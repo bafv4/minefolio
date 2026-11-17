@@ -303,6 +303,7 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 
 - **クライアント側の保存前検証（`app/routes/me/devices.tsx`）**: 上記と同じ `validateMouseSettings()` で事前チェックし、範囲外の値は送信せずその場で該当欄の直下にインラインエラー（`FieldErrorText`、`aria-invalid` / `aria-describedby` 付き）を表示して該当欄までスクロールする（`showFieldError()`）。サーバー側 action からの `field` 付きエラーも同じ表示経路（`fieldError` state）で扱うため、直接 POST 等でサーバー側だけが弾いたケースでも同様にハイライトされる。該当欄を編集するとエラー表示は消える（感度は内部値 `0..1` 欄・パーセント欄のどちらを編集しても解消扱い）
 
+- **旧データ取り込み（`importFromLegacy`）の書き込みと呼び出し元**: 旧 API の取得（外部 fetch）はトランザクションの外で先に行う。ライブテーブルへの書き込み（既存のキーバインド・設定・カスタムキー・リマップ・アイテム配置・サーチクラフトの削除と挿入）と、**取り込んだ内容での新しいプリセットの作成（編集先にする）は 1 トランザクション**にまとめる（`createPreset` は呼び出し側のトランザクションに参加できる）。途中で失敗すると全体がロールバックされ、既存のライブデータも既存のプリセットも元のまま残り、新しいプリセットも作られない。取り込みのたびに新しいプリセットを作るので（プリセットが 0 件でも 1 件以上でも同じ）、既存プリセットのスナップショット・`updatedAt` は変わらず、取り込み後も元のプリセットへ切り替えて戻せる。ユーザーへ返す失敗文言は翻訳済みの固定文言（走者が見つからない `meImport.legacyNotFound`・その他 `meImport.legacyImportFailed`）だけで、drizzle のエラー文（SQL を含む）は返さない。ログも `errorSummary` を通す。呼び出し元（`/me/keybindings` の `import-legacy`・`/me/account` の `import_legacy`）はどちらも同じ結果になり、取り込み後のスナップショット同期は不要（新しいプリセットが完全なスナップショットを持つ）
 - **旧データインポート（`app/lib/legacy-import.ts`、MCSRer Hotkeys からの `/me/import`）**: 無検証の値が入ってくるため、`mouseDpi` / `gameSensitivity` / `cm360` はそれぞれ上記相当の妥当性を確認する。無効な値は**クランプせず取り込まない**（`null` として保存）。未設定（`undefined`）の項目は従来どおり既存の列を更新しない
 
 ---

@@ -17,6 +17,7 @@ import {
   PUBLIC_CONFIG_HISTORY_SINCE,
 } from "../config-history";
 import { createPreset } from "../preset-utils";
+import { createTranslator } from "../messages";
 
 let db: TestDb;
 
@@ -78,8 +79,8 @@ describe("resolvePublicPresetId / resolveActivePublicPresetId", () => {
 describe("createPreset の履歴", () => {
   it("初回（自動でメイン）は preset_id 付き、2件目（非メイン）は null", async () => {
     const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
-    const first = await createPreset(db, { userId: user.id, name: "first", isActive: true });
-    const second = await createPreset(db, { userId: user.id, name: "second" });
+    const first = await createPreset(db, { t: createTranslator("ja"), userId: user.id, name: "first", isActive: true });
+    const second = await createPreset(db, { t: createTranslator("ja"), userId: user.id, name: "second" });
 
     const history = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
     const byDesc = (name: string) => history.find((h) => h.changeDescription.includes(name));

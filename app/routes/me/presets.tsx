@@ -365,7 +365,7 @@ export async function action({ request }: Route.ActionArgs) {
       // 既存プリセット非アクティブ化、ライブテーブル全クリア
       await tx
         .update(configPresets)
-        .set({ isActive: false, updatedAt: now })
+        .set({ isActive: false })
         .where(eq(configPresets.userId, user.id));
       await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
       await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
@@ -724,7 +724,7 @@ export async function action({ request }: Route.ActionArgs) {
       });
     });
 
-    return { success: true, message: t("mePresets.createdAndApplied", { name: trimmedName }) };
+    return { success: true, intent: "create-preset", message: t("mePresets.createdAndApplied", { name: trimmedName }) };
   }
 
   // プリセット削除
@@ -781,7 +781,7 @@ export async function action({ request }: Route.ActionArgs) {
         });
       });
 
-      return { success: true, message: t("mePresets.presetDeleted") };
+      return { success: true, intent: "delete-preset", message: t("mePresets.presetDeleted") };
     }
 
     await db
@@ -797,7 +797,7 @@ export async function action({ request }: Route.ActionArgs) {
       createdAt: now,
     });
 
-    return { success: true, message: t("mePresets.presetDeleted") };
+    return { success: true, intent: "delete-preset", message: t("mePresets.presetDeleted") };
   }
 
   // メイン（公開用）プリセットの設定。
@@ -814,7 +814,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
     if (preset.isMain) {
-      return { success: true, message: t("mePresets.mainPresetSet") };
+      return { success: true, intent: "set-main", message: t("mePresets.mainPresetSet") };
     }
 
     await setMainPreset(db, { id: preset.id, userId: user.id });
@@ -828,7 +828,7 @@ export async function action({ request }: Route.ActionArgs) {
       createdAt: now,
     });
 
-    return { success: true, message: t("mePresets.mainPresetSet") };
+    return { success: true, intent: "set-main", message: t("mePresets.mainPresetSet") };
   }
 
   // プリセットの名前・説明の変更。
@@ -863,7 +863,7 @@ export async function action({ request }: Route.ActionArgs) {
     const nameChanged = preset.name !== trimmedName;
     const descriptionChanged = (preset.description ?? null) !== trimmedDescription;
     if (!nameChanged && !descriptionChanged) {
-      return { success: true, message: t("mePresets.presetUpdated") };
+      return { success: true, intent: "update-preset", message: t("mePresets.presetUpdated") };
     }
 
     await db.transaction(async (tx) => {
@@ -883,7 +883,7 @@ export async function action({ request }: Route.ActionArgs) {
       });
     });
 
-    return { success: true, message: t("mePresets.presetUpdated") };
+    return { success: true, intent: "update-preset", message: t("mePresets.presetUpdated") };
   }
 
   // プリセット適用
@@ -1027,19 +1027,19 @@ export async function action({ request }: Route.ActionArgs) {
       // 全てのプリセットを非アクティブに
       await tx
         .update(configPresets)
-        .set({ isActive: false, updatedAt: now })
+        .set({ isActive: false })
         .where(eq(configPresets.userId, user.id));
 
       // このプリセットをアクティブに
       await tx
         .update(configPresets)
-        .set({ isActive: true, updatedAt: now })
+        .set({ isActive: true })
         .where(eq(configPresets.id, presetId));
 
       // 編集先の切替は変更履歴に記録しない（公開内容も設定内容も変えないため、履歴が切替の繰り返しで埋まる）
     });
 
-    return { success: true, message: t("mePresets.appliedPreset", { name: preset.name }) };
+    return { success: true, intent: "apply-preset", message: t("mePresets.appliedPreset", { name: preset.name }) };
   }
 
   return { error: t("mePresets.unknownAction") };
@@ -1072,12 +1072,16 @@ export default function PresetsPage() {
 
     if ("success" in data && data.success) {
       toast.success(data.message);
-      setRenameTarget(null);
-      setIsCreateDialogOpen(false);
-      setNewPresetName("");
-      setNewPresetDescription("");
-      setSourceType("current");
-      setSourcePresetId("");
+      // 成功した操作に対応するダイアログだけを閉じる（別の操作の成功で、入力中のダイアログを閉じない）
+      if (data.intent === "update-preset") {
+        setRenameTarget(null);
+      } else if (data.intent === "create-preset") {
+        setIsCreateDialogOpen(false);
+        setNewPresetName("");
+        setNewPresetDescription("");
+        setSourceType("current");
+        setSourcePresetId("");
+      }
     } else if ("error" in data) {
       toast.error(data.error);
     }

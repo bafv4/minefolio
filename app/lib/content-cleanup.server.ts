@@ -16,6 +16,7 @@
 // deleteTranslationsForGuide / deleteTranslationsForUser / cleanupUserBlobs /
 // cleanupGuideBlobs は上記2関数の内部実装（個別のテスト対象として export は維持）。
 
+import { errorSummary } from "@/lib/error-summary";
 import { eq, and, or, like, inArray } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import type { Database } from "./db";
@@ -117,7 +118,7 @@ export async function cleanupUserBlobs({
       }
     }
   } catch (error) {
-    console.error(`[content-cleanup] Failed to clean up blobs for user ${userId}:`, error);
+    console.error(`[content-cleanup] Failed to clean up blobs for user ${userId}:`, errorSummary(error));
   }
 }
 
@@ -200,7 +201,7 @@ export async function cleanupGuideBlobs({
 
     await deleteBlobsInBatches(toDelete);
   } catch (error) {
-    console.error(`[content-cleanup] Failed to clean up blobs for guide ${guideId}:`, error);
+    console.error(`[content-cleanup] Failed to clean up blobs for guide ${guideId}:`, errorSummary(error));
   }
 }
 

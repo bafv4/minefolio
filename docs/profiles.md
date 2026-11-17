@@ -843,6 +843,9 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **下書き（draft）**: MCID・リンク・動画はクライアントの下書き状態にだけ持つ（`app/lib/profile-edit-draft.ts` の `ProfileDraft`。純関数でテスト済み）。ダイアログの確定は下書きの更新だけで、サーバーへは送らない。各ダイアログに「保存バーで保存するまで反映されません」の案内を出し、未保存の行には「未保存」バッジ、削除予定の行は取り消し線＋「取り消す」を出す。項目単位の取り消しと、保存バーの「変更を破棄」（フォーム値＋下書き全体を保存済みへ戻す）がある
 - **一時ID**: 新規のリンク・動画はクライアント生成の一時キー（`new-<uuid>`）を持つ。サーバーの ID としては使わず、サーバーが `createId()` で採番する。一時キーは `order`（動画は `new:<key>`）とエラー位置（`fieldErrors`）の参照にだけ使う。保存成功後は loader の再取得結果で下書き・保存済み両方を作り直す（実 ID に置き換わる）
 - **送信**: 保存バーの保存で `_action=save_all` ＋ プロフィール列 ＋ `changes`（JSON。`ProfileChanges`。差分が無ければ省略）を **1リクエスト**で送る。`_action` 未指定（従来の保存）も同じ経路で、`changes` が無いときはプロフィール列だけを保存する。`changes` は zod で検証し、不正なら何も保存しない
+- **未知の `_action` は拒否**: `_action` が送られていて `save_all` 以外（古いタブが送る `import_legacy` / `delete_account` など。これらは `/me/account` の action）なら、保存せず `meEdit.invalidOption` のエラーを返す（`/me/edit` が黙って「保存した」と返さない）。`_action` が無いときだけ従来の保存として扱う
+- **リンクのプラットフォーム重複は書き込みトランザクションの中でも再検査する**: `social_links` に `(userId, platform)` の一意制約が無いため、①の事前確認だけでは並行リクエストで重複しうる。`db.transaction()` は libsql の既定（`BEGIN IMMEDIATE`）で書き込みロックを開始時に取り並行する保存を直列化するので、トランザクション内でリンクを読み直して最終状態を再検査し、重複なら何も書かず `platformLinkExists` を返す（Speedrun.com 列からのリンク逆同期もこの読み直した行を使う）。一意制約そのものは未追加（リモート DDL と承認が要る）
+- **保存エラーのログ**: 保存の catch は `errorSummary(e)`（`app/lib/error-summary.ts`。SQL 文と原因だけでパラメータを出さない）で出し、入力値（表示名・自己紹介・所在地など）をログに残さない
 - **サーバー処理**（`app/lib/profile-edit.server.ts` の `saveProfileBatch`）: ① 検証（形式 → 既存データを読んだ「最終状態」の検証〈所有確認・同一プラットフォーム重複・動画10件上限〉→ MCID 重複と Mojang 照合）→ ② DB 書き込みを**単一トランザクション**（MCID/slug 更新・slug 履歴・お気に入り追従・リンク〈削除→更新→作成〉・動画〈削除→更新→作成→並び〉・プロフィール列）→ ③ commit 後に外部キャッシュのキック（`scheduleSocialLinkKicks` 等。保存が失敗したら一切走らない）。①で失敗したら DB は1行も変わらない。他ユーザーの ID の更新はエラー、削除は無視する（IDOR 防止）
 - **不正値の扱い**: enum 系（`profileVisibility` / `profilePose` / `capeDisplay` / `defaultProfileTab` / `mainPlatform` / `role`）と真偽の欄（`slimSkin` / `show*` / `allowAutoTranslation`）は、許可リスト（enum は `schema.ts` の `enumValues`、既定タブは `PROFILE_TAB_VALUES`）にない値をエラー（`meEdit.invalidOption`）にして何も書かない。真偽は `"true"` / `"false"` のみ（`"on"` や空文字を false 扱いにしない）。`defaultProfileTab` は保存済みの値をそのまま送り返すため、選択肢（`SELECTABLE_PROFILE_TABS`）ではなく enum 全体（廃止値 `settings` を含む）で検証する
 - **件数・長さの上限**（悪用防止の水準。現実的な最大の約10倍。定数は `profile-edit-validation.ts`）: カスタムリンクの `customLabel` 100 文字・`customUrl` 2000 文字（`PROFILE_FIELD_LIMITS`。入力欄の `maxLength` も同じ）、リンク総数 `MAX_SOCIAL_LINKS`（50 件。動画上限と同じく**件数が増える保存だけ**検査し、過去データが超過していても他の保存は妨げない）。記録の `pbVideoUrl` は 2000 文字（`PROFILE_FIELD_LIMITS.recordVideoUrl`。`/me/records` の保存で検査）。超過は `meEdit.customLabelMax` / `customUrlMax` / `linkMaxCount` / `meRecords.videoUrlTooLong` を返し、何も書かない
@@ -851,6 +854,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する。保存時のエラー（クライアントの事前検証〈RTA歴の片方だけ選択〉とサーバーが返した `fieldErrors` の両方）は、ページ順で最初のエラー欄（`edit-error-*` の id、RTA歴は Select）へスクロールしてフォーカスする（`prefers-reduced-motion` ではなめらかにしない。保存バーの裏は `scroll-padding` が避ける）。Select（`/me/edit` の RTA歴の年月・主なプラットフォーム・役割、`/me/account` の公開範囲・既定タブ）の `SelectValue` には今の値の表示文字を子として渡す（Radix は SSR で選択中の文字を描けず、サーバー HTML が空になるため）。表示設定のスイッチ行は `max-w-2xl` で幅を詰める
 - **未保存検知・離脱ガード**: `FloatingSaveBar` が内蔵する離脱ガード（`unsavedGuard` 既定 true。内部で `useUnsavedWarning` ＋ `UnsavedChangesDialog`。この画面は自前では持たない）が `hasChanges`（保存中は止めない）を見る。`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
 - **アカウント削除**（`/me/account`）: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
+- **`/me/account` の `_action`**: `save_all` / `import_legacy` / `delete_account` のみ。送られているが未知の値は `meEdit.unknownAccountAction` のエラーを返し、保存として扱わない（`_action` が送られていない場合は従来どおり保存として扱う）
 - **レガシーインポート**（`/me/account`。キー配置等が無い走者にだけ案内）: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
 - **個別 `_action` は削除済み**: 旧 `set_mcid` / `remove_mcid` / `set_bedrock_mcid` / `remove_bedrock_mcid` / `create_link` / `update_link` / `delete_link` / 動画系の個別 action は無く、`/me/edit` の action は `save_all`（`saveProfileBatch`）のみ、`/me/account` の action は `save_all`（同じ `saveProfileBatch`）・`import_legacy`・`delete_account` のみ
 - **モバイル表示と追加ダイアログ**: MCID 行はモバイルでボタンが下に縦積みになり（`sm` 以上は横並び）、MCID は長くても折り返して全体を表示する。ソーシャルリンク追加・動画追加ダイアログにはキャンセルボタン（`DialogClose`）を置く
@@ -901,7 +905,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### アカウント削除
 
-`/me/edit` の `_action="delete_account"`（confirmText に MCID または slug の入力一致を要求）で実行する。処理本体は `app/lib/content-cleanup.server.ts` の合成ドメイン操作 `deleteUserAccount()` に集約されている:
+`/me/account` の `_action="delete_account"`（confirmText に MCID または slug の入力一致を要求）で実行する。処理本体は `app/lib/content-cleanup.server.ts` の合成ドメイン操作 `deleteUserAccount()` に集約されている:
 
 1. **派生データの削除 + 本体の削除を単一の `db.transaction()` で原子化**（`users` 行の削除前に派生データを削除する順序はトランザクション内の手順として維持。削除後は cascade で `guides` が消え、著者のガイド一覧を後から引けなくなるため）
    - `content_translations` の翻訳キャッシュ行（`userBio` 分 + 著者だった全ガイドの `guide` 分）を `deleteTranslationsForUser()` で削除

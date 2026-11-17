@@ -421,7 +421,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
       sourceType: "current",
     });
     expect(created).toEqual({
-      success: true,
+      success: true, intent: "create-preset",
       message: "プリセット「A」を作成し、編集先にしました",
     });
 
@@ -459,7 +459,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
       ]),
     });
     const appliedB = await callAction({ intent: "apply-preset", presetId: presetB.id });
-    expect(appliedB).toEqual({ success: true, message: "プリセット「B」を編集先にしました" });
+    expect(appliedB).toEqual({ success: true, intent: "apply-preset", message: "プリセット「B」を編集先にしました" });
 
     // B は他種別を持たないので、ライブは B の内容だけに置き換わる（全ワイプの確認）
     expect(await readLiveConfig(user.id)).toEqual({
@@ -469,7 +469,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
 
     // A を再適用するとライブが完全復元される（craftId は新規採番だが参照は保たれる）
     const appliedA = await callAction({ intent: "apply-preset", presetId: presetA!.id });
-    expect(appliedA).toEqual({ success: true, message: "プリセット「A」を編集先にしました" });
+    expect(appliedA).toEqual({ success: true, intent: "apply-preset", message: "プリセット「A」を編集先にしました" });
 
     expect(await readLiveConfig(user.id)).toEqual(baseline);
   });
@@ -537,7 +537,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, message: "プリセット「旧世代」を編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「旧世代」を編集先にしました" });
     const live = await readLiveConfig(user.id);
     expect(live.keyRemaps).toEqual([
       {
@@ -605,7 +605,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, message: "プリセット「重複sequence」を編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「重複sequence」を編集先にしました" });
     const live = await readLiveConfig(user.id);
     // sequence は挿入順の1始まりへ振り直される
     expect(live.searchCraftLoops.map((l) => ({ sequence: l.sequence, comment: l.comment }))).toEqual(
@@ -710,7 +710,7 @@ describe("action - delete-preset の不変条件", () => {
 
     const res = await callAction({ intent: "delete-preset", presetId: plain.id });
 
-    expect(res).toEqual({ success: true, message: "プリセットを削除しました" });
+    expect(res).toEqual({ success: true, intent: "delete-preset", message: "プリセットを削除しました" });
     expect(await findPreset(plain.id)).toBeUndefined();
     expect(await readLiveConfig(user.id)).toEqual(before);
     const history = await db.query.configHistory.findMany({
@@ -730,7 +730,7 @@ describe("action - delete-preset の不変条件", () => {
 
     const res = await callAction({ intent: "delete-preset", presetId: only.id });
 
-    expect(res).toEqual({ success: true, message: "プリセットを削除しました" });
+    expect(res).toEqual({ success: true, intent: "delete-preset", message: "プリセットを削除しました" });
     expect(await findPreset(only.id)).toBeUndefined();
     expect(await readLiveConfig(user.id)).toEqual(EMPTY_LIVE);
   });
@@ -888,7 +888,7 @@ describe("action - create-preset のソース別スナップショット", () =>
       sourcePresetId: source.id,
     });
     expect(res).toEqual({
-      success: true,
+      success: true, intent: "create-preset",
       message: "プリセット「コピー先」を作成し、編集先にしました",
     });
 
@@ -918,7 +918,7 @@ describe("action - create-preset のソース別スナップショット", () =>
     const user = await setupUser();
 
     const res = await callAction({ intent: "create-preset", name: "初期", sourceType: "current" });
-    expect(res).toEqual({ success: true, message: "プリセット「初期」を作成し、編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "create-preset", message: "プリセット「初期」を作成し、編集先にしました" });
 
     const preset = (await db.query.configPresets.findFirst({
       where: eq(schema.configPresets.userId, user.id),
@@ -979,6 +979,40 @@ describe("action - create-preset のソース別スナップショット", () =>
 // 5. その他の intent
 // ---------------------------------------------------------------------------
 
+describe("action - 編集先の切替・作成は、内容が変わらないプリセットの updatedAt を進めない", () => {
+  const OLD = new Date("2024-01-01T00:00:00Z");
+
+  it("apply-preset は、切替元・切替先どちらの updatedAt も進めない（isActive だけが変わる）", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const from = await insertPreset(user.id, { name: "元", isActive: true, updatedAt: OLD });
+    const to = await insertPreset(user.id, { name: "先", updatedAt: OLD });
+
+    const res = await callAction({ intent: "apply-preset", presetId: to.id });
+
+    expect(res).toMatchObject({ success: true, intent: "apply-preset" });
+    const fromAfter = await findPreset(from.id);
+    const toAfter = await findPreset(to.id);
+    expect(fromAfter?.isActive).toBe(false);
+    expect(toAfter?.isActive).toBe(true);
+    expect(fromAfter?.updatedAt.getTime()).toBe(OLD.getTime());
+    expect(toAfter?.updatedAt.getTime()).toBe(OLD.getTime());
+  });
+
+  it("create-preset は、既存プリセットの updatedAt を進めない", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const existing = await insertPreset(user.id, { name: "既存", isActive: true, updatedAt: OLD });
+
+    const res = await callAction({ intent: "create-preset", name: "新規", sourceType: "current" });
+
+    expect(res).toMatchObject({ success: true, intent: "create-preset" });
+    const after = await findPreset(existing.id);
+    expect(after?.isActive).toBe(false);
+    expect(after?.updatedAt.getTime()).toBe(OLD.getTime());
+  });
+});
+
 describe("action - set-main / 未知の intent", () => {
   it("set-main は is_main を排他的に付け替え、編集中フラグとライブテーブルには触れない", async () => {
     const user = await setupUser();
@@ -990,7 +1024,7 @@ describe("action - set-main / 未知の intent", () => {
     const res = await callAction({ intent: "set-main", presetId: other.id });
 
     expect(res).toEqual({
-      success: true,
+      success: true, intent: "set-main",
       message: "メインのプリセットを設定しました。プロフィールにはこのプリセットが表示されます",
     });
     expect((await findPreset(main.id))?.isMain).toBe(false);
@@ -1014,7 +1048,7 @@ describe("action - set-main / 未知の intent", () => {
       description: "  説明文  ",
     });
 
-    expect(res).toEqual({ success: true, message: "プリセットの名前と説明を更新しました" });
+    expect(res).toEqual({ success: true, intent: "update-preset", message: "プリセットの名前と説明を更新しました" });
     const after = await findPreset(main.id);
     expect(after).toMatchObject({ name: "新名", description: "説明文", isMain: true, isActive: true });
     expect(after?.keybindingsData).toBe(beforeRow?.keybindingsData);

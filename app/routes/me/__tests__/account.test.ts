@@ -279,6 +279,37 @@ describe("/me/account の保存は /me/edit の列を消さない", () => {
   });
 });
 
+describe("/me/account の _action", () => {
+  async function callWithAction(action: string | null) {
+    const fd = new FormData();
+    if (action !== null) fd.set("_action", action);
+    fd.set("profileVisibility", "unlisted");
+    const request = new Request("https://minefolio.app/me/account", { method: "POST", body: fd });
+    return accountAction({ request, params: {}, context: {} } as never) as Promise<{ error?: string; success?: boolean }>;
+  }
+
+  it("送られているが未知の _action はエラーを返し、保存しない", async () => {
+    const before = await seedFullRunner();
+    signInAs("discord-runner");
+
+    const res = await callWithAction("set_mcid");
+
+    expect(res.error).toBeDefined();
+    expect(res.success).toBeUndefined();
+    expect((await userRow(before.id))!.profileVisibility).toBe("public");
+  });
+
+  it("_action が送られていない場合は従来どおり保存として扱う", async () => {
+    const before = await seedFullRunner();
+    signInAs("discord-runner");
+
+    const res = await callWithAction(null);
+
+    expect(res.error).toBeUndefined();
+    expect((await userRow(before.id))!.profileVisibility).toBe("unlisted");
+  });
+});
+
 describe("/me/account の保存の検証（不正な値は拒否し、ほかの列も書かない）", () => {
   it.each(["evil", "", "guides"])("defaultProfileTab に %j を送ると拒否する", async (value) => {
     const before = await seedFullRunner();

@@ -381,34 +381,38 @@ export async function action({ request }: Route.ActionArgs) {
     configData.controllerSettings = controllerSettings;
   }
 
-  // upsert: ライブの playerConfig 行が無い場合は insert する
-  // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
-  if (user.playerConfig) {
-    await db
-      .update(playerConfigs)
-      .set(configData)
-      .where(eq(playerConfigs.id, user.playerConfig.id));
-  } else {
-    await db.insert(playerConfigs).values({
+  // 設定の更新と変更履歴の記録は 1 トランザクションにする（片方だけ残らない）。
+  // スナップショット同期はトランザクションの外（docs/presets.md の既知の制限）
+  await db.transaction(async (tx) => {
+    // upsert: ライブの playerConfig 行が無い場合は insert する
+    // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
+    if (user.playerConfig) {
+      await tx
+        .update(playerConfigs)
+        .set(configData)
+        .where(eq(playerConfigs.id, user.playerConfig.id));
+    } else {
+      await tx.insert(playerConfigs).values({
+        id: createId(),
+        userId: user.id,
+        ...configData,
+        createdAt: new Date(),
+      });
+    }
+
+    // 変更履歴を記録
+    await tx.insert(configHistory).values({
       id: createId(),
       userId: user.id,
-      ...configData,
+      changeType: "device",
+      changeDescription: t("meDevices.deviceChangeHistory"),
+      presetId: await resolveActivePublicPresetId(tx, user.id),
       createdAt: new Date(),
     });
-  }
+  });
 
   // アクティブプリセットスナップショット同期
   await syncActivePresetSnapshot(db, user.id, ["playerConfig", "fingers"]);
-
-  // 変更履歴を記録
-  await db.insert(configHistory).values({
-    id: createId(),
-    userId: user.id,
-    changeType: "device",
-    changeDescription: t("meDevices.deviceChangeHistory"),
-    presetId: await resolveActivePublicPresetId(db, user.id),
-    createdAt: new Date(),
-  });
 
   return { success: true };
 }

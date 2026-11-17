@@ -9,6 +9,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { Translator } from "@/lib/messages";
 import { isUniqueConstraintError, type Database } from "@/lib/db";
+import { errorSummary } from "@/lib/error-summary";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import type { CapeDisplay } from "@/lib/cape";
@@ -353,6 +354,24 @@ export type SaveProfileResult =
   | { success: true; action: "profile"; newSlug?: string; error?: undefined; fieldErrors?: undefined }
   | { error: string; fieldErrors?: ProfileFieldErrors; action?: undefined; success?: undefined };
 
+/**
+ * 今回の保存で作成・更新するリンクのうち、カスタム以外のプラットフォームが最終状態で重複するものがあるか。
+ * 検査するのは touchedKeys のリンクだけ（過去データの重複は無関係な保存を妨げない）。
+ */
+function hasTouchedPlatformDuplicate(
+  finalLinks: { key: string; platform: string }[],
+  touchedKeys: ReadonlySet<string>,
+): boolean {
+  const counts = new Map<string, number>();
+  for (const l of finalLinks) {
+    if (l.platform !== "custom") counts.set(l.platform, (counts.get(l.platform) ?? 0) + 1);
+  }
+  return finalLinks.some((l) => l.platform !== "custom" && touchedKeys.has(l.key) && (counts.get(l.platform) ?? 0) > 1);
+}
+
+/** トランザクション内の再確認でプラットフォーム重複を見つけたときに投げる（catch で platformLinkExists にする） */
+class PlatformLinkConflictError extends Error {}
+
 export async function saveProfileBatch({
   db,
   t,
@@ -637,6 +656,20 @@ export async function saveProfileBatch({
       if (bedrockSet) userSet.bedrockMcid = bedrockSet;
       else if (bedrockRemove) userSet.bedrockMcid = null;
 
+      // リンクは書き込みトランザクションの中で読み直す。drizzle の db.transaction() は libsql の既定（"write" = BEGIN IMMEDIATE）で
+      // 書き込みロックを開始時に取るため、並行する保存はここで直列化され、先行の commit 済みの内容がこの読み取りに見える。
+      // ①の重複検査は読み取りから書き込みまでの間に他のリクエストが入りうる（social_links に (userId, platform) の一意制約が無い）ので、最終状態をここで再検査する
+      const freshLinks = await tx.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) });
+      if (linkCreates.length > 0 || validLinkUpdates.length > 0) {
+        const freshFinal = [
+          ...freshLinks
+            .filter((l) => !linkDeletes.includes(l.id))
+            .map((l) => ({ key: l.id, platform: validLinkUpdates.find((u) => u.id === l.id)?.platform ?? l.platform })),
+          ...linkCreates.map((l) => ({ key: l.key, platform: l.platform })),
+        ];
+        if (hasTouchedPlatformDuplicate(freshFinal, touchedKeys)) throw new PlatformLinkConflictError();
+      }
+
       // リンク: 削除 → 更新 → 作成（削除を先に行い、同一プラットフォームの入れ替えを通す）
       if (linkDeletes.length > 0) {
         await tx.delete(socialLinks).where(and(inArray(socialLinks.id, linkDeletes), eq(socialLinks.userId, user.id)));
@@ -669,7 +702,7 @@ export async function saveProfileBatch({
         // 解決済みIDを残すと cron/即時更新が旧アカウントを見続けるため、値が変わったらリセットする
         if (speedruncomUsername !== user.speedruncomUsername) userSet.speedruncomId = null;
       } else if (srTouched) {
-        const existingSr = existingLinks.find((l) => l.platform === "speedruncom");
+        const existingSr = freshLinks.find((l) => l.platform === "speedruncom");
         if (speedruncomUsername) {
           if (!existingSr) {
             await tx.insert(socialLinks).values({
@@ -756,7 +789,8 @@ export async function saveProfileBatch({
       }
     });
   } catch (e) {
-    console.error("Profile save error:", e);
+    if (e instanceof PlatformLinkConflictError) return { error: t("meEdit.platformLinkExists") };
+    console.error("Profile save error:", errorSummary(e));
     if (isUniqueConstraintError(e)) {
       // MCID の変更を含む保存での UNIQUE 違反は、競合（直前に他ユーザーが取得）として MCID のエラーにする
       if (mcidSet) {

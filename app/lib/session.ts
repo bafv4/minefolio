@@ -1,4 +1,4 @@
-import { redirect } from "react-router";
+import { createContext, redirect } from "react-router";
 import { eq } from "drizzle-orm";
 import type { Auth } from "./auth";
 import type { Database } from "./db";
@@ -46,6 +46,13 @@ export async function getOptionalSession(request: Request, auth: Auth) {
 }
 
 type UserRow = typeof users.$inferSelect;
+
+/**
+ * /me/* のレイアウトのミドルウェア（routes/me/_layout.tsx）が解決した「登録済みユーザー行」を、
+ * 同じリクエストのレイアウト loader へ渡すための context キー（同じ行を二重に読まないため）。
+ * 未設定（ミドルウェアを通っていない）なら null。
+ */
+export const registeredUserContext = createContext<UserRow | null>(null);
 
 /**
  * 「登録済み」の述語。users 行があり、かつ初期設定ウィザード（/onboarding）を完了していること。

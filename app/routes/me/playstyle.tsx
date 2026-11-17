@@ -7,6 +7,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { errorSummary } from "@/lib/error-summary";
 import { users, playstyles } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 import { eq } from "drizzle-orm";
@@ -242,7 +243,7 @@ export async function action({ request }: Route.ActionArgs) {
         .where(eq(users.id, user.id));
     });
   } catch (e) {
-    console.error("Playstyle save error:", e);
+    console.error("Playstyle save error:", errorSummary(e));
     return { error: t("mePlaystyle.saveFailed") };
   }
 

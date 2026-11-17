@@ -5,6 +5,7 @@ import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } fr
 import type { Route } from "./+types/items";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb } from "@/lib/db";
+import { errorSummary } from "@/lib/error-summary";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -347,7 +348,7 @@ export async function action({ request }: Route.ActionArgs) {
 
       return { success: true };
     } catch (error) {
-      console.error("Save error:", error);
+      console.error("Save error:", errorSummary(error));
       return { error: t("meItems.saveFailed") };
     }
   }

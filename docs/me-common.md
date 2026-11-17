@@ -5,6 +5,8 @@
 
 ## レイアウト（`_layout.tsx`）
 
+- `middleware` が配下の loader と action の前に登録完了を確認する（未登録は `/onboarding`。仕組みは [auth.md](./auth.md#me-の保護ルートのミドルウェア)）。`/api/me/*` は対象外。
+
 - 左にサイドバー、右に `<Outlet />`。`<main>` はサイト共通レイアウト（`routes/_layout.tsx`）の 1 つだけで、ここは `div`。
 - サイドバーの項目名は各画面の h1（`meXxx.pageTitle`）と同じ文言にそろえる（短い方）。
 - 項目は主の群（プロフィール編集 `/me/edit`・記録・プレイスタイル・キー配置・デバイス・アイテム配置・サーチクラフト）と、区切り線の下の補助の群（プリセット・インポート・公開とアカウント `/me/account`）。`/me/account` は公開範囲・既定タブ・表示設定・旧データ取り込み・アカウント削除のページ（担当は profiles-worker。[保存方式](./profiles.md#medit-の保存方式保存バーでの一括保存)）。

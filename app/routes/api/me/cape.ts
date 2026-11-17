@@ -1,3 +1,4 @@
+import { errorSummary } from "@/lib/error-summary";
 import type { ActionFunctionArgs } from "react-router";
 import { del } from "@vercel/blob";
 import { createDb } from "@/lib/db";
@@ -49,7 +50,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       return plainJsonResponse({ success: true });
     } catch (error) {
-      console.error("Delete cape error:", error);
+      console.error("Delete cape error:", errorSummary(error));
       return plainJsonResponse({ error: "Failed to delete cape" }, { status: 500 });
     }
   }
@@ -106,7 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       return plainJsonResponse({ success: true, customCapeUrl: url });
     } catch (error) {
-      console.error("Save cape error:", error);
+      console.error("Save cape error:", errorSummary(error));
       return plainJsonResponse({ error: "Failed to save cape" }, { status: 500 });
     }
   }

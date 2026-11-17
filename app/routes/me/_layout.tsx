@@ -1,12 +1,10 @@
 import { Fragment, useEffect, useState } from "react";
-import { Outlet, NavLink, redirect, useLoaderData, useLocation, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
+import { Outlet, NavLink, useLoaderData, useLocation, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession, isRegistered } from "@/lib/session";
+import { getCurrentUser, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { eq } from "drizzle-orm";
 import { cn } from "@/lib/utils";
 import {
   Pencil,
@@ -45,21 +43,27 @@ export function shouldRevalidate({
   return defaultShouldRevalidate;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+// /me/* の登録完了ゲート。配下の loader だけでなく **action の前**にも走るので、ウィザード（/onboarding）
+// 未完了のアカウントが /me/* の action を直接 POST して書き込む（例: 登録完了前に公開にする）ことを防ぐ。
+// 未ログインは /login、未登録（users 行なし・onboardingCompleted=false）は /onboarding へ redirect。
+// /api/me/* は別ルート（このレイアウトの外）で、オンボーディングのスキン手順が登録完了前に使うので対象外。
+// 解決した行は context に積み、下のレイアウト loader が再利用する（DB の往復を増やさない）。
+export const middleware: Route.MiddlewareFunction[] = [
+  async ({ request, context }) => {
+    const db = createDb();
+    const auth = createAuth(db, getEnv());
+    const { user } = await getCurrentUser(request, auth, db);
+    context.set(registeredUserContext, user);
+  },
+];
+
+export async function loader({ request, context }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
 
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
-
-  // 未登録（行が無い、またはウィザード未完了）なら /onboarding へ（判定は isRegistered に集約）
-  if (!isRegistered(user)) {
-    return redirect("/onboarding");
-  }
+  // 通常はミドルウェアが解決済み（未登録なら既にそこで /onboarding へ redirect している）
+  const user = context.get(registeredUserContext) ?? (await getCurrentUser(request, auth, db)).user;
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 

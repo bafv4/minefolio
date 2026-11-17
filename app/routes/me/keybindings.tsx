@@ -831,18 +831,8 @@ export async function action({ request }: Route.ActionArgs) {
 
     const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
-      // importFromLegacy が書き込みうるライブテーブルをすべて同期する
-      // （itemLayouts / searchCrafts を欠くとスナップショットが古いままになる）
-      await syncActivePresetSnapshot(db, user.id, [
-        "keybindings",
-        "remaps",
-        "fingers",
-        "customKeys",
-        "playerConfig",
-        "itemLayouts",
-        "searchCrafts",
-        "customActions",
-      ], { activePresetId: activePresetRow.id });
+      // 取り込みは importFromLegacy が新しいプリセット（編集先）を作って完結する。
+      // 旧アクティブへの同期は、非アクティブ化済みで no-op になるため呼ばない
       return {
         success: true,
         message: t("meKeybindings.importSummary", {

@@ -226,6 +226,12 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  // `_action` が送られているのに `save_all` 以外（古いタブが送る import_legacy / delete_account など）は、
+  // 保存したと偽らずエラーにする。未指定（従来の保存）は下の経路のまま
+  const actionType = formData.get("_action");
+  if (actionType !== null && actionType !== "save_all") {
+    return { error: t("meEdit.invalidOption") };
+  }
   // プロフィール情報の更新（保存バーの一括保存。`save_all` と `_action` 未指定は同じ経路）。
   // 本体は app/lib/profile-edit.server.ts。`changes`（JSON）に MCID・リンク・動画の差分が載る。
   // このページの項目だけを送る（公開範囲・既定タブ・表示設定は /me/account。profile-edit-scope.ts）

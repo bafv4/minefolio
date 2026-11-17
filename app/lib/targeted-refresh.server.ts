@@ -6,6 +6,7 @@
 // 絶対にブロック・失敗させない（throw しない）。cron 側の一括更新ロジック（twitch-vod-cache.ts /
 // youtube-cache.ts / rankings-update.server.ts）をそのまま1件スコープで再利用する薄いラッパー
 
+import { errorSummary } from "@/lib/error-summary";
 import { waitUntil } from "@vercel/functions";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { getEnv } from "./env.server";
@@ -25,7 +26,7 @@ import { updateUserRankings, cleanupDuplicateVerifiedRankings } from "./rankings
  */
 export function runAfterResponse(task: Promise<unknown>): void {
   const safeTask = task.catch((error) => {
-    console.error("[targeted-refresh] background task failed:", error);
+    console.error("[targeted-refresh] background task failed:", errorSummary(error));
   });
   try {
     waitUntil(safeTask);
@@ -53,7 +54,7 @@ export async function refreshTwitchVodsForLogin(login: string): Promise<void> {
     });
     await applyFetchedVods(vods, incompleteLogins);
   } catch (error) {
-    console.error(`[targeted-refresh] Failed to refresh Twitch VODs for ${login}:`, error);
+    console.error(`[targeted-refresh] Failed to refresh Twitch VODs for ${login}:`, errorSummary(error));
   }
 }
 
@@ -90,7 +91,7 @@ export async function deleteTwitchVodsForLogin(login: string, owner: LinkOwner):
 
     await db.delete(twitchVodCache).where(sql`lower(${twitchVodCache.userLogin}) = ${lowered}`);
   } catch (error) {
-    console.error(`[targeted-refresh] Failed to delete Twitch VODs for ${login}:`, error);
+    console.error(`[targeted-refresh] Failed to delete Twitch VODs for ${login}:`, errorSummary(error));
   }
 }
 
@@ -106,7 +107,7 @@ export async function refreshYoutubeForChannel(identifier: string, mcid: string)
     const pending = await fetchChannelUploadsForCache(env.YOUTUBE_API_KEY, identifier, mcid, 10);
     await upsertVideoCache(pending);
   } catch (error) {
-    console.error(`[targeted-refresh] Failed to refresh YouTube videos for ${identifier}:`, error);
+    console.error(`[targeted-refresh] Failed to refresh YouTube videos for ${identifier}:`, errorSummary(error));
   }
 }
 
@@ -142,7 +143,7 @@ export async function deleteYoutubeVideosForChannelIdentifier(identifier: string
         ),
       );
   } catch (error) {
-    console.error(`[targeted-refresh] Failed to delete YouTube videos for ${identifier}:`, error);
+    console.error(`[targeted-refresh] Failed to delete YouTube videos for ${identifier}:`, errorSummary(error));
   }
 }
 
@@ -160,7 +161,7 @@ export async function updateYoutubeCacheMcid(oldMcid: string, newMcid: string): 
   } catch (error) {
     console.error(
       `[targeted-refresh] Failed to update YouTube cache MCID from ${oldMcid} to ${newMcid}:`,
-      error
+      errorSummary(error)
     );
   }
 }
@@ -184,6 +185,6 @@ export async function refreshSrcRankingsForUser(userId: string): Promise<void> {
     await updateUserRankings(db, categories, user);
     await cleanupDuplicateVerifiedRankings(db, userId);
   } catch (error) {
-    console.error(`[targeted-refresh] Failed to refresh SRC rankings for user ${userId}:`, error);
+    console.error(`[targeted-refresh] Failed to refresh SRC rankings for user ${userId}:`, errorSummary(error));
   }
 }

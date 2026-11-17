@@ -1,3 +1,4 @@
+import { errorSummary } from "@/lib/error-summary";
 import type { ActionFunctionArgs } from "react-router";
 import { del } from "@vercel/blob";
 import { createDb } from "@/lib/db";
@@ -49,7 +50,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       return plainJsonResponse({ success: true });
     } catch (error) {
-      console.error("Delete skin error:", error);
+      console.error("Delete skin error:", errorSummary(error));
       return plainJsonResponse({ error: "Failed to delete skin" }, { status: 500 });
     }
   }
@@ -122,7 +123,7 @@ export async function action({ request }: ActionFunctionArgs) {
         customSkinModel: validatedModel,
       });
     } catch (error) {
-      console.error("Save skin error:", error);
+      console.error("Save skin error:", errorSummary(error));
       return plainJsonResponse({ error: "Failed to save skin" }, { status: 500 });
     }
   }

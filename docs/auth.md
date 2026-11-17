@@ -141,7 +141,7 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
   （途中離脱したユーザーはウィザードのステップ1から再開する。各ステップはスキップできるため実質ロックにはならない）
 - 戻り値: `{ session, user }`
 - 注: 現状、アプリのルートは `getCurrentUser` を直接使っておらず（`getSession` ＋独自の `users` 検索が主）、
-  `/me/*` のレイアウト（`app/routes/me/_layout.tsx`）も同じ `isRegistered(user)` で判定して `/onboarding` へ送る
+  `/me/*` のレイアウト（`app/routes/me/_layout.tsx`）も `getCurrentUser` で判定して `/onboarding` へ送る（下の「`/me/*` の保護」）
 
 ### `getCurrentUserOrOnboarding(request, auth, db)`
 
@@ -284,6 +284,22 @@ const session = await getSession(request, auth);
 ```
 
 使用箇所: `/onboarding`, `/me/edit`, その他認証必須ページ
+
+### `/me/*` の保護（ルートのミドルウェア）
+
+`app/routes/me/_layout.tsx` が `middleware`（React Router 8 の server middleware。8.5.0 では future フラグ不要）で
+`getCurrentUser` を呼ぶ。ミドルウェアは配下の loader **と action の前**に走るので、ウィザード未完了のアカウントが
+`/me/*` の action を直接 POST して書き込む（登録完了前に公開にする等）ことはできない。
+未ログインは `/login`、未登録は `/onboarding` へ redirect。解決した users 行は `registeredUserContext`
+（`app/lib/session.ts`）経由でレイアウトの loader が再利用する（DB の往復は増えない）。
+`/api/me/*` は別ルートでこのゲートの外（オンボーディングのスキン手順が登録完了前に使うため）。各 action 側に同じ確認を書く必要はない。
+
+### `/api/me/*` の Origin 確認
+
+resource route には React Router の Origin 確認（`throwIfPotentialCSRFAttack`）が効かないため、`requireApiUser`
+（`app/lib/api-auth.server.ts`）が POST / PUT / PATCH / DELETE に限り、認証より前に `rejectCrossOriginMutation` で確認する。
+`origin` ヘッダなしは通す。あれば `new URL(origin).origin` が `request.url` の origin と一致しなければ 403
+（`"null"`・不正な形も 403）。GET は確認しない。`APP_URL` とは比べない（フレームワーク自身の比較と同じ）。
 
 ### パターン2: 認証任意ページ
 

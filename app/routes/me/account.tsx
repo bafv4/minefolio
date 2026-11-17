@@ -179,6 +179,12 @@ export async function action({ request }: Route.ActionArgs) {
     return redirect("/");
   }
 
+  // 送られているが未知の `_action` は、保存として扱って成功を返さずエラーにする
+  // （`_action` が送られていない場合は従来どおり保存として扱う）
+  if (actionType !== null && actionType !== "save_all") {
+    return { error: t("meEdit.unknownAccountAction") };
+  }
+
   // 公開範囲・既定タブ・表示設定の保存（保存バー。`save_all` と `_action` 未指定は同じ経路）。
   // 送られた項目だけを更新するので、/me/edit の項目（基本情報・MCID・リンク・動画）には触れない
   return saveProfileBatch({ db, t, user, formData });

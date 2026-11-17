@@ -53,7 +53,7 @@ export function PresetSelector({
   className,
 }: PresetSelectorProps) {
   const t = useT();
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
   const revalidator = useRevalidator();
   // 「メインに設定」は編集対象の切替とは別の fetcher（切替中ロックやセレクトの「…」表示を起こさない）
   const mainFetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
@@ -63,6 +63,12 @@ export function PresetSelector({
   // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす
   const isSwitching = fetcher.state !== "idle";
   const lastRevalidatedAt = useRef(0);
+
+  // 編集先の切替（apply-preset）が失敗したときは、理由をトーストで知らせる（成功は帯・選択の更新で分かる）
+  const switchResult = fetcher.data;
+  useEffect(() => {
+    if (switchResult?.error) toast.error(switchResult.error);
+  }, [switchResult]);
 
   // 「メインに設定」の結果をトーストで知らせる（成功後は action 後の再検証で帯が消える）
   const mainResult = mainFetcher.data;

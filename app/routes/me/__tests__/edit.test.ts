@@ -40,6 +40,8 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
 });
 
 import { action, loader } from "../edit";
+import { saveProfileBatch } from "@/lib/profile-edit.server";
+import { createTranslator } from "@/lib/messages";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -501,5 +503,55 @@ describe("action - リンクの長さ・件数の上限", () => {
     const res = await callAction(formWithChanges({ links: { delete: ["link0"] } }));
 
     expect(res).toEqual({ success: true, action: "profile" });
+  });
+});
+
+describe("action - 未知の _action", () => {
+  it("save_all 以外の _action（古いタブが送る import_legacy / delete_account など）は拒否し、何も書かれない", async () => {
+    const user = await setupUser();
+
+    for (const unknown of ["import_legacy", "delete_account", "bogus", ""]) {
+      const res = await callAction(baseFormData({ _action: unknown, displayName: "Changed" }));
+      expect(res).toEqual({ error: "不正な選択肢です" });
+    }
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("_action 未指定（従来の保存）は今までどおり保存できる", async () => {
+    const user = await setupUser();
+
+    const res = await callAction(baseFormData({ displayName: "Changed" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).toBe("Changed");
+  });
+});
+
+describe("saveProfileBatch - リンクの重複をトランザクション内で再検査する", () => {
+  it("事前確認（トランザクションの外）の後に同じプラットフォームのリンクが入っても、重複して作らず何も書かない", async () => {
+    const user = await setupUser();
+    // 並行リクエストが事前確認の後・書き込みの前に commit した状態を作る。事前確認の読み取りだけは古い（空の）結果を返させる
+    await db.insert(socialLinks).values({ id: "raced", userId: user.id, platform: "youtube", identifier: "first" });
+    vi.spyOn(db.query.socialLinks, "findMany").mockResolvedValueOnce([]);
+    const fd = baseFormData({ displayName: "Changed" });
+    fd.set("changes", JSON.stringify({ links: { create: [{ key: "k", platform: "youtube", identifier: "second" }] } }));
+
+    const res = await saveProfileBatch({ db, t: createTranslator("ja"), user, formData: fd });
+
+    expect(res).toMatchObject({ error: "このプラットフォームのリンクは既に登録されています" });
+    const links = await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) });
+    expect(links.map((l) => l.identifier)).toEqual(["first"]);
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("重複が無ければ従来どおり作成できる", async () => {
+    const user = await setupUser();
+    const fd = baseFormData();
+    fd.set("changes", JSON.stringify({ links: { create: [{ key: "k", platform: "youtube", identifier: "only" }] } }));
+
+    const res = await saveProfileBatch({ db, t: createTranslator("ja"), user, formData: fd });
+
+    expect(res).toMatchObject({ success: true });
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(1);
   });
 });

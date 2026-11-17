@@ -7,6 +7,7 @@ import { normalizeKeyCode, type FingerType } from "./keybindings";
 import { sanitizeFingerAssignments } from "./finger-assignments";
 import { isValidMouseDpi, isValidSensitivity } from "./mouse-settings";
 import { createPresetFromOnboarding } from "./preset-utils";
+import { errorSummary } from "./error-summary";
 
 // カスタムキーの型定義
 interface LegacyCustomKey {
@@ -185,17 +186,9 @@ function guessCustomKeyCategory(keyCode: string, keyName: string): "mouse" | "ke
   return "keyboard";
 }
 
-/**
- * MCSRer Hotkeysからデータをインポート
- */
-export async function importFromLegacy(
-  t: Translator,
-  db: Database,
-  userId: string,
-  legacyApiUrl: string,
-  mcid: string
-): Promise<{
-  success: boolean;
+type LegacyImportTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+interface LegacyImportCounts {
   keybindingsImported: number;
   customKeysImported: number;
   remapsImported: number;
@@ -203,25 +196,18 @@ export async function importFromLegacy(
   settingsImported: boolean;
   itemLayoutsImported: number;
   searchCraftsImported: number;
-  error?: string;
-}> {
-  try {
-    const legacyData = await fetchLegacyData(legacyApiUrl, mcid);
+}
 
-    if (!legacyData) {
-      return {
-        success: false,
-        keybindingsImported: 0,
-        customKeysImported: 0,
-        remapsImported: 0,
-        fingerAssignmentsImported: false,
-        settingsImported: false,
-        itemLayoutsImported: 0,
-        searchCraftsImported: 0,
-        error: t("meImport.legacyNotFound")
-      };
-    }
-
+/**
+ * 旧データをライブテーブルへ書き込む（トランザクション内で呼ぶ）。
+ * 既存データの削除と挿入を同じトランザクションに入れるため、途中で失敗すると全体がロールバックされ、
+ * 既存のデータが消えたまま残ることはない。外部 fetch は呼び出し側で済ませてから渡す。
+ */
+async function writeLegacyData(
+  tx: LegacyImportTransaction,
+  userId: string,
+  legacyData: LegacyPlayerData
+): Promise<LegacyImportCounts> {
     let keybindingsImported = 0;
     let customKeysImported = 0;
     let remapsImported = 0;
@@ -242,7 +228,7 @@ export async function importFromLegacy(
 
       if (hasKeybinds) {
         // 既存のキーバインドを削除
-        await db.delete(keybindings).where(eq(keybindings.userId, userId));
+        await tx.delete(keybindings).where(eq(keybindings.userId, userId));
 
         const now = new Date();
 
@@ -253,7 +239,7 @@ export async function importFromLegacy(
           if (mapping && rawKeyCode && typeof rawKeyCode === "string") {
             // Minecraft形式のキーコードをJavaScript形式に正規化
             const keyCode = normalizeKeyCode(rawKeyCode);
-            await db.insert(keybindings).values({
+            await tx.insert(keybindings).values({
               id: createId(),
               userId,
               action: mapping.action,
@@ -274,7 +260,7 @@ export async function importFromLegacy(
       const now = new Date();
 
       // 既存の設定を確認
-      const existingConfig = await db.query.playerConfigs.findFirst({
+      const existingConfig = await tx.query.playerConfigs.findFirst({
         where: eq(playerConfigs.userId, userId),
       });
 
@@ -317,12 +303,12 @@ export async function importFromLegacy(
       };
 
       if (existingConfig) {
-        await db
+        await tx
           .update(playerConfigs)
           .set(configValues)
           .where(eq(playerConfigs.userId, userId));
       } else {
-        await db.insert(playerConfigs).values({
+        await tx.insert(playerConfigs).values({
           id: createId(),
           userId,
           ...configValues,
@@ -336,7 +322,7 @@ export async function importFromLegacy(
     // カスタムキーをインポート
     if (legacyData.customKeys && legacyData.customKeys.length > 0) {
       // 既存のカスタムキーを削除
-      await db.delete(customKeys).where(eq(customKeys.userId, userId));
+      await tx.delete(customKeys).where(eq(customKeys.userId, userId));
 
       const now = new Date();
 
@@ -345,7 +331,7 @@ export async function importFromLegacy(
           // Minecraft形式のキーコードをJavaScript形式に正規化
           const keyCode = normalizeKeyCode(customKey.keyCode);
           const category = guessCustomKeyCategory(keyCode, customKey.keyName);
-          await db.insert(customKeys).values({
+          await tx.insert(customKeys).values({
             id: createId(),
             userId,
             keyCode,
@@ -362,7 +348,7 @@ export async function importFromLegacy(
     // キーリマップをインポート（remappingsはRecord<string, string>形式）
     if (legacyData.remappings && Object.keys(legacyData.remappings).length > 0) {
       // 既存のリマップを削除
-      await db.delete(keyRemaps).where(eq(keyRemaps.userId, userId));
+      await tx.delete(keyRemaps).where(eq(keyRemaps.userId, userId));
 
       const now = new Date();
 
@@ -375,7 +361,7 @@ export async function importFromLegacy(
           targetKey = normalizeKeyCode(targetKeyRaw);
         }
 
-        await db.insert(keyRemaps).values({
+        await tx.insert(keyRemaps).values({
           id: createId(),
           userId,
           sourceKey,
@@ -402,19 +388,19 @@ export async function importFromLegacy(
       // 指割り当てがある場合はplayerConfigsに保存
       if (Object.keys(fingerMap).length > 0) {
         const now = new Date();
-        const existingConfig = await db.query.playerConfigs.findFirst({
+        const existingConfig = await tx.query.playerConfigs.findFirst({
           where: eq(playerConfigs.userId, userId),
         });
 
         const fingerAssignmentsJson = JSON.stringify(fingerMap);
 
         if (existingConfig) {
-          await db
+          await tx
             .update(playerConfigs)
             .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
             .where(eq(playerConfigs.userId, userId));
         } else {
-          await db.insert(playerConfigs).values({
+          await tx.insert(playerConfigs).values({
             id: createId(),
             userId,
             fingerAssignments: fingerAssignmentsJson,
@@ -430,7 +416,7 @@ export async function importFromLegacy(
     // アイテム配置をインポート
     if (legacyData.itemLayouts && legacyData.itemLayouts.length > 0) {
       // 既存のアイテム配置を削除
-      await db.delete(itemLayouts).where(eq(itemLayouts.userId, userId));
+      await tx.delete(itemLayouts).where(eq(itemLayouts.userId, userId));
 
       const now = new Date();
 
@@ -439,7 +425,7 @@ export async function importFromLegacy(
         const segment = layout.segment;
 
         // 同じセグメントが既にインポートされていないか確認
-        const existingLayout = await db.query.itemLayouts.findFirst({
+        const existingLayout = await tx.query.itemLayouts.findFirst({
           where: (layouts, { and, eq: eqOp }) =>
             and(eqOp(layouts.userId, userId), eqOp(layouts.segment, segment)),
         });
@@ -467,7 +453,7 @@ export async function importFromLegacy(
           ? layout.offhand.filter(item => item !== "any")
           : [];
 
-        await db.insert(itemLayouts).values({
+        await tx.insert(itemLayouts).values({
           id: createId(),
           userId,
           segment,
@@ -487,8 +473,8 @@ export async function importFromLegacy(
       // 既存のサーチクラフト・Loop（繋ぎ方）を削除
       // Loop は searchCrafts.id を参照するため、crafts を入れ替える前に必ず Loop も削除する
       // （残すと新しい crafts の id に対して古い Loop が孤児参照になる）
-      await db.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, userId));
-      await db.delete(searchCrafts).where(eq(searchCrafts.userId, userId));
+      await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, userId));
+      await tx.delete(searchCrafts).where(eq(searchCrafts.userId, userId));
 
       const now = new Date();
 
@@ -511,7 +497,7 @@ export async function importFromLegacy(
         if (craft.key3) keys.push(craft.key3);
         if (craft.key4) keys.push(craft.key4);
 
-        await db.insert(searchCrafts).values({
+        await tx.insert(searchCrafts).values({
           id: createId(),
           userId,
           sequence: craft.sequence,
@@ -526,68 +512,112 @@ export async function importFromLegacy(
       }
     }
 
-    // インポート完了後にプリセットを自動作成
-    // 更新されたデータを取得
-    const userKeybindings = await db.query.keybindings.findMany({
-      where: eq(keybindings.userId, userId),
-    });
-    const userPlayerConfig = await db.query.playerConfigs.findFirst({
-      where: eq(playerConfigs.userId, userId),
-    });
-    const userKeyRemaps = await db.query.keyRemaps.findMany({
-      where: eq(keyRemaps.userId, userId),
-    });
-    const userItemLayouts = await db.query.itemLayouts.findMany({
-      where: eq(itemLayouts.userId, userId),
-    });
-    const userSearchCrafts = await db.query.searchCrafts.findMany({
-      where: eq(searchCrafts.userId, userId),
-    });
-    const userCustomKeys = await db.query.customKeys.findMany({
-      where: eq(customKeys.userId, userId),
-    });
-    // カスタムアクションはレガシーAPIに存在しないが、ライブテーブルに既存データが
-    // 残っている場合はスナップショットへ含める（アクティブプリセット=ライブテーブルの不変条件）
-    const userCustomActions = await db.query.customActions.findMany({
-      where: eq(customActions.userId, userId),
+  return {
+    keybindingsImported,
+    customKeysImported,
+    remapsImported,
+    fingerAssignmentsImported,
+    settingsImported,
+    itemLayoutsImported,
+    searchCraftsImported
+  };
+}
+
+/** 取り込めなかったときの返り値（件数はすべて 0） */
+function legacyImportFailure(error: string) {
+  return {
+    success: false,
+    keybindingsImported: 0,
+    customKeysImported: 0,
+    remapsImported: 0,
+    fingerAssignmentsImported: false,
+    settingsImported: false,
+    itemLayoutsImported: 0,
+    searchCraftsImported: 0,
+    error,
+  };
+}
+
+/**
+ * MCSRer Hotkeysからデータをインポート
+ *
+ * - 旧 API の取得（外部 fetch）はトランザクションの外で先に行う
+ * - ライブテーブルへの書き込み（既存データの削除＋挿入）と、取り込んだ内容での新しいプリセットの作成
+ *   （編集先にする）は 1 トランザクション。途中で失敗すると全体がロールバックされ、既存のライブデータも
+ *   既存のプリセットも元のまま残る（プリセットの作成だけ失敗して、データがどのプリセットにも属さなくなることもない）
+ * - 取り込みのたびに新しいプリセットを作る（既存プリセットの中身・updatedAt は変えない。既存のアクティブは
+ *   createPreset が非アクティブにする）。取り込み後も元のプリセットへ切り替えて戻せる
+ * - 失敗時にユーザーへ返す文言は翻訳済みの固定文言だけ（drizzle のエラー文は SQL を含むため返さない）
+ */
+export async function importFromLegacy(
+  t: Translator,
+  db: Database,
+  userId: string,
+  legacyApiUrl: string,
+  mcid: string
+): Promise<{
+  success: boolean;
+  keybindingsImported: number;
+  customKeysImported: number;
+  remapsImported: number;
+  fingerAssignmentsImported: boolean;
+  settingsImported: boolean;
+  itemLayoutsImported: number;
+  searchCraftsImported: number;
+  error?: string;
+}> {
+  try {
+    const legacyData = await fetchLegacyData(legacyApiUrl, mcid);
+
+    if (!legacyData) {
+      return legacyImportFailure(t("meImport.legacyNotFound"));
+    }
+
+    const counts = await db.transaction(async (tx) => {
+      const written = await writeLegacyData(tx, userId, legacyData);
+
+      // 書き込んだ内容（ライブテーブル）で新しいプリセットを作り、編集先にする。
+      // 更新されたデータを取得する
+      const [
+        userKeybindings,
+        userPlayerConfig,
+        userKeyRemaps,
+        userItemLayouts,
+        userSearchCrafts,
+        userCustomKeys,
+        userCustomActions,
+      ] = await Promise.all([
+        tx.query.keybindings.findMany({ where: eq(keybindings.userId, userId) }),
+        tx.query.playerConfigs.findFirst({ where: eq(playerConfigs.userId, userId) }),
+        tx.query.keyRemaps.findMany({ where: eq(keyRemaps.userId, userId) }),
+        tx.query.itemLayouts.findMany({ where: eq(itemLayouts.userId, userId) }),
+        tx.query.searchCrafts.findMany({ where: eq(searchCrafts.userId, userId) }),
+        tx.query.customKeys.findMany({ where: eq(customKeys.userId, userId) }),
+        // カスタムアクションはレガシーAPIに存在しないが、ライブテーブルに既存データが残っている場合は
+        // スナップショットへ含める（アクティブプリセット=ライブテーブルの不変条件）
+        tx.query.customActions.findMany({ where: eq(customActions.userId, userId) }),
+      ]);
+
+      // レガシーインポートもオンボーディングの一種として扱う
+      await createPresetFromOnboarding(
+        t,
+        tx,
+        userId,
+        userKeybindings,
+        userPlayerConfig ?? null,
+        userKeyRemaps,
+        userItemLayouts,
+        userSearchCrafts,
+        userCustomKeys,
+        userCustomActions
+      );
+      return written;
     });
 
-    // 初期プリセットを作成（レガシーインポートもオンボーディングの一種として扱う）
-    // ライブテーブルへ書き込んだ全データをスナップショットに含める
-    await createPresetFromOnboarding(
-      db,
-      userId,
-      userKeybindings,
-      userPlayerConfig ?? null,
-      userKeyRemaps,
-      userItemLayouts,
-      userSearchCrafts,
-      userCustomKeys,
-      userCustomActions
-    );
-
-    return {
-      success: true,
-      keybindingsImported,
-      customKeysImported,
-      remapsImported,
-      fingerAssignmentsImported,
-      settingsImported,
-      itemLayoutsImported,
-      searchCraftsImported
-    };
+    return { success: true, ...counts };
   } catch (error) {
-    console.error("Legacy import error:", error);
-    return {
-      success: false,
-      keybindingsImported: 0,
-      customKeysImported: 0,
-      remapsImported: 0,
-      fingerAssignmentsImported: false,
-      settingsImported: false,
-      itemLayoutsImported: 0,
-      searchCraftsImported: 0,
-      error: error instanceof Error ? error.message : t("meImport.legacyImportFailed")
-    };
+    // 失敗したクエリの SQL・パラメータ（入力値）をログとユーザーへ出さない
+    console.error("Legacy import error:", errorSummary(error));
+    return legacyImportFailure(t("meImport.legacyImportFailed"));
   }
 }

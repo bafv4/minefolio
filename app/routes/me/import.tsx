@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useRevalidator } from "react-router";
 import type { Route } from "./+types/import";
@@ -75,7 +75,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  *   （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）。
  * 戻り値はレスポンスの presetCreated にそのまま使う。
  */
-async function syncPresetAfterImport(db: Database, userId: string, hasPresets: boolean): Promise<boolean> {
+async function syncPresetAfterImport(t: Translator, db: Database, userId: string, hasPresets: boolean): Promise<boolean> {
   if (!hasPresets) {
     const [
       updatedKeybindings,
@@ -96,6 +96,7 @@ async function syncPresetAfterImport(db: Database, userId: string, hasPresets: b
     ]);
 
     await createPresetFromImport(
+      t,
       db,
       userId,
       updatedKeybindings,
@@ -249,7 +250,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
-    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
+    const presetCreated = await syncPresetAfterImport(t, db, user.id, hasPresets);
 
     return { success: true, type: "remaps", count: remaps.length, presetCreated };
   }
@@ -387,7 +388,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
-    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
+    const presetCreated = await syncPresetAfterImport(t, db, user.id, hasPresets);
 
     return {
       success: true,

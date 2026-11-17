@@ -16,6 +16,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 import { createPreset } from "@/lib/preset-utils";
+import { createTranslator } from "@/lib/messages";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -71,7 +72,7 @@ afterEach(() => {
 /** action は playerConfig 系の保存にアクティブなプリセットを要求するため、都度用意する */
 async function setupUserWithActivePreset() {
   const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
-  const preset = await createPreset(db, { userId: user.id, name: "Main", isActive: true });
+  const preset = await createPreset(db, { t: createTranslator("ja"), userId: user.id, name: "Main", isActive: true });
   signInAs("discord-runner");
   return { user, preset };
 }

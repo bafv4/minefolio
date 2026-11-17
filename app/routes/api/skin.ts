@@ -1,3 +1,4 @@
+import { errorSummary } from "@/lib/error-summary";
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { parseVercelBlobUrl } from "@/lib/blob-url";
@@ -85,7 +86,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         return fetchMojangSkin(user.uuid);
       }
     } catch (error) {
-      console.error("Failed to fetch user skin:", error);
+      console.error("Failed to fetch user skin:", errorSummary(error));
     }
   }
 
@@ -163,7 +164,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch skin:", error);
+    console.error("Failed to fetch skin:", errorSummary(error));
     return new Response("Failed to fetch skin", { status: 500 });
   }
 }
