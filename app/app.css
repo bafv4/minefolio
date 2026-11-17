@@ -346,6 +346,207 @@ body {
   --guide-bg-legacy-yellow: oklch(0.27 0.06 102);
 }
 
+/* ───────────────────────────────────────────────────────────────
+   ハイコントラスト（html[data-contrast="more"]）。テーマ（light / dark / ultra-dark）とは別軸で、
+   3テーマそれぞれに強化版のトークンを持つ。属性は use-contrast.ts（と root.tsx の初回描画前スクリプト）が付ける。
+   コンポーネントは data-contrast を見て出し分けない（dark: を使わないのと同じ。差はトークンで吸収する）。
+   目標（WCAG の強化基準）: 通常の文字 7:1 以上、枠線・フォーカスリング・アイコンなどの UI 部品 4.5:1 以上。
+   色相は通常モードのまま、明度・彩度だけを動かす。面（card / secondary 等）の差は区別が付く範囲で保つ。
+   枠線は /60・/70 のような透明度を掛けた後でも 4.5:1 になるよう、不透明で強い値にする（下の未層ルールが残りを補う）。
+   ─────────────────────────────────────────────────────────────── */
+:root[data-contrast="more"]:not(.dark):not(.ultra-dark) {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.1 0.03 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.1 0.03 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.1 0.03 265);
+  --primary: oklch(0.2 0.05 265.8);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.955 0.007 247.9);
+  --secondary-foreground: oklch(0.2 0.05 265.8);
+  --muted: oklch(0.955 0.007 247.9);
+  --muted-foreground: oklch(0.36 0.04 256);
+  --accent: oklch(0.955 0.007 247.9);
+  --accent-foreground: oklch(0.2 0.05 265.8);
+  --destructive: oklch(0.43 0.19 27.3);
+  --border: oklch(0.2 0.03 260);
+  --page-grid-line: oklch(0 0 0 / 0);
+  --input: oklch(0.955 0.007 247.9);
+  --ring: oklch(0.4 0.12 162);
+  --sidebar-border: oklch(0.2 0.03 260);
+  --sidebar-ring: oklch(0.4 0.12 162);
+  --brand: oklch(0.4 0.12 162);
+  --brand-link: oklch(0.38 0.12 160);
+  --success: oklch(0.4 0.13 139);
+  --warning: oklch(0.43 0.12 49);
+  --warning-foreground: oklch(1 0 0);
+  --info: oklch(0.42 0.17 259.8);
+  --favorite: oklch(0.5 0.2 27);
+  --youtube: oklch(0.45 0.19 27.3);
+  --twitch: oklch(0.45 0.22 302.3);
+  --gold: oklch(0.42 0.09 75.8);
+  --bronze: oklch(0.42 0.11 58.3);
+  --rank-coal: oklch(0.38 0 0);
+  --rank-iron: oklch(0.4 0 0);
+  --rank-gold: oklch(0.41 0.09 73.3);
+  --rank-emerald: oklch(0.4 0.12 143.1);
+  --rank-diamond: oklch(0.4 0.07 195);
+  --rank-netherite: oklch(0.43 0.19 314.5);
+  --key-movement: oklch(0.4 0.12 142.3);
+  --key-combat: oklch(0.42 0.17 259.8);
+  --key-inventory: oklch(0.42 0.09 84.4);
+  --key-hotbar: oklch(0.45 0.19 27.3);
+  --key-ui: oklch(0.43 0.2 303.9);
+  --finger-chip-fg: oklch(0.15 0.02 260);
+}
+
+.dark[data-contrast="more"],
+.ultra-dark[data-contrast="more"] {
+  --foreground: oklch(1 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.98 0.01 255.5);
+  --secondary-foreground: oklch(1 0 0);
+  --muted-foreground: oklch(0.88 0.03 256.8);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.84 0.14 22.2);
+  --border: oklch(0.85 0.02 260);
+  --page-grid-line: oklch(1 0 0 / 0);
+  --ring: oklch(0.8 0.15 162);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0.02 260);
+  --sidebar-ring: oklch(0.8 0.15 162);
+  --brand: oklch(0.8 0.15 162);
+  --brand-link: oklch(0.84 0.14 160);
+  --success: oklch(0.82 0.16 140);
+  --warning: oklch(0.9 0.18 91.9);
+  --info: oklch(0.84 0.12 254.6);
+  --favorite: oklch(0.82 0.14 22);
+  --youtube: oklch(0.84 0.14 22.2);
+  --twitch: oklch(0.84 0.14 305.5);
+  --gold: oklch(0.88 0.16 86);
+  --bronze: oklch(0.84 0.15 70);
+  --rank-coal: oklch(0.84 0 0);
+  --rank-gold: oklch(0.86 0.15 73.3);
+  --rank-emerald: oklch(0.9 0.2 143.1);
+  --rank-diamond: oklch(0.92 0.12 195);
+  --rank-netherite: oklch(0.78 0.17 314.5);
+  --key-movement: oklch(0.86 0.17 151.7);
+  --key-combat: oklch(0.84 0.12 254.6);
+  --key-inventory: oklch(0.9 0.17 91.9);
+  --key-hotbar: oklch(0.84 0.14 22.2);
+  --key-ui: oklch(0.84 0.14 305.5);
+  --finger-pinky: oklch(0.42 0.15 350);
+  --finger-ring: oklch(0.42 0.15 290);
+  --finger-middle: oklch(0.42 0.12 230);
+  --finger-index: oklch(0.42 0.15 175);
+  --finger-thumb: oklch(0.42 0.15 145);
+  --finger-palm: oklch(0.42 0.13 70);
+}
+
+
+.ultra-dark[data-contrast="more"] {
+  --foreground: oklch(1 0 0);
+  --muted-foreground: oklch(0.88 0.01 286);
+  --primary: oklch(0.98 0.003 286);
+  --border: oklch(0.85 0.01 286);
+  --sidebar-border: oklch(0.85 0.01 286);
+}
+
+/* 透明度を掛けた枠線のうち、トークンを強くしても 4.5:1 に届かない物（/40・/50 は不透明の黒でも約 2.5〜4:1、
+   前景色の /15 は約 1.4:1）を、/60 相当の枠線に揃える。層の外（unlayered）に置いて、ユーティリティ層より優先させる。
+   コンポーネント側のクラスは書き換えず、ここだけで吸収する */
+:root[data-contrast="more"] .border-border\/40,
+:root[data-contrast="more"] .border-border\/50,
+:root[data-contrast="more"] .border-foreground\/15 {
+  border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+/* ダークの outline ボタンは枠に --input（塗り色）を使う。ハイコントラストでは枠線の色にする */
+.dark[data-contrast="more"] .dark\:border-input,
+.ultra-dark[data-contrast="more"] .dark\:border-input {
+  border-color: var(--border);
+}
+/* destructive ボタン: 文字色（--destructive）がダークでは明るい値になるため、白文字を載せると読めない。
+   塗りの上は背景色（暗色）の文字にする */
+.dark[data-contrast="more"] .dark\:bg-destructive\/60,
+.ultra-dark[data-contrast="more"] .dark\:bg-destructive\/60 {
+  background-color: var(--destructive);
+  color: var(--background);
+}
+/* スイッチの未選択の溝は塗り色だけで背景と区別されるので、枠線を足して輪郭を出す */
+:root[data-contrast="more"] [data-slot="switch"] {
+  border-color: var(--border);
+}
+
+/* ハイコントラストのホバー・ハイライト。面の濃淡（--accent や bg-muted/50 など）は 3:1 を出せないので、
+   濃淡ではなく「前景色のアウトライン・反転・下線・強い枠」で状態を示す（WCAG 1.4.11）。
+   クラスの列挙ではなく class 属性の部分一致（hover:bg- など）で拾うので、新しいホバー用クラスにも自動で効く。
+   タッチ端末の貼り付いたホバーを避けるため (hover: hover) の中だけ。選択中（brand）とは別の手がかりにする */
+@media (hover: hover) {
+  /* 薄い面・半透明の面に変わるホバー（リスト行・リンク行・ナビ・タブ・ghost / outline ボタン）: 内側の 2px アウトライン */
+  :root[data-contrast="more"] [class*="hover:bg-"]:not([class*="hover:bg-transparent"], :disabled, [aria-disabled="true"]):hover {
+    outline: 2px solid var(--foreground);
+    outline-offset: var(--hc-hover-offset, -2px);
+  }
+  /* 塗りのボタン（brand / primary / destructive）は塗りの濃淡の差が小さいので、外側のアウトライン */
+  :root[data-contrast="more"] [class*="hover:bg-brand"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-primary"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-destructive"]:hover {
+    --hc-hover-offset: 2px;
+  }
+  /* 塗りが薄まる（/90・/80）ホバーは、載っている文字のコントラストを下げるので、塗りは変えずアウトラインだけで示す */
+  :root[data-contrast="more"] [class*="hover:bg-brand/90"]:hover {
+    background-color: var(--brand);
+  }
+  :root[data-contrast="more"] [class*="hover:bg-primary/90"]:hover {
+    background-color: var(--primary);
+  }
+  :root[data-contrast="more"] [class*="hover:bg-destructive/80"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-destructive/90"]:hover {
+    background-color: var(--destructive);
+  }
+  /* 親（.group）のホバーで面が変わる子 */
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:bg-"] {
+    outline: 2px solid var(--foreground);
+    outline-offset: -2px;
+  }
+  /* カード等のホバー枠（border-primary/40 など）は強い枠色へ */
+  :root[data-contrast="more"] [class*="hover:border-"]:hover,
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:border-"] {
+    border-color: var(--primary);
+  }
+  /* 文字色だけが変わるホバー（muted → foreground など）は下線を足す。
+     面も変わる要素（ghost / outline ボタン・ナビ項目など）は、上のアウトラインが手がかりになるので下線は足さない */
+  :root[data-contrast="more"] [class*="hover:text-"]:not([class*="hover:bg-"]):hover,
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:text-"]:not([class*="group-hover:bg-"]) {
+    text-decoration-line: underline;
+    text-underline-offset: 3px;
+  }
+  /* 透明度だけが変わるホバー */
+  :root[data-contrast="more"] [class*="hover:opacity-"]:hover {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
+}
+/* メニュー・セレクト・コマンドのハイライト項目（Radix の data-highlighted、cmdk の data-selected）は前景色と背景色を反転。
+   選択中の brand とは別の手がかりで、文字は foreground / background の組（19:1 前後）。destructive 項目も同じ組にする */
+:root[data-contrast="more"] [data-highlighted]:not(:has([data-slot="switch"])),
+:root[data-contrast="more"] [data-selected="true"] {
+  background-color: var(--foreground) !important;
+  color: var(--background) !important;
+}
+:root[data-contrast="more"] [data-highlighted]:not(:has([data-slot="switch"])) svg,
+:root[data-contrast="more"] [data-selected="true"] svg {
+  color: inherit !important;
+}
+/* スイッチを持つ項目（ハイコントラストの切替）は、スイッチの塗りが反転面に埋もれるので、反転せずアウトラインにする */
+:root[data-contrast="more"] [data-highlighted]:has([data-slot="switch"]) {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

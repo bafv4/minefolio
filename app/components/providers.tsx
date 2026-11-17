@@ -1,6 +1,7 @@
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { LocaleProvider } from "@/hooks/use-locale";
+import { ContrastSync } from "@/hooks/use-contrast";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 
 interface ProvidersProps {
@@ -19,6 +20,7 @@ export function Providers({ children, locale = DEFAULT_LOCALE }: ProvidersProps)
       disableTransitionOnChange
       themes={["light", "dark", "ultra-dark"]}
     >
+      <ContrastSync />
       {children}
       <Toaster position="top-right" />
     </ThemeProvider>

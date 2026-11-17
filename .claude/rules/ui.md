@@ -58,6 +58,23 @@
 - 切替 UI は `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS`（デスクトップのドロップダウンとモバイルのセグメントで共有）
 - **`dark:` バリアントは使わない。** 3テーマの差はトークン側で吸収する
 
+### ハイコントラスト
+- テーマとは別のオン・オフ（3テーマ × 2）。`<html data-contrast="more">` が付くと、`app/app.css` の「ハイコントラスト」ブロック
+  （`:root[data-contrast="more"]:not(.dark):not(.ultra-dark)` / `.dark[data-contrast="more"]` / `.ultra-dark[data-contrast="more"]`）が各テーマのトークンを上書きする
+- **コンポーネントで `data-contrast` を見て出し分けない**（`dark:` を使わないのと同じ）。差はトークンと、`app.css` の少数の未層ルール
+  （透明度で弱まる `border-border/40`・`/50`・`border-foreground/15` を /60 相当へ揃える等）で吸収する
+- 数値の目標は WCAG の強化基準: 通常の文字 **7:1 以上**、大きな文字と UI 部品（枠線・アイコン・フォーカスリング）**4.5:1 以上**。
+  値を変えるときは 3テーマすべてで background / card / secondary の各面 × 文字色・意味色・brand・primary、枠線（`/60`・`/70` を掛けた後）を測る。
+  色相は変えず、明度・彩度だけを動かす。面の差（card / secondary）は区別が付く範囲で保ち、新しい強調色は足さない
+- `--input` は入力欄の**塗り色**（枠ではない）なのでハイコントラストでも面として保つ。背景の格子（`--page-grid-line`）は消す
+- 切替は `useContrast()`（`@/hooks/use-contrast`）。保存は localStorage `contrast`、判定は `@/lib/contrast`。詳細は `docs/infrastructure.md`
+- **ホバー・ハイライトは濃淡ではなく別の手がかりで示す**（WCAG 1.4.11: 隣接色に対し 3:1 以上、その状態の文字は 7:1 以上）。`--accent` / `bg-muted/50` などの面の差は 3:1 に届かないので、
+  `app.css` の HC ブロックが class 属性の部分一致（`[class*="hover:bg-"]` など。クラスを列挙しないので新しいホバーにも効く）で次を足す。`(hover: hover)` の中だけ
+  - 面が変わるホバー（リスト行・リンク行・ナビ・タブ・ghost / outline ボタン）: 前景色の 2px 内側アウトライン。塗りのボタン（brand / primary / destructive）は外側アウトラインで、塗りは薄めずトークンのまま
+  - カードのホバー枠（`hover:border-*`）: `--primary`（ほぼ前景色）。文字色だけが変わるホバー（`hover:text-*`）: 下線
+  - メニュー・セレクト・コマンドのハイライト項目（`data-highlighted` / `data-selected`）: 前景色と背景色の反転（スイッチを持つ項目だけアウトライン）
+  - 選択中の brand（面・下線）とは別の手がかりにする。`--accent` は強い色に変えない（`bg-accent` だけで文字色が対になっていない箇所＝スケルトン・ダイアログの閉じる・combobox の行などが読めなくなるため）
+
 ### 色トークン
 - テーマ色は **oklch** で CSS 変数に定義する
 - 意味色は必ずトークン（`text-success` / `text-warning` / `text-info` / `text-destructive`、面は各 `bg-*/10`、枠は `border-*/30`〜`/50`）。

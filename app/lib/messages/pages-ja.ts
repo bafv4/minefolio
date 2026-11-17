@@ -35,6 +35,7 @@ export const PAGES_JA = {
     lightShort: "ライト",
     darkShort: "ダーク",
     ultraDarkShort: "ウルトラ",
+    highContrast: "ハイコントラスト",
   },
   /** 共有・コピー（components/share-button.tsx） */
   share: {

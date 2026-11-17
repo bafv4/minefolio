@@ -40,6 +40,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     lightShort: "Light",
     darkShort: "Dark",
     ultraDarkShort: "Ultra",
+    highContrast: "High contrast",
   },
   share: {
     label: "Share",

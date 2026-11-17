@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle, THEME_OPTIONS } from "./theme-toggle";
+import { Switch } from "@/components/ui/switch";
+import { useContrast } from "@/hooks/use-contrast";
 import { WhatsNew } from "@/components/whats-new";
 import { cn } from "@/lib/utils";
 import { useLoginHref } from "@/hooks/use-login-href";
@@ -54,6 +56,7 @@ export function Header({ user }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const { enabled: highContrast, setEnabled: setHighContrast } = useContrast();
 
   // サブルート（/guides/xxx 等）でも親のナビ項目を現在地にする
   const activeHref = findActiveNavHref(location.pathname, navigation.map((n) => n.href));
@@ -364,6 +367,12 @@ export function Header({ user }: HeaderProps) {
                       </button>
                     ))}
                   </div>
+
+                  {/* ハイコントラスト（テーマとは別のオン・オフ。ラベルごと押せる） */}
+                  <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
+                    <span>{t("theme.highContrast")}</span>
+                    <Switch checked={highContrast} onCheckedChange={setHighContrast} />
+                  </label>
 
                   {/* 言語切替（デスクトップはヘッダー右のドロップダウン、
                       モバイルはテーマと同じセグメント切替で並べる） */}

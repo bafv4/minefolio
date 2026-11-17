@@ -10,6 +10,7 @@ import {
 import { Analytics } from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
+import { CONTRAST_INIT_SCRIPT } from "@/lib/contrast";
 import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 import { buttonVariants } from "@/components/ui/button";
 import { Providers } from "@/components/providers";
@@ -39,6 +40,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" type="image/png" href="/icon.png" />
+        {/* ハイコントラストの属性を描画前に付ける（ちらつき防止）。判定は @/lib/contrast の resolveContrast と同じ */}
+        <script dangerouslySetInnerHTML={{ __html: CONTRAST_INIT_SCRIPT }} />
         <Meta />
         <Links />
       </head>

@@ -2,11 +2,14 @@ import { Moon, Sun, Eclipse, Check } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 import { useTheme } from "next-themes";
+import { useContrast } from "@/hooks/use-contrast";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -21,6 +24,7 @@ export const THEME_OPTIONS = [
 export function ThemeToggle() {
   const t = useT();
   const { theme, setTheme } = useTheme();
+  const { enabled: highContrast, setEnabled: setHighContrast } = useContrast();
 
   return (
     <DropdownMenu>
@@ -44,6 +48,31 @@ export function ThemeToggle() {
             {theme === value && <Check className="ml-auto h-4 w-4" aria-hidden />}
           </DropdownMenuItem>
         ))}
+        {/* ハイコントラストはテーマとは別のオン・オフ（3テーマそれぞれに効く）。
+            メニューの中なので、役割はチェック項目（role=menuitemcheckbox・aria-checked は Radix が付ける）のまま、
+            見た目だけトグルスイッチにする（ui/switch.tsx と同じクラス。操作できる button を項目の中に入れ子にしない）。
+            切り替えてもメニューは閉じない（結果をその場で見られるように） */}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={highContrast}
+          onCheckedChange={setHighContrast}
+          onSelect={(event) => event.preventDefault()}
+          className="cursor-pointer justify-between gap-3 pl-2 [&>span:first-child]:hidden"
+        >
+          {t("theme.highContrast")}
+          <span
+            aria-hidden="true"
+            data-slot="switch"
+            data-state={highContrast ? "checked" : "unchecked"}
+            className="inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-colors data-[state=checked]:bg-primary data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80"
+          >
+            <span
+              data-slot="switch-thumb"
+              data-state={highContrast ? "checked" : "unchecked"}
+              className="block size-4 rounded-full bg-background transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0 dark:data-[state=checked]:bg-primary-foreground dark:data-[state=unchecked]:bg-foreground"
+            />
+          </span>
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
