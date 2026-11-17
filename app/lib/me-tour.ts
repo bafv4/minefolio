@@ -1,7 +1,7 @@
 // /me の初回ツアーの手順定義と、対象要素の解決（DOM に触る部分はここに集めて単体で試せるようにする）。
 //
 // 対象は `data-me-tour="<名前>"` 属性で示す。見つからない・見えていない対象の手順は飛ばす
-// （ただし fallback: "bottom" の手順は、対象が無くても画面下の中央に吹き出しを出す）。
+// （allowHidden の手順は、DOM にさえあれば見えていなくても指す）。
 
 export type MeTourStepId = "sidebar" | "edit" | "save" | "player";
 
@@ -9,8 +9,8 @@ export interface MeTourStepDef {
   id: MeTourStepId;
   /** 優先順に探す data-me-tour の値。最初に「見えている」ものを使う */
   targets: readonly string[];
-  /** 対象が見つからなくても出す（画面下の中央に置く） */
-  fallback?: "bottom";
+  /** DOM に存在すれば、aria-hidden / 非表示でも指す（変更が無いあいだ隠れている保存バー用）。無ければ手順ごと飛ばす */
+  allowHidden?: boolean;
 }
 
 export const ME_TOUR_STEPS: readonly MeTourStepDef[] = [
@@ -18,8 +18,8 @@ export const ME_TOUR_STEPS: readonly MeTourStepDef[] = [
   { id: "sidebar", targets: ["sidebar", "sidebar-toggle"] },
   // 各ページが付ける。付いていない画面（/me/edit 以外）では飛ばす
   { id: "edit", targets: ["edit-form"] },
-  // 保存バーは変更が無いあいだ aria-hidden なので、通常は画面下の中央を指す
-  { id: "save", targets: ["save-bar"], fallback: "bottom" },
+  // 保存バー（FloatingSaveBar）がある画面だけ。変更が無いあいだは aria-hidden だが、DOM にあれば指す
+  { id: "save", targets: ["save-bar"], allowHidden: true },
   { id: "player", targets: ["identity"] },
 ];
 
@@ -33,10 +33,10 @@ export function isTourTargetVisible(el: Element): boolean {
 
 export interface ResolvedTourStep {
   def: MeTourStepDef;
-  /** 実際に指す要素（null は画面下の中央） */
-  element: HTMLElement | null;
-  /** 使われた data-me-tour の値（null は fallback） */
-  target: string | null;
+  /** 実際に指す要素 */
+  element: HTMLElement;
+  /** 使われた data-me-tour の値 */
+  target: string;
 }
 
 export function resolveTourSteps(root: ParentNode = document): ResolvedTourStep[] {
@@ -45,12 +45,11 @@ export function resolveTourSteps(root: ParentNode = document): ResolvedTourStep[
     let found: ResolvedTourStep | null = null;
     for (const target of def.targets) {
       const el = root.querySelector<HTMLElement>(`[data-me-tour="${target}"]`);
-      if (el && isTourTargetVisible(el)) {
+      if (el && (def.allowHidden || isTourTargetVisible(el))) {
         found = { def, element: el, target };
         break;
       }
     }
-    if (!found && def.fallback === "bottom") found = { def, element: null, target: null };
     if (found) resolved.push(found);
   }
   return resolved;

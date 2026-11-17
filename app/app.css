@@ -416,6 +416,12 @@ body {
       --sticky-bar-inset: 7.75rem;
     }
   }
+  /* /me の lg 未満: メニュー開閉ボタンの帯（data-me-nav-bar、_layout.tsx。ヘッダー 64px の直下に貼り付く約 60px）＋余白の 8.5rem */
+  @media (width < 64rem) {
+    :root:has([data-me-nav-bar]) {
+      --sticky-bar-inset: 8.5rem;
+    }
+  }
   :root:has([data-editor-toolbar]) {
     --sticky-bar-inset: calc(4.5rem + var(--editor-toolbar-height, 0px));
   }

@@ -1528,6 +1528,7 @@ export const PAGES_JA = {
     import: "インポート",
     home: "マイページ",
     mobileMenuLabel: "マイページのメニューを開閉（現在: {page}）",
+    navLabel: "マイページ",
     tour: {
       dialogLabel: "マイページの使い方ツアー",
       progress: "{current} / {total}",
@@ -1546,7 +1547,7 @@ export const PAGES_JA = {
       },
       save: {
         title: "変更は保存ボタンで確定",
-        body: "編集すると画面の下に保存バーが出ます。「変更を保存」を押すまで、内容は走者画面に反映されません。",
+        body: "キー配置・デバイスなどの変更は、画面下の保存バーで確定します。",
       },
       player: {
         title: "走者画面で見える",

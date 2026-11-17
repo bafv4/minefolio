@@ -82,14 +82,15 @@ export function FloatingSaveBar({
           <span className="sr-only">{t("common.savingInProgress")}</span>
         )}
       </div>
-      <div className="flex gap-2">
+      {/* モバイルは「取消」を左端の小さな副次操作にして、広い「保存」から離す（押し間違いで破棄しにくくする） */}
+      <div className="flex gap-2 max-sm:gap-6">
         {onReset && hasChanges && (
           <Button
             type="button"
             variant="ghost"
             onClick={onReset}
             disabled={isSubmitting}
-            className="flex-1 sm:flex-none touch-manipulation"
+            className="flex-none min-h-11 sm:min-h-9 text-muted-foreground touch-manipulation"
           >
             <RotateCcw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">{reset}</span>
@@ -100,7 +101,7 @@ export function FloatingSaveBar({
           type="button"
           onClick={onSave}
           disabled={isSubmitting || !hasChanges}
-          className="flex-1 sm:flex-none sm:min-w-32 touch-manipulation"
+          className="flex-1 sm:flex-none sm:min-w-32 min-h-11 sm:min-h-9 touch-manipulation"
         >
           {isSubmitting ? (
             <>

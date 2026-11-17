@@ -119,10 +119,11 @@ export default function MeLayout() {
   const currentLabel = currentItem ? t(currentItem.labelKey) : t("meLayout.home");
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Sidebar Navigation */}
-      <aside className="lg:w-64 shrink-0">
-        <nav className="sticky top-24 space-y-1">
+    <div className="flex flex-col lg:flex-row lg:gap-8">
+      {/* Sidebar Navigation。lg 未満は aside / nav を display:contents にして、開閉ボタンの帯をページ全体を
+          包むコンテナの直下に出す（sticky は直近の親の中でしか貼り付かないため） */}
+      <aside className="lg:w-64 shrink-0 max-lg:contents">
+        <nav aria-label={t("meLayout.navLabel")} className="sticky top-24 space-y-1 max-lg:contents">
           <div data-me-tour="identity" className="mb-3 pb-3 lg:mb-4 lg:pb-4 border-b flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium truncate">
@@ -139,7 +140,13 @@ export default function MeLayout() {
             />
           </div>
 
-          {/* lg 未満（縦積み）: 現在のページ名を表示する開閉トグル。h1 を1画面目に収めるため既定は閉じる */}
+          {/* lg 未満（縦積み）: 現在のページ名を表示する開閉トグル。h1 を1画面目に収めるため既定は閉じる。
+              トグルと開いたメニューを1つの帯にして、ヘッダーの直下（64px）に貼り付ける（長いときは帯の中でスクロール）。
+              lg 以上は display:contents で、従来のサイドバーのまま */}
+          <div
+            data-me-nav-bar
+            className="max-lg:sticky max-lg:top-[64px] max-lg:z-30 max-lg:-mx-2 max-lg:bg-background max-lg:px-2 max-lg:py-2 space-y-1 lg:contents"
+          >
           <Button
             type="button"
             variant="outline"
@@ -154,7 +161,7 @@ export default function MeLayout() {
             {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
           </Button>
 
-          <div id="me-mobile-menu" data-me-tour="sidebar" className={cn("space-y-1", !mobileMenuOpen && "hidden", "lg:block")}>
+          <div id="me-mobile-menu" data-me-tour="sidebar" className={cn("space-y-1 max-lg:max-h-[calc(100dvh-9rem)] max-lg:overflow-y-auto", !mobileMenuOpen && "hidden", "lg:block")}>
           {/* 主要なナビゲーション項目 */}
           {mainNavItems.map((item) => (
             <Fragment key={item.to}>
@@ -206,12 +213,13 @@ export default function MeLayout() {
             </NavLink>
           ))}
           </div>
+          </div>
         </nav>
       </aside>
 
       {/* Main Content */}
       {/* <main> はサイトの共通レイアウト（routes/_layout.tsx）が持つので、ここは div にする */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 max-lg:mt-6">
         <div className={cn(
           "transition-opacity duration-150",
           isNavigating && "opacity-50 pointer-events-none"

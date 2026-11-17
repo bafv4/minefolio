@@ -1,7 +1,7 @@
 // /me の初回ツアー。`show`（users.meTourCompletedAt が null）のとき、画面の要素を順に指す吹き出しを1回だけ出す。
 // 終える・スキップ・Esc のいずれでも api/me/guide に記録し、二度と出ない。
-// 吹き出しは Radix Popover（modal）: フォーカスの移動・背景の読み上げ除外・Esc・衝突回避（375px でも画面内）を任せ、
-// 外側のクリックでは閉じない。対象は data-me-tour 属性で示す（手順と対象は lib/me-tour.ts）。
+// 吹き出しは Radix Popover（非モーダル）: 背景のスクロール・操作は止めない。フォーカスの移動・Esc・衝突回避
+// （375px でも画面内）・スクロール追従（autoUpdate）を任せ、外側のクリックでは閉じない（誤タップで二度と出なくなるため）。対象は data-me-tour 属性で示す（手順と対象は lib/me-tour.ts）。
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentProps } from "react";
 import { useT } from "@/hooks/use-locale";
@@ -37,7 +37,6 @@ export function MeTour({ show }: { show: boolean }) {
   const open = show && !finished && steps !== null;
   const step = open ? steps[Math.min(index, steps.length - 1)] : null;
   const element = step?.element ?? null;
-
   // 指している要素を枠で強調し、見える位置へ寄せる
   useEffect(() => {
     if (!element) return;
@@ -53,12 +52,12 @@ export function MeTour({ show }: { show: boolean }) {
 
   const anchor = useMemo<AnchorRef | null>(() => {
     if (!step) return null;
+    const element = step.element;
     return {
       current: {
-        contextElement: element ?? undefined,
+        contextElement: element,
         getBoundingClientRect: () => {
           const viewport = { width: window.innerWidth, height: window.innerHeight };
-          if (!element) return new DOMRect(viewport.width / 2, viewport.height - 24, 0, 0);
           const r = anchorRect(element.getBoundingClientRect(), viewport);
           return new DOMRect(r.left, r.top, r.width, r.height);
         },
@@ -78,16 +77,17 @@ export function MeTour({ show }: { show: boolean }) {
   const usesToggle = step.target === "sidebar-toggle";
   const body =
     id === "sidebar" && usesToggle ? t("meLayout.tour.sidebar.bodyMobile") : t(`meLayout.tour.${id}.body`);
-  const side = step.element === null ? "top" : step.target === "sidebar" ? "right" : "bottom";
+  // 保存バーは画面下に固定されているので、吹き出しはその上に出す
+  const side = id === "save" ? "top" : step.target === "sidebar" ? "right" : "bottom";
 
   return (
-    <Popover open modal>
+    <Popover open modal={false}>
       <PopoverAnchor virtualRef={anchor} />
       <PopoverContent
         ref={contentRef}
         tabIndex={-1}
         side={side}
-        align={step.element === null ? "center" : "start"}
+        align="start"
         sideOffset={12}
         collisionPadding={16}
         aria-label={t("meLayout.tour.dialogLabel")}

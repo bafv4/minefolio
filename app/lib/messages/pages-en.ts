@@ -1559,6 +1559,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     import: "Import",
     home: "My page",
     mobileMenuLabel: "Toggle my page menu (current: {page})",
+    navLabel: "My page",
     tour: {
       dialogLabel: "My page tour",
       progress: "{current} / {total}",
@@ -1577,7 +1578,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       },
       save: {
         title: "Save to apply changes",
-        body: "A save bar appears at the bottom when you edit. Nothing shows on your runner page until you press Save changes.",
+        body: "Changes to your key layout, devices and so on are confirmed with the save bar at the bottom of the screen.",
       },
       player: {
         title: "What others see",
