@@ -8,6 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, playstyles } from "@/lib/schema";
+import { cn } from "@/lib/utils";
 import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
@@ -300,7 +301,7 @@ function PlaystyleSelectField<T extends string>({
     <div className="space-y-2">
       <Label htmlFor={field}>{t(labelKey)}</Label>
       <Select value={value} onValueChange={(v) => onChange(v as T)}>
-        <SelectTrigger id={field} className={className}>
+        <SelectTrigger id={field} className={cn("data-[size=default]:max-sm:h-11", className)}>
           {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す */}
           <SelectValue placeholder={t("mePlaystyle.select")}>
             {value ? (() => {
@@ -481,7 +482,7 @@ export default function PlaystylePage() {
               onValueChange={(value) => handleChange("mainVersion", value as VersionKey)}
               disabled={formValues.versions.length === 0}
             >
-              <SelectTrigger id="mainVersion" className="w-full sm:w-72">
+              <SelectTrigger id="mainVersion" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
                 <SelectValue
                   placeholder={
                     formValues.versions.length === 0
@@ -529,7 +530,7 @@ export default function PlaystylePage() {
               onValueChange={(value) => handleChange("mainCategory", value as CategoryKey)}
               disabled={formValues.categories.length === 0}
             >
-              <SelectTrigger id="mainCategory" className="w-full sm:w-72">
+              <SelectTrigger id="mainCategory" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
                 <SelectValue
                   placeholder={
                     formValues.categories.length === 0
@@ -566,7 +567,7 @@ export default function PlaystylePage() {
                 handleChange("inputMethod", value as PlaystyleFormValues["inputMethod"])
               }
             >
-              <SelectTrigger id="inputMethod" className="w-full sm:w-72">
+              <SelectTrigger id="inputMethod" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
                 <SelectValue placeholder={t("mePlaystyle.select")}>
                   {formValues.inputMethod === "keyboard_mouse"
                     ? t("mePlaystyle.inputMethodKeyboardMouse")

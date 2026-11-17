@@ -565,12 +565,15 @@ export default function RecordsPage() {
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleOpenCreate} disabled={isSaving} className="w-full sm:w-auto h-11 sm:h-10">
-              <Plus className="mr-2 h-4 w-4" />
-              {t("meRecords.addRecord")}
-            </Button>
-          </DialogTrigger>
+          {/* 0件のときは、空状態の「最初の記録を追加」が導線なので、見出し側のボタンは出さない（ダイアログは開閉の状態で動く） */}
+          {draftRecords.length > 0 && (
+            <DialogTrigger asChild>
+              <Button onClick={handleOpenCreate} disabled={isSaving} className="w-full sm:w-auto h-11 sm:h-10">
+                <Plus className="mr-2 h-4 w-4" />
+                {t("meRecords.addRecord")}
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent>
             {/* 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする */}
             <form key={`${isDialogOpen}-${editingKey ?? "new"}`} onSubmit={handleApply}>
