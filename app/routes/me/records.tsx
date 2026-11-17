@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/records";
@@ -8,25 +8,15 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords } from "@/lib/schema";
-import { eq, and, asc, count } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
 import { parseRunIdList, parseRunIdListInput, sameRunIdSet, toggleRunId } from "@/lib/run-id-list";
-import { YouTubeEmbed } from "@/components/youtube-embed";
+import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { PageSection } from "@/components/page-section";
@@ -52,7 +42,7 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
-  Loader2,
+  Undo2,
   AlertCircle,
   Eye,
   EyeOff,
@@ -159,8 +149,85 @@ export function HydrateFallback() {
   );
 }
 
-/** create 分岐のトランザクションを、登録上限到達時にユーザー向けエラーメッセージ付きで中断するための例外 */
-class RecordLimitError extends Error {}
+/** 登録できるカスタム記録の上限 */
+const MAX_CUSTOM_RECORDS = 50;
+
+/** 保存で受け取るカスタム記録の変更1件（新規は id が null、削除は delete が true） */
+type RecordOp = {
+  id: string | null;
+  delete: boolean;
+  category: string;
+  categoryDisplayName: string;
+  personalBest: number | null;
+  pbVideoUrl: string | null;
+  isVisible: boolean;
+  isPinned: boolean;
+};
+
+/** 変更一覧の JSON を検証する。形が不正（型・件数・id の重複など）なら null。値の検証エラーは error で返す */
+function parseRecordOps(raw: unknown, t: Translator): { ops: RecordOp[] } | { error: string } | null {
+  if (typeof raw !== "string") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length > MAX_CUSTOM_RECORDS * 2) return null;
+
+  const ops: RecordOp[] = [];
+  const seenIds = new Set<string>();
+  for (const item of parsed) {
+    if (typeof item !== "object" || item === null) return null;
+    const o = item as Record<string, unknown>;
+    if (o.id !== null && typeof o.id !== "string") return null;
+    if (typeof o.delete !== "boolean") return null;
+    if (o.id !== null) {
+      if (seenIds.has(o.id)) return null;
+      seenIds.add(o.id);
+    }
+    if (o.delete) {
+      if (o.id === null) return null;
+      ops.push({
+        id: o.id,
+        delete: true,
+        category: "",
+        categoryDisplayName: "",
+        personalBest: null,
+        pbVideoUrl: null,
+        isVisible: true,
+        isPinned: false,
+      });
+      continue;
+    }
+    if (typeof o.category !== "string" || typeof o.categoryDisplayName !== "string") return null;
+    if (typeof o.isVisible !== "boolean" || typeof o.isPinned !== "boolean") return null;
+    if (
+      o.personalBest !== null &&
+      !(typeof o.personalBest === "number" && Number.isSafeInteger(o.personalBest) && o.personalBest > 0)
+    ) {
+      return { error: t("meRecords.invalidTime") };
+    }
+    if (o.pbVideoUrl !== null && typeof o.pbVideoUrl !== "string") return null;
+    const category = o.category.trim();
+    const categoryDisplayName = o.categoryDisplayName.trim();
+    const pbVideoUrl = typeof o.pbVideoUrl === "string" ? o.pbVideoUrl.trim() || null : null;
+    if (!category || !categoryDisplayName) return { error: t("meRecords.categoryRequired") };
+    if (category.length > 100 || categoryDisplayName.length > 100) return { error: t("meRecords.categoryTooLong") };
+    if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) return { error: t("meRecords.invalidVideoUrl") };
+    ops.push({
+      id: o.id,
+      delete: false,
+      category,
+      categoryDisplayName,
+      personalBest: o.personalBest,
+      pbVideoUrl,
+      isVisible: o.isVisible,
+      isPinned: o.isPinned,
+    });
+  }
+  return { ops };
+}
 
 export async function action({ request }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
@@ -181,125 +248,155 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const action = formData.get("_action") as string;
 
-  if (action === "create" || action === "update") {
-    const id = formData.get("id") as string | null;
-    const category = (formData.get("category") as string)?.trim();
-    const categoryDisplayName = (formData.get("categoryDisplayName") as string)?.trim();
-    const personalBestStr = (formData.get("personalBest") as string)?.trim();
-    const pbVideoUrl = (formData.get("pbVideoUrl") as string)?.trim() || null;
-    const isVisible = formData.get("isVisible") === "true";
-    const isPinned = formData.get("isPinned") === "true";
-
-    if (!category || !categoryDisplayName) {
-      return { error: t("meRecords.categoryRequired") };
-    }
-
-    if (category.length > 100 || categoryDisplayName.length > 100) {
-      return { error: t("meRecords.categoryTooLong") };
-    }
-
-    const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
-    if (personalBestStr && personalBest === null) {
-      return { error: t("meRecords.invalidTime") };
-    }
-
-    if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) {
-      return { error: t("meRecords.invalidVideoUrl") };
-    }
-
-    if (action === "create") {
-      // 件数チェック→insert を同一トランザクションで行い、並行リクエストでの
-      // 上限突破（read-then-insert の競合）を防ぐ
-      try {
-        await db.transaction(async (tx) => {
-          const [{ n }] = await tx
-            .select({ n: count() })
-            .from(categoryRecords)
-            .where(eq(categoryRecords.userId, user.id));
-          if (n >= 50) {
-            throw new RecordLimitError();
-          }
-
-          await tx.insert(categoryRecords).values({
-            id: createId(),
-            userId: user.id,
-            category,
-            categoryDisplayName,
-            recordType: "custom",
-            personalBest,
-            pbVideoUrl,
-            isVisible,
-            isPinned,
-          });
-        });
-      } catch (e) {
-        if (e instanceof RecordLimitError) {
-          return { error: t("meRecords.errorLimitReached") };
-        }
-        // (userId, category, recordType) の一意制約。同じカテゴリの記録は1件だけ
-        if (isUniqueConstraintError(e)) {
-          return { error: t("meRecords.categoryDuplicate") };
-        }
-        throw e;
-      }
-    } else if (id) {
-      try {
-        await db
-          .update(categoryRecords)
-          .set({
-            category,
-            categoryDisplayName,
-            personalBest,
-            pbVideoUrl,
-            isVisible,
-            isPinned,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
-      } catch (e) {
-        if (isUniqueConstraintError(e)) {
-          return { error: t("meRecords.categoryDuplicate") };
-        }
-        throw e;
-      }
-    }
-
-    return { success: true };
-  }
-
-  if (action === "delete") {
-    const id = formData.get("id") as string;
-    if (id) {
-      await db
-        .delete(categoryRecords)
-        .where(and(eq(categoryRecords.id, id), eq(categoryRecords.userId, user.id)));
-    }
-    return { success: true };
-  }
-
-  // Speedrun.com記録の非表示・ピン留めを、下書きの内容でまとめて保存する（FloatingSaveBar から）
-  if (action === "saveSpeedrunFlags") {
+  // 画面の下書き（Speedrun.com 記録の非表示・ピン留め＋カスタム記録の追加・編集・削除）を1回でまとめて保存する。
+  // 検証はすべて書き込みの前に行い、書き込みは1つのトランザクションにして、途中まで書かれた状態を残さない
+  if (action === "saveRecords") {
     const hidden = parseRunIdListInput(formData.get("hidden"));
     const pinned = parseRunIdListInput(formData.get("pinned"));
-    if (!hidden || !pinned) {
+    const parsedOps = parseRecordOps(formData.get("records"), t);
+    if (!hidden || !pinned || !parsedOps) {
       return { error: t("meRecords.invalidAction") };
+    }
+    if ("error" in parsedOps) {
+      return { error: parsedOps.error };
+    }
+    const { ops } = parsedOps;
+
+    // 変更対象の id はすべて本人の記録でなければならない（他人の id が混ざっていたら何も書かない）
+    const existing = await db
+      .select({ id: categoryRecords.id, category: categoryRecords.category })
+      .from(categoryRecords)
+      .where(eq(categoryRecords.userId, user.id));
+    const existingById = new Map(existing.map((r) => [r.id, r.category]));
+    if (ops.some((op) => op.id !== null && !existingById.has(op.id))) {
+      return { error: t("meRecords.invalidAction") };
+    }
+
+    // 保存後の状態で、カテゴリの重複と件数の上限を確認する
+    const finalCategories = new Map(existingById);
+    for (const op of ops) {
+      if (op.id !== null && op.delete) finalCategories.delete(op.id);
+    }
+    for (const op of ops) {
+      if (op.id !== null && !op.delete) finalCategories.set(op.id, op.category);
+    }
+    let newIndex = 0;
+    for (const op of ops) {
+      if (op.id === null) finalCategories.set(`new-${newIndex++}`, op.category);
+    }
+    if (finalCategories.size > MAX_CUSTOM_RECORDS) {
+      return { error: t("meRecords.errorLimitReached") };
+    }
+    if (new Set(finalCategories.values()).size !== finalCategories.size) {
+      return { error: t("meRecords.categoryDuplicate") };
     }
 
     // 非表示は露出を減らす操作なので updatedAt（ホームの「最近の更新」等）は進めない。ピン留めが変わったときだけ進める
     const pinnedChanged = !sameRunIdSet(parseRunIdList(user.pinnedSpeedrunRecords), pinned);
-    await db
-      .update(users)
-      .set({
-        hiddenSpeedrunRecords: JSON.stringify(hidden),
-        pinnedSpeedrunRecords: JSON.stringify(pinned),
-        ...(pinnedChanged ? { updatedAt: new Date() } : {}),
-      })
-      .where(eq(users.id, user.id));
+    try {
+      await db.transaction(async (tx) => {
+        // 一意制約に一時的に触れないよう、削除 → 更新 → 追加の順に書く
+        for (const op of ops) {
+          if (op.id !== null && op.delete) {
+            await tx
+              .delete(categoryRecords)
+              .where(and(eq(categoryRecords.id, op.id), eq(categoryRecords.userId, user.id)));
+          }
+        }
+        for (const op of ops) {
+          if (op.id !== null && !op.delete) {
+            await tx
+              .update(categoryRecords)
+              .set({
+                category: op.category,
+                categoryDisplayName: op.categoryDisplayName,
+                personalBest: op.personalBest,
+                pbVideoUrl: op.pbVideoUrl,
+                isVisible: op.isVisible,
+                isPinned: op.isPinned,
+                updatedAt: new Date(),
+              })
+              .where(and(eq(categoryRecords.id, op.id), eq(categoryRecords.userId, user.id)));
+          }
+        }
+        for (const op of ops) {
+          if (op.id === null) {
+            await tx.insert(categoryRecords).values({
+              id: createId(),
+              userId: user.id,
+              category: op.category,
+              categoryDisplayName: op.categoryDisplayName,
+              recordType: "custom",
+              personalBest: op.personalBest,
+              pbVideoUrl: op.pbVideoUrl,
+              isVisible: op.isVisible,
+              isPinned: op.isPinned,
+            });
+          }
+        }
+        await tx
+          .update(users)
+          .set({
+            hiddenSpeedrunRecords: JSON.stringify(hidden),
+            pinnedSpeedrunRecords: JSON.stringify(pinned),
+            ...(pinnedChanged ? { updatedAt: new Date() } : {}),
+          })
+          .where(eq(users.id, user.id));
+      });
+    } catch (e) {
+      // 事前確認をすり抜けた並行リクエストとの競合（(userId, category, recordType) の一意制約）
+      if (isUniqueConstraintError(e)) {
+        return { error: t("meRecords.categoryDuplicate") };
+      }
+      throw e;
+    }
 
-    return { success: true, flags: true as const };
+    return { success: true };
   }
 
   return { error: t("meRecords.invalidAction") };
+}
+
+/** 画面で編集中のカスタム記録（key は画面内の識別子。保存済みは id、追加分は new-N） */
+type DraftRecord = {
+  key: string;
+  id: string | null;
+  category: string;
+  categoryDisplayName: string;
+  personalBest: number | null;
+  pbVideoUrl: string | null;
+  isVisible: boolean;
+  isPinned: boolean;
+  deleted: boolean;
+};
+
+/** 下書きの内容の比較用キー（key は画面内の識別子なので含めない） */
+function draftComparable(d: DraftRecord): string {
+  return JSON.stringify([d.id, d.category, d.categoryDisplayName, d.personalBest, d.pbVideoUrl, d.isVisible, d.isPinned, d.deleted]);
+}
+
+function toDrafts(
+  records: {
+    id: string;
+    category: string;
+    categoryDisplayName: string;
+    personalBest: number | null;
+    pbVideoUrl: string | null;
+    isVisible: boolean;
+    isPinned: boolean;
+  }[],
+): DraftRecord[] {
+  return records.map((r) => ({
+    key: r.id,
+    id: r.id,
+    category: r.category,
+    categoryDisplayName: r.categoryDisplayName,
+    personalBest: r.personalBest,
+    pbVideoUrl: r.pbVideoUrl,
+    isVisible: r.isVisible,
+    isPinned: r.isPinned,
+    deleted: false,
+  }));
 }
 
 export default function RecordsPage() {
@@ -311,74 +408,152 @@ export default function RecordsPage() {
     pinnedSpeedrunRecords: savedPinned,
     speedruncomUsername,
   } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
-  const flagsFetcher = useFetcher<typeof action>();
+  const saveFetcher = useFetcher<typeof action>();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<typeof records[0] | null>(null);
-  const [deletingRecord, setDeletingRecord] = useState<typeof records[0] | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
   const [categoryKey, setCategoryKey] = useState<CategoryKey>("rsg");
   const [categorySuffix, setCategorySuffix] = useState("");
-  // Speedrun.com 記録の非表示・ピン留めは下書きで持ち、FloatingSaveBar で保存する
+  // Speedrun.com 記録の非表示・ピン留めと、カスタム記録の追加・編集・削除は、すべて下書きで持ち、FloatingSaveBar でまとめて保存する
   const [draftHidden, setDraftHidden] = useState<string[]>(savedHidden);
   const [draftPinned, setDraftPinned] = useState<string[]>(savedPinned);
+  const savedDrafts = toDrafts(records);
+  const [draftRecords, setDraftRecords] = useState<DraftRecord[]>(savedDrafts);
+  const newKeyCounter = useRef(0);
 
-  const isSubmitting = fetcher.state === "submitting";
-  const isSavingFlags = flagsFetcher.state !== "idle";
-  const data = fetcher.data;
+  const isSaving = saveFetcher.state !== "idle";
+  const editing = editingKey ? (draftRecords.find((d) => d.key === editingKey) ?? null) : null;
 
-  // 保存済みの内容が変わったとき（保存の完了・別操作の再検証で中身が変わったとき）だけ下書きを取り直す。
-  // カスタム記録の追加・削除でも loader は再検証されるので、配列の参照ではなく内容で比べる
-  // （そうしないと、未保存の下書きがその度に消える）
-  const savedFlagsKey = JSON.stringify([[...savedHidden].sort(), [...savedPinned].sort()]);
+  // 保存済みの内容が変わったとき（保存の完了・再検証で中身が変わったとき）だけ下書きを取り直す。
+  // 配列の参照ではなく内容で比べる（そうしないと、未保存の下書きが再検証の度に消える）
+  const savedKey = JSON.stringify([
+    [...savedHidden].sort(),
+    [...savedPinned].sort(),
+    savedDrafts.map(draftComparable),
+  ]);
   useEffect(() => {
     setDraftHidden(savedHidden);
     setDraftPinned(savedPinned);
+    setDraftRecords(toDrafts(records));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedFlagsKey]);
+  }, [savedKey]);
 
+  const recordsDirty =
+    JSON.stringify(draftRecords.map(draftComparable)) !== JSON.stringify(savedDrafts.map(draftComparable));
   const flagsDirty = !sameRunIdSet(draftHidden, savedHidden) || !sameRunIdSet(draftPinned, savedPinned);
+  const hasChanges = flagsDirty || recordsDirty;
 
-  const flagsResult = flagsFetcher.data;
-  const handledFlagsResult = useRef<typeof flagsResult>(undefined);
+  const saveResult = saveFetcher.data;
+  const handledSaveResult = useRef<typeof saveResult>(undefined);
   useEffect(() => {
-    if (!flagsResult || flagsResult === handledFlagsResult.current) return;
-    handledFlagsResult.current = flagsResult;
-    if ("success" in flagsResult && flagsResult.success) {
-      toast.success(t("meRecords.saveFlagsSuccess"));
+    if (!saveResult || saveResult === handledSaveResult.current) return;
+    handledSaveResult.current = saveResult;
+    if ("success" in saveResult && saveResult.success) {
+      toast.success(t("meRecords.saveSuccess"));
     } else {
-      toast.error("error" in flagsResult ? flagsResult.error : t("meRecords.saveFlagsFailed"));
+      toast.error("error" in saveResult ? saveResult.error : t("meRecords.saveFailed"));
     }
-  }, [flagsResult, t]);
+  }, [saveResult, t]);
 
-  const handleSaveFlags = () => {
-    flagsFetcher.submit(
-      { _action: "saveSpeedrunFlags", hidden: JSON.stringify(draftHidden), pinned: JSON.stringify(draftPinned) },
+  const handleSave = () => {
+    // 変わった記録（追加・編集・削除予定）だけを送る
+    const savedByKey = new Map(savedDrafts.map((d) => [d.key, draftComparable(d)]));
+    const ops: RecordOp[] = draftRecords
+      .filter((d) => d.id === null || savedByKey.get(d.key) !== draftComparable(d))
+      .map((d) => ({
+        id: d.id,
+        delete: d.deleted,
+        category: d.category,
+        categoryDisplayName: d.categoryDisplayName,
+        personalBest: d.personalBest,
+        pbVideoUrl: d.pbVideoUrl,
+        isVisible: d.isVisible,
+        isPinned: d.isPinned,
+      }));
+    saveFetcher.submit(
+      {
+        _action: "saveRecords",
+        hidden: JSON.stringify(draftHidden),
+        pinned: JSON.stringify(draftPinned),
+        records: JSON.stringify(ops),
+      },
       { method: "post" },
     );
   };
 
-  const handleResetFlags = () => {
+  const handleReset = () => {
     setDraftHidden(savedHidden);
     setDraftPinned(savedPinned);
+    setDraftRecords(toDrafts(records));
   };
 
   const handleOpenCreate = () => {
-    setEditingRecord(null);
+    setEditingKey(null);
     setCategoryKey("rsg");
     setCategorySuffix("");
+    setDialogError(null);
     setIsDialogOpen(true);
   };
 
-  const handleOpenEdit = (record: typeof records[0]) => {
+  const handleOpenEdit = (record: DraftRecord) => {
     const { key, suffix } = splitRecordCategory(record.category);
-    setEditingRecord(record);
+    setEditingKey(record.key);
     setCategoryKey(key);
     setCategorySuffix(suffix);
+    setDialogError(null);
     setIsDialogOpen(true);
+  };
+
+  // ダイアログの「この画面に反映」。DB には書かず、下書きに積むだけ（確定は FloatingSaveBar の保存）
+  const handleApply = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const category = resolveRecordCategory(editing?.category ?? null, categoryKey, categorySuffix).trim();
+    const categoryDisplayName = String(fd.get("categoryDisplayName") ?? "").trim();
+    const personalBestStr = String(fd.get("personalBest") ?? "").trim();
+    const pbVideoUrl = String(fd.get("pbVideoUrl") ?? "").trim() || null;
+
+    if (!category || !categoryDisplayName) return setDialogError(t("meRecords.categoryRequired"));
+    if (category.length > 100 || categoryDisplayName.length > 100) return setDialogError(t("meRecords.categoryTooLong"));
+    const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
+    if (personalBestStr && personalBest === null) return setDialogError(t("meRecords.invalidTime"));
+    if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) return setDialogError(t("meRecords.invalidVideoUrl"));
+    const alive = draftRecords.filter((d) => !d.deleted && d.key !== editingKey);
+    if (alive.some((d) => d.category === category)) return setDialogError(t("meRecords.categoryDuplicate"));
+    if (!editing && alive.length >= MAX_CUSTOM_RECORDS) return setDialogError(t("meRecords.errorLimitReached"));
+
+    const fields = {
+      category,
+      categoryDisplayName,
+      personalBest,
+      pbVideoUrl,
+      isVisible: fd.get("isVisible") === "true",
+      isPinned: fd.get("isPinned") === "true",
+    };
+    if (editing) {
+      setDraftRecords((prev) => prev.map((d) => (d.key === editing.key ? { ...d, ...fields } : d)));
+    } else {
+      const key = `new-${newKeyCounter.current++}`;
+      setDraftRecords((prev) => [...prev, { key, id: null, deleted: false, ...fields }]);
+    }
+    setIsDialogOpen(false);
+  };
+
+  // 削除は下書きの上で「削除予定」にする（追加したばかりの記録は一覧から外す）。保存するまで DB は変わらず、元に戻せる
+  const handleMarkDelete = (record: DraftRecord) => {
+    setDraftRecords((prev) =>
+      record.id === null
+        ? prev.filter((d) => d.key !== record.key)
+        : prev.map((d) => (d.key === record.key ? { ...d, deleted: true } : d)),
+    );
+  };
+
+  const handleUndoDelete = (record: DraftRecord) => {
+    setDraftRecords((prev) => prev.map((d) => (d.key === record.key ? { ...d, deleted: false } : d)));
   };
 
   const iconButtonClass =
-    "inline-flex size-11 items-center justify-center rounded transition-colors hover:bg-secondary sm:size-8";
+    "inline-flex size-11 items-center justify-center rounded transition-colors hover:bg-secondary disabled:opacity-50 sm:size-8";
 
   return (
     <div className="space-y-7 pb-24 sm:space-y-8">
@@ -391,28 +566,26 @@ export default function RecordsPage() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenCreate} className="w-full sm:w-auto h-11 sm:h-10">
+            <Button onClick={handleOpenCreate} disabled={isSaving} className="w-full sm:w-auto h-11 sm:h-10">
               <Plus className="mr-2 h-4 w-4" />
               {t("meRecords.addRecord")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             {/* 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする */}
-            <fetcher.Form
-              key={`${isDialogOpen}-${editingRecord?.id ?? "new"}`}
-              method="post"
-              onSubmit={() => setIsDialogOpen(false)}
-            >
-              <input type="hidden" name="_action" value={editingRecord ? "update" : "create"} />
-              {editingRecord && <input type="hidden" name="id" value={editingRecord.id} />}
-              <input type="hidden" name="category" value={resolveRecordCategory(editingRecord?.category ?? null, categoryKey, categorySuffix)} />
+            <form key={`${isDialogOpen}-${editingKey ?? "new"}`} onSubmit={handleApply}>
               <DialogHeader>
-                <DialogTitle>{editingRecord ? t("meRecords.editRecord") : t("meRecords.addRecordTitle")}</DialogTitle>
+                <DialogTitle>{editing ? t("meRecords.editRecord") : t("meRecords.addRecordTitle")}</DialogTitle>
                 <DialogDescription>
-                  {editingRecord ? t("meRecords.editRecordDescription") : t("meRecords.addRecordDescription")}
+                  {editing ? t("meRecords.editRecordDescription") : t("meRecords.addRecordDescription")}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {dialogError && (
+                  <NoticeBanner tone="error" icon={AlertCircle}>
+                    {dialogError}
+                  </NoticeBanner>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="categoryKey">{t("meRecords.categoryKey")}</Label>
                   <Select value={categoryKey} onValueChange={(v) => setCategoryKey(v as CategoryKey)}>
@@ -448,7 +621,7 @@ export default function RecordsPage() {
                   <Input
                     id="categoryDisplayName"
                     name="categoryDisplayName"
-                    defaultValue={editingRecord?.categoryDisplayName ?? ""}
+                    defaultValue={editing?.categoryDisplayName ?? ""}
                     placeholder={t("meRecords.displayNamePlaceholder")}
                     maxLength={100}
                     required
@@ -459,7 +632,7 @@ export default function RecordsPage() {
                   <Input
                     id="personalBest"
                     name="personalBest"
-                    defaultValue={editingRecord?.personalBest ? formatTime(editingRecord.personalBest) : ""}
+                    defaultValue={editing?.personalBest ? formatTime(editing.personalBest) : ""}
                     placeholder={t("meRecords.personalBestPlaceholder")}
                   />
                 </div>
@@ -469,7 +642,7 @@ export default function RecordsPage() {
                     id="pbVideoUrl"
                     name="pbVideoUrl"
                     type="url"
-                    defaultValue={editingRecord?.pbVideoUrl ?? ""}
+                    defaultValue={editing?.pbVideoUrl ?? ""}
                     placeholder="https://youtube.com/..."
                   />
                 </div>
@@ -478,7 +651,7 @@ export default function RecordsPage() {
                     id="isVisible"
                     name="isVisible"
                     value="true"
-                    defaultChecked={editingRecord?.isVisible ?? true}
+                    defaultChecked={editing?.isVisible ?? true}
                   />
                   <Label htmlFor="isVisible">{t("meRecords.visible")}</Label>
                 </div>
@@ -488,32 +661,28 @@ export default function RecordsPage() {
                       id="isPinned"
                       name="isPinned"
                       value="true"
-                      defaultChecked={editingRecord?.isPinned ?? false}
+                      defaultChecked={editing?.isPinned ?? false}
                     />
                     <Label htmlFor="isPinned">{t("meRecords.pinned")}</Label>
                   </div>
                   <p className="text-xs text-muted-foreground">{t("meRecords.pinnedHint")}</p>
                 </div>
               </div>
+              <p className="pb-3 text-xs text-muted-foreground">{t("meRecords.applyNote")}</p>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   {t("meRecords.cancel")}
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
-                  {editingRecord ? t("meRecords.submitUpdate") : t("meRecords.submitAdd")}
-                </Button>
+                <Button type="submit">{t("meRecords.submitApply")}</Button>
               </DialogFooter>
-            </fetcher.Form>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {data && "error" in data && (
+      {saveResult && "error" in saveResult && (
         <NoticeBanner tone="error" icon={AlertCircle}>
-          {data.error}
+          {saveResult.error}
         </NoticeBanner>
       )}
 
@@ -526,72 +695,78 @@ export default function RecordsPage() {
           title={t("meRecords.speedrunSectionTitle")}
         >
           <p className="text-sm text-muted-foreground">
-            {t("meRecords.speedrunSectionDescription")} {t("meRecords.sectionDraftHint")}
+            {t("meRecords.speedrunSectionDescription")}
           </p>
           {speedruncomRecords && !speedruncomRecords.error && speedruncomRecords.personalBests.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {speedruncomRecords.personalBests.map((pb) => {
                 const isHidden = draftHidden.includes(pb.run.id);
                 const isPinned = draftPinned.includes(pb.run.id);
                 const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
-                const recordName = [pb.game?.data?.names?.international, pb.category?.data?.name]
+                const timeText = formatTime(pb.run.times.primary_t * 1000);
+                const baseName = [pb.game?.data?.names?.international, pb.category?.data?.name]
                   .filter(Boolean)
                   .join(" ");
+                // 同じカテゴリでバージョン違いの記録が並んでも、ボタンの読み上げ名で区別できるようにする
+                const recordName = `${baseName} (${[pb.platformName, pb.versionName, timeText].filter(Boolean).join(" / ")})`;
+                const videoLabel = pb.category?.data?.name ?? baseName;
                 return (
                   <div
                     key={pb.run.id}
                     className={cn(
-                      "rounded-xl bg-secondary/50 p-3 space-y-1 relative group",
+                      "rounded-xl bg-secondary/50 p-3 space-y-1",
                       isHidden && "opacity-50"
                     )}
                   >
-                    <div className="absolute top-1 right-1 flex items-center">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => setDraftPinned((prev) => toggleRunId(prev, pb.run.id))}
-                            disabled={isSavingFlags}
-                            aria-label={t("meRecords.pinRecordLabel", { name: recordName })}
-                            aria-pressed={isPinned}
-                            className={iconButtonClass}
-                          >
-                            <Pin className={cn("h-4 w-4", isPinned ? "text-primary" : "text-muted-foreground")} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isPinned ? t("meRecords.unpin") : t("meRecords.pin")}
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => setDraftHidden((prev) => toggleRunId(prev, pb.run.id))}
-                            disabled={isSavingFlags}
-                            aria-label={t("meRecords.showRecordLabel", { name: recordName })}
-                            aria-pressed={!isHidden}
-                            className={iconButtonClass}
-                          >
-                            {isHidden ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {isHidden ? t("meRecords.show") : t("meRecords.hide")}
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <div className="flex items-center justify-between pr-24 sm:pr-20">
-                      <h3 className="font-medium text-sm truncate">
-                        {pb.category?.data?.name ?? "Unknown"}
-                      </h3>
-                      <Badge variant="outline" className="shrink-0">
-                        #{pb.place}
-                      </Badge>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <h3 className="min-w-0 break-words font-medium text-sm line-clamp-2">
+                          {pb.category?.data?.name ?? "Unknown"}
+                        </h3>
+                        <Badge variant="outline" className="shrink-0">
+                          #{pb.place}
+                        </Badge>
+                      </div>
+                      <div className="-mr-1 -mt-1 flex shrink-0 items-center">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setDraftPinned((prev) => toggleRunId(prev, pb.run.id))}
+                              disabled={isSaving}
+                              aria-label={t("meRecords.pinRecordLabel", { name: recordName })}
+                              aria-pressed={isPinned}
+                              className={iconButtonClass}
+                            >
+                              <Pin className={cn("h-4 w-4", isPinned ? "text-primary" : "text-muted-foreground")} />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {isPinned ? t("meRecords.unpin") : t("meRecords.pin")}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setDraftHidden((prev) => toggleRunId(prev, pb.run.id))}
+                              disabled={isSaving}
+                              aria-label={t("meRecords.showRecordLabel", { name: recordName })}
+                              aria-pressed={!isHidden}
+                              className={iconButtonClass}
+                            >
+                              {isHidden ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {isHidden ? t("meRecords.show") : t("meRecords.hide")}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
                       {pb.game?.data?.names?.international ?? "Unknown Game"}
@@ -601,13 +776,12 @@ export default function RecordsPage() {
                         {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
                       </p>
                     )}
-                    <p className="text-lg font-mono font-bold">
-                      {formatTime(pb.run.times.primary_t * 1000)}
-                    </p>
+                    <p className="text-lg font-mono font-bold">{timeText}</p>
                     {videoEmbedUrl && (
-                      <YouTubeEmbed
+                      <YouTubeClickEmbed
                         embedUrl={videoEmbedUrl}
-                        title={pb.category?.data?.name ?? "Speedrun video"}
+                        title={t("playerStatsCards.videoTitle", { label: videoLabel })}
+                        playLabel={t("playerStatsCards.playVideo", { label: `${videoLabel} ${timeText}` })}
                       />
                     )}
                     <div className="flex items-center gap-2 flex-wrap">
@@ -656,35 +830,55 @@ export default function RecordsPage() {
         title={t("meRecords.customRecords")}
         first={!speedruncomUsername}
       >
-        {records.length > 0 ? (
+        {draftRecords.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {records.map((record) => (
-              <Card key={record.id} className="gap-3 py-5">
+            {draftRecords.map((record) => (
+              <Card key={record.key} className={cn("gap-3 py-5", record.deleted && "border-destructive/40 opacity-60")}>
                 <CardHeader className="px-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="text-base font-semibold">{record.categoryDisplayName}</h3>
+                      <h3 className={cn("text-base font-semibold", record.deleted && "line-through")}>
+                        {record.categoryDisplayName}
+                      </h3>
                       <CardDescription>{record.category}</CardDescription>
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 sm:size-9"
-                        aria-label={t("meRecords.editRecordLabel", { name: record.categoryDisplayName })}
-                        onClick={() => handleOpenEdit(record)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-11 sm:size-9"
-                        aria-label={t("meRecords.deleteRecordLabel", { name: record.categoryDisplayName })}
-                        onClick={() => setDeletingRecord(record)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {record.deleted ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-11 sm:min-h-8"
+                          disabled={isSaving}
+                          aria-label={t("meRecords.undoDeleteLabel", { name: record.categoryDisplayName })}
+                          onClick={() => handleUndoDelete(record)}
+                        >
+                          <Undo2 className="mr-1 h-3 w-3" />
+                          {t("meRecords.undoDelete")}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-11 sm:size-9"
+                            disabled={isSaving}
+                            aria-label={t("meRecords.editRecordLabel", { name: record.categoryDisplayName })}
+                            onClick={() => handleOpenEdit(record)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-11 sm:size-9"
+                            disabled={isSaving}
+                            aria-label={t("meRecords.deleteRecordLabel", { name: record.categoryDisplayName })}
+                            onClick={() => handleMarkDelete(record)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -694,7 +888,8 @@ export default function RecordsPage() {
                       {formatTime(record.personalBest)}
                     </p>
                   )}
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {record.deleted && <Badge variant="destructive">{t("meRecords.deletePending")}</Badge>}
                     {!record.isVisible && <Badge variant="secondary">{t("meRecords.private")}</Badge>}
                     {record.isPinned && <PinnedBadge />}
                     {record.pbVideoUrl && (
@@ -717,7 +912,7 @@ export default function RecordsPage() {
             title={t("meRecords.noCustomRecords")}
             description={t("meRecords.noCustomRecordsDescription")}
             action={
-              <Button onClick={handleOpenCreate}>
+              <Button onClick={handleOpenCreate} disabled={isSaving}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meRecords.addFirstRecord")}
               </Button>
@@ -726,35 +921,11 @@ export default function RecordsPage() {
         )}
       </PageSection>
 
-      <AlertDialog open={deletingRecord !== null} onOpenChange={(open) => !open && setDeletingRecord(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("meRecords.deleteTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("meRecords.deleteDescription", { name: deletingRecord?.categoryDisplayName ?? "" })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("meRecords.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (deletingRecord) {
-                  fetcher.submit({ _action: "delete", id: deletingRecord.id }, { method: "post" });
-                }
-              }}
-            >
-              {t("meRecords.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <FloatingSaveBar
-        hasChanges={flagsDirty}
-        isSubmitting={isSavingFlags}
-        onSave={handleSaveFlags}
-        onReset={handleResetFlags}
+        hasChanges={hasChanges}
+        isSubmitting={isSaving}
+        onSave={handleSave}
+        onReset={handleReset}
       />
     </div>
   );

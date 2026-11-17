@@ -629,13 +629,13 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
   - 記録: グリッド2列分（`md:col-span-2`）+ タイム拡大 + 枠線強調（`RecordCard`）
   - 動画: 上記「動画欄」参照
   - Speedrun.com記録: 下記「Speedrun.com記録のピン留め」参照
-- 切替UI: ガイド=`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）、記録=`/me/records` の編集ダイアログのSwitch、動画=`/me/edit` の動画ダイアログのSwitch、Speedrun.com記録=`/me/records` のピンアイコンボタン
+- 切替UI: ガイド=`/my-guides` 一覧のピンボタン（`_action: "togglePin"`）、記録=`/me/records` の編集ダイアログのSwitch（下書きに積み、保存で確定）、動画=`/me/edit` の動画ダイアログのSwitch、Speedrun.com記録=`/me/records` のピンアイコンボタン
 
 ### /me/records（記録の管理）
 
 欄区切り（`PageSection`）。「Speedrun.com 記録」欄（ユーザー名設定時のみ）と「カスタム記録」欄の2つ。
 
-- **保存の仕方**: Speedrun.com 記録の非表示・ピン留めは下書き → `FloatingSaveBar`（下の「Speedrun.com記録のピン留め」）。カスタム記録の追加・編集・削除はダイアログで確定する即時操作。**削除は `AlertDialog` で確認**してから送る。追加・編集ダイアログにキャンセルボタンあり
+- **保存の仕方（全部を下書きにそろえる）**: Speedrun.com 記録の非表示・ピン留めと、カスタム記録の追加・編集・削除は、すべて画面上の下書きで持ち、`FloatingSaveBar`（離脱の警告つき）でまとめて保存する（`hasChanges` は旗の下書き＋記録の下書き。保存中は編集・追加・トグルを無効にする）。ダイアログの確定ボタンは「この画面に反映」（DB には書かず下書きに積むだけ。注記「ページ下の保存で確定します」付き）で、必須・長さ・時間形式・動画URL・同一カテゴリの重複・50件上限はダイアログ内で先に検査して表示する。**削除は即時の確認ダイアログではなく、下書き上で「削除予定」にする**（行は半透明・取り消し線・「削除予定」バッジで、その行の「元に戻す」で復帰。追加したばかりの記録は一覧から外すだけ）。保存の action は `_action: "saveRecords"`（`hidden` / `pinned` ＋ `records`＝変わった記録だけの JSON 配列。`id` が null なら新規、`delete: true` なら削除）で、書き込み前に形・値・所有者（他人の id が混ざっていたら `invalidAction` で何も書かない）・保存後のカテゴリ重複（`categoryDuplicate`）・件数上限（`errorLimitReached`）をすべて検証し、1つのトランザクションで 削除 → 更新 → 追加 → 旗の更新 の順に書く（途中で失敗しても何も残らない。エラーは下書きを残したまま表示）。説明文（h1 の下）に「ここでの変更は下書きで、ページ下の保存で確定します」と書く。
 - **カテゴリ（`category_records.category`）**: プロフィールのハイライトが、プレイスタイルのメインカテゴリ（rsg / ssg / aa / ce / ranked）の記録を前方一致（`recordMatchesMainCategory`、`profile-highlights.ts`）で選ぶために使われるので、入力欄は残している。画面では**カテゴリ（選択式。`CATEGORY_KEYS`）＋サブカテゴリ（任意の自由入力）**に分けて入力し、`app/lib/record-category.ts` の `buildRecordCategory` が `rsg_any` の形に組み立てて `category` として送る（既存の記録の編集では、開いた時点のキー・サブカテゴリから変更が無ければ `resolveRecordCategory` が元の値をそのまま送る。`RSG-any` 等が表示名だけの変更で `rsg_any` に正規化され、`rsg-any` と `rsg_any` を両方持つ走者で重複エラーになるのを防ぐ）（action は従来どおり `category` 1本を受ける）。既存の自由入力は `splitRecordCategory` が前方一致で分け、どのキーにも属さない値は「その他」＋全体として保つ（組み立て直しても同じ値）。`(userId, category, recordType)` は一意なので、同じカテゴリ・サブカテゴリで2件目を作ると `meRecords.categoryDuplicate` を返す（500 にしない）。列はそのまま（`categoryRefId` は手入力の記録では未使用）
 - 操作ボタンはすべて名前つき（記録名入りの `aria-label`）で、md 未満は 44px
 
@@ -643,7 +643,7 @@ v1.4.0 で追加。skinview3d の OrbitControls を有効化し、ユーザー�
 
 Speedrun.comのPBはDBにキャッシュされず、プロフィール表示のたびにSpeedrun.com APIから直接取得される（`category_records` に行を持たない）ため、他のピン留めと違い `category_records.isPinned` を使えない。代わりに `users.pinnedSpeedrunRecords`（JSON配列、ピン留めするrun IDの一覧。`hiddenSpeedrunRecords` と同じ形式）で管理する。
 
-- 管理: `/me/records` の「Speedrun.com 記録」欄で、各タイルの右上にピン留め（`Pin`）と表示/非表示（`Eye`/`EyeOff`）の2つのトグルボタンが並ぶ（`aria-pressed` ＋記録名入りの `aria-label`、md 未満は 44px）。押しても**即保存はせず下書きに積み**、`FloatingSaveBar`（離脱の警告つき）の保存で `_action: "saveSpeedrunFlags"`（`hidden` / `pinned` に run ID の JSON 配列。サーバーが重複・空文字を除いて上限 500 件で検証し、2列を1回の update で置き換える）が呼ばれる。`updatedAt` はピン留めの集合が変わったときだけ進める。下書きは保存済みの内容（集合）が変わったときだけ取り直す（カスタム記録の追加・削除でも loader が再検証されるため、参照ではなく内容で比べる）。純粋関数は `app/lib/run-id-list.ts`（`sameRunIdSet` / `parseRunIdListInput`）。保存中（`isSavingFlags`）は2つのトグルを `disabled` にする（保存後の再取得で下書きが保存済みの値に取り直されるため、保存中に押した操作が消えるのを防ぐ）。保存は「リスト全体で上書き」なので、別タブの古い画面から保存すると後勝ちで他方の変更が消える
+- 管理: `/me/records` の「Speedrun.com 記録」欄で、各タイルの右上にピン留め（`Pin`）と表示/非表示（`Eye`/`EyeOff`）の2つのトグルボタンが並ぶ（`aria-pressed` ＋記録名入りの `aria-label`、md 未満は 44px）。押しても**即保存はせず下書きに積み**、`FloatingSaveBar`（離脱の警告つき）の保存で、カスタム記録の変更と一緒に `_action: "saveRecords"`（`hidden` / `pinned` に run ID の JSON 配列。サーバーが重複・空文字を除いて上限 500 件で検証し、2列を同じトランザクションで置き換える）が呼ばれる。`updatedAt` はピン留めの集合が変わったときだけ進める。下書きは保存済みの内容（集合）が変わったときだけ取り直す（再検証で参照だけが変わっても未保存の下書きを消さないよう、参照ではなく内容で比べる（記録の下書きも同じキーで取り直す））。純粋関数は `app/lib/run-id-list.ts`（`sameRunIdSet` / `parseRunIdListInput`）。保存中（`isSavingFlags`）は2つのトグルを `disabled` にする（保存後の再取得で下書きが保存済みの値に取り直されるため、保存中に押した操作が消えるのを防ぐ）。保存は「リスト全体で上書き」なので、別タブの古い画面から保存すると後勝ちで他方の変更が消える
 - 表示: プロフィールの活動・記録タブで、非表示記録を除外した後、ピン留めを先頭に安定ソートしてから最大6件表示（`StatsContent` 内）。ピン留めカードは `md:col-span-2` + 枠線強調 + タイム拡大（`text-3xl`）+ ピンアイコン
 - 非表示（`hiddenSpeedrunRecords`）と独立して管理されるため、非表示にした記録をピン留めすることも技術的には可能だが、非表示である以上プロフィールには表示されない
 
