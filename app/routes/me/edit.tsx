@@ -725,6 +725,39 @@ export default function EditProfilePage() {
   const [customCapeUrl, setCustomCapeUrl] = useState<string | null>(user.customCapeUrl);
 
   const [formValues, setFormValues] = useState(buildFormValues);
+
+  // Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す
+  const mainPlatformLabels: Record<string, string> = {
+    pc_windows: t("playerProfile.platformPcWindows"),
+    pc_mac: t("playerProfile.platformPcMac"),
+    pc_linux: t("playerProfile.platformPcLinux"),
+    switch: "Switch",
+    mobile: t("meEdit.mobile"),
+    other: t("meEdit.other"),
+  };
+  const roleLabels: Record<string, string> = {
+    runner: t("meEdit.roleRunner"),
+    viewer: t("meEdit.roleViewer"),
+  };
+  const visibilityLabels: Record<string, string> = {
+    public: t("meEdit.profilePublic"),
+    unlisted: t("meEdit.profileUnlisted"),
+    private: t("meEdit.profilePrivate"),
+  };
+  const defaultTabKey = DEFAULT_PROFILE_TAB_LABEL_KEYS[formValues.defaultProfileTab as SelectableProfileTabValue];
+  const defaultTabLabel = defaultTabKey ? t(defaultTabKey) : undefined;
+
+  // エラーの欄へスクロールしてフォーカスする（保存バーの裏は scroll-padding が避ける）。
+  // 対象が描画されていなければ何もしない
+  const focusErrorTarget = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    });
+  }, []);
   // 保存済みの値（dirty 判定の基準）。保存成功時に送信時点のスナップショットへ更新する
   const [savedFormValues, setSavedFormValues] = useState(buildFormValues);
   const submittedValuesRef = useRef<ReturnType<typeof buildFormValues> | null>(null);
@@ -818,6 +851,7 @@ export default function EditProfilePage() {
     // RTA歴は年・月の両方を選ぶか、両方未選択（未回答）のみ有効
     if (isRtaStartedIncomplete) {
       toast.error(t("meEdit.rtaStartedBothOrNone"));
+      focusErrorTarget(rtaStartedYear ? "rtaStartedMonth" : "rtaStartedYear");
       return;
     }
 
@@ -866,7 +900,7 @@ export default function EditProfilePage() {
       setFormValues((prev) => ({ ...prev, speedruncomUsername }));
     }
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, draft, savedDraft, isRtaStartedIncomplete, t, translationEnabled]);
+  }, [fetcher, formValues, draft, savedDraft, isRtaStartedIncomplete, t, translationEnabled, focusErrorTarget]);
 
   // ポーズ変更を同期
   useEffect(() => {
@@ -928,9 +962,23 @@ export default function EditProfilePage() {
       setFieldErrors({});
     } else if ("error" in data) {
       toast.error(data.error);
-      setFieldErrors(("fieldErrors" in data && data.fieldErrors) || {});
+      const errors = ("fieldErrors" in data && data.fieldErrors) || {};
+      setFieldErrors(errors);
+      // ページ順（MCID → Bedrock → リンク → 動画）で最初のエラー欄へ連れて行く
+      const firstLink = latestDraftRef.current.draft.links.find((l) => errors.links?.[l.key]);
+      const firstVideo = latestDraftRef.current.draft.videos.find((v) => errors.videos?.[v.key]);
+      const targetId = errors.mcid
+        ? "edit-error-mcid"
+        : errors.bedrockMcid
+          ? "edit-error-bedrockMcid"
+          : firstLink
+            ? `edit-error-link-${firstLink.key}`
+            : firstVideo
+              ? `edit-error-video-${firstVideo.key}`
+              : null;
+      if (targetId) focusErrorTarget(targetId);
     }
-  }, [data]);
+  }, [data, focusErrorTarget]);
 
   // インポート結果のトースト
   useEffect(() => {
@@ -1368,7 +1416,7 @@ export default function EditProfilePage() {
                 </div>
               )}
               {fieldErrors.mcid && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" id="edit-error-mcid" tabIndex={-1}>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{fieldErrors.mcid}</AlertDescription>
                 </Alert>
@@ -1484,7 +1532,7 @@ export default function EditProfilePage() {
                 </div>
               </div>
               {fieldErrors.bedrockMcid && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" id="edit-error-bedrockMcid" tabIndex={-1}>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{fieldErrors.bedrockMcid}</AlertDescription>
                 </Alert>
@@ -1767,7 +1815,12 @@ export default function EditProfilePage() {
                       aria-label={t("meEdit.rtaStartedYearAria")}
                       aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedYear}
                     >
-                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
+                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")}>
+                        {/* 未選択（""）は undefined にして placeholder を出す（Number("") で「0年」にしない） */}
+                        {formValues.rtaStartedYear
+                          ? t("meEdit.rtaStartedYearOption", { year: Number(formValues.rtaStartedYear) })
+                          : undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
@@ -1789,7 +1842,12 @@ export default function EditProfilePage() {
                       aria-label={t("meEdit.rtaStartedMonthAria")}
                       aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedMonth}
                     >
-                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
+                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")}>
+                        {/* 未選択（""）は undefined にして placeholder を出す（Number("") で「0月」にしない） */}
+                        {formValues.rtaStartedMonth
+                          ? t("meEdit.rtaStartedMonthOption", { month: Number(formValues.rtaStartedMonth) })
+                          : undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
@@ -1833,7 +1891,9 @@ export default function EditProfilePage() {
                   onValueChange={(value) => handleInputChange("mainPlatform", value)}
                 >
                   <SelectTrigger id="mainPlatform" className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
+                    <SelectValue placeholder={t("meEdit.select")}>
+                      {mainPlatformLabels[formValues.mainPlatform]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pc_windows">{t("playerProfile.platformPcWindows")}</SelectItem>
@@ -1853,7 +1913,9 @@ export default function EditProfilePage() {
                   onValueChange={(value) => handleInputChange("role", value)}
                 >
                   <SelectTrigger id="role" className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
+                    <SelectValue placeholder={t("meEdit.select")}>
+                      {roleLabels[formValues.role]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="runner">{t("meEdit.roleRunner")}</SelectItem>
@@ -1966,7 +2028,11 @@ export default function EditProfilePage() {
                           </Button>
                         </div>
                       </div>
-                      {rowError && <p className="text-xs text-destructive">{rowError}</p>}
+                      {rowError && (
+                        <p id={`edit-error-link-${link.key}`} tabIndex={-1} className="text-xs text-destructive">
+                          {rowError}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -2111,7 +2177,11 @@ export default function EditProfilePage() {
                           </Button>
                         </div>
                       </div>
-                      {rowError && <p className="text-xs text-destructive">{rowError}</p>}
+                      {rowError && (
+                        <p id={`edit-error-video-${video.key}`} tabIndex={-1} className="text-xs text-destructive">
+                          {rowError}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -2161,7 +2231,7 @@ export default function EditProfilePage() {
                 onValueChange={(value) => handleInputChange("profileVisibility", value)}
               >
                 <SelectTrigger id="profileVisibility" className="w-full">
-                  <SelectValue />
+                  <SelectValue>{visibilityLabels[formValues.profileVisibility]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="public">
@@ -2184,7 +2254,7 @@ export default function EditProfilePage() {
                 onValueChange={(value) => handleInputChange("defaultProfileTab", value)}
               >
                 <SelectTrigger id="defaultProfileTab" className="w-full">
-                  <SelectValue />
+                  <SelectValue>{defaultTabLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {SELECTABLE_PROFILE_TABS.map((value) => (
@@ -2205,7 +2275,7 @@ export default function EditProfilePage() {
                 {t("meEdit.displaySettingsHint")}
               </p>
 
-              <div className="space-y-3">
+              <div className="max-w-2xl space-y-3">
                 <div className="flex min-h-11 items-center justify-between gap-4 sm:min-h-0">
                   <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.showPacemanOnHome")}

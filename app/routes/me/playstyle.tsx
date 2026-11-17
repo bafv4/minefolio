@@ -301,7 +301,13 @@ function PlaystyleSelectField<T extends string>({
       <Label htmlFor={field}>{t(labelKey)}</Label>
       <Select value={value} onValueChange={(v) => onChange(v as T)}>
         <SelectTrigger id={field} className={className}>
-          <SelectValue placeholder={t("mePlaystyle.select")} />
+          {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す */}
+          <SelectValue placeholder={t("mePlaystyle.select")}>
+            {value ? (() => {
+              const selected = options.find((opt) => opt.value === value);
+              return selected ? t(selected.labelKey) : undefined;
+            })() : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((opt) => (
@@ -482,7 +488,11 @@ export default function PlaystylePage() {
                       ? t("mePlaystyle.selectVersionsFirst")
                       : t("mePlaystyle.select")
                   }
-                />
+                >
+                  {formValues.mainVersion
+                    ? `${editionOfVersion(formValues.mainVersion) === "java" ? "Java" : "Bedrock"} ${versionLabel(formValues.mainVersion)}`
+                    : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {formValues.versions.map((v) => (
@@ -496,23 +506,19 @@ export default function PlaystylePage() {
 
           <div className="space-y-2">
             <Label id="categories-label">{t("mePlaystyle.categories")}</Label>
-            <div role="group" aria-labelledby="categories-label" className="flex flex-wrap gap-2">
-              {CATEGORIES.map((cat) => {
-                const selected = formValues.categories.includes(cat.value);
-                return (
-                  <Button
-                    key={cat.value}
-                    type="button"
-                    variant={selected ? "default" : "outline"}
-                    size="sm"
-                    aria-pressed={selected}
-                    className="min-h-11 sm:min-h-8"
-                    onClick={() => handleToggleCategory(cat.value)}
-                  >
-                    {categoryLabel(t, cat.value)}
-                  </Button>
-                );
-              })}
+            <div role="group" aria-labelledby="categories-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {CATEGORIES.map((cat) => (
+                <label
+                  key={cat.value}
+                  className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 sm:min-h-0"
+                >
+                  <Checkbox
+                    checked={formValues.categories.includes(cat.value)}
+                    onCheckedChange={() => handleToggleCategory(cat.value)}
+                  />
+                  {categoryLabel(t, cat.value)}
+                </label>
+              ))}
             </div>
           </div>
 
@@ -530,7 +536,9 @@ export default function PlaystylePage() {
                       ? t("mePlaystyle.selectCategoriesFirst")
                       : t("mePlaystyle.select")
                   }
-                />
+                >
+                  {formValues.mainCategory ? categoryLabel(t, formValues.mainCategory) : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {formValues.categories.map((c) => (
@@ -559,7 +567,15 @@ export default function PlaystylePage() {
               }
             >
               <SelectTrigger id="inputMethod" className="w-full sm:w-72">
-                <SelectValue placeholder={t("mePlaystyle.select")} />
+                <SelectValue placeholder={t("mePlaystyle.select")}>
+                  {formValues.inputMethod === "keyboard_mouse"
+                    ? t("mePlaystyle.inputMethodKeyboardMouse")
+                    : formValues.inputMethod === "controller"
+                      ? t("mePlaystyle.inputMethodController")
+                      : formValues.inputMethod === "touch"
+                        ? t("mePlaystyle.inputMethodTouch")
+                        : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="keyboard_mouse">{t("mePlaystyle.inputMethodKeyboardMouse")}</SelectItem>

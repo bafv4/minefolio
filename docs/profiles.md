@@ -267,7 +267,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | 項目 | 形式 | 表示条件 |
 |---|---|---|
 | プレイするバージョン | エディション別チェックボックス複数選択 | 常時 |
-| カテゴリ | チップ複数選択 | 常時 |
+| カテゴリ | チェックボックスのタイル複数選択（バージョンと同じ形） | 常時 |
 | メインバージョン / メインカテゴリ | 選択済みから各1つ | 常時（メインバージョンのエディション → プロフィールの Java/Bedrock バッジを決定） |
 | 入力方法 | 3値 Select（`users.inputMethod`。`/me/edit` から移管しバッジと一本化。**編集の場所は playstyle に一本化**し、`/me/devices` からは外す方針。説明文から `/me/keybindings` / `/me/devices` の編集モードへリンクする） | 常時 |
 | ホットバー切替方法 | 4値: ホットキー/ホットキー(時々ホイール)/マウスホイール(時々ホットキー)/マウスホイール | 常時 |
@@ -828,7 +828,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **送信**: 保存バーの保存で `_action=save_all` ＋ プロフィール列 ＋ `changes`（JSON。`ProfileChanges`。差分が無ければ省略）を **1リクエスト**で送る。`_action` 未指定（従来の保存）も同じ経路で、`changes` が無いときはプロフィール列だけを保存する。`changes` は zod で検証し、不正なら何も保存しない
 - **サーバー処理**（`app/lib/profile-edit.server.ts` の `saveProfileBatch`）: ① 検証（形式 → 既存データを読んだ「最終状態」の検証〈所有確認・同一プラットフォーム重複・動画10件上限〉→ MCID 重複と Mojang 照合）→ ② DB 書き込みを**単一トランザクション**（MCID/slug 更新・slug 履歴・お気に入り追従・リンク〈削除→更新→作成〉・動画〈削除→更新→作成→並び〉・プロフィール列）→ ③ commit 後に外部キャッシュのキック（`scheduleSocialLinkKicks` 等。保存が失敗したら一切走らない）。①で失敗したら DB は1行も変わらない。他ユーザーの ID の更新はエラー、削除は無視する（IDOR 防止）
 - **MCID の Mojang 照合は二段構え**: ダイアログ確定時に `GET /api/me/mcid-check?mcid=`（認証必須・DB 非変更。形式 → 重複 → Mojang の順。`fetchUuidFromMcid` のキャッシュはインスタンス内メモリのため、Vercel では確認時と保存時で別インスタンスになり、Mojang を2回照合することがある。大文字小文字違いの MCID は `uuid` が同じになるため、`users.uuid` の他ユーザー使用も `taken` として弾く）で確認し、**確認できたものだけ**下書きに載せる（UUID・アバターのプレビュー可）。保存時にもサーバーが必ず再照合する（クライアントの結果は信用しない）。保存時に失敗したら `fieldErrors.mcid`（`mcidNotFound` / `mcidTaken` / `mcidVerifyFailed`）を返し、**他の変更も含め何も保存せず**、下書きはそのまま残る（MCID カード内に赤い Alert を出して再入力・再試行できる）。Bedrock 版は自己申告で Mojang 照合なし（形式検証のみ）
-- **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する
+- **検証エラーの表示**: `{ error, fieldErrors: { mcid?, bedrockMcid?, links?: {key: msg}, videos?: {key: msg} } }`。`error` はトースト、`fieldErrors` は該当項目の下に表示する。保存時のエラー（クライアントの事前検証〈RTA歴の片方だけ選択〉とサーバーが返した `fieldErrors` の両方）は、ページ順で最初のエラー欄（`edit-error-*` の id、RTA歴は Select）へスクロールしてフォーカスする（`prefers-reduced-motion` ではなめらかにしない。保存バーの裏は `scroll-padding` が避ける）。Select（RTA歴の年月・主なプラットフォーム・役割・公開範囲・既定タブ）の `SelectValue` には今の値の表示文字を子として渡す（Radix は SSR で選択中の文字を描けず、サーバー HTML が空になるため）。表示設定のスイッチ行は `max-w-2xl` で幅を詰める
 - **未保存検知・離脱ガード**: `FloatingSaveBar` が内蔵する離脱ガード（`unsavedGuard` 既定 true。内部で `useUnsavedWarning` ＋ `UnsavedChangesDialog`。この画面は自前では持たない）が `hasChanges`（保存中は止めない）を見る。`hasChanges` を「フォーム値の変更 ＋ `hasProfileChanges(savedDraft, draft)`」にした（下書きの `buildProfileChanges` が空でないかで判定。前後の空白だけの差・追加してすぐ削除した項目は変更とみなさない）。保存中〜保存後の再取得が終わるまで（`fetcher.state !== "idle"`）は保存ボタンを無効にして二重送信（新規行の重複）を防ぐ
 - **アカウント削除**: 未保存の変更があるとき、確認ダイアログに「未保存の変更は破棄されます」を表示。実行ボタンのクリックで下書き・フォーム値を破棄してから送信し、削除後のリダイレクトを離脱ガードが止めないようにする
 - **レガシーインポート**: 未保存の変更がある間はボタンを無効化し「先に保存または取り消してください」を表示する（インポートはキー配置等を別テーブルへ書くだけでプロフィール列は触らないが、画面の下書きとの食い違いを避けるため）
