@@ -15,15 +15,28 @@ function UnsavedGuard({
   hasChanges,
   onSave,
   isSubmitting,
+  saveResult,
+  saveSucceeded,
 }: {
   hasChanges: boolean;
   onSave: () => void;
   isSubmitting: boolean;
+  saveResult?: unknown;
+  saveSucceeded?: boolean;
 }) {
   // 保存中は止めない。ただし blocked 済みの状態は dirty が下がっても保たれるので、
   // 「保存して移動」は送信完了後に proceed できる
   const blocker = useUnsavedWarning(hasChanges && !isSubmitting);
-  return <UnsavedChangesDialog blocker={blocker} onSave={onSave} isSubmitting={isSubmitting} hasChanges={hasChanges} />;
+  return (
+    <UnsavedChangesDialog
+      blocker={blocker}
+      onSave={onSave}
+      isSubmitting={isSubmitting}
+      hasChanges={hasChanges}
+      saveResult={saveResult}
+      saveSucceeded={saveSucceeded}
+    />
+  );
 }
 
 interface FloatingSaveBarProps {
@@ -39,6 +52,14 @@ interface FloatingSaveBarProps {
    * 画面側で useUnsavedWarning + UnsavedChangesDialog を自前で持つ間だけ false にする。
    */
   unsavedGuard?: boolean;
+  /**
+   * 直近の保存の結果。保存の送信が完了するたびに新しい参照になる値（保存に使う fetcher の data をそのまま渡す。
+   * まだ保存していない間は undefined でよい）。「保存して移動」が保存の成否を判定するのに使う。
+   * 必須にしてあるのは、渡し忘れると「未保存が消えたら成功」という推定に戻り、保存に失敗しても移動しうるため
+   */
+  saveResult: unknown;
+  /** saveResult が成功を表すか */
+  saveSucceeded: boolean;
 }
 
 export function FloatingSaveBar({
@@ -50,6 +71,8 @@ export function FloatingSaveBar({
   resetLabel,
   className,
   unsavedGuard = true,
+  saveResult,
+  saveSucceeded,
 }: FloatingSaveBarProps) {
   // 既定ラベルは本体で解決する（既定引数は useT() より先に評価されるため）
   const t = useT();
@@ -57,7 +80,15 @@ export function FloatingSaveBar({
   const reset = resetLabel ?? t("common.discardChanges");
   return (
     <>
-    {unsavedGuard && <UnsavedGuard hasChanges={hasChanges} onSave={onSave} isSubmitting={isSubmitting} />}
+    {unsavedGuard && (
+      <UnsavedGuard
+        hasChanges={hasChanges}
+        onSave={onSave}
+        isSubmitting={isSubmitting}
+        saveResult={saveResult}
+        saveSucceeded={saveSucceeded}
+      />
+    )}
     <div
       data-me-tour="save-bar"
       role="region"

@@ -26,4 +26,16 @@ describe("resolveSyncedDraft", () => {
     const edited = { n: 5 };
     expect(resolveSyncedDraft({ draft: edited, prevBase: { n: 1 }, nextBase: next, isEqual })).toBe(edited);
   });
+
+  it("持ち主のキー（編集先プリセット）が変わったら、編集済みでも新しい値で置き換える", () => {
+    const next = { a: "B の内容" };
+    const edited = { a: "A の編集中" };
+    expect(
+      resolveSyncedDraft({ draft: edited, prevBase: { a: "A" }, nextBase: next, prevKey: "A", nextKey: "B" }),
+    ).toBe(next);
+    // キーが同じなら従来どおり編集を残す
+    expect(
+      resolveSyncedDraft({ draft: edited, prevBase: { a: "A" }, nextBase: next, prevKey: "A", nextKey: "A" }),
+    ).toBe(edited);
+  });
 });

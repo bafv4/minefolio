@@ -67,6 +67,7 @@ import type { Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, type PresetSyncKind } from "@/lib/preset-utils";
 import { parseFingerAssignments } from "@/lib/preset-read";
+import { validateFingerAssignmentsJson } from "@/lib/finger-assignments";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
@@ -559,14 +560,9 @@ function parseKeybindingUpdates(raw: string | null | undefined): KeybindingUpdat
   return valid ? updates : null;
 }
 
-/** fingerAssignments の JSON 文字列がオブジェクトとして妥当か検証する。 */
+/** fingerAssignments の JSON 文字列を検証する（値は有効な指の配列、件数・長さの上限つき）。 */
 function isValidFingerAssignmentsJson(raw: string): boolean {
-  try {
-    const v = JSON.parse(raw);
-    return v !== null && typeof v === "object" && !Array.isArray(v);
-  } catch {
-    return false;
-  }
+  return validateFingerAssignmentsJson(raw) !== null;
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -1328,13 +1324,13 @@ export default function KeybindingsPage() {
       })),
     [initialCustomActions],
   );
-  const { draft: localRemaps, setDraft: setLocalRemaps } = useLoaderSyncedDraft<RemapEntry[]>(remapsSource);
+  const { draft: localRemaps, setDraft: setLocalRemaps } = useLoaderSyncedDraft<RemapEntry[]>(remapsSource, { resetKey: activePreset?.id ?? null });
   const { draft: localFingerAssignments, setDraft: setLocalFingerAssignments } =
-    useLoaderSyncedDraft<FingerAssignmentMap>(fingerAssignmentsSource);
+    useLoaderSyncedDraft<FingerAssignmentMap>(fingerAssignmentsSource, { resetKey: activePreset?.id ?? null });
   const { draft: localCustomKeys, setDraft: setLocalCustomKeys } =
-    useLoaderSyncedDraft<CustomKeyEntry[]>(customKeysSource);
+    useLoaderSyncedDraft<CustomKeyEntry[]>(customKeysSource, { resetKey: activePreset?.id ?? null });
   const { draft: localCustomActions, setDraft: setLocalCustomActions } =
-    useLoaderSyncedDraft<CustomActionEntry[]>(customActionsSource);
+    useLoaderSyncedDraft<CustomActionEntry[]>(customActionsSource, { resetKey: activePreset?.id ?? null });
 
   // ダイアログ関連
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
@@ -1345,6 +1341,21 @@ export default function KeybindingsPage() {
   const [modalDraftRemaps, setModalDraftRemaps] = useState<RemapEntry[] | null>(null);
   const [modalDraftFingerAssignments, setModalDraftFingerAssignments] = useState<FingerAssignmentMap | null>(null);
   const [modalDraftCustomActions, setModalDraftCustomActions] = useState<CustomActionEntry[] | null>(null);
+
+  // 編集先プリセットが変わったら（別タブでの切替など）、別のプリセットの内容を引き継がないよう
+  // hook 以外の下書き（操作割り当ての差分・キーのダイアログの下書き）も捨て、開いているダイアログを閉じる
+  const activePresetId = activePreset?.id ?? null;
+  const [draftPresetId, setDraftPresetId] = useState(activePresetId);
+  if (draftPresetId !== activePresetId) {
+    setDraftPresetId(activePresetId);
+    setKeybindingChanges({});
+    setEditingKeyCode(null);
+    setIsCapturing(false);
+    setModalDraftKeybindingChanges(null);
+    setModalDraftRemaps(null);
+    setModalDraftFingerAssignments(null);
+    setModalDraftCustomActions(null);
+  }
 
   // タブの状態
   const [activeTab, setActiveTab] = useState("keybindings");
@@ -2080,7 +2091,7 @@ export default function KeybindingsPage() {
     // 指割り当てをコピー
     if ((target === "fingers" || target === "all") && preset.fingerAssignmentsData) {
       try {
-        const fingerAssignmentsDataParsed = JSON.parse(preset.fingerAssignmentsData) as FingerAssignmentMap;
+        const fingerAssignmentsDataParsed = parseFingerAssignments(preset.fingerAssignmentsData);
         setLocalFingerAssignments(fingerAssignmentsDataParsed);
         copiedItems.push(t("meKeybindings.tabFingers"));
       } catch (e) {
@@ -2582,6 +2593,8 @@ export default function KeybindingsPage() {
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={resetChanges}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* キー編集ダイアログ */}

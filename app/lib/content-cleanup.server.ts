@@ -21,7 +21,8 @@ import { del } from "@vercel/blob";
 import type { Database } from "./db";
 import { createDb } from "./db";
 import { contentTranslations, guides, users, favorites, authSessions, authAccounts, authUsers } from "./schema";
-import { isVercelBlobUrl, collectBlobPathnames } from "./blob-url";
+import { collectBlobPathnames } from "./blob-url";
+import { isOwnTextureBlob } from "./blob-ownership.server";
 import { listAllBlobs, delBlobsInBatches } from "./blob-storage.server";
 import { runAfterResponse } from "./targeted-refresh.server";
 
@@ -101,14 +102,14 @@ export async function cleanupUserBlobs({
 
     // 規約前パス（prefix に乗らなかった場合）の保険。del() は冪等なので、
     // prefix 削除で既に消えていても二重削除にはならない
-    if (isVercelBlobUrl(customSkinUrl)) {
+    if (isOwnTextureBlob(customSkinUrl, { userId, kind: "skin" })) {
       try {
         await del(customSkinUrl as string);
       } catch (error) {
         console.error(`[content-cleanup] Failed to delete custom skin blob for user ${userId}:`, error);
       }
     }
-    if (isVercelBlobUrl(customCapeUrl)) {
+    if (isOwnTextureBlob(customCapeUrl, { userId, kind: "cape" })) {
       try {
         await del(customCapeUrl as string);
       } catch (error) {

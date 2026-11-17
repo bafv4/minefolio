@@ -680,6 +680,29 @@ describe("action - まとめ書き込み（CASE UPDATE / db.batch / upsert）", 
     });
   });
 
+  it("save-fingers は値が指の配列でない payload を拒否し、既存の値を変えない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await callAction(
+      formDataOf({ intent: "save-fingers", presetId: preset.id, fingerAssignments: JSON.stringify({ KeyW: ["left-index"] }) }),
+    );
+    for (const bad of [{ KeyW: 5 }, { KeyW: ["left-toe"] }, { KeyW: { a: 1 } }]) {
+      const res = await callAction(
+        formDataOf({ intent: "save-fingers", presetId: preset.id, fingerAssignments: JSON.stringify(bad) }),
+      );
+      expect(res).toHaveProperty("error");
+    }
+    const config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(JSON.parse(config!.fingerAssignments!)).toEqual({ KeyW: ["left-index"] });
+  });
+
+  it("save-all も不正な指割り当てを拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+    const res = await callAction(
+      formDataOf({ intent: "save-all", presetId: preset.id, fingerAssignments: JSON.stringify({ KeyW: 5 }) }),
+    );
+    expect(res).toHaveProperty("error");
+  });
+
   it("save-fingers は player_configs が無ければ作成し、あれば更新する（スナップショットも同期）", async () => {
     const { user, preset } = await setupUserWithActivePreset();
 

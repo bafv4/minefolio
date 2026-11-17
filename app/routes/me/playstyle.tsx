@@ -329,7 +329,8 @@ export default function PlaystylePage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
-  const isSubmitting = fetcher.state === "submitting";
+  // 保存後の再取得が終わるまでを保存中に含める（保存バーの「未保存」のちらつき防止）
+  const isSubmitting = fetcher.state !== "idle";
 
   const buildFormValues = useCallback(
     (): PlaystyleFormValues => ({
@@ -747,6 +748,8 @@ export default function PlaystylePage() {
       <FloatingSaveBar
         hasChanges={hasChanges}
         isSubmitting={isSubmitting}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
         onSave={handleSave}
         onReset={handleReset}
       />

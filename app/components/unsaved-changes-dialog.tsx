@@ -1,8 +1,10 @@
 // 未保存のまま離れようとしたときの確認ダイアログ。useUnsavedWarning() が返す Blocker と組で使う。
 //
-// `onSave` を渡すと「保存して移動」（主ボタン）を足す。押すと onSave を呼び、送信が終わって未保存が解消したら
-// blocker.proceed()。送信が始まらない（画面側の事前検証で止まった）・失敗した（送信後も未保存）ときは
-// blocker.reset() してダイアログを閉じ、画面側のエラー表示を見せる。onSave を渡さない呼び出し側
+// `onSave` を渡すと「保存して移動」（主ボタン）を足す。押すと onSave を呼び、送信が終わったら保存の結果で判定する。
+// `saveResult` / `saveSucceeded` を渡す画面は、押した時点と別の参照の saveResult が届いたら、saveSucceeded が true なら
+// blocker.proceed()、false なら blocker.reset()（未保存の解消は見ない。失敗しても再検証で下書きが捨てられることがあるため）。
+// 渡していない画面は、従来どおり「送信後に未保存が解消したか」の推定になる。
+// 送信が始まらない（画面側の事前検証で止まった）ときも blocker.reset() してダイアログを閉じ、画面側のエラー表示を見せる。onSave を渡さない呼び出し側
 // （guide-editor）は従来どおり「編集を続ける」「保存せず離れる」の2択。
 import { useEffect, useRef, useState } from "react";
 import type { Blocker } from "react-router";
@@ -24,7 +26,7 @@ import {
 export const SAVE_START_TIMEOUT_MS = 1500;
 
 /**
- * 送信が終わってから、未保存（hasChanges）が解消するのを待つ上限。画面側は保存結果を受け取った後の effect で
+ * 送信が終わってから、保存の結果（saveResult の更新。渡していない画面は未保存 hasChanges の解消）を待つ上限。画面側は保存結果を受け取った後の effect で
  * 下書きの基準を入れ替えるため、送信が終わったレンダーではまだ hasChanges が true のことがある。
  * 過ぎても解消しなければ保存は失敗したとみなす
  */
@@ -38,6 +40,10 @@ interface UnsavedChangesDialogProps {
   isSubmitting?: boolean;
   /** 未保存の変更が残っているか（保存中を含めた生の値。onSave を渡すとき必須） */
   hasChanges?: boolean;
+  /** 直近の保存の結果。保存の送信が完了するたびに新しい参照になる値（保存に使う fetcher の data をそのまま渡す） */
+  saveResult?: unknown;
+  /** saveResult が成功を表すか。saveResult / saveSucceeded を渡さない画面は未保存の解消で成功を推定する */
+  saveSucceeded?: boolean;
 }
 
 export function UnsavedChangesDialog({
@@ -45,12 +51,17 @@ export function UnsavedChangesDialog({
   onSave,
   isSubmitting = false,
   hasChanges = true,
+  saveResult,
+  saveSucceeded,
 }: UnsavedChangesDialogProps) {
   const t = useT();
   // waiting: onSave を呼んで送信の開始待ち / saving: 送信中 / settling: 送信後に未保存の解消待ち / idle: 何もしていない
   const [phase, setPhase] = useState<"idle" | "waiting" | "saving" | "settling">("idle");
   const blockerRef = useRef(blocker);
   blockerRef.current = blocker;
+  // 「保存して移動」を押した時点の saveResult。これと別の参照になったら、その保存の結果が届いたとみなす
+  const resultAtClickRef = useRef<unknown>(undefined);
+  const tracked = saveResult !== undefined || saveSucceeded !== undefined;
 
   const blocked = blocker.state === "blocked";
 
@@ -77,19 +88,27 @@ export function UnsavedChangesDialog({
       return;
     }
     if (phase === "settling") {
-      if (!hasChanges) {
+      if (tracked) {
+        if (saveResult !== resultAtClickRef.current) {
+          setPhase("idle");
+          // 成功したなら未保存が一瞬残っていても移動し、失敗したなら未保存が消えていても移動しない
+          if (saveSucceeded) blockerRef.current.proceed?.();
+          else blockerRef.current.reset?.();
+          return;
+        }
+      } else if (!hasChanges) {
         setPhase("idle");
         blockerRef.current.proceed?.();
         return;
       }
       const timer = setTimeout(() => {
-        // 送信後も未保存が残った（保存に失敗した）。画面のエラー表示が見えるよう閉じる
+        // 結果が届かない／送信後も未保存が残った（保存に失敗した）。画面のエラー表示が見えるよう閉じる
         setPhase("idle");
         blockerRef.current.reset?.();
       }, SAVE_SETTLE_TIMEOUT_MS);
       return () => clearTimeout(timer);
     }
-  }, [phase, isSubmitting, hasChanges]);
+  }, [phase, isSubmitting, hasChanges, tracked, saveResult, saveSucceeded]);
 
   const busy = phase !== "idle";
 
@@ -126,6 +145,7 @@ export function UnsavedChangesDialog({
                 onClick={(e) => {
                   // 保存が終わるまでダイアログを閉じない
                   e.preventDefault();
+                  resultAtClickRef.current = saveResult;
                   setPhase("waiting");
                   onSave();
                 }}

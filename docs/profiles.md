@@ -333,14 +333,15 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 - 認証必須
 - リクエストボディ: `{ url: string, model?: "default" | "slim" }`
 - URLは `blob.vercel-storage.com`（完全一致 or サブドメイン）のホストに限定。`new URL()` でパースしてホスト名で許可リスト判定する（部分文字列一致は `#fragment` 等ですり抜けられ SSRF になるため使わない）。検証ロジックは `app/lib/blob-url.ts`（`isVercelBlobUrl` / `parseVercelBlobUrl`）に集約
-- 既存の古いBlobがあれば削除してから更新
+- **所有判定**（`isOwnTextureBlobUrl` / env を読む `isOwnTextureBlob`＝`app/lib/blob-ownership.server.ts`）: ホスト確認に加え、URL のパスが `skins/<自分の userId>/` で始まり（その下に名前があり、`..` セグメントを含まない）、`BLOB_READ_WRITE_TOKEN` があるときはホストが自ストア（`<storeId>.public|private.blob.vercel-storage.com`、storeId はトークン `vercel_blob_rw_<storeId>_…` の4つ目、@vercel/blob と同じ導出）であること。通らなければ 400 `Invalid blob URL`。トークンが無い環境（ローカル）ではパスだけを確認する。プレフィックスはアップロードのトークン発行（`TEXTURE_BLOB_PREFIX`）と共有。他人の Blob を保存すると、解除・差し替え時の `del()` で消せてしまうため
+- 既存の古いBlobがあれば削除してから更新。ただし古い URL が所有判定に通らない（過去に保存された他人のパス・他ストア）ときは `del()` せず、列の更新だけ行う
 
 ### API: `DELETE /api/me/skin`
 
 カスタムスキンを削除する。
 
 - 認証必須
-- Vercel BlobからファイルをDELETE
+- Vercel BlobからファイルをDELETE（所有判定に通らない既存 URL は `del()` せず列のクリアのみ。アカウント削除の `cleanupUserBlobs` の保険 `del()` も同じ）
 - DBの `customSkinUrl`, `customSkinModel`, `customSkinUpdatedAt` を `null` に
 
 ### API: `GET /api/skin`
@@ -351,7 +352,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 - `uuid` - Minecraft UUID (直接指定)
 - `userId` - Minefolioユーザー ID (カスタムスキン優先チェック)
 
-保存済み `customSkinUrl` をサーバー side で fetch する前に、保存時と同じ許可リスト検証（`parseVercelBlobUrl`）を再適用する。信頼された Vercel Blob ホスト以外・IP リテラル・非 https は fetch せずスキップし、SSRF を防ぐ。
+保存済み `customSkinUrl` をサーバー side で fetch する前に、保存時と同じ許可リスト検証（`parseVercelBlobUrl`）を再適用する。信頼された Vercel Blob ホスト以外・IP リテラル・非 https は fetch せずスキップし、SSRF を防ぐ。応答の `Content-Length` がスキンのアップロード上限（1MB）を超えるときは本文を読まず Mojang 経路へフォールバックする（読み取り側には所有判定を入れない）。
 
 ### スキン取得優先順位
 
@@ -394,6 +395,8 @@ Steve を返す（この API の挙動は変えていない）。「MCID未登�
 
 **カスタムマント（`customCapeUrl`） → Mojang のマント（`uuid` がある場合） → なし**。
 カスタムスキンを設定していても `uuid` があれば Mojang のマントを出す（スキンとマントは独立に解決する）。
+
+`POST` / `DELETE /api/me/cape` はスキンと同じ所有判定（`capes/<userId>/`）を通す。判定に通らない既存 URL は `del()` しない。
 この解決は `app/lib/cape.ts` の `resolveCapeProps({ uuid, customCapeUrl, capeDisplay })`（`.server` ではない共有ヘルパー）に集約しており、
 返り値 `{ capeUrl?, backEquipment? }` をそのまま `MinecraftFullBody` に spread する。`hidden` や出所が無い場合は `{}`。
 

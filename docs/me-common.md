@@ -17,9 +17,13 @@
 `dirty = hasChanges && !isSubmitting` なので、保存中は止めない。pathname が変わらない遷移も止めない（`useUnsavedWarning` と同じ）。
 
 - 確認ダイアログ（`UnsavedChangesDialog`）は主ボタン「保存して移動」・「編集を続ける」・「保存せず離れる」（outline＋destructive 文字色。データを失う操作は主ボタンにしない）。
-  「保存して移動」は `onSave` を呼び、送信（`isSubmitting`）の立ち上がりを待つ。送信が終わってから未保存が解消すれば `blocker.proceed()`
-  （画面側は保存結果を受けた後の effect で下書きの基準を入れ替えるので、送信終了のレンダーではまだ未保存のことがある。最大 1 秒待つ＝`SAVE_SETTLE_TIMEOUT_MS`）、
-  1 秒待っても未保存が残る（保存に失敗した）／1.5 秒経っても送信が始まらない（画面側の事前検証で止まった）ときは `blocker.reset()` で閉じて画面のエラーを見せる。
+  「保存して移動」は押した時点の `saveResult` の参照を覚えて `onSave` を呼び、送信（`isSubmitting`）の立ち上がりを待つ。
+  各画面は保存に使う fetcher の `data` を `saveResult`、その成否を `saveSucceeded` として `FloatingSaveBar` に渡す（保存の送信が完了するたびに新しい参照になること）。
+  送信が終わったとき `saveResult` が押した時点と別の参照なら、その保存の結果が届いたとみなし、`saveSucceeded` が true なら `blocker.proceed()`、false なら `blocker.reset()`。
+  **未保存（`hasChanges`）は見ない**: 保存が失敗しても再検証で loader が変わり下書きが捨てられる（別タブでプリセットが切り替わっていた等）と未保存が消えるため、
+  それを成功と取り違えて移動してしまう。送信が終わっても `saveResult` が同じ参照のままなら最大 1 秒待ち（`SAVE_SETTLE_TIMEOUT_MS`）、届かなければ `reset`。
+  1.5 秒経っても送信が始まらない（画面側の事前検証で止まった）ときも `reset` で閉じて画面のエラーを見せる。
+  `FloatingSaveBar` ではこの2つは必須（`/me` の8画面すべてが渡す）。`UnsavedChangesDialog` を直接使い、どちらも渡さない呼び出し側だけが、送信後に未保存が解消したかで成功を推定する。
   保存中はボタンを無効にし「保存して移動中...」と表示、Esc でも閉じない。guide-editor は `onSave` を渡さず、従来の2択のまま。
 - 保存バーの面は不透明の `bg-card`、枠は中立の `border-border/70`（「未保存」バッジの `text-warning` を全テーマで 4.5:1 以上に保つ。
   warning/10 を card に重ねて light 4.65・dark 5.58・ultra-dark 5.85）。
@@ -43,9 +47,12 @@
 
 - loader の値（source）が変わったとき、**下書きが前回の基準値と同じ（＝未変更）のときだけ新しい値で置き換える**。編集済みなら下書きを残し、基準値（base）だけを新しい値へ進める。比較は既定で JSON 文字列の一致
 - 置き換えは**レンダー中**に行う（effect にしない）。置き換え前の値が 1 フレーム描かれない
-- 保存成功の直後は `syncOnNextSource()` を呼び、次の source 更新では**編集済みでも**置き換える（サーバーで正規化された値・新規行に採番された id に揃える）
-- プリセット切替は未保存の間は無効なので常に「未変更」＝置き換わる。source は参照が安定していること（`useMemo`）
-- `/me/keybindings` の操作割り当ての差分（`keybindingChanges`）は下書きが「id → キー」の差分なので、loader が変わったときに**保存値と同じになった項目だけ**外す（未保存の項目は残す）。保存成功時は従来どおり全クリア
+- 保存成功の直後は `syncOnNextSource()` を呼び、次の source 更新では**編集済みでも**置き換える（サーバーで正規化された値・新規行に採番された id に揃える）。`/me/keybindings` は `syncOnNextSource` を使わず、保存成功時に再検証後の値へ直接そろえる
+- **プリセットが変わったら、編集済みでも必ず置き換える**。各画面は `useLoaderSyncedDraft(source, { resetKey: activePreset?.id ?? null })` を呼び、`resetKey` が変わったとき新しい値で置き換えて基準値も進める（`resolveSyncedDraft` の `prevKey` / `nextKey`）。別タブで編集先を切り替えたあとに、旧プリセットの内容が新しいプリセットへ保存される事故（保存時の `presetId` は loader の最新のアクティブIDなので、`staleSession` では防げない）を避けるため。不変条件: 「プリセット A で読み込んだ下書きは、`presetId=B` では保存できない」（`use-loader-synced-draft.test.tsx`）
+- 未変更の間にプリセットが切り替わる通常の場合も、同じ規則で置き換わる。source は参照が安定していること（`useMemo`）
+- `/search-craft` は crafts と loops の 2 つの hook を同じ `resetKey` で揃える（Loop が旧 craftId を指したまま残らない）
+- `/me/keybindings` は hook 以外の下書きもプリセットが変わった時点で捨てる: 操作割り当ての差分（`keybindingChanges`）、キーのダイアログの下書き（`modalDraft*`）。開いているダイアログは閉じる
+- 同じプリセットの中での `keybindingChanges` は、loader が変わったときに**保存値と同じになった項目だけ**外す（未保存の項目は残す）。保存成功時は従来どおり全クリア
 
 ## はじめにガイド
 

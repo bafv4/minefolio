@@ -4,6 +4,9 @@ import { parseVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
+// カスタムスキンのアップロード上限（blob-storage.server.ts の maximumSizeInBytes と同じ 1MB）
+const MAX_CUSTOM_SKIN_BYTES = 1 * 1024 * 1024;
+
 // Steve's default skin URL (embedded as base64 fallback would be better, but using official URL)
 const STEVE_SKIN_URL =
   "https://textures.minecraft.net/texture/31f477eb1a7beee631c2ca64d06f8f68fa93a3386d04452ab27f43acdf1b60cb";
@@ -62,7 +65,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const safeCustomSkinUrl = parseVercelBlobUrl(user?.customSkinUrl);
       if (safeCustomSkinUrl) {
         const skinResponse = await fetch(safeCustomSkinUrl);
-        if (skinResponse.ok) {
+        // アップロード上限（1MB）を超える巨大ファイルは読まない（自ストア判定は読み取り側に入れない）
+        const declaredLength = Number(skinResponse.headers.get("content-length"));
+        const tooLarge = Number.isFinite(declaredLength) && declaredLength > MAX_CUSTOM_SKIN_BYTES;
+        if (skinResponse.ok && !tooLarge) {
           const skinData = await skinResponse.arrayBuffer();
           return new Response(skinData, {
             headers: {

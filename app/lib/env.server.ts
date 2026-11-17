@@ -28,6 +28,7 @@ export function getEnv(): Env {
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
     DEV_AUTH: process.env.DEV_AUTH,
+    BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
   };
 }
 

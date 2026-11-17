@@ -9,12 +9,15 @@ import { jsonEqual, resolveSyncedDraft } from "@/lib/loader-synced-draft";
  * 保存成功の直後は `syncOnNextSource()` を呼ぶと、次の source 更新では編集済みでも置き換える
  * （サーバーの正規化後の値・採番済み ID に合わせるため）。
  *
+ * `resetKey` は下書きの持ち主（編集先プリセットの id など）。変わったときは編集済みでも必ず置き換える
+ * （別のプリセットの内容を、新しいプリセットへ保存させないため）。
+ *
  * source は参照が安定していること（useMemo など）。レンダー中に同期するので、
  * 置き換えの 1 フレーム前に古い値が描かれることはない。
  */
 export function useLoaderSyncedDraft<T>(
   source: T,
-  isEqual: (a: T, b: T) => boolean = jsonEqual,
+  options: { isEqual?: (a: T, b: T) => boolean; resetKey?: unknown } = {},
 ): {
   draft: T;
   setDraft: Dispatch<SetStateAction<T>>;
@@ -22,13 +25,18 @@ export function useLoaderSyncedDraft<T>(
   base: T;
   syncOnNextSource: () => void;
 } {
+  const { isEqual = jsonEqual, resetKey } = options;
   const [draft, setDraft] = useState<T>(source);
   const [base, setBase] = useState<T>(source);
+  const [key, setKey] = useState(resetKey);
   const [force, setForce] = useState(false);
 
-  if (source !== base) {
+  if (source !== base || resetKey !== key) {
     setBase(source);
-    setDraft(resolveSyncedDraft({ draft, prevBase: base, nextBase: source, force, isEqual }));
+    setKey(resetKey);
+    setDraft(
+      resolveSyncedDraft({ draft, prevBase: base, nextBase: source, force, prevKey: key, nextKey: resetKey, isEqual }),
+    );
     if (force) setForce(false);
   }
 

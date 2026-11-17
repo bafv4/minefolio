@@ -816,7 +816,7 @@ export default function ItemLayoutsPage() {
     draft: layouts,
     setDraft: setLayouts,
     syncOnNextSource,
-  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts);
+  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts, { resetKey: activePreset?.id ?? null });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
@@ -1055,6 +1055,8 @@ export default function ItemLayoutsPage() {
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}

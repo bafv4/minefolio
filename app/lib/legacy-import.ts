@@ -4,6 +4,7 @@ import type { Database } from "./db";
 import { keybindings, playerConfigs, customKeys, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customActions } from "./schema";
 import { eq } from "drizzle-orm";
 import { normalizeKeyCode, type FingerType } from "./keybindings";
+import { sanitizeFingerAssignments } from "./finger-assignments";
 import { isValidMouseDpi, isValidSensitivity } from "./mouse-settings";
 import { createPresetFromOnboarding } from "./preset-utils";
 
@@ -391,22 +392,11 @@ export async function importFromLegacy(
     // 指割り当てをインポート（settings.fingerAssignmentsはRecord<string, string[]>形式）
     const apiFingerAssignments = legacyData.settings?.fingerAssignments;
     if (apiFingerAssignments && Object.keys(apiFingerAssignments).length > 0) {
-      // 有効な指タイプのリスト
-      const validFingers: FingerType[] = [
-        "left-pinky", "left-ring", "left-middle", "left-index", "left-thumb",
-        "right-thumb", "right-index", "right-middle", "right-ring", "right-pinky"
-      ];
-
-      // 指割り当てをマップに変換（キーコードはすでにJavaScript形式）
+      // 指割り当てをマップに変換（キーコードはすでにJavaScript形式）。
+      // 有効な指だけを残し、件数・長さの上限も共通のサニタイズ（finger-assignments.ts）で揃える
       const fingerMap: Record<string, FingerType[]> = {};
-      for (const [keyCode, fingers] of Object.entries(apiFingerAssignments)) {
-        if (keyCode && fingers && Array.isArray(fingers)) {
-          // 有効な指のみをフィルタリング
-          const validFingerList = fingers.filter((f): f is FingerType => validFingers.includes(f as FingerType));
-          if (validFingerList.length > 0) {
-            fingerMap[keyCode] = validFingerList;
-          }
-        }
+      for (const [keyCode, fingers] of Object.entries(sanitizeFingerAssignments(apiFingerAssignments))) {
+        if (fingers.length > 0) fingerMap[keyCode] = fingers;
       }
 
       // 指割り当てがある場合はplayerConfigsに保存

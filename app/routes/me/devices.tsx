@@ -468,7 +468,7 @@ export default function DevicesPage() {
     setDraft: setFormValues,
     base: initialFormValues,
     syncOnNextSource,
-  } = useLoaderSyncedDraft(sourceFormValues);
+  } = useLoaderSyncedDraft(sourceFormValues, { resetKey: activePreset?.id ?? null });
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
   const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
@@ -1083,6 +1083,8 @@ export default function DevicesPage() {
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}

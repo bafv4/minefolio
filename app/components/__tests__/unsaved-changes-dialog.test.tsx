@@ -22,7 +22,7 @@ function blocked(): Blocker {
   return { state: "blocked", location: {} as never, proceed, reset } as unknown as Blocker;
 }
 
-async function render(props: { isSubmitting: boolean; hasChanges: boolean; withSave?: boolean }) {
+async function render(props: { isSubmitting: boolean; hasChanges: boolean; withSave?: boolean; saveResult?: unknown; saveSucceeded?: boolean }) {
   await act(async () => {
     root.render(
       createElement(UnsavedChangesDialog, {
@@ -30,6 +30,8 @@ async function render(props: { isSubmitting: boolean; hasChanges: boolean; withS
         onSave: props.withSave === false ? undefined : onSave,
         isSubmitting: props.isSubmitting,
         hasChanges: props.hasChanges,
+        saveResult: props.saveResult,
+        saveSucceeded: props.saveSucceeded,
       }),
     );
   });
@@ -116,5 +118,49 @@ describe("UnsavedChangesDialog", () => {
     await act(async () => button("common.leaveWithoutSaving").click());
     expect(proceed).toHaveBeenCalledTimes(1);
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  describe("saveResult / saveSucceeded を渡す場合", () => {
+    const first = { success: true };
+    const second = { success: false };
+
+    async function startSave(result: unknown, succeeded: boolean) {
+      await render({ isSubmitting: false, hasChanges: true, saveResult: result, saveSucceeded: succeeded });
+      await act(async () => button("common.saveAndLeave").click());
+      await render({ isSubmitting: true, hasChanges: true, saveResult: result, saveSucceeded: succeeded });
+    }
+
+    it("結果が届いて成功なら、未保存が残っていても proceed する", async () => {
+      await startSave(undefined, false);
+      await render({ isSubmitting: false, hasChanges: true, saveResult: first, saveSucceeded: true });
+      expect(proceed).toHaveBeenCalledTimes(1);
+      expect(reset).not.toHaveBeenCalled();
+    });
+
+    it("結果が届いて失敗なら、未保存が消えていても reset する（proceed しない）", async () => {
+      await startSave(first, true);
+      await render({ isSubmitting: false, hasChanges: false, saveResult: second, saveSucceeded: false });
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(proceed).not.toHaveBeenCalled();
+    });
+
+    it("送信が終わっても結果が届かなければ、待って reset する（未保存が消えても proceed しない）", async () => {
+      await startSave(first, true);
+      await render({ isSubmitting: false, hasChanges: false, saveResult: first, saveSucceeded: true });
+      expect(proceed).not.toHaveBeenCalled();
+      expect(reset).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_SETTLE_TIMEOUT_MS + 10);
+      });
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(proceed).not.toHaveBeenCalled();
+    });
+
+    it("送信が終わった後に結果が届いても、待っている間なら成功で proceed する", async () => {
+      await startSave(first, true);
+      await render({ isSubmitting: false, hasChanges: true, saveResult: first, saveSucceeded: true });
+      await render({ isSubmitting: false, hasChanges: true, saveResult: second, saveSucceeded: true });
+      expect(proceed).toHaveBeenCalledTimes(1);
+    });
   });
 });

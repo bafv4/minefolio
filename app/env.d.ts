@@ -33,5 +33,6 @@ export interface Env {
   VERCEL_TEAM_ID?: string;
   // ローカル開発専用: "1" で /dev/login の簡易ログインを有効化（本番では NODE_ENV ガードにより常に無効）
   DEV_AUTH?: string;
+  BLOB_READ_WRITE_TOKEN?: string;
 }
 

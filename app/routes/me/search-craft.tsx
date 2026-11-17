@@ -461,12 +461,16 @@ export default function SearchCraftPage() {
     draft: crafts,
     setDraft: setCrafts,
     syncOnNextSource: syncCraftsOnNextSource,
-  } = useLoaderSyncedDraft<SearchCraftItem[]>(initialCrafts);
+  } = useLoaderSyncedDraft<SearchCraftItem[]>(initialCrafts, {
+    resetKey: activePreset?.id ?? null,
+  });
   const {
     draft: loops,
     setDraft: setLoops,
     syncOnNextSource: syncLoopsOnNextSource,
-  } = useLoaderSyncedDraft<SearchCraftLoopItem[]>(initialLoops);
+  } = useLoaderSyncedDraft<SearchCraftLoopItem[]>(initialLoops, {
+    resetKey: activePreset?.id ?? null,
+  });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
@@ -677,6 +681,8 @@ export default function SearchCraftPage() {
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}

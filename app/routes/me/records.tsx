@@ -927,6 +927,8 @@ export default function RecordsPage() {
       <FloatingSaveBar
         hasChanges={hasChanges}
         isSubmitting={isSaving}
+        saveResult={saveResult}
+        saveSucceeded={saveResult != null && "success" in saveResult && saveResult.success === true}
         onSave={handleSave}
         onReset={handleReset}
       />

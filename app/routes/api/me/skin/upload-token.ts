@@ -3,6 +3,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { requireApiUser } from "@/lib/api-auth.server";
+import { TEXTURE_BLOB_PREFIX } from "@/lib/blob-url";
 import { handleTextureUploadToken } from "@/lib/blob-storage.server";
 
 // POST /api/me/skin/upload-token
@@ -16,7 +17,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!user) return response;
 
   return handleTextureUploadToken(request, {
-    prefix: "skins",
+    prefix: TEXTURE_BLOB_PREFIX.skin,
     userId: user.id,
     logLabel: "Skin",
   });

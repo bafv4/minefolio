@@ -428,6 +428,8 @@ export default function AccountPage() {
       <FloatingSaveBar
         hasChanges={hasChanges}
         isSubmitting={isSubmitting}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
         onSave={handleSave}
         onReset={handleReset}
       />

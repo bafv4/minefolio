@@ -4,6 +4,8 @@ import {
   isVercelBlobUrl,
   blobUrlToPathname,
   collectBlobPathnames,
+  isOwnTextureBlobUrl,
+  storeIdFromBlobToken,
 } from "../blob-url";
 
 describe("parseVercelBlobUrl", () => {
@@ -154,5 +156,29 @@ describe("collectBlobPathnames", () => {
     expect(collectBlobPathnames([html])).toEqual(
       new Set(["skins/u1/skin.png", "skins/u2/skin.png"])
     );
+  });
+});
+
+describe("isOwnTextureBlobUrl / storeIdFromBlobToken", () => {
+  const host = "https://store1.public.blob.vercel-storage.com";
+
+  it("トークンからストア ID を取り出す", () => {
+    expect(storeIdFromBlobToken("vercel_blob_rw_store1_secret")).toBe("store1");
+    expect(storeIdFromBlobToken("garbage")).toBe("");
+  });
+
+  it("自分のディレクトリ配下だけ通す", () => {
+    expect(isOwnTextureBlobUrl(`${host}/skins/u1/a.png`, { userId: "u1", kind: "skin" })).toBe(true);
+    expect(isOwnTextureBlobUrl(`${host}/skins/u2/a.png`, { userId: "u1", kind: "skin" })).toBe(false);
+    expect(isOwnTextureBlobUrl(`${host}/capes/u1/a.png`, { userId: "u1", kind: "skin" })).toBe(false);
+    expect(isOwnTextureBlobUrl(`${host}/skins/u1/%2e%2e/u2/a.png`, { userId: "u1", kind: "skin" })).toBe(false);
+    expect(isOwnTextureBlobUrl(`${host}/skins/u10/a.png`, { userId: "u1", kind: "skin" })).toBe(false);
+  });
+
+  it("storeId 指定時はホストも自ストアに限る。空文字は fail closed", () => {
+    const url = `${host}/capes/u1/a.png`;
+    expect(isOwnTextureBlobUrl(url, { userId: "u1", kind: "cape", storeId: "STORE1" })).toBe(true);
+    expect(isOwnTextureBlobUrl(url, { userId: "u1", kind: "cape", storeId: "other" })).toBe(false);
+    expect(isOwnTextureBlobUrl(url, { userId: "u1", kind: "cape", storeId: "" })).toBe(false);
   });
 });

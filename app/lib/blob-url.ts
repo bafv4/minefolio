@@ -109,3 +109,57 @@ export function collectBlobPathnames(texts: ReadonlyArray<string | null | undefi
   }
   return pathnames;
 }
+
+// ── スキン・マントの所有判定 ───────────────────────────────────────────
+//
+// `isVercelBlobUrl` はホストが Blob ドメインかしか見ないため、他人のスキン・ガイド画像・
+// 別ストアの URL も通る。保存した URL は解除・差し替え・アカウント削除で `del()` に渡るので、
+// 他人の Blob を消せてしまう。保存時・削除時とも、ここの判定を通ったものだけを扱う。
+
+/** テクスチャ種別ごとの Blob パスの先頭ディレクトリ（トークン発行側と判定側の単一情報源）。 */
+export const TEXTURE_BLOB_PREFIX = { skin: "skins", cape: "capes" } as const;
+export type TextureKind = keyof typeof TEXTURE_BLOB_PREFIX;
+
+/** `<prefix>/<userId>/`（アップロードを許可するパスの先頭）。 */
+export function userTexturePrefix(kind: TextureKind, userId: string): string {
+  return `${TEXTURE_BLOB_PREFIX[kind]}/${userId}/`;
+}
+
+/**
+ * `BLOB_READ_WRITE_TOKEN`（`vercel_blob_rw_<storeId>_<secret>`）からストア ID を取り出す。
+ * @vercel/blob の parseStoreIdFromReadWriteToken と同じ（"_" 区切りの4つ目）。取れなければ空文字。
+ */
+export function storeIdFromBlobToken(token: string): string {
+  const [, , , storeId = ""] = token.split("_");
+  return storeId;
+}
+
+/**
+ * URL が「このユーザーの種別ディレクトリ配下の Blob」か。
+ * - パスが `<prefix>/<userId>/` で始まり、その下に名前があり、`..` セグメントを含まない
+ * - `storeId` を渡したときは、ホストが自ストア（`<storeId>.public|private.blob.vercel-storage.com`）であること
+ *   （渡さない＝トークン無しのローカル環境ではパスだけを確認する。空文字は fail closed）
+ */
+export function isOwnTextureBlobUrl(
+  url: string | null | undefined,
+  { userId, kind, storeId }: { userId: string; kind: TextureKind; storeId?: string },
+): boolean {
+  const safe = parseVercelBlobUrl(url);
+  if (!safe) return false;
+
+  const pathname = blobUrlToPathname(safe);
+  if (!pathname) return false;
+  const prefix = userTexturePrefix(kind, userId);
+  if (!pathname.startsWith(prefix) || pathname.length === prefix.length) return false;
+  if (pathname.split("/").includes("..")) return false;
+
+  if (storeId !== undefined) {
+    if (!storeId) return false;
+    const host = new URL(safe).hostname.toLowerCase().replace(/\.$/, "");
+    const id = storeId.toLowerCase();
+    if (host !== `${id}.public.blob.vercel-storage.com` && host !== `${id}.private.blob.vercel-storage.com`) {
+      return false;
+    }
+  }
+  return true;
+}

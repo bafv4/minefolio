@@ -5,6 +5,7 @@ import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { plainJsonResponse, requireApiUser } from "@/lib/api-auth.server";
 import { isVercelBlobUrl } from "@/lib/blob-url";
+import { isOwnTextureBlob } from "@/lib/blob-ownership.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
@@ -24,8 +25,9 @@ export async function action({ request }: ActionFunctionArgs) {
   // DELETE: カスタムスキンを削除
   if (method === "DELETE") {
     try {
-      // 既存のBlobを削除
-      if (user.customSkinUrl) {
+      // 既存のBlobを削除。自分のディレクトリ配下でない URL（過去に保存された他人のパス・他ストア）は
+      // del() せず、列のクリアだけ行う
+      if (user.customSkinUrl && isOwnTextureBlob(user.customSkinUrl, { userId: user.id, kind: "skin" })) {
         try {
           await del(user.customSkinUrl);
         } catch (e) {
@@ -88,9 +90,14 @@ export async function action({ request }: ActionFunctionArgs) {
       if (!isVercelBlobUrl(url)) {
         return plainJsonResponse({ error: "Invalid blob URL" }, { status: 400 });
       }
+      // 自分のストア・自分のディレクトリ（skins/<userId>/）配下だけ受け付ける。
+      // 他人の Blob を保存すると、解除・差し替え時に del() で消せてしまう
+      if (!isOwnTextureBlob(url, { userId: user.id, kind: "skin" })) {
+        return plainJsonResponse({ error: "Invalid blob URL" }, { status: 400 });
+      }
 
-      // 古いBlobを削除（新しいものと異なる場合）
-      if (user.customSkinUrl && user.customSkinUrl !== url) {
+      // 古いBlobを削除（新しいものと異なる場合）。自分の物と確認できない旧 URL は del() しない
+      if (user.customSkinUrl && user.customSkinUrl !== url && isOwnTextureBlob(user.customSkinUrl, { userId: user.id, kind: "skin" })) {
         try {
           await del(user.customSkinUrl);
         } catch (e) {

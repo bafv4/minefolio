@@ -356,6 +356,10 @@ JIS配列とUS配列で同一キーコードの表示ラベルが異なる。キ
 
 デフォルトはWASD配置に基づく一般的な指割り当てが定義されている（`DEFAULT_FINGER_ASSIGNMENTS`）。
 
+**検証（`app/lib/finger-assignments.ts`、許可リストは `keybindings.ts` の `FINGER_TYPES` が単一情報源）**
+- 保存時（`validateFingerAssignments`）: 値はすべて「有効な指の配列」であること。キー数は 200 以下、キー名は 1〜32 文字、1 キーの指は 12 個以下。1 つでも不正なら `invalidPayload` のエラーを返し、保存しない（null・空で上書きしない）。通す経路: `/me/keybindings` の `save-fingers` / `save-all`、レガシー API 取り込み（`legacy-import.ts`。不正な項目は落とす `sanitizeFingerAssignments`）。`/me/import` と playground は指割り当てを書き込まない。プリセットのスナップショットは保存済みの検証済みデータの複製で、「他のプリセットからコピー」はクライアントで `parseFingerAssignments` を通してから取り込む
+- 読み取り時（`parseFingerAssignments` → `sanitizeFingerAssignments`）: 配列でない項目・有効でない指・上限超過を落として返す（すでに不正な行が保存されていても、公開ページの描画を落とさない保険）。`VirtualKeyboard` / `VirtualMouse` も配列でない値は無視する
+
 ---
 
 ## コントローラー設定

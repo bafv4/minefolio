@@ -589,19 +589,22 @@ export function getKeyLabel(
 // =====================================
 
 // 指の種類定義
-export type FingerType =
-  | "left-pinky"
-  | "left-ring"
-  | "left-middle"
-  | "left-index"
-  | "left-thumb"
-  | "left-palm"
-  | "right-palm"
-  | "right-thumb"
-  | "right-index"
-  | "right-middle"
-  | "right-ring"
-  | "right-pinky";
+// 許可する指の一覧（単一情報源。保存時の検証・読み取り時のサニタイズはここから導出する）
+export const FINGER_TYPES = [
+  "left-pinky",
+  "left-ring",
+  "left-middle",
+  "left-index",
+  "left-thumb",
+  "left-palm",
+  "right-palm",
+  "right-thumb",
+  "right-index",
+  "right-middle",
+  "right-ring",
+  "right-pinky",
+] as const;
+export type FingerType = (typeof FINGER_TYPES)[number];
 
 // 指のラベル
 const FINGER_LABEL_KEYS: Record<FingerType, MessageKey> = {

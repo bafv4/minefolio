@@ -11,6 +11,7 @@
 // 合成する行の id は `preset-<kind>-<idx>` 形式（表示専用。DB の行 id とは無関係)。
 // 並び順はライブテーブル取得時の orderBy と揃える。
 import type { FingerType } from "./keybindings";
+import { sanitizeFingerAssignments } from "./finger-assignments";
 import { normalizeKeyRemapType } from "./remap-utils";
 import { isValidLoopTransitionValue, normalizeVariationIndex, type LoopStepData } from "./search-craft-loops";
 import { resolveVariations, variationMirror } from "./search-craft-variations";
@@ -60,9 +61,7 @@ export function parseFingerAssignments(
   if (!json) return {};
   try {
     const parsed = JSON.parse(json);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, FingerType[]>)
-      : {};
+    return sanitizeFingerAssignments(parsed);
   } catch {
     return {};
   }

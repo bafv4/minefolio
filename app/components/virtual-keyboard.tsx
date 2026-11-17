@@ -605,11 +605,12 @@ function VirtualKeyboardComponent({
     const merged: FingerType[] = [];
     for (const code of getKeyCodeAliases(keyCode, layout)) {
       const normalized = normalizeKeyCode(code);
-      const list =
+      const found: unknown =
         effectiveFingerAssignments[normalized] ||
         effectiveFingerAssignments[code] ||
-        effectiveFingerAssignments[code.toLowerCase()] ||
-        [];
+        effectiveFingerAssignments[code.toLowerCase()];
+      // 壊れたデータ（配列でない値）で描画を落とさない
+      const list: FingerType[] = Array.isArray(found) ? found : [];
       for (const f of list) if (!merged.includes(f)) merged.push(f);
     }
     return merged;
@@ -1210,7 +1211,8 @@ export function VirtualMouse({
 
   // 指割り当てを取得（ユーザー設定のみ、デフォルトは使用しない）
   const getFingersForButton = (code: string): FingerType[] => {
-    return fingerAssignments[code] || fingerAssignments[code.toLowerCase()] || [];
+    const found: unknown = fingerAssignments[code] || fingerAssignments[code.toLowerCase()];
+    return Array.isArray(found) ? found : [];
   };
 
   // リマップ情報を取得
