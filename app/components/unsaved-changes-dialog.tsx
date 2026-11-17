@@ -107,7 +107,7 @@ export function UnsavedChangesDialog({
           <AlertDialogDescription>{t("common.unsavedLeaveDesc")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy} onClick={() => blocker.reset?.()}>
+          <AlertDialogCancel disabled={busy} className="max-sm:min-h-11" onClick={() => blocker.reset?.()}>
             {t("common.keepEditing")}
           </AlertDialogCancel>
           {onSave ? (
@@ -115,13 +115,14 @@ export function UnsavedChangesDialog({
               {/* データを失う操作は主ボタンにしない（outline＋文字だけ destructive 色） */}
               <AlertDialogAction
                 disabled={busy}
-                className={cn(buttonVariants({ variant: "outline" }), "text-destructive")}
+                className={cn(buttonVariants({ variant: "outline" }), "text-destructive max-sm:min-h-11")}
                 onClick={() => blocker.proceed?.()}
               >
                 {t("common.leaveWithoutSaving")}
               </AlertDialogAction>
               <AlertDialogAction
                 disabled={busy}
+                className="max-sm:min-h-11"
                 onClick={(e) => {
                   // 保存が終わるまでダイアログを閉じない
                   e.preventDefault();
@@ -133,7 +134,7 @@ export function UnsavedChangesDialog({
               </AlertDialogAction>
             </>
           ) : (
-            <AlertDialogAction onClick={() => blocker.proceed?.()}>
+            <AlertDialogAction className="max-sm:min-h-11" onClick={() => blocker.proceed?.()}>
               {t("common.leaveWithoutSaving")}
             </AlertDialogAction>
           )}

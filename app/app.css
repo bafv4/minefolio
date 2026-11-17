@@ -411,6 +411,15 @@ body {
     }
   }
 
+  /* lg 以上の /me はサイドバー（w-64 = 16rem ＋ gap-8 = 2rem）の分だけ本文の列が右へ寄るので、
+     保存バーも半分（9rem）右へずらして本文の列の中央に揃える。サイドバー（[data-me-tour="sidebar"]）がある画面だけ。
+     me/_layout.tsx のサイドバー幅・gap を変えたらここも合わせる */
+  @media (width >= 64rem) {
+    :root:has([data-me-tour="sidebar"]) {
+      --save-bar-shift: 9rem;
+    }
+  }
+
   /* 上端に貼り付く UI の scroll-padding-top（WCAG 2.4.11: Tab で移ったフォーカス・アンカー移動の着地点を隠さない）。
      --sticky-bar-inset: 上端に貼り付く帯の合計＋余白。既定はサイトヘッダー（全ページで sticky、65px）＋余白の 4.5rem（72px）。
        - 走者画面（追従するホットバーの番兵 [data-stuck]）: md 以上はヘッダー＋貼り付いたコンパクトなホットバー（57px）＋余白の 8.5rem（136px）
@@ -1827,5 +1836,7 @@ body {
 /* 変更が無く隠れている保存バーをツアーが指すときは、見える状態にして指す（操作は不可のまま） */
 [data-me-tour="save-bar"][data-me-tour-active] {
   opacity: 1 !important;
-  transform: none !important;
+  /* Tailwind 4 の translate-y-* は transform ではなく translate プロパティ（--tw-translate-y）で動かすので、
+     縦のずれだけ打ち消す（lg の横ずらし --save-bar-shift は残す） */
+  --tw-translate-y: 0px !important;
 }

@@ -25,14 +25,14 @@
   warning/10 を card に重ねて light 4.65・dark 5.58・ultra-dark 5.85）。
 - バーが見えている間（`aria-hidden="false"`）は `app/app.css` が `--save-bar-inset`（モバイル 8.75rem・sm 以上 6.5rem）を `--bottom-fixed-inset` に足し、
   body の `padding-bottom` と `scroll-padding-bottom` に効かせる。Tab で移った欄がバーの裏に隠れない（WCAG 2.4.11）。
+- lg 以上の `/me` は本文の列がサイドバー（16rem＋gap 2rem）の分だけ右にあるので、バーは `translate-x-[var(--save-bar-shift,0px)]` で半分（9rem）右へずらして
+  本文の列の中央に揃える。`--save-bar-shift` は `app.css` が lg 以上かつ `[data-me-tour="sidebar"]` がある画面だけで解決する（サイドバー幅・gap を変えたら合わせる）。
+- 「トップへ戻る」は `bottom-[calc(1.5rem+var(--bottom-fixed-inset,0px))]`。保存バーが見えている間はその上に出て、保存ボタンの右端と重ならない。
+- 離脱確認ダイアログのボタンはモバイルで高さ 44px（`max-sm:min-h-11`、消費側で指定）。
 - 既定で有効。`useBlocker` は 1 ルーターに 1 つしか効かないため、自前で `useUnsavedWarning` + `UnsavedChangesDialog` を
   持つ画面は `<FloatingSaveBar unsavedGuard={false} />` を渡して二重にしない（現在は該当なし。`/me/*` の保存バーのある画面はすべて保存バー側に移した）。
 - 自前の分を外して移行するには、その画面から `useUnsavedWarning` の呼び出しと `<UnsavedChangesDialog />` を消し、
   `unsavedGuard={false}` を削除する。
-
-## はじめにガイド
-
-オーナーの決定: 「ツアーとチェックリストの両方」「閉じた・見たことは DB に保存」。
 
 ## 再検証と下書きの同期（`useLoaderSyncedDraft`）
 
@@ -46,6 +46,10 @@
 - 保存成功の直後は `syncOnNextSource()` を呼び、次の source 更新では**編集済みでも**置き換える（サーバーで正規化された値・新規行に採番された id に揃える）
 - プリセット切替は未保存の間は無効なので常に「未変更」＝置き換わる。source は参照が安定していること（`useMemo`）
 - `/me/keybindings` の操作割り当ての差分（`keybindingChanges`）は下書きが「id → キー」の差分なので、loader が変わったときに**保存値と同じになった項目だけ**外す（未保存の項目は残す）。保存成功時は従来どおり全クリア
+
+## はじめにガイド
+
+オーナーの決定: 「ツアーとチェックリストの両方」「閉じた・見たことは DB に保存」。
 
 | 何 | 保存先 | 記録する経路 |
 |---|---|---|
@@ -64,6 +68,8 @@
 - 手順の対象は `data-me-tour="<名前>"` 属性で指す。見えていない（`display:none` / サイズ 0 / `aria-hidden` 配下）・無い対象の手順は飛ばす。
   - `sidebar`（lg 以上のナビ一覧）／ `sidebar-toggle`（lg 未満の開閉ボタン）／ `identity`（サイドバー上部の名前と共有）／ `save-bar`（`FloatingSaveBar` が付ける）は共通部分が持つ
   - **`edit-form`** は `/me/edit` が付ける（プロフィール入力の先頭のカードなど、画面より小さめの要素に）。無い画面では飛ばす
+  - **`preset`**（「編集中のプリセット」）は `[data-me-tour="preset-selector"]`（`PresetSelector` のルートが付ける）が見えている画面
+    （キー配置・デバイス・アイテム・サーチクラフト）だけで出す。保存バーの手順の前。無い画面では飛ばす
   - 保存バーの手順は、`[data-me-tour="save-bar"]` が DOM にある画面（`FloatingSaveBar` を描く画面）だけで出す。
     変更が無いあいだ `aria-hidden` でも、存在すれば指す。その間は `[data-me-tour-active]` の CSS がバーを一時的に見える状態（不透明・位置は本来の位置）にして指す
     （透明のまま空所を指さない。操作は不可のまま。手順は飛ばさない）。保存バーの無い画面（/me/import・/me/presets など）では手順ごと飛ばす

@@ -67,6 +67,8 @@ export function FloatingSaveBar({
         // Cookie 同意バナー表示中は、その高さぶん上へ積む（cookie-consent.tsx が変数を公開）
         "fixed bottom-[calc(1rem+var(--cookie-banner-offset,0px))] left-0 right-0 mx-auto z-50",
         "w-[calc(100%-2rem)] max-w-2xl",
+        // lg 以上で /me のサイドバーがあるとき、本文の列の中央へ寄せる（--save-bar-shift は app.css。サイドバーが無ければ 0）
+        "lg:translate-x-[var(--save-bar-shift,0px)]",
         "flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3",
         // 不透明の面（半透明だと「未保存」バッジの warning 文字が背景次第で 4.5:1 を割る）。枠は中立（primary はリンクの色）
         "bg-card",

@@ -75,7 +75,8 @@ export function BackToTopButton({ threshold = 200 }: Props) {
           onFocus={(e) => setFocused(e.currentTarget.matches(":focus-visible"))}
           onBlur={() => setFocused(false)}
           className={cn(
-            "fixed bottom-[calc(1.5rem+var(--bottom-dock-height,0px))] right-6 z-50 inline-flex items-center justify-center",
+            // 下端固定 UI（ドック・Cookie バナー・保存バー）の合算インセットの上に出す（保存バーと重ならない）
+            "fixed bottom-[calc(1.5rem+var(--bottom-fixed-inset,0px))] right-6 z-50 inline-flex items-center justify-center",
             "h-11 w-11 rounded-full border border-border/70 bg-card text-foreground shadow-md",
             "transition-[opacity,transform,visibility,background-color,border-color] duration-200 ease-out will-change-transform",
             "motion-reduce:translate-y-0 motion-reduce:transition-opacity",

@@ -3,7 +3,7 @@
 // 対象は `data-me-tour="<名前>"` 属性で示す。見つからない・見えていない対象の手順は飛ばす
 // （allowHidden の手順は、DOM にさえあれば見えていなくても指す）。
 
-export type MeTourStepId = "sidebar" | "edit" | "save" | "player";
+export type MeTourStepId = "sidebar" | "edit" | "preset" | "save" | "player";
 
 export interface MeTourStepDef {
   id: MeTourStepId;
@@ -19,6 +19,8 @@ export const ME_TOUR_STEPS: readonly MeTourStepDef[] = [
   { id: "sidebar", targets: ["sidebar", "sidebar-toggle"] },
   // 各ページが付ける。付いていない画面（/me/edit 以外）では飛ばす
   { id: "edit", targets: ["edit-form"] },
+  // PresetSelector（キー配置・デバイス・アイテム・サーチクラフト）がある画面だけ。保存バーの前（何に保存されるかを先に伝える）
+  { id: "preset", targets: ["preset-selector"] },
   // 保存バー（FloatingSaveBar）がある画面だけ。変更が無いあいだは aria-hidden だが、DOM にあれば指す
   { id: "save", targets: ["save-bar"], allowHidden: true },
   { id: "player", targets: ["identity"] },
