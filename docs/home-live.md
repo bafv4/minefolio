@@ -199,13 +199,26 @@ DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がc
 | トリガー | 実行内容 |
 |---|---|
 | Twitch/YouTubeリンクの追加・変更 | 新チャンネルのVOD/動画を即時取得（`refreshTwitchVodsForLogin` / `refreshYoutubeForChannel`） |
-| Twitch/YouTubeリンクの変更・削除 | 旧チャンネルのキャッシュ行を削除（`deleteTwitchVodsForLogin` / `deleteYoutubeVideosForChannelIdentifier`） |
+| Twitch/YouTubeリンクの変更・削除 | 旧チャンネルのキャッシュ行を削除（`deleteTwitchVodsForLogin` / `deleteYoutubeVideosForChannelIdentifier`）。**他の走者の登録分は消さない**（下記） |
 | Speedrun.comユーザー名の変更（ソーシャルリンク欄・基本情報フォームのどちらの経路でも） | Speedrun.com/MCSR Rankedランキングを即時更新（`refreshSrcRankingsForUser`） |
 | MCID変更 | `youtube_video_cache.minefolio_mcid` の紐付けを新MCIDへ更新（`updateYoutubeCacheMcid`。旧MCIDのまま残ると一覧から消えるため）＋YouTube連携があれば新MCIDで即時再取得 |
 | プロフィールを非公開→公開へ再公開 | 非公開中は cron の走査対象外（`getPublicTwitchLinks` / `getRegisteredYouTubeChannels` は公開プロフィールのみを走査）だったため取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる |
 
 cron（YouTube 2時間毎・Twitch 30分毎）は全体の定期同期として引き続き稼働し、この即時リフレッシュを
 置き換えるものではない（未ログイン操作や外部サービス側での削除・非公開化は cron 側の `verify` が拾う）。
+
+**リンク解除時の削除は、他の走者の登録分を消さない。** `twitch_vod_cache`（チャンネルの login 単位）と
+`youtube_video_cache`（`channelId` ＋ `minefolioMcid`）はチャンネル単位の共有キャッシュで、ソーシャルリンクは
+自己申告のため、他人のチャンネル名でリンクを作って外すだけで他人の動画が次の cron まで消えてしまう。これを防ぐため、
+削除関数には「外した本人」（`LinkOwner` = `userId` と MCID）を渡し、判定は削除と同じ関数の中で行う:
+
+- **Twitch**: `social_links` に、`platform = 'twitch'` かつ `lower(identifier)` が同じ login で `userId` が本人以外の行が
+  1件でもあれば削除しない（1クエリ）。判定のクエリが失敗したときも消さない。
+- **YouTube**: `channelId`（ハンドルは解決して UC-ID に）が同じで、`minefolioMcid`（大文字小文字無視）が本人の MCID に
+  一致する行だけを削除する。行は最初に取得した走者の MCID に帰属し（`upsertVideoCache` は衝突時に `minefolioMcid` を更新しない）、
+  他の走者の MCID に帰属した行は消えない。同じ保存で MCID を変える／外すときは `updateYoutubeCacheMcid` と並行になるため、
+  旧・新の両方を渡す。本人の MCID が無ければ（取得がスキップされるので帰属行も無い）何も消さない。
+- 旧→新の identifier 変更は、従来どおり「削除 → 取得」の順に直列化する。
 
 ### 表示制御フラグ
 

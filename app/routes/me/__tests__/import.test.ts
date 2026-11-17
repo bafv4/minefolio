@@ -35,6 +35,8 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../import";
+import { SAVE_LIMITS } from "@/lib/save-limits";
+import { parseOptionsText, parseStandardSettings } from "@/lib/import-parser";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -500,13 +502,175 @@ describe("action - import-minecraft", () => {
 });
 
 describe("action - 未知の intent", () => {
-  it("既知でない intent は何も書き込まず success:false を返す", async () => {
+  it("既知でない intent は何も書き込まず success:false とエラー文言を返す", async () => {
     const user = await setupUser();
     await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
 
     const res = await callAction(formDataOf({ intent: "import-unknown" }));
 
-    expect(res).toEqual({ success: false });
+    expect(res.success).toBe(false);
+    expect(res.error).toBeTruthy();
+    expect(await findRemaps(user.id)).toHaveLength(0);
+  });
+});
+
+describe("action - 取り込み先プリセットの確認", () => {
+  it("presetId が現在の編集先と違えば staleSession を返し、何も書き込まない", async () => {
+    const user = await setupUser();
+    const stale = await seedConfigPreset(db, user.id, { name: "A", isActive: false });
+    await seedConfigPreset(db, user.id, { name: "B", isActive: true });
+
+    const remapRes = await callAction(
+      formDataOf({ intent: "import-remaps", remaps: JSON.stringify([CAPSLOCK_REMAP]), presetId: stale.id }),
+    );
+    expect(remapRes).toEqual({ success: false, error: STALE_SESSION_ERROR });
+    expect(await findRemaps(user.id)).toHaveLength(0);
+
+    const mcRes = await callAction(
+      formDataOf({
+        intent: "import-minecraft",
+        keybindings: JSON.stringify([{ action: "key.attack", keyCode: "mouse_left", category: "combat" }]),
+        gameSettings: JSON.stringify({ fov: 90 }),
+        presetId: stale.id,
+      }),
+    );
+    expect(mcRes).toEqual({ success: false, error: STALE_SESSION_ERROR });
+    expect(await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) })).toHaveLength(0);
+    expect(await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) })).toBeUndefined();
+  });
+
+  it("presetId が現在の編集先と一致すれば取り込める", async () => {
+    const user = await setupUser();
+    const active = await seedConfigPreset(db, user.id, { name: "B", isActive: true });
+
+    const res = await callAction(
+      formDataOf({ intent: "import-remaps", remaps: JSON.stringify([CAPSLOCK_REMAP]), presetId: active.id }),
+    );
+    expect(res.success).toBe(true);
+    expect(await findRemaps(user.id)).toHaveLength(1);
+  });
+});
+
+describe("action - import-minecraft のゲーム設定の検証", () => {
+  const KB = [{ action: "key.attack", keyCode: "mouse_left", category: "combat" }];
+
+  it("型違いは invalidData で拒否し、何も書き込まない", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    for (const gameSettings of [{ fov: "90" }, { guiScale: "2" }, { toggleSprint: "yes" }, { gameLanguage: 5 }]) {
+      const res = await callAction(minecraftForm(KB, gameSettings));
+      expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
+    }
+    expect(await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) })).toHaveLength(0);
+    expect(await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) })).toBeUndefined();
+  });
+
+  it("数値だが範囲外・非整数の fov / guiScale は、その項目だけ取り込まず既存値を保持する（キー配置は取り込む）", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+    await seedPlayerConfig(db, user.id, { fov: 70, guiScale: 2 });
+
+    // 改造クライアントの値や、度数のまま書かれた形式を換算した値（例: 70 → 2870）に相当
+    for (const gameSettings of [{ fov: 500 }, { fov: 2870 }, { fov: 74.5 }, { guiScale: 11 }, { guiScale: 1.5 }]) {
+      const res = await callAction(minecraftForm(KB, { ...gameSettings, toggleSprint: true }));
+      expect(res.success).toBe(true);
+      // 取り込めたのは toggleSprint だけ
+      expect(res.gameSettingsCount).toBe(1);
+      const config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+      expect(config).toMatchObject({ fov: 70, guiScale: 2, toggleSprint: true });
+    }
+    expect(await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) })).toHaveLength(1);
+  });
+
+  // 画面のダイアログは parsedMcSettings.keybindings / gameSettings をそのまま JSON.stringify して送る。
+  // 検証を厳しくした結果、本物のファイルが取り込めなくならないことを固定する
+  const SETTINGS_LINES = [
+    "version:2567",
+    "autoJump:false",
+    "fov:0.75",
+    "guiScale:3",
+    "rawMouseInput:true",
+    "mouseSensitivity:0.2676056338028169",
+    "toggleCrouch:false",
+    "toggleSprint:true",
+    "lang:ja_jp",
+    "key_key.attack:key.mouse.left",
+    "key_key.forward:key.keyboard.w",
+    "key_key.sprint:key.keyboard.left.control",
+  ];
+  const SETTINGS_JSON = {
+    autoJump: false,
+    fov: 0.75,
+    guiScale: 3,
+    rawMouseInput: true,
+    mouseSensitivity: 0.2676056338028169,
+    toggleCrouch: false,
+    toggleSprint: true,
+    lang: "ja_jp",
+    "key_key.attack": "key.mouse.left",
+    "key_key.forward": "key.keyboard.w",
+  };
+
+  it.each([
+    ["options.txt", () => parseOptionsText(SETTINGS_LINES.join(String.fromCharCode(10)))],
+    ["standardsettings.json", () => parseStandardSettings(JSON.stringify(SETTINGS_JSON))],
+  ])("実際のパーサの出力（%s）は、ダイアログと同じ形で送ると検証を通る", async (_name, parse) => {
+    const parsed = parse();
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+
+    const res = await callAction(minecraftForm(parsed.keybindings, parsed.gameSettings));
+
+    expect(res.success).toBe(true);
+    const config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(config).toMatchObject({
+      fov: 100, // 0.75 * 40 + 70
+      guiScale: 3,
+      rawInput: true,
+      toggleSprint: true,
+      toggleSneak: false,
+      autoJump: false,
+      gameLanguage: "ja_jp",
+    });
+    const keybindings = await db.query.keybindings.findMany({ where: eq(schema.keybindings.userId, user.id) });
+    expect(keybindings.length).toBeGreaterThan(0);
+  });
+
+  it("null の値（パーサの NaN）は未指定として既存値を保持する", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+    await seedPlayerConfig(db, user.id, { fov: 70 });
+
+    const res = await callAction(minecraftForm(KB, { fov: null, guiScale: 3 }));
+
+    expect(res.success).toBe(true);
+    expect(res.gameSettingsCount).toBe(1);
+    const config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(config).toMatchObject({ fov: 70, guiScale: 3 });
+  });
+
+  it("ゲーム言語は小文字に正規化し、許可リスト外は取り込まず既存値を保持する", async () => {
+    const user = await setupUser();
+    await seedConfigPreset(db, user.id, { name: "Main", isActive: true });
+    await seedPlayerConfig(db, user.id, { gameLanguage: "en_us" });
+
+    await callAction(minecraftForm(KB, { gameLanguage: "JA_JP" }));
+    let config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(config?.gameLanguage).toBe("ja_jp");
+
+    const res = await callAction(minecraftForm(KB, { gameLanguage: "../../x" }));
+    expect(res.success).toBe(true);
+    config = await db.query.playerConfigs.findFirst({ where: eq(schema.playerConfigs.userId, user.id) });
+    expect(config?.gameLanguage).toBe("ja_jp");
+  });
+});
+
+describe("action - 文字数の上限", () => {
+  it("長すぎるリマップのキー名・メモは invalidData で拒否する", async () => {
+    const user = await setupUser();
+    const res = await callAction(remapForm([{ ...CAPSLOCK_REMAP, notes: "x".repeat(SAVE_LIMITS.memo + 1) }]));
+    expect(res).toEqual({ success: false, error: INVALID_DATA_ERROR });
     expect(await findRemaps(user.id)).toHaveLength(0);
   });
 });

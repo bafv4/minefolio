@@ -170,7 +170,7 @@ describe("save_all - リンク更新のキック", () => {
     );
 
     expect(res).toEqual({ success: true, action: "profile" });
-    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("oldtwitchuser");
+    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("oldtwitchuser", { userId: user.id, mcids: [null, null] });
     expect(targetedRefreshMocks.refreshTwitchVodsForLogin).toHaveBeenCalledWith("newtwitchuser");
     expectOnlyCalled("deleteTwitchVodsForLogin", "refreshTwitchVodsForLogin");
   });
@@ -204,7 +204,10 @@ describe("save_all - リンク削除のキック", () => {
     const res = await callAction(saveAllForm({ links: { delete: [link.id] } }));
 
     expect(res).toEqual({ success: true, action: "profile" });
-    expect(targetedRefreshMocks.deleteYoutubeVideosForChannelIdentifier).toHaveBeenCalledWith("@somechannel");
+    expect(targetedRefreshMocks.deleteYoutubeVideosForChannelIdentifier).toHaveBeenCalledWith("@somechannel", {
+      userId: user.id,
+      mcids: [null, null],
+    });
     expectOnlyCalled("deleteYoutubeVideosForChannelIdentifier");
   });
 

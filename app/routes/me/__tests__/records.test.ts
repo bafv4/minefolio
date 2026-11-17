@@ -21,6 +21,7 @@ vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../records";
 import { isHttpUrl as isHttpVideoUrl } from "@/lib/safe-url";
+import { PROFILE_FIELD_LIMITS } from "@/lib/profile-edit-validation";
 
 // pbVideoUrl の Stored XSS 対策（http/https スキーム許可リスト）の回帰テスト。
 describe("isHttpVideoUrl", () => {
@@ -143,6 +144,21 @@ describe("action - 検証", () => {
     expect((await callAction(saveForm([{ pbVideoUrl: "javascript:alert(1)" }]))).error).toBeTruthy();
     expect((await callAction(saveForm([{ personalBest: -5 }]))).error).toBeTruthy();
     expect(await recordCount(user.id)).toBe(0);
+  });
+
+  it("動画URLが上限（2000文字）を超えると何も書かずにエラーにし、上限ちょうどは保存できる", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+    const base = "https://example.com/";
+    const limit = PROFILE_FIELD_LIMITS.recordVideoUrl;
+
+    const tooLong = await callAction(saveForm([{ pbVideoUrl: base + "a".repeat(limit - base.length + 1) }]));
+    expect(tooLong).toEqual({ error: "動画URLは2000文字以内で入力してください" });
+    expect(await recordCount(user.id)).toBe(0);
+
+    const ok = await callAction(saveForm([{ pbVideoUrl: base + "a".repeat(limit - base.length) }]));
+    expect(ok.success).toBe(true);
+    expect(await recordCount(user.id)).toBe(1);
   });
 
   it("形が不正な変更一覧は invalidAction", async () => {

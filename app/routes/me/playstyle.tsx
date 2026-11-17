@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/playstyle";
 import { createDb } from "@/lib/db";
@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Layers, SlidersHorizontal, Sparkles, AlertCircle, ExternalLink } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import {
   ALL_VERSION_KEYS,
   CATEGORIES,
@@ -220,21 +221,30 @@ export async function action({ request }: Route.ActionArgs) {
     updatedAt: now,
   };
 
-  await db
-    .insert(playstyles)
-    .values({ id: createId(), userId: user.id, ...playstyleData, createdAt: now })
-    .onConflictDoUpdate({ target: playstyles.userId, set: playstyleData });
+  // playstyles と users の2回の書き込みは1トランザクションにする（片方だけ書かれた状態を残さない）。
+  // 失敗は { error } で返す（throw すると ErrorBoundary に落ちて、入力中の下書きが消える）
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(playstyles)
+        .values({ id: createId(), userId: user.id, ...playstyleData, createdAt: now })
+        .onConflictDoUpdate({ target: playstyles.userId, set: playstyleData });
 
-  // users は1回の update に集約（inputMethod + メインバージョンがあればエディションも更新）。
-  // mainVersion 未設定（""）の場合は mainEdition を触らない（クリア手段は現状なし。仕様どおり）
-  await db
-    .update(users)
-    .set({
-      inputMethod,
-      ...(v.mainVersion ? { mainEdition: editionOfVersion(v.mainVersion) } : {}),
-      updatedAt: now,
-    })
-    .where(eq(users.id, user.id));
+      // users は1回の update に集約（inputMethod + メインバージョンがあればエディションも更新）。
+      // mainVersion 未設定（""）の場合は mainEdition を触らない（クリア手段は現状なし。仕様どおり）
+      await tx
+        .update(users)
+        .set({
+          inputMethod,
+          ...(v.mainVersion ? { mainEdition: editionOfVersion(v.mainVersion) } : {}),
+          updatedAt: now,
+        })
+        .where(eq(users.id, user.id));
+    });
+  } catch (e) {
+    console.error("Playstyle save error:", e);
+    return { error: t("mePlaystyle.saveFailed") };
+  }
 
   return { success: true };
 }
@@ -332,7 +342,7 @@ export default function PlaystylePage() {
   // 保存後の再取得が終わるまでを保存中に含める（保存バーの「未保存」のちらつき防止）
   const isSubmitting = fetcher.state !== "idle";
 
-  const buildFormValues = useCallback(
+  const sourceFormValues = useMemo(
     (): PlaystyleFormValues => ({
       versions: loaderData.versions,
       categories: loaderData.categories,
@@ -355,22 +365,25 @@ export default function PlaystylePage() {
     [loaderData],
   );
 
-  const [formValues, setFormValues] = useState<PlaystyleFormValues>(buildFormValues);
-  const initialFormValues = useRef(formValues);
+  // loader の値が変わったとき（保存後・タブ復帰の再検証）は、未変更の間だけ新しい値へ置き換える。
+  // 保存が失敗して再検証されても、入力中の下書きは消さない
+  const {
+    draft: formValues,
+    setDraft: setFormValues,
+    base: initialFormValues,
+  } = useLoaderSyncedDraft(sourceFormValues, {
+    // 成功した保存の結果。次の loader 更新では編集済みでも保存値（サーバーで正規化された値）へ揃える。
+    // 失敗（error）の結果は null なので、下書きを残す
+    syncToken: successfulSaveToken(fetcher.data),
+  });
 
-  useEffect(() => {
-    const next = buildFormValues();
-    setFormValues(next);
-    initialFormValues.current = next;
-  }, [buildFormValues]);
-
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
   const handleChange = useCallback(
     <K extends keyof PlaystyleFormValues>(field: K, value: PlaystyleFormValues[K]) => {
       setFormValues((prev) => ({ ...prev, [field]: value }));
     },
-    [],
+    [setFormValues],
   );
 
   const handleToggleVersion = useCallback((key: VersionKey) => {
@@ -381,7 +394,7 @@ export default function PlaystylePage() {
         : "";
       return { ...prev, versions, mainVersion };
     });
-  }, []);
+  }, [setFormValues]);
 
   const handleToggleCategory = useCallback((key: CategoryKey) => {
     setFormValues((prev) => {
@@ -391,18 +404,18 @@ export default function PlaystylePage() {
         : "";
       return { ...prev, categories, mainCategory };
     });
-  }, []);
+  }, [setFormValues]);
 
   const handleToggleClickMethod = useCallback((key: ClickMethod) => {
     setFormValues((prev) => ({
       ...prev,
       clickMethods: toggleInOrder(prev.clickMethods, key, CLICK_METHOD_KEYS),
     }));
-  }, []);
+  }, [setFormValues]);
 
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
-  }, []);
+    setFormValues(initialFormValues);
+  }, [initialFormValues, setFormValues]);
 
   const handleSave = useCallback(() => {
     const formData = new FormData();
@@ -423,11 +436,10 @@ export default function PlaystylePage() {
 
     if ("success" in data && data.success) {
       toast.success(t("mePlaystyle.saveSuccess"));
-      initialFormValues.current = formValues;
     } else if ("error" in data) {
       toast.error(data.error);
     }
-  }, [fetcher.data, formValues, t]);
+  }, [fetcher.data, t]);
 
   const showKbmFields = isKbmPlaystyle(formValues.inputMethod);
   const showJavaRsgRankedFields = playsJavaRsgOrRanked(formValues.versions, formValues.categories);

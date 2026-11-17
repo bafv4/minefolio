@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions } from "@/lib/schema";
 import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
 import { createId } from "@paralleldrive/cuid2";
 import { setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
@@ -277,7 +278,7 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await getSession(request, auth);
 
   const formData = await request.formData();
-  const intent = formData.get("intent") as string;
+  const intent = formString(formData, "intent");
   const now = new Date();
 
   // 全8リレーションが必要なのは create-preset の現設定分岐と apply-preset の
@@ -294,13 +295,28 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プリセット作成（現在の設定を保存 or 既存プリセットからコピー）
   if (intent === "create-preset") {
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string | null;
-    const sourceType = formData.get("sourceType") as string; // "current" or "copy"
-    const sourcePresetId = formData.get("sourcePresetId") as string | null;
+    const name = formString(formData, "name");
+    const description = formString(formData, "description");
+    const sourceType = formString(formData, "sourceType"); // "current" or "copy"
+    const sourcePresetId = formString(formData, "sourcePresetId");
 
     if (!name?.trim()) {
       return { error: t("mePresets.presetNameRequired") };
+    }
+    if (
+      name.trim().length > SAVE_LIMITS.presetName ||
+      (description?.trim().length ?? 0) > SAVE_LIMITS.presetDescription
+    ) {
+      return { error: t("mePresets.limitExceeded") };
+    }
+
+    // 1ユーザーあたりのプリセット数の上限（コピーも数える）
+    const [{ count: presetCount }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(configPresets)
+      .where(eq(configPresets.userId, user.id));
+    if (presetCount >= SAVE_LIMITS.presetsPerUser) {
+      return { error: t("mePresets.tooManyPresets", { max: SAVE_LIMITS.presetsPerUser }) };
     }
 
     let sourcePreset: typeof configPresets.$inferSelect | undefined;
@@ -713,7 +729,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プリセット削除
   if (intent === "delete-preset") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, presetId),
@@ -788,7 +804,7 @@ export async function action({ request }: Route.ActionArgs) {
   // is_main フラグを排他的に付け替えるだけで、ライブテーブル・編集対象（isActive）には一切触れない。
   // 公開面はメインプリセットのスナップショットを表示するため、即座に反映される。
   if (intent === "set-main") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)),
@@ -820,12 +836,18 @@ export async function action({ request }: Route.ActionArgs) {
   // （名前は trim して必須、説明は trim して空なら null）。updatedAt は設定内容の更新日時なので変えない。名前は走者画面のプリセット選択にも出るが、
   // 公開される操作設定の内容は変わらないため、履歴の presetId は null（お気に入り走者の動きには出さない）
   if (intent === "update-preset") {
-    const presetId = formData.get("presetId") as string;
-    const name = formData.get("name") as string | null;
-    const description = formData.get("description") as string | null;
+    const presetId = formString(formData, "presetId") ?? "";
+    const name = formString(formData, "name");
+    const description = formString(formData, "description");
 
     if (!name?.trim()) {
       return { error: t("mePresets.presetNameRequired") };
+    }
+    if (
+      name.trim().length > SAVE_LIMITS.presetName ||
+      (description?.trim().length ?? 0) > SAVE_LIMITS.presetDescription
+    ) {
+      return { error: t("mePresets.limitExceeded") };
     }
     const trimmedName = name.trim();
     const trimmedDescription = description?.trim() || null;
@@ -866,7 +888,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プリセット適用
   if (intent === "apply-preset") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, presetId),

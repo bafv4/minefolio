@@ -36,12 +36,14 @@ interface ImportDialogProps {
   source: "remap" | "minecraft";
   /** 取り込み先（編集中）のプリセット名。null はプリセットが無く、取り込みで新規作成される */
   targetPresetName: string | null;
+  /** 取り込み先（編集中）のプリセット id。送り返して、別タブで編集先が切り替わっていないかサーバーが確認する */
+  targetPresetId: string | null;
   onSuccess?: () => void;
 }
 
 type ImportStep = "select" | "preview" | "done";
 
-export function ImportDialog({ source, targetPresetName, onSuccess }: ImportDialogProps) {
+export function ImportDialog({ source, targetPresetName, targetPresetId, onSuccess }: ImportDialogProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<ImportStep>("select");
@@ -130,6 +132,7 @@ export function ImportDialog({ source, targetPresetName, onSuccess }: ImportDial
         {
           intent: "import-remaps",
           remaps: JSON.stringify(selectedRemapData),
+          ...(targetPresetId ? { presetId: targetPresetId } : {}),
         },
         { method: "post" }
       );
@@ -141,11 +144,12 @@ export function ImportDialog({ source, targetPresetName, onSuccess }: ImportDial
           intent: "import-minecraft",
           keybindings: importKeybindings ? JSON.stringify(parsedMcSettings.keybindings) : "[]",
           gameSettings: importGameSettings ? JSON.stringify(parsedMcSettings.gameSettings) : "{}",
+          ...(targetPresetId ? { presetId: targetPresetId } : {}),
         },
         { method: "post" }
       );
     }
-  }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, fetcher]);
+  }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, targetPresetId, fetcher]);
 
   // fetcher完了時の処理。サーバーがエラーを返した場合（プリセット未作成・
   // 別タブでの切替検知等）は完了画面に遷移せず、エラーをダイアログ内に表示する
@@ -155,15 +159,16 @@ export function ImportDialog({ source, targetPresetName, onSuccess }: ImportDial
     if (fetcher.data === prevFetcherDataRef.current) return;
     prevFetcherDataRef.current = fetcher.data;
     if (step !== "preview") return;
-    const data = fetcher.data as { error?: string };
-    if (data.error) {
-      setError(data.error);
+    const data = fetcher.data as { success?: boolean; error?: string };
+    // success が true でなければ失敗として扱う（エラー文言が無くても完了画面へ進めない）
+    if (data.success !== true) {
+      setError(data.error ?? t("meImport.importFailed"));
     } else {
       setError(null);
       setStep("done");
       onSuccess?.();
     }
-  }, [fetcher.state, fetcher.data, step, onSuccess]);
+  }, [fetcher.state, fetcher.data, step, onSuccess, t]);
 
   const toggleRemapSelection = (index: number) => {
     setSelectedRemaps((prev) => {

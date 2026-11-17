@@ -47,7 +47,7 @@
 
 - loader の値（source）が変わったとき、**下書きが前回の基準値と同じ（＝未変更）のときだけ新しい値で置き換える**。編集済みなら下書きを残し、基準値（base）だけを新しい値へ進める。比較は既定で JSON 文字列の一致
 - 置き換えは**レンダー中**に行う（effect にしない）。置き換え前の値が 1 フレーム描かれない
-- 保存成功の直後は `syncOnNextSource()` を呼び、次の source 更新では**編集済みでも**置き換える（サーバーで正規化された値・新規行に採番された id に揃える）。`/me/keybindings` は `syncOnNextSource` を使わず、保存成功時に再検証後の値へ直接そろえる
+- フックの `syncToken` に「**最後に成功した保存の結果**の参照」（`successfulSaveToken(fetcher.data)`。失敗の結果・未保存は null）を渡す。未消費のトークンがある状態で source が変わったレンダーでは**編集済みでも**置き換え（サーバーで正規化された値・新規行に採番された id に揃える）、同じレンダーで「消費済み」を state に記録する。保存結果と loader の再取得結果が同じコミットで届いても別々に届いても、強制はちょうど 1 回だけ効く（effect のタイミングに依存しない）。失敗した保存の後の再検証・タブ復帰の再検証（トークンが同じ／null）では効かず、編集済みの下書きは残る。`/me/keybindings` は `syncToken` を使わず、保存成功時に再検証後の値へ直接そろえる
 - **プリセットが変わったら、編集済みでも必ず置き換える**。各画面は `useLoaderSyncedDraft(source, { resetKey: activePreset?.id ?? null })` を呼び、`resetKey` が変わったとき新しい値で置き換えて基準値も進める（`resolveSyncedDraft` の `prevKey` / `nextKey`）。別タブで編集先を切り替えたあとに、旧プリセットの内容が新しいプリセットへ保存される事故（保存時の `presetId` は loader の最新のアクティブIDなので、`staleSession` では防げない）を避けるため。不変条件: 「プリセット A で読み込んだ下書きは、`presetId=B` では保存できない」（`use-loader-synced-draft.test.tsx`）
 - 未変更の間にプリセットが切り替わる通常の場合も、同じ規則で置き換わる。source は参照が安定していること（`useMemo`）
 - `/search-craft` は crafts と loops の 2 つの hook を同じ `resetKey` で揃える（Loop が旧 craftId を指したまま残らない）

@@ -344,7 +344,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 `/me/search-craft` の `saveAll` アクション（`app/routes/me/search-craft.tsx`）は crafts・loops を毎回全削除→全挿入する。
 
-1. crafts の submittedId→finalId マップを**挿入前に**構築する（`new-` 始まりの id のみ `createId()` で新規採番）。Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングでは id を振り直せない
+1. crafts の submittedId→finalId マップを**挿入前に**構築する（**自分の既存行にある id だけ引き継ぎ**、それ以外〔`new-` 始まり・他人の id・任意の文字列〕は `createId()` で新規採番。送信 id → 最終 id は全件登録する。Loop の id も同じ規則）。Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングでは id を振り直せない
 2. `remapLoopSteps()` で loops の craftId を最終idへ引き換える。削除済みエントリへの参照はステップ除去、残りが2件未満になった Loop は破棄する（保存自体は拒否しない安全網）
 3. トランザクション内で `loops 削除 → crafts 削除 → crafts 挿入 → loops 挿入`（sequence は挿入順の連番）の順に実行する
 
@@ -438,6 +438,10 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 サーチクラフト設定はテンプレートとして公開し、他のプレイヤーが自分の設定に反映したり Playground で試したりできる。詳細は [`docs/search-craft-templates.md`](search-craft-templates.md) を参照。
 
 ---
+
+## 保存の検証と上限
+
+`saveAll`（アイテム配置・サーチクラフト・Loop）は、書き込み前に形・件数・文字数・`timing`（許可リスト）・id の重複を検証し、不正なら全体を拒否する。アイテム配置は空・重複（大文字小文字無視）のセグメント名も拒否する。検証・上限の一覧・id の引き継ぎ規則・変更履歴に生データを残さない方針は [`docs/keybindings.md`](keybindings.md)「保存の検証と上限」にまとめている。
 
 ## 関連ファイル
 

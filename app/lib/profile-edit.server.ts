@@ -12,7 +12,7 @@ import { isUniqueConstraintError, type Database } from "@/lib/db";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import type { CapeDisplay } from "@/lib/cape";
-import type { ProfileTabValue } from "@/lib/profile-tabs";
+import { PROFILE_TAB_VALUES, type ProfileTabValue } from "@/lib/profile-tabs";
 import { isValidRtaStartedYearMonth } from "@/lib/rta-career";
 import {
   runAfterResponse,
@@ -22,10 +22,12 @@ import {
   deleteYoutubeVideosForChannelIdentifier,
   updateYoutubeCacheMcid,
   refreshSrcRankingsForUser,
+  type LinkOwner,
 } from "@/lib/targeted-refresh.server";
 import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
 import {
   MAX_PROFILE_VIDEOS,
+  MAX_SOCIAL_LINKS,
   NEW_VIDEO_ORDER_PREFIX,
   PROFILE_FIELD_LIMITS,
   linksTouchSpeedrun,
@@ -61,6 +63,7 @@ const ROLES = users.role.enumValues;
 export function scheduleSocialLinkKicks({
   userId,
   mcid,
+  ownerMcids,
   oldPlatform,
   oldIdentifier,
   newPlatform,
@@ -68,11 +71,14 @@ export function scheduleSocialLinkKicks({
 }: {
   userId: string;
   mcid: string | null;
+  /** リンクを外した本人の MCID（旧・新）。YouTube の削除で「自分の帰属行だけ」を消すのに使う */
+  ownerMcids: LinkOwner["mcids"];
   oldPlatform: string | null;
   oldIdentifier: string | null;
   newPlatform: string;
   newIdentifier: string;
 }) {
+  const owner: LinkOwner = { userId, mcids: ownerMcids };
   const changed = oldPlatform !== newPlatform || oldIdentifier !== newIdentifier;
   if (!changed) return;
 
@@ -81,7 +87,7 @@ export function scheduleSocialLinkKicks({
   // 次のcronまでキャッシュが空になるため、両方行う場合は必ず削除→取得の順に直列化する
   const deleteOldTwitch =
     oldPlatform === "twitch" && oldIdentifier && (newPlatform !== "twitch" || newIdentifier !== oldIdentifier)
-      ? () => deleteTwitchVodsForLogin(oldIdentifier)
+      ? () => deleteTwitchVodsForLogin(oldIdentifier, owner)
       : null;
   const refreshNewTwitch =
     newPlatform === "twitch" ? () => refreshTwitchVodsForLogin(newIdentifier) : null;
@@ -96,7 +102,7 @@ export function scheduleSocialLinkKicks({
   // YouTube: 同上（@ハンドル↔UC-IDの変更も同一チャンネルでありうるため直列化。mcid未設定ユーザーは新規取得をスキップ）
   const deleteOldYoutube =
     oldPlatform === "youtube" && oldIdentifier && (newPlatform !== "youtube" || newIdentifier !== oldIdentifier)
-      ? () => deleteYoutubeVideosForChannelIdentifier(oldIdentifier)
+      ? () => deleteYoutubeVideosForChannelIdentifier(oldIdentifier, owner)
       : null;
   const refreshNewYoutube =
     newPlatform === "youtube" && mcid ? () => refreshYoutubeForChannel(newIdentifier, mcid) : null;
@@ -114,12 +120,20 @@ export function scheduleSocialLinkKicks({
   }
 }
 
-/** リンク削除時に、削除したプラットフォームの外部キャッシュを削除する */
-export function scheduleSocialLinkDeleteKicks(userId: string, link: { platform: string; identifier: string }) {
+/**
+ * リンク削除時に、削除したプラットフォームの外部キャッシュを削除する。
+ * 共有キャッシュのうち他の走者の登録分は消さない（`ownerMcids` は本人の MCID。判定は targeted-refresh.server.ts）
+ */
+export function scheduleSocialLinkDeleteKicks(
+  userId: string,
+  link: { platform: string; identifier: string },
+  ownerMcids: LinkOwner["mcids"],
+) {
+  const owner: LinkOwner = { userId, mcids: ownerMcids };
   if (link.platform === "twitch") {
-    runAfterResponse(deleteTwitchVodsForLogin(link.identifier));
+    runAfterResponse(deleteTwitchVodsForLogin(link.identifier, owner));
   } else if (link.platform === "youtube") {
-    runAfterResponse(deleteYoutubeVideosForChannelIdentifier(link.identifier));
+    runAfterResponse(deleteYoutubeVideosForChannelIdentifier(link.identifier, owner));
   } else if (link.platform === "speedruncom") {
     runAfterResponse(refreshSrcRankingsForUser(userId));
   }
@@ -163,7 +177,16 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   // 文字列欄: 送られていれば trim・空→null、送られていなければ undefined
   const text = (name: string): string | null | undefined =>
     has(name) ? (String(formData.get(name) ?? "").trim() || null) : undefined;
-  const flag = (name: string): boolean | undefined => (has(name) ? formData.get(name) === "true" : undefined);
+  // 真偽の欄は "true" / "false" だけを受け付ける。ほかの値は不正値（invalid に集める。false にはしない）
+  const invalidFlags: string[] = [];
+  const flag = (name: string): boolean | undefined => {
+    if (!has(name)) return undefined;
+    const raw = formData.get(name);
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+    invalidFlags.push(name);
+    return undefined;
+  };
 
   const displayName = text("displayName");
   const displayNameAlphabet = text("displayNameAlphabet");
@@ -188,11 +211,13 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
     typeof capeDisplayRaw === "string" && CAPE_DISPLAYS.includes(capeDisplayRaw)
       ? (capeDisplayRaw as CapeDisplay)
       : undefined;
-  // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
-  // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
-  const defaultProfileTab = has("defaultProfileTab")
-    ? (formData.get("defaultProfileTab") as ProfileTabValue)
-    : undefined;
+  // 値の集合は app/lib/profile-tabs.ts の PROFILE_TAB_VALUES（単一情報源）。フォームは保存済みの値を
+  // そのまま送り返すので、選択肢（SELECTABLE_PROFILE_TABS）ではなく enum 全体（廃止値 "settings" を含む）で検証する
+  const defaultProfileTabRaw = has("defaultProfileTab") ? formData.get("defaultProfileTab") : undefined;
+  const defaultProfileTab =
+    typeof defaultProfileTabRaw === "string" && (PROFILE_TAB_VALUES as readonly string[]).includes(defaultProfileTabRaw)
+      ? (defaultProfileTabRaw as ProfileTabValue)
+      : undefined;
   // 空文字は「未設定にする」（null）
   const mainPlatform = has("mainPlatform")
     ? ((formData.get("mainPlatform") as ProfileFields["mainPlatform"]) || null)
@@ -222,6 +247,8 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   }
   if (profilePose !== undefined && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
   if (capeDisplayRaw !== undefined && capeDisplay === undefined) return { error: t("meEdit.invalidOption") };
+  if (defaultProfileTabRaw !== undefined && defaultProfileTab === undefined) return { error: t("meEdit.invalidOption") };
+  if (invalidFlags.length > 0) return { error: t("meEdit.invalidOption") };
   if (allowAutoTranslationRaw !== undefined && allowAutoTranslation === undefined) {
     return { error: t("meEdit.invalidOption") };
   }
@@ -474,6 +501,11 @@ export async function saveProfileBatch({
     }
   }
   if (hasFieldErrors()) return failWithFieldErrors();
+
+  // リンクの件数上限（既存 − 削除 + 新規）。動画と同じく、件数が増える保存だけ検査する
+  if (finalLinks.length > MAX_SOCIAL_LINKS && finalLinks.length > existingLinks.length) {
+    return { error: t("meEdit.linkMaxCount") };
+  }
 
   // 動画の件数上限（既存 − 削除 + 新規）。件数が増える保存だけ検査する（過去データが上限超でも他の保存は妨げない）
   const finalVideoCount = existingVideos.length - videoDeletes.length + videoCreates.length;
@@ -738,6 +770,8 @@ export async function saveProfileBatch({
 
   // ---- ③ commit 後の副作用（失敗しても保存は成功扱い） ----
   const effectiveMcid = mcidSet ?? (mcidRemove ? null : user.mcid);
+  // キャッシュ行は MCID に帰属する。同じ保存で MCID を変える／外すときは updateYoutubeCacheMcid と並行になるので、旧・新の両方を渡す
+  const ownerMcids = [user.mcid, effectiveMcid];
 
   // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
   // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない）
@@ -779,6 +813,7 @@ export async function saveProfileBatch({
     scheduleSocialLinkKicks({
       userId: user.id,
       mcid: effectiveMcid,
+      ownerMcids,
       oldPlatform: null,
       oldIdentifier: null,
       newPlatform: l.platform,
@@ -790,6 +825,7 @@ export async function saveProfileBatch({
     scheduleSocialLinkKicks({
       userId: user.id,
       mcid: effectiveMcid,
+      ownerMcids,
       oldPlatform: old.platform,
       oldIdentifier: old.identifier,
       newPlatform: l.platform,
@@ -803,7 +839,7 @@ export async function saveProfileBatch({
     const recreated = finalLinks.some(
       (f) => f.platform === deleted.platform && f.identifier.toLowerCase() === deleted.identifier.toLowerCase(),
     );
-    if (!recreated) scheduleSocialLinkDeleteKicks(user.id, deleted);
+    if (!recreated) scheduleSocialLinkDeleteKicks(user.id, deleted, ownerMcids);
   }
 
   // speedrun.com リンク経由でない speedruncomUsername の変更（基本情報フォーム側）もランキングを即時更新する

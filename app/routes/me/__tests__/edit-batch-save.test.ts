@@ -546,7 +546,7 @@ describe("save_all - commit 後の外部キャッシュキック", () => {
       }),
     );
 
-    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("gone");
+    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("gone", { userId: user.id, mcids: ["OldM", "NewM"] });
     // 新MCID で YouTube を取得する（mcid 変更後の値を使う）
     expect(targetedRefreshMocks.refreshYoutubeForChannel).toHaveBeenCalledWith("ytchan", "NewM");
     await vi.waitFor(() => expect(targetedRefreshMocks.updateYoutubeCacheMcid).toHaveBeenCalledWith("OldM", "NewM"));

@@ -10,6 +10,8 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { isValidCraftRow, isValidLoopRow, hasValidUniqueIds, parseTimingInput } from "@/lib/search-craft-payload";
 import { cn } from "@/lib/utils";
 import { NoticeBanner } from "@/components/notice-banner";
 import { PageSection } from "@/components/page-section";
@@ -48,7 +50,7 @@ import {
   type SearchCraftVariation,
 } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
-import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
@@ -231,8 +233,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const actionType = formString(formData, "_action");
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -256,28 +258,42 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (actionType === "saveAll") {
-    const craftsJson = formData.get("crafts") as string;
+    const craftsJson = formString(formData, "crafts") ?? "";
     // loops フィールド自体が未送信（null）＝ Loop 機能追加前の古いタブ等からの保存。
     // これを "[]" 相当に倒すと、保存のたびに既存 Loop が無警告で全消去されてしまうため、
     // フィールドが本当に存在しない場合は DB の既存 loops をフォールバックとして採用する
     // （明示的に "[]" が送信された場合＝新しいクライアントでの全削除は、従来どおり尊重する）。
-    const loopsField = formData.get("loops") as string | null;
+    const loopsField = formString(formData, "loops");
 
     try {
+      // 自分の既存行（id・timing・comment）。検証で「保存値と同じなら通す」ために使い、id の引き継ぎにも使う。
+      // 送られた id を引き継ぐのは「自分の既存行にある id」だけ。それ以外（new- 始まり・他人の id・任意の文字列）は
+      // 新規採番する（任意の文字列を主キーにできると、他人の id の存在を成功・失敗から判定できてしまう）。
+      const [ownCraftRows, ownLoopRows] = await Promise.all([
+        db.query.searchCrafts.findMany({
+          where: eq(searchCrafts.userId, user.id),
+          columns: { id: true, timing: true, comment: true },
+        }),
+        db.query.searchCraftLoops.findMany({
+          where: eq(searchCraftLoops.userId, user.id),
+          columns: { id: true, timing: true, comment: true },
+        }),
+      ]);
+      const ownCraftIds = new Set(ownCraftRows.map((r) => r.id));
+      const ownLoopIds = new Set(ownLoopRows.map((r) => r.id));
+      const storedCrafts = new Map(ownCraftRows.map((r) => [r.id, r]));
+      const storedLoops = new Map(ownLoopRows.map((r) => [r.id, r]));
+
       const craftsRaw = JSON.parse(craftsJson) as Array<Record<string, unknown>>;
 
-      // items が string[] であることを保証する。非配列・非文字列要素のまま永続化されると、
-      // 公開ガイド埋め込みの SSR が items.map で TypeError を投げて 500 になるため、ここで拒否する。
+      // 形・件数・文字数・timing の許可リスト・id の重複を検証する（lib/search-craft-payload.ts）。
+      // items が string[] でないまま永続化されると、公開ガイド埋め込みの SSR が items.map で
+      // TypeError を投げて 500 になるため、ここで拒否する。
       if (
         !Array.isArray(craftsRaw) ||
-        craftsRaw.some(
-          (craft) =>
-            !craft ||
-            typeof craft.id !== "string" ||
-            !craft.id ||
-            !Array.isArray(craft.items) ||
-            (craft.items as unknown[]).some((item) => typeof item !== "string"),
-        )
+        craftsRaw.length > SAVE_LIMITS.searchCrafts ||
+        craftsRaw.some((craft) => !craft || typeof craft !== "object" || !isValidCraftRow(craft, storedCrafts.get(craft.id as string))) ||
+        !hasValidUniqueIds(craftsRaw)
       ) {
         return { error: t("meSearchCraft.invalidCraftData") };
       }
@@ -290,7 +306,7 @@ export async function action({ request }: Route.ActionArgs) {
         items: craft.items as string[],
         keys: [],
         comment: typeof craft.comment === "string" ? craft.comment : null,
-        timing: (craft.timing ?? null) as SearchCraftItem["timing"],
+        timing: parseTimingInput(craft.timing, storedCrafts.get(craft.id as string)?.timing) ?? null,
         variations: resolveRowVariations({
           variations: craft.variations,
           searchStr: typeof craft.searchStr === "string" ? craft.searchStr : null,
@@ -322,25 +338,32 @@ export async function action({ request }: Route.ActionArgs) {
         // （削除済みエントリの参照はこの後 remapLoopSteps の安全網で除去する）。
         if (
           !Array.isArray(loopsRaw) ||
+          loopsRaw.length > SAVE_LIMITS.searchCraftLoops ||
           loopsRaw.some(
             (loop) =>
               !loop ||
               typeof loop !== "object" ||
               typeof (loop as { id?: unknown }).id !== "string" ||
               !(loop as { id: string }).id ||
+              !isValidLoopRow(loop as Record<string, unknown>, storedLoops.get((loop as { id: string }).id)) ||
               !isValidLoopStepsShape((loop as { steps?: unknown }).steps),
-          )
+          ) ||
+          !hasValidUniqueIds(loopsRaw as Array<{ id?: unknown }>)
         ) {
           return { error: t("meSearchCraft.invalidCraftData") };
         }
-        loops = loopsRaw as SearchCraftLoopItem[];
+        loops = (loopsRaw as SearchCraftLoopItem[]).map((loop) => ({
+          ...loop,
+          timing: parseTimingInput(loop.timing, storedLoops.get(loop.id)?.timing) ?? null,
+        }));
       }
 
-      // crafts の submittedId→finalId マップを挿入前に確定する（"new-" 始まりのみ新規採番）。
+      // crafts の submittedId→finalId マップを挿入前に確定する（引き継げない id は新規採番）。
       // Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングで id を振り直せない。
+      // 振り直した分も含めて「送信 id → 最終 id」を全件登録する（id の重複は検証で拒否済み）
       const craftIdMap = new Map<string, string>();
       const finalCrafts = crafts.map((craft) => {
-        const finalId = craft.id.startsWith("new-") ? createId() : craft.id;
+        const finalId = ownCraftIds.has(craft.id) ? craft.id : createId();
         craftIdMap.set(craft.id, finalId);
         return { ...craft, id: finalId };
       });
@@ -352,7 +375,7 @@ export async function action({ request }: Route.ActionArgs) {
           const steps = remapLoopSteps(loop.steps, craftIdMap);
           if (!steps) return null;
           return {
-            id: loop.id.startsWith("new-") ? createId() : loop.id,
+            id: ownLoopIds.has(loop.id) ? loop.id : createId(),
             steps,
             comment: loop.comment,
             timing: loop.timing,
@@ -460,16 +483,17 @@ export default function SearchCraftPage() {
   const {
     draft: crafts,
     setDraft: setCrafts,
-    syncOnNextSource: syncCraftsOnNextSource,
   } = useLoaderSyncedDraft<SearchCraftItem[]>(initialCrafts, {
     resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+    syncToken: successfulSaveToken(fetcher.data),
   });
   const {
     draft: loops,
     setDraft: setLoops,
-    syncOnNextSource: syncLoopsOnNextSource,
   } = useLoaderSyncedDraft<SearchCraftLoopItem[]>(initialLoops, {
     resetKey: activePreset?.id ?? null,
+    syncToken: successfulSaveToken(fetcher.data),
   });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
@@ -487,9 +511,6 @@ export default function SearchCraftPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      // 新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
-      syncCraftsOnNextSource();
-      syncLoopsOnNextSource();
       toast.success(t("meSearchCraft.saveSuccess"));
     } else if ("error" in data) {
       toast.error(data.error);

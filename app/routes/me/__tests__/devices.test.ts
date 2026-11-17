@@ -28,6 +28,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../devices";
+import { SAVE_LIMITS } from "@/lib/save-limits";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -380,5 +381,76 @@ describe("action - 入力方法は /me/playstyle に一本化", () => {
     const res = await callAction(fd);
 
     expect(res.error).toBeTruthy();
+  });
+});
+
+describe("action - gameLanguage・長さ・型の検証", () => {
+  it("ゲーム言語は小文字に正規化して保存する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "JA_JP" }));
+
+    expect(res.success).toBe(true);
+    expect((await findConfig(user.id))?.gameLanguage).toBe("ja_jp");
+  });
+
+  it("許可リスト外のゲーム言語はエラーにし、既存値を上書きしない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await callAction(baseFormData(preset.id, { gameLanguage: "ja_jp" }));
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "../../etc" }));
+
+    expect(res.success).toBeUndefined();
+    expect(res.error).toBeTruthy();
+    expect((await findConfig(user.id))?.gameLanguage).toBe("ja_jp");
+  });
+
+  it("保存済みの値と同一なら許可リスト外でも通す（旧データの持ち主が保存不能にならない）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.insert(schema.playerConfigs).values({ userId: user.id, gameLanguage: "Legacy_XX" });
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "Legacy_XX", mouseDpi: "1200" }));
+
+    expect(res.success).toBe(true);
+    expect((await findConfig(user.id))?.mouseDpi).toBe(1200);
+  });
+
+  it("モデル名・メモが上限を超えると何も書かずに拒否する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    for (const overrides of <Record<string, string>[]>[
+      { keyboardModel: "x".repeat(SAVE_LIMITS.keyboardModel + 1) },
+      { mouseModel: "x".repeat(SAVE_LIMITS.mouseModel + 1) },
+      { notes: "x".repeat(SAVE_LIMITS.deviceNotes + 1) },
+    ]) {
+      const res = await callAction(baseFormData(preset.id, overrides));
+      expect(res.error).toBeTruthy();
+    }
+    expect(await findConfig(user.id)).toBeUndefined();
+  });
+
+  it("File を送られても 500 にせず（文字列でなければ未送信扱い）処理する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+    const fd = baseFormData(preset.id);
+    fd.set("keyboardModel", new File(["x"], "x.txt"));
+    fd.set("notes", new File(["x"], "x.txt"));
+
+    const res = await callAction(fd);
+
+    expect(res.success).toBe(true);
+  });
+
+  it("コントローラー設定は既知の4項目だけを保存する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const json = JSON.stringify({ controllerModel: "Xbox", lookSensitivity: 50, invertYAxis: false, vibration: true, extra: "x".repeat(50) });
+
+    await callAction(baseFormData(preset.id, { controllerSettings: json }));
+
+    expect(JSON.parse((await findConfig(user.id))?.controllerSettings ?? "{}")).toEqual({
+      controllerModel: "Xbox",
+      lookSensitivity: 50,
+      invertYAxis: false,
+      vibration: true,
+    });
   });
 });

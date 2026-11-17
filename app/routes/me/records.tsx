@@ -53,6 +53,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 import { isHttpUrl } from "@/lib/safe-url";
+import { PROFILE_FIELD_LIMITS } from "@/lib/profile-edit-validation";
 import { categoryLabel, type CategoryKey } from "@/lib/playstyle";
 import { RECORD_CATEGORY_KEYS, resolveRecordCategory, splitRecordCategory } from "@/lib/record-category";
 
@@ -215,6 +216,7 @@ function parseRecordOps(raw: unknown, t: Translator): { ops: RecordOp[] } | { er
     if (!category || !categoryDisplayName) return { error: t("meRecords.categoryRequired") };
     if (category.length > 100 || categoryDisplayName.length > 100) return { error: t("meRecords.categoryTooLong") };
     if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) return { error: t("meRecords.invalidVideoUrl") };
+    if (pbVideoUrl && pbVideoUrl.length > PROFILE_FIELD_LIMITS.recordVideoUrl) return { error: t("meRecords.videoUrlTooLong") };
     ops.push({
       id: o.id,
       delete: false,
@@ -518,6 +520,7 @@ export default function RecordsPage() {
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
     if (personalBestStr && personalBest === null) return setDialogError(t("meRecords.invalidTime"));
     if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) return setDialogError(t("meRecords.invalidVideoUrl"));
+    if (pbVideoUrl && pbVideoUrl.length > PROFILE_FIELD_LIMITS.recordVideoUrl) return setDialogError(t("meRecords.videoUrlTooLong"));
     const alive = draftRecords.filter((d) => !d.deleted && d.key !== editingKey);
     if (alive.some((d) => d.category === category)) return setDialogError(t("meRecords.categoryDuplicate"));
     if (!editing && alive.length >= MAX_CUSTOM_RECORDS) return setDialogError(t("meRecords.errorLimitReached"));
@@ -647,6 +650,7 @@ export default function RecordsPage() {
                     type="url"
                     defaultValue={editing?.pbVideoUrl ?? ""}
                     placeholder="https://youtube.com/..."
+                    maxLength={PROFILE_FIELD_LIMITS.recordVideoUrl}
                   />
                 </div>
                 <div className="flex items-center gap-2">

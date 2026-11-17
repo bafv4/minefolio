@@ -14,7 +14,9 @@ import {
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { contentTranslations, users } from "@/lib/schema";
+import { contentTranslations, socialLinks, users } from "@/lib/schema";
+import { MAX_SOCIAL_LINKS, PROFILE_FIELD_LIMITS, type ProfileChanges } from "@/lib/profile-edit-validation";
+import { PROFILE_TAB_VALUES } from "@/lib/profile-tabs";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -344,5 +346,160 @@ describe("自己紹介の自動翻訳と公開範囲（非公開プロフィー�
 
     expect(await db.select().from(contentTranslations)).toHaveLength(0);
     expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
+  });
+});
+
+describe("action - defaultProfileTab の検証", () => {
+  it.each([...PROFILE_TAB_VALUES])("有効値（%s）は保存される", async (value) => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      defaultProfileTab: value === "profile" ? "stats" : "profile",
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ defaultProfileTab: value }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.defaultProfileTab).toBe(value);
+  });
+
+  it.each(["evil", "", "guides", "Profile"])("不正な値（%j）は invalidOption エラーになり、ほかの列も書かれない", async (value) => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", defaultProfileTab: "stats", displayName: "Old" });
+    signInAs("discord-runner");
+    const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+    const res = await callAction(baseFormData({ defaultProfileTab: value, displayName: "Changed" }));
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+  });
+});
+
+describe("action - 真偽の欄（slimSkin / show*）の検証", () => {
+  const FLAGS = ["slimSkin", "showPacemanOnHome", "showTwitchOnHome", "showYoutubeOnHome", "showRankedStats", "showPacemanStats"];
+
+  it.each(FLAGS.flatMap((f) => ["on", "1", "", "TRUE"].map((v) => [f, v] as const)))(
+    "%s に %j を送ると invalidOption エラーになり、DB は無変更（false 扱いにしない）",
+    async (flag, value) => {
+      const user = await seedUser(db, {
+        slug: "runner",
+        discordId: "discord-runner",
+        slimSkin: true,
+        showPacemanOnHome: true,
+        showTwitchOnHome: true,
+        showYoutubeOnHome: true,
+        showRankedStats: true,
+        showPacemanStats: true,
+        displayName: "Old",
+      });
+      signInAs("discord-runner");
+      const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+      const res = await callAction(baseFormData({ [flag]: value, displayName: "Changed" }));
+
+      expect(res).toEqual({ error: "不正な選択肢です" });
+      expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+    },
+  );
+
+  it("\"true\" / \"false\" は従来どおり保存される", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", slimSkin: false, showRankedStats: true });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ slimSkin: "true", showRankedStats: "false" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row).toMatchObject({ slimSkin: true, showRankedStats: false });
+  });
+});
+
+describe("action - リンクの長さ・件数の上限", () => {
+  function formWithChanges(changes: ProfileChanges, overrides: Record<string, string> = {}): FormData {
+    const fd = baseFormData({ _action: "save_all", ...overrides });
+    fd.set("changes", JSON.stringify(changes));
+    return fd;
+  }
+  const custom = (label: string, url: string) => ({
+    key: "k",
+    platform: "custom",
+    identifier: "id",
+    customLabel: label,
+    customUrl: url,
+  });
+
+  it("上限ちょうどのカスタムリンクは保存できる", async () => {
+    const user = await setupUser();
+    const url = "https://example.com/" + "a".repeat(PROFILE_FIELD_LIMITS.customUrl - "https://example.com/".length);
+
+    const res = await callAction(
+      formWithChanges({ links: { create: [custom("a".repeat(PROFILE_FIELD_LIMITS.customLabel), url)] } }),
+    );
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(1);
+  });
+
+  it("customLabel が上限を超えるとエラーになり、リンクもほかの列も書かれない", async () => {
+    const user = await setupUser();
+
+    const res = (await callAction(
+      formWithChanges(
+        { links: { create: [custom("a".repeat(PROFILE_FIELD_LIMITS.customLabel + 1), "https://example.com")] } },
+        { displayName: "Changed" },
+      ),
+    )) as { error?: string };
+
+    expect(res.error).toBe("カスタムSNSの表示名は100文字以内で入力してください");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(0);
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("customUrl が上限を超えるとエラーになり、何も書かれない", async () => {
+    const user = await setupUser();
+    const url = "https://example.com/" + "a".repeat(PROFILE_FIELD_LIMITS.customUrl);
+
+    const res = (await callAction(formWithChanges({ links: { create: [custom("x", url)] } }))) as { error?: string };
+
+    expect(res.error).toBe("URLは2000文字以内で入力してください");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(0);
+  });
+
+  it("リンクが上限件数ある状態で増やす保存は拒否し、何も書かれない", async () => {
+    const user = await setupUser();
+    await db.insert(socialLinks).values(
+      Array.from({ length: MAX_SOCIAL_LINKS }, (_, i) => ({
+        userId: user.id,
+        platform: "custom" as const,
+        identifier: `id${i}`,
+        customLabel: `l${i}`,
+        customUrl: "https://example.com",
+      })),
+    );
+
+    const res = (await callAction(
+      formWithChanges({ links: { create: [custom("x", "https://example.com")] } }),
+    )) as { error?: string };
+
+    expect(res.error).toBe("リンクは50件まで登録できます");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(MAX_SOCIAL_LINKS);
+  });
+
+  it("上限超えの既存データがあっても、件数が増えない保存（削除）は通る", async () => {
+    const user = await setupUser();
+    const rows = Array.from({ length: MAX_SOCIAL_LINKS + 2 }, (_, i) => ({
+      id: `link${i}`,
+      userId: user.id,
+      platform: "custom" as const,
+      identifier: `id${i}`,
+      customLabel: `l${i}`,
+      customUrl: "https://example.com",
+    }));
+    await db.insert(socialLinks).values(rows);
+
+    const res = await callAction(formWithChanges({ links: { delete: ["link0"] } }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
   });
 });

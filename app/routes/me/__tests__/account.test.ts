@@ -279,6 +279,45 @@ describe("/me/account の保存は /me/edit の列を消さない", () => {
   });
 });
 
+describe("/me/account の保存の検証（不正な値は拒否し、ほかの列も書かない）", () => {
+  it.each(["evil", "", "guides"])("defaultProfileTab に %j を送ると拒否する", async (value) => {
+    const before = await seedFullRunner();
+    signInAs("discord-runner");
+
+    const res = (await callAccount({ ...ACCOUNT_FORM, defaultProfileTab: value })) as { error?: string };
+
+    expect(res.error).toBe("不正な選択肢です");
+    // 同じ保存に含まれる有効な変更（公開範囲・表示設定）も書かれない
+    expect(await userRow(before.id)).toEqual(before);
+  });
+
+  it("廃止された既定タブ値 settings を保存済みの走者でも、その値を送り返す保存は通る", async () => {
+    const before = await seedFullRunner({ defaultProfileTab: "settings" });
+    signInAs("discord-runner");
+
+    const res = await callAccount({ ...ACCOUNT_FORM, defaultProfileTab: "settings" });
+
+    expect(res).toMatchObject({ success: true });
+    expect((await userRow(before.id))!.defaultProfileTab).toBe("settings");
+  });
+
+  it.each(["showPacemanOnHome", "showTwitchOnHome", "showYoutubeOnHome", "showRankedStats", "showPacemanStats"])(
+    "%s に true / false 以外を送ると拒否する（false 扱いにしない）",
+    async (flag) => {
+      const before = await seedFullRunner();
+      signInAs("discord-runner");
+
+      for (const value of ["on", "1", ""]) {
+        const res = (await callAccount({ ...ACCOUNT_FORM, profileVisibility: "private", [flag]: value })) as {
+          error?: string;
+        };
+        expect(res.error).toBe("不正な選択肢です");
+      }
+      expect(await userRow(before.id)).toEqual(before);
+    },
+  );
+});
+
 describe("/me/edit の保存は /me/account の列を消さない", () => {
   it("基本情報・スキン等だけが変わり、公開範囲・既定タブ・表示設定は不変", async () => {
     const before = await seedFullRunner({

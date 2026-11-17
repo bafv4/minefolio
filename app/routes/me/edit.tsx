@@ -367,6 +367,7 @@ function SocialLinkDialog({
                 name="customLabel"
                 defaultValue={editingLink?.customLabel ?? ""}
                 placeholder={t("meEdit.customLabelPlaceholder")}
+                maxLength={PROFILE_FIELD_LIMITS.customLabel}
                 required
               />
             </div>
@@ -377,6 +378,7 @@ function SocialLinkDialog({
                 name="customUrl"
                 defaultValue={editingLink?.customUrl ?? ""}
                 placeholder={t("meEdit.customUrlPlaceholder")}
+                maxLength={PROFILE_FIELD_LIMITS.customUrl}
                 required
               />
             </div>

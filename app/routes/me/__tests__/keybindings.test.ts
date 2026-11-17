@@ -30,6 +30,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../keybindings";
+import { SAVE_LIMITS } from "@/lib/save-limits";
 import { syncActivePresetSnapshot } from "@/lib/preset-utils";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
@@ -779,5 +780,195 @@ describe("action - 変更履歴の公開影響（preset_id）", () => {
 
     expect(history).toHaveLength(1);
     expect(history[0].presetId).toBeNull();
+  });
+});
+
+describe("action - save-all の検証（不正値・上限）と履歴", () => {
+  const INVALID = { error: "送信データの形式が不正です。" };
+
+  async function saveAll(presetId: string, fields: Record<string, unknown>) {
+    const entries: Record<string, string> = { intent: "save-all", presetId };
+    for (const [key, value] of Object.entries(fields)) entries[key] = JSON.stringify(value);
+    return callAction(formDataOf(entries));
+  }
+
+  it("変更履歴に生のペイロード（newData）を保存しない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    await saveAll(preset.id, { remaps: [{ sourceKey: "KeyA", targetKey: "KeyX", remapType: "trigger" }] });
+
+    const history = await findKeybindingHistory(user.id);
+    expect(history).toHaveLength(1);
+    expect(history[0].newData).toBeNull();
+    expect(history[0].changeDescription).toBeTruthy();
+  });
+
+  it("カスタムキー・アクションの category が enum 外なら全体を拒否し、何も書かない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    expect(
+      await saveAll(preset.id, {
+        remaps: [{ sourceKey: "KeyA", targetKey: "KeyX", remapType: "trigger" }],
+        customKeys: [{ keyCode: "Mouse6", keyName: "追加", category: "bogus" }],
+      }),
+    ).toEqual(INVALID);
+    expect(
+      await saveAll(preset.id, {
+        customActions: [{ actionName: "a", triggerKey: "KeyA", category: "bogus" }],
+      }),
+    ).toEqual(INVALID);
+
+    expect(await findRemaps(user.id)).toHaveLength(0);
+    expect(await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) })).toHaveLength(0);
+    expect(await db.query.customActions.findMany({ where: eq(schema.customActions.userId, user.id) })).toHaveLength(0);
+  });
+
+  it("型違いの値（keyCode が数値・名前が配列）は 500 にせず拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    expect(await saveAll(preset.id, { customKeys: [{ keyCode: 1, keyName: "x", category: "mouse" }] })).toEqual(INVALID);
+    expect(await saveAll(preset.id, { customKeys: [{ keyCode: "a", keyName: ["x"], category: "mouse" }] })).toEqual(INVALID);
+    expect(await saveAll(preset.id, { customActions: [{ actionName: 5, triggerKey: "a", category: "other" }] })).toEqual(INVALID);
+  });
+
+  it("save-remaps の sourceKey が文字列でなければ 500 にせず拒否する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-remaps",
+        presetId: preset.id,
+        remaps: JSON.stringify([{ sourceKey: 123, targetKey: "KeyX", remapType: "trigger" }]),
+      }),
+    );
+
+    expect(res).toEqual(INVALID);
+    expect(await findRemaps(user.id)).toHaveLength(0);
+  });
+
+  it("既存のカスタムキーを空の名前で更新しようとしたら拒否し、既存行は変わらない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const [row] = await db
+      .insert(schema.customKeys)
+      .values({ userId: user.id, keyCode: "Mouse4", keyName: "旧名", category: "mouse" })
+      .returning();
+
+    const res = await saveAll(preset.id, {
+      customKeys: [{ id: row.id, keyCode: "Mouse4", keyName: "", category: "mouse" }],
+    });
+
+    expect(res).toEqual(INVALID);
+    const after = await db.query.customKeys.findFirst({ where: eq(schema.customKeys.id, row.id) });
+    expect(after?.keyName).toBe("旧名");
+  });
+
+  it("長すぎる文字列は拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+
+    expect(
+      await saveAll(preset.id, {
+        remaps: [{ sourceKey: "KeyA", targetKey: "KeyX", notes: "x".repeat(SAVE_LIMITS.memo + 1), remapType: "trigger" }],
+      }),
+    ).toEqual(INVALID);
+  });
+
+  it("カスタムキーは保存後の総数が上限を超えるなら、何も書かずに上限エラーを返す", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.insert(schema.customKeys).values(
+      Array.from({ length: SAVE_LIMITS.customKeys }, (_, i) => ({
+        userId: user.id,
+        keyCode: `K${i}`,
+        keyName: `名${i}`,
+        category: "keyboard" as const,
+      })),
+    );
+
+    const res = await saveAll(preset.id, {
+      customKeys: [{ keyCode: "Extra", keyName: "追加", category: "keyboard" }],
+    });
+
+    expect(res).toEqual({ error: "保存できる件数の上限を超えています。件数を減らしてお試しください。" });
+    expect(await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) })).toHaveLength(
+      SAVE_LIMITS.customKeys,
+    );
+  });
+
+  it("リマップは保存後の総数が上限を超えるなら拒否し、削除も確定させない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.insert(schema.keyRemaps).values(
+      Array.from({ length: SAVE_LIMITS.remaps }, (_, i) => ({
+        userId: user.id,
+        sourceKey: `Src${i}`,
+        targetKey: "KeyX",
+        remapType: "trigger" as const,
+      })),
+    );
+    const existing = await findRemaps(user.id);
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-remaps",
+        presetId: preset.id,
+        remaps: JSON.stringify([
+          { id: existing[0].id, sourceKey: "Src0", targetKey: "KeyX", remapType: "trigger", _delete: true },
+          { sourceKey: "New1", targetKey: "KeyX", remapType: "trigger" },
+          { sourceKey: "New2", targetKey: "KeyX", remapType: "trigger" },
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ error: "保存できる件数の上限を超えています。件数を減らしてお試しください。" });
+    expect(await findRemaps(user.id)).toHaveLength(SAVE_LIMITS.remaps);
+  });
+});
+
+describe("action - 保存済みの空のキーコードを持つカスタムキー", () => {
+  it("キーコードが空の既存行があっても、別のカスタムキーを足す保存は通り、その行は保存値のまま残る", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const [legacy] = await db
+      .insert(schema.customKeys)
+      .values({ userId: user.id, keyCode: "", keyName: "旧データ", category: "mouse" })
+      .returning();
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-all",
+        presetId: preset.id,
+        customKeys: JSON.stringify([
+          { id: legacy.id, keyCode: "", keyName: "旧データ", category: "mouse" },
+          { keyCode: "Mouse6", keyName: "追加", category: "mouse" },
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ success: true, message: "設定を保存しました" });
+    const rows = await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) });
+    expect(rows).toHaveLength(2);
+    const kept = rows.find((r) => r.id === legacy.id);
+    expect(kept).toMatchObject({ keyCode: "", keyName: "旧データ" });
+  });
+
+  it("保存値が空でない行を空で送ると拒否し、空の保存値と違う値でも空にはできない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const [row] = await db
+      .insert(schema.customKeys)
+      .values({ userId: user.id, keyCode: "Mouse4", keyName: "名前", category: "mouse" })
+      .returning();
+    const invalid = { error: "送信データの形式が不正です。" };
+
+    for (const edit of [{ keyCode: "" }, { keyName: "" }]) {
+      const res = await callAction(
+        formDataOf({
+          intent: "save-all",
+          presetId: preset.id,
+          customKeys: JSON.stringify([{ id: row.id, keyCode: "Mouse4", keyName: "名前", category: "mouse", ...edit }]),
+        }),
+      );
+      expect(res).toEqual(invalid);
+    }
+    expect(await db.query.customKeys.findFirst({ where: eq(schema.customKeys.id, row.id) })).toMatchObject({
+      keyCode: "Mouse4",
+      keyName: "名前",
+    });
   });
 });

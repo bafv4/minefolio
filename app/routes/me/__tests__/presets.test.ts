@@ -34,6 +34,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../presets";
+import { SAVE_LIMITS } from "@/lib/save-limits";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -1134,5 +1135,65 @@ describe("action - 変更履歴の公開影響（preset_id）", () => {
     expect(first?.presetId).toBe(firstPreset?.id);
     expect(first?.presetId).not.toBeNull();
     expect(second?.presetId).toBeNull();
+  });
+});
+
+describe("action - 上限と型の検証（create-preset / update-preset）", () => {
+  it("名前・説明が上限を超えると作成せずエラーを返す", async () => {
+    const user = await setupUser();
+
+    for (const entries of <Record<string, string>[]>[
+      { name: "x".repeat(SAVE_LIMITS.presetName + 1) },
+      { name: "A", description: "x".repeat(SAVE_LIMITS.presetDescription + 1) },
+    ]) {
+      const res = await callAction({ intent: "create-preset", sourceType: "current", ...entries });
+      expect(res.error).toBeTruthy();
+    }
+    expect(await db.query.configPresets.findMany({ where: eq(schema.configPresets.userId, user.id) })).toHaveLength(0);
+  });
+
+  it("1ユーザーのプリセット数が上限に達していたら作成（コピー含む）を拒否する", async () => {
+    const user = await setupUser();
+    const rows = Array.from({ length: SAVE_LIMITS.presetsPerUser }, (_, i) => ({
+      userId: user.id,
+      name: `P${i}`,
+      isActive: i === 0,
+    }));
+    await db.insert(schema.configPresets).values(rows);
+
+    const res = await callAction({ intent: "create-preset", name: "One more", sourceType: "current" });
+
+    expect(res.error).toContain(String(SAVE_LIMITS.presetsPerUser));
+    expect(await db.query.configPresets.findMany({ where: eq(schema.configPresets.userId, user.id) })).toHaveLength(
+      SAVE_LIMITS.presetsPerUser,
+    );
+  });
+
+  it("update-preset も名前・説明の上限を超えると拒否し、既存の値を変えない", async () => {
+    const user = await setupUser();
+    const [preset] = await db
+      .insert(schema.configPresets)
+      .values({ userId: user.id, name: "Old", isActive: true })
+      .returning();
+
+    const res = await callAction({
+      intent: "update-preset",
+      presetId: preset.id,
+      name: "x".repeat(SAVE_LIMITS.presetName + 1),
+    });
+
+    expect(res.error).toBeTruthy();
+    const after = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(after?.name).toBe("Old");
+  });
+
+  it("name に File を送られても 500 にせず「名前が必要」エラーを返す", async () => {
+    await setupUser();
+    const fd = new FormData();
+    fd.set("intent", "create-preset");
+    fd.set("name", new File(["x"], "x.txt"));
+    const res = (await action({ request: makeRequest(fd), params: {}, context: {} } as never)) as ActionResult;
+
+    expect(res.error).toBe("プリセット名を入力してください");
   });
 });

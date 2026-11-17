@@ -11,6 +11,9 @@ export const SOCIAL_PLATFORMS: readonly string[] = ["speedruncom", "youtube", "t
 /** 動画欄の最大件数 */
 export const MAX_PROFILE_VIDEOS = 10;
 
+/** ソーシャルリンクの最大件数（画面に上限は無い。悪用防止の水準で、1回の保存で作成できる件数の上限と揃える） */
+export const MAX_SOCIAL_LINKS = 50;
+
 /** 新規動画を order 配列で参照するときのプレフィックス（`new:<clientKey>`） */
 export const NEW_VIDEO_ORDER_PREFIX = "new:";
 
@@ -65,6 +68,11 @@ export const PROFILE_FIELD_LIMITS = {
   pronouns: 20,
   speedruncomUsername: 50,
   linkIdentifier: 100,
+  /** カスタムリンクの表示名（画面に上限は無い。悪用防止の水準） */
+  customLabel: 100,
+  /** カスタムリンクの URL / 記録の動画 URL（画面に上限は無い。悪用防止の水準） */
+  customUrl: 2000,
+  recordVideoUrl: 2000,
   videoTitle: 100,
   mcidMin: 3,
   mcidMax: 16,
@@ -132,6 +140,8 @@ export function validateLinkInput(input: LinkPayload): MessageKey | null {
     // カスタムSNSはラベルとURLが必須
     if (!customLabel) return "meEdit.customLabelRequired";
     if (!customUrl) return "meEdit.customUrlRequired";
+    if (customLabel.length > PROFILE_FIELD_LIMITS.customLabel) return "meEdit.customLabelMax";
+    if (customUrl.length > PROFILE_FIELD_LIMITS.customUrl) return "meEdit.customUrlMax";
     try {
       new URL(customUrl);
     } catch {

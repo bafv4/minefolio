@@ -68,6 +68,8 @@ import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRe
 import { syncActivePresetSnapshot, type PresetSyncKind } from "@/lib/preset-utils";
 import { parseFingerAssignments } from "@/lib/preset-read";
 import { validateFingerAssignmentsJson } from "@/lib/finger-assignments";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { isValidRemapInputs, isValidCustomKeyInputs, isValidCustomActionInputs } from "@/lib/keybindings-payload";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
@@ -267,6 +269,9 @@ type DbClient = Db | DbTransaction;
 /** save-all のトランザクションをユーザー向けエラーメッセージ付きで中断するための例外 */
 class SaveAllAbortError extends Error {}
 
+/** 保存後の総数が上限を超えるときにトランザクションを中断する例外（削除だけ commit されるのを防ぐ） */
+class SaveLimitExceededError extends Error {}
+
 async function persistRemaps(
   t: Translator,
   db: DbClient,
@@ -332,6 +337,11 @@ async function persistRemaps(
         });
       }
 
+      // 保存後の総数で上限を判定する（ペイロード件数だけでは、id 無しの行を繰り返し送って増やせる）。
+      // existingRows は上の削除の後に読んでいるので、削除分は数えない
+      const finalIds = new Set([...existingRows.map((r) => r.id), ...resolved.map((r) => r.id)]);
+      if (finalIds.size > SAVE_LIMITS.remaps) throw new SaveLimitExceededError();
+
       if (resolved.length > 0) {
         await tx.delete(keyRemaps).where(
           and(
@@ -355,6 +365,9 @@ async function persistRemaps(
     // （内側で正常リターンすると削除だけが commit されるため）
     if (isUniqueConstraintError(e)) {
       return { error: t("meKeybindings.remapConflictError") };
+    }
+    if (e instanceof SaveLimitExceededError) {
+      return { error: t("meKeybindings.limitExceeded") };
     }
     throw e;
   }
@@ -435,8 +448,20 @@ async function persistCustomKeys(
   db: DbClient,
   userId: string,
   keysData: CustomKeyMutationInput[],
-  now: Date
-) {
+  now: Date,
+  /** 検証のために読んだ自分の既存行（往復を増やさず使い回す） */
+  existing: Array<{ id: string }>
+): Promise<{ limitExceeded: boolean }> {
+  // 保存後の総数（既存 − 削除 + 新規）で上限を判定する。超過なら何も書かない
+  const existingIds = new Set(existing.map((r) => r.id));
+  const deletedIds = new Set(
+    keysData.filter((ck) => ck._delete && ck.id && existingIds.has(ck.id)).map((ck) => ck.id!),
+  );
+  const inserts = keysData.filter((ck) => !ck._delete && !ck.id && ck.keyCode && ck.keyName).length;
+  if (existing.length - deletedIds.size + inserts > SAVE_LIMITS.customKeys) {
+    return { limitExceeded: true };
+  }
+
   const statements: BatchItem<"sqlite">[] = [];
   for (const ck of keysData) {
     if (ck._delete && ck.id) {
@@ -471,6 +496,7 @@ async function persistCustomKeys(
     }
   }
   await runWrites(db, statements);
+  return { limitExceeded: false };
 }
 
 async function persistCustomActions(
@@ -478,7 +504,20 @@ async function persistCustomActions(
   userId: string,
   actionsData: CustomActionMutationInput[],
   now: Date
-) {
+): Promise<{ limitExceeded: boolean }> {
+  const existing = await db.query.customActions.findMany({
+    where: eq(customActions.userId, userId),
+    columns: { id: true },
+  });
+  const existingIds = new Set(existing.map((r) => r.id));
+  const deletedIds = new Set(
+    actionsData.filter((a) => a._delete && a.id && existingIds.has(a.id)).map((a) => a.id!),
+  );
+  const inserts = actionsData.filter((a) => !a._delete && !a.id && a.actionName && a.triggerKey).length;
+  if (existing.length - deletedIds.size + inserts > SAVE_LIMITS.customActions) {
+    return { limitExceeded: true };
+  }
+
   const statements: BatchItem<"sqlite">[] = [];
   for (const action of actionsData) {
     if (action._delete && action.id) {
@@ -529,6 +568,7 @@ async function persistCustomActions(
     );
   }
   await runWrites(db, statements);
+  return { limitExceeded: false };
 }
 
 /** formData 由来の JSON 配列を安全にパースする（不正なら null）。 */
@@ -548,14 +588,18 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
  * キーバインド更新の上限件数。CASE 式 UPDATE のバインド変数が件数に比例するため、
  * SQLite の変数上限に当たる前に弾く（実際のキー数は数百件未満）。
  */
-const MAX_KEYBINDING_UPDATES = 1000;
+const MAX_KEYBINDING_UPDATES = SAVE_LIMITS.keybindingUpdates;
 
 /** キーバインド更新 payload を検証してパースする（不正・過大なら null）。 */
 function parseKeybindingUpdates(raw: string | null | undefined): KeybindingUpdateInput[] | null {
   const updates = parseJsonArray<KeybindingUpdateInput>(raw);
   if (!updates || updates.length > MAX_KEYBINDING_UPDATES) return null;
   const valid = updates.every(
-    (u) => typeof u.id === "string" && typeof u.keyCode === "string",
+    (u) =>
+      typeof u.id === "string" &&
+      u.id.length <= SAVE_LIMITS.shortText &&
+      typeof u.keyCode === "string" &&
+      u.keyCode.length <= SAVE_LIMITS.shortText,
   );
   return valid ? updates : null;
 }
@@ -620,9 +664,9 @@ export async function action({ request }: Route.ActionArgs) {
   // リマップ保存
   if (intent === "save-remaps") {
     const remapsData = parseJsonArray<RemapMutationInput>(
-      formData.get("remaps") as string,
+      formString(formData, "remaps"),
     );
-    if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
+    if (!remapsData || !isValidRemapInputs(remapsData)) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
     const remapError = await persistRemaps(t, db, user.id, remapsData, now);
@@ -658,7 +702,9 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 事前パース・バリデーション（書き込みを始める前に不正 payload をすべて弾く）
     const remapsData = remapsJson ? parseJsonArray<RemapMutationInput>(remapsJson) : null;
-    if (remapsJson && !remapsData) return { error: t("meKeybindings.invalidPayload") };
+    if (remapsJson && (!remapsData || !isValidRemapInputs(remapsData))) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     const keybindingUpdates = keybindingsJson
       ? parseKeybindingUpdates(keybindingsJson)
@@ -672,12 +718,26 @@ export async function action({ request }: Route.ActionArgs) {
     const customActionsData = customActionsJson
       ? parseJsonArray<CustomActionMutationInput>(customActionsJson)
       : null;
-    if (customActionsJson && !customActionsData) return { error: t("meKeybindings.invalidPayload") };
+    if (customActionsJson && (!customActionsData || !isValidCustomActionInputs(customActionsData))) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     const customKeysData = customKeysJson
       ? parseJsonArray<CustomKeyMutationInput>(customKeysJson)
       : null;
-    if (customKeysJson && !customKeysData) return { error: t("meKeybindings.invalidPayload") };
+    // 自分の既存のカスタムキー。検証で「保存値と同じ値は通す」ために使い、上限の判定にも使い回す
+    const existingCustomKeys = customKeysData
+      ? await db.query.customKeys.findMany({
+          where: eq(customKeys.userId, user.id),
+          columns: { id: true, keyCode: true, keyName: true },
+        })
+      : [];
+    if (
+      customKeysJson &&
+      (!customKeysData || !isValidCustomKeyInputs(customKeysData, new Map(existingCustomKeys.map((r) => [r.id, r]))))
+    ) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     // 変更履歴の内容
     const changes: string[] = [];
@@ -712,12 +772,14 @@ export async function action({ request }: Route.ActionArgs) {
 
         // カスタムアクション
         if (customActionsData) {
-          await persistCustomActions(tx, user.id, customActionsData, now);
+          const result = await persistCustomActions(tx, user.id, customActionsData, now);
+          if (result.limitExceeded) throw new SaveAllAbortError(t("meKeybindings.limitExceeded"));
         }
 
         // カスタムキー
         if (customKeysData) {
-          await persistCustomKeys(tx, user.id, customKeysData, now);
+          const result = await persistCustomKeys(tx, user.id, customKeysData, now, existingCustomKeys);
+          if (result.limitExceeded) throw new SaveAllAbortError(t("meKeybindings.limitExceeded"));
         }
 
         // 変更履歴を記録
@@ -727,7 +789,7 @@ export async function action({ request }: Route.ActionArgs) {
             userId: user.id,
             changeType: "keybinding",
             changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join(t("common.listSeparator")) }),
-            newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson, customKeys: customKeysJson }),
+            // クライアントの生ペイロードは保存しない（読む側が無く、保存のたびに DB が膨らむため）
             presetId: await resolveActivePublicPresetId(tx, user.id),
             createdAt: now,
           });
@@ -800,12 +862,15 @@ export async function action({ request }: Route.ActionArgs) {
   // カスタムアクション保存
   if (intent === "save-custom-actions") {
     const customActionsData = parseJsonArray<CustomActionMutationInput>(
-      formData.get("customActions") as string,
+      formString(formData, "customActions"),
     );
-    if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
+    if (!customActionsData || !isValidCustomActionInputs(customActionsData)) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     const now = new Date();
-    await persistCustomActions(db, user.id, customActionsData, now);
+    const persisted = await persistCustomActions(db, user.id, customActionsData, now);
+    if (persisted.limitExceeded) return { error: t("meKeybindings.limitExceeded") };
     await syncActivePresetSnapshot(db, user.id, ["customActions"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveCustomActions") };

@@ -59,8 +59,9 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
-import { gameLanguageOptions } from "@/lib/game-languages";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
+import { gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
+import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
@@ -205,7 +206,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const actionType = formData.get("_action") as string | null;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -231,10 +232,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   // マウス設定の範囲チェック（フォーム外からの POST でも異常値が DB に入らないようにする）。
   // NaN（"abc" のパース結果など）は各バリデーションがいずれも false になり拒否される。
-  const mouseDpiStr = formData.get("mouseDpi") as string;
-  const gameSensitivityStr = formData.get("gameSensitivity") as string;
-  const windowsSpeedStr = formData.get("windowsSpeed") as string;
-  const windowsSpeedMultiplierStr = formData.get("windowsSpeedMultiplier") as string;
+  const mouseDpiStr = formString(formData, "mouseDpi");
+  const gameSensitivityStr = formString(formData, "gameSensitivity");
+  const windowsSpeedStr = formString(formData, "windowsSpeed");
+  const windowsSpeedMultiplierStr = formString(formData, "windowsSpeedMultiplier");
 
   const parsed = parseMouseSettingsInput({
     mouseDpi: mouseDpiStr ?? "",
@@ -254,15 +255,15 @@ export async function action({ request }: Route.ActionArgs) {
   // parseInt は "70.9" や "70abc" を先頭だけ読んで 70 として黙って受理してしまい、
   // 「整数で入力してください」というメッセージと矛盾するため Number() + Number.isInteger で検証する
   // （NaN は isInteger が false を返すため個別の Number.isFinite チェックは不要）。
-  const fovStr = formData.get("fov") as string;
-  const guiScaleStr = formData.get("guiScale") as string;
+  // （/me/import の Minecraft 設定取り込みと同じ検証関数 isValidFov / isValidGuiScale を使う）
+  const fovStr = formString(formData, "fov");
+  const guiScaleStr = formString(formData, "guiScale");
   const fov = fovStr ? Number(fovStr) : null;
   const guiScale = guiScaleStr ? Number(guiScaleStr) : null;
-  if (fov !== null && (!Number.isInteger(fov) || fov < 30 || fov > 110)) {
+  if (fov !== null && !isValidFov(fov)) {
     return { error: t("meDevices.fovInvalid"), field: "fov" };
   }
-  // バニラは高解像度環境で GUI スケール 5〜9 が正当値になりうるため上限は 10 まで許容する
-  if (guiScale !== null && (!Number.isInteger(guiScale) || guiScale < 0 || guiScale > 10)) {
+  if (guiScale !== null && !isValidGuiScale(guiScale)) {
     return { error: t("meDevices.guiScaleInvalid"), field: "guiScale" };
   }
 
@@ -270,35 +271,83 @@ export async function action({ request }: Route.ActionArgs) {
   // （@/lib/keybindings の KEYBOARD_LAYOUT_OPTIONS）検証する。
   // 不正値（allowlist 外）は null 上書きにせず configData から除外し、DB の既存値を保持する。
   // 有効値・明示的な未設定（空文字→null）は従来どおり書き込む。
-  const keyboardLayoutRaw = (formData.get("keyboardLayout") as string) || null;
+  const keyboardLayoutRaw = formString(formData, "keyboardLayout") || null;
   const keyboardLayoutIsValid =
     keyboardLayoutRaw === null ||
     (KEYBOARD_LAYOUT_OPTIONS as readonly string[]).includes(keyboardLayoutRaw);
   const keyboardLayout = keyboardLayoutIsValid
     ? (keyboardLayoutRaw as (typeof KEYBOARD_LAYOUT_OPTIONS)[number] | null)
     : null;
-  const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
-  const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
+  const keyboardModel = formString(formData, "keyboardModel")?.trim() || null;
+  const mouseModel = formString(formData, "mouseModel")?.trim() || null;
   const toggleSprint = formData.get("toggleSprint") === "true";
   const toggleSneak = formData.get("toggleSneak") === "true";
   const autoJump = formData.get("autoJump") === "true";
   const rawInput = formData.get("rawInput") === "true";
   const mouseAcceleration = formData.get("mouseAcceleration") === "true";
-  const gameLanguage = (formData.get("gameLanguage") as string)?.trim() || null;
-  const notes = (formData.get("notes") as string)?.trim() || null;
+  const notes = formString(formData, "notes")?.trim() || null;
+
+  // 長さの上限（超過は何も書かずにエラー）
+  if (
+    (keyboardModel?.length ?? 0) > SAVE_LIMITS.keyboardModel ||
+    (mouseModel?.length ?? 0) > SAVE_LIMITS.mouseModel ||
+    (notes?.length ?? 0) > SAVE_LIMITS.deviceNotes
+  ) {
+    return { error: t("meDevices.limitExceeded") };
+  }
+
+  // ゲーム言語は許可リスト（game-languages の単一情報源）で検証する。小文字に正規化して保存する。
+  // 保存済みの値と同一なら通す（import や旧データ由来で許可リスト外の値を持つ人が、以後ほかの欄を保存できなくなるのを避ける）。
+  // 空は「未設定」。許可リスト外の新しい値はエラー（null で上書きしない）
+  const gameLanguageRaw = formString(formData, "gameLanguage")?.trim() || null;
+  let gameLanguage: string | null = null;
+  if (gameLanguageRaw !== null) {
+    const normalized = normalizeGameLanguage(gameLanguageRaw);
+    if (normalized !== null) {
+      gameLanguage = normalized;
+    } else if (gameLanguageRaw === user.playerConfig?.gameLanguage) {
+      gameLanguage = gameLanguageRaw;
+    } else {
+      return { error: t("meDevices.gameLanguageInvalid") };
+    }
+  }
 
   // コントローラー設定（JSON文字列としてそのまま保存する）。
   // JSON.parse が通るだけでなくオブジェクト（配列・null を除く）であることまで検証し、
   // "123" や "\"x\"" のような非オブジェクト JSON を弾く。
   // 不正時は null 上書きにせず configData から除外し、DB の既存値を保持する（keyboardLayout と同方針）。
-  const controllerSettingsJson = formData.get("controllerSettings") as string | null;
+  const controllerSettingsJson = formString(formData, "controllerSettings");
   let controllerSettingsIsValid = true;
   let controllerSettings: string | null = null;
   if (controllerSettingsJson) {
+    if (controllerSettingsJson.length > SAVE_LIMITS.shortText * 2) {
+      return { error: t("meDevices.limitExceeded") };
+    }
     try {
       const parsed = JSON.parse(controllerSettingsJson);
-      if (typeof parsed === "object" && parsed !== null) {
-        controllerSettings = controllerSettingsJson;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const model = parsed.controllerModel;
+        if (typeof model === "string" && model.length > SAVE_LIMITS.controllerModel) {
+          return { error: t("meDevices.limitExceeded") };
+        }
+        // 既知の4フィールドだけを再シリアライズする（未知のキーは保存しない）。
+        // 型が合わない場合は保存せず既存値を保持する
+        const lookSensitivity = parsed.lookSensitivity;
+        if (
+          (model === null || model === undefined || typeof model === "string") &&
+          (lookSensitivity === null || lookSensitivity === undefined || typeof lookSensitivity === "number") &&
+          (parsed.invertYAxis === undefined || typeof parsed.invertYAxis === "boolean") &&
+          (parsed.vibration === undefined || typeof parsed.vibration === "boolean")
+        ) {
+          controllerSettings = JSON.stringify({
+            controllerModel: model ?? null,
+            lookSensitivity: lookSensitivity ?? null,
+            invertYAxis: parsed.invertYAxis ?? false,
+            vibration: parsed.vibration ?? true,
+          });
+        } else {
+          controllerSettingsIsValid = false;
+        }
       } else {
         controllerSettingsIsValid = false;
       }
@@ -467,8 +516,11 @@ export default function DevicesPage() {
     draft: formValues,
     setDraft: setFormValues,
     base: initialFormValues,
-    syncOnNextSource,
-  } = useLoaderSyncedDraft(sourceFormValues, { resetKey: activePreset?.id ?? null });
+  } = useLoaderSyncedDraft(sourceFormValues, {
+    resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。次の loader 更新では編集済みでも保存値（サーバーで正規化された値）へ揃える
+    syncToken: successfulSaveToken(data),
+  });
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
   const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
@@ -647,8 +699,6 @@ export default function DevicesPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meDevices.saveSuccess"));
-      // 保存値（サーバーで正規化された値）へ揃えるため、次の loader 更新では編集済みでも置き換える
-      syncOnNextSource();
       setFieldError(null);
     } else if ("error" in data) {
       toast.error(data.error);
@@ -658,7 +708,7 @@ export default function DevicesPage() {
         showFieldError({ field: data.field, message: data.error });
       }
     }
-  }, [data, showFieldError, syncOnNextSource]);
+  }, [data, showFieldError]);
 
   return (
     <div className="space-y-7 sm:space-y-8 pb-24">

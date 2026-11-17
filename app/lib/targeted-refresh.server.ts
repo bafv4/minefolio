@@ -7,10 +7,10 @@
 // youtube-cache.ts / rankings-update.server.ts）をそのまま1件スコープで再利用する薄いラッパー
 
 import { waitUntil } from "@vercel/functions";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { getEnv } from "./env.server";
 import { createDb } from "./db";
-import { users, speedrunCategories, youtubeVideoCache, twitchVodCache } from "./schema";
+import { users, speedrunCategories, youtubeVideoCache, twitchVodCache, socialLinks } from "./schema";
 import { getTwitchAppToken, getRecentVods } from "./twitch";
 import { applyFetchedVods, findKnownVodIds } from "./twitch-vod-cache";
 import { resolveChannelId } from "./youtube";
@@ -57,15 +57,38 @@ export async function refreshTwitchVodsForLogin(login: string): Promise<void> {
   }
 }
 
+/** リンクを外した（変えた）本人。共有キャッシュのうち、他の走者の登録分を消さないための判定に使う */
+export type LinkOwner = {
+  userId: string;
+  /** 本人の MCID（変更・削除を含む保存では旧・新の両方。`youtube_video_cache.minefolio_mcid` との一致に使う） */
+  mcids: readonly (string | null | undefined)[];
+};
+
 /**
- * リンク解除時に、そのTwitchチャンネルのVODキャッシュ行を削除する
+ * リンク解除時に、そのTwitchチャンネルのVODキャッシュ行を削除する。
+ * `twitch_vod_cache` はチャンネル単位の共有キャッシュで誰の登録かの列を持たないため、
+ * 自分以外の走者が同じ login（大文字小文字を無視）の twitch リンクを持っているときは消さない
+ * （自己申告のリンクを作って外すだけで、他人の VOD をキャッシュから消せてしまうのを防ぐ）。
+ * 判定に失敗したときも消さない側に倒す
  */
-export async function deleteTwitchVodsForLogin(login: string): Promise<void> {
+export async function deleteTwitchVodsForLogin(login: string, owner: LinkOwner): Promise<void> {
   try {
     const db = createDb();
-    await db
-      .delete(twitchVodCache)
-      .where(sql`lower(${twitchVodCache.userLogin}) = ${login.toLowerCase()}`);
+    const lowered = login.toLowerCase();
+    const otherOwner = await db
+      .select({ id: socialLinks.id })
+      .from(socialLinks)
+      .where(
+        and(
+          eq(socialLinks.platform, "twitch"),
+          sql`lower(${socialLinks.identifier}) = ${lowered}`,
+          ne(socialLinks.userId, owner.userId),
+        ),
+      )
+      .limit(1);
+    if (otherOwner.length > 0) return;
+
+    await db.delete(twitchVodCache).where(sql`lower(${twitchVodCache.userLogin}) = ${lowered}`);
   } catch (error) {
     console.error(`[targeted-refresh] Failed to delete Twitch VODs for ${login}:`, error);
   }
@@ -88,11 +111,17 @@ export async function refreshYoutubeForChannel(identifier: string, mcid: string)
 }
 
 /**
- * リンク解除時に、そのYouTubeチャンネル（ハンドル/UC-ID両対応）の動画キャッシュ行を削除する。
- * 識別子を解決できなければ何もしない
+ * リンク解除時に、そのYouTubeチャンネル（ハンドル/UC-ID両対応）の動画キャッシュ行のうち、
+ * 本人の MCID に帰属した行だけを削除する。識別子を解決できなければ何もしない。
+ * `youtube_video_cache` はチャンネル単位の共有キャッシュで、行は最初に取得した走者の MCID に帰属する
+ * （再取得で上書きされない）。他の走者の MCID に帰属した行は、同じチャンネルでも消さない。
+ * 本人の MCID が無ければ（取得がスキップされるため帰属行も無い）何も消さない
  */
-export async function deleteYoutubeVideosForChannelIdentifier(identifier: string): Promise<void> {
+export async function deleteYoutubeVideosForChannelIdentifier(identifier: string, owner: LinkOwner): Promise<void> {
   try {
+    const mcids = [...new Set(owner.mcids.filter((m): m is string => Boolean(m)).map((m) => m.toLowerCase()))];
+    if (mcids.length === 0) return;
+
     const env = getEnv();
     const apiKey = env.YOUTUBE_API_KEY;
     const isChannelIdFormat = identifier.startsWith("UC") && identifier.length === 24;
@@ -104,7 +133,14 @@ export async function deleteYoutubeVideosForChannelIdentifier(identifier: string
     if (!channelId) return;
 
     const db = createDb();
-    await db.delete(youtubeVideoCache).where(eq(youtubeVideoCache.channelId, channelId));
+    await db
+      .delete(youtubeVideoCache)
+      .where(
+        and(
+          eq(youtubeVideoCache.channelId, channelId),
+          inArray(sql`lower(${youtubeVideoCache.minefolioMcid})`, mcids),
+        ),
+      );
   } catch (error) {
     console.error(`[targeted-refresh] Failed to delete YouTube videos for ${identifier}:`, error);
   }

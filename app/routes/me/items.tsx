@@ -10,6 +10,8 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { formString } from "@/lib/save-limits";
+import { isValidItemLayoutsPayload } from "@/lib/item-layouts-payload";
 import { cn } from "@/lib/utils";
 import { NoticeBanner } from "@/components/notice-banner";
 import { PageSection } from "@/components/page-section";
@@ -89,7 +91,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
@@ -138,21 +140,6 @@ type ItemLayout = {
   offhand: string[];
   notes: string | null;
 };
-
-/**
- * slots 配列内の1エントリが `{ slot: number, items: string[] }`（Slot 型）の形をしているか。
- * action の保存前検証（saveAll）から使う。公開プロフィール側の ItemHotbar（slots.find・
- * items.map／CyclingSlotIcon の items.map）が想定する形で、崩れていると SSR が落ちる。
- */
-function isValidSlotShape(slot: unknown): boolean {
-  if (!slot || typeof slot !== "object") return false;
-  const s = slot as Record<string, unknown>;
-  return (
-    typeof s.slot === "number" &&
-    Array.isArray(s.items) &&
-    (s.items as unknown[]).every((item) => typeof item === "string")
-  );
-}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
@@ -273,8 +260,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const actionType = formString(formData, "_action");
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -298,30 +285,15 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (actionType === "saveAll") {
-    const layoutsJson = formData.get("layouts") as string;
+    const layoutsJson = formString(formData, "layouts") ?? "";
 
     try {
-      const layoutsRaw = JSON.parse(layoutsJson) as Array<Record<string, unknown>>;
+      const layoutsRaw: unknown = JSON.parse(layoutsJson);
 
-      // slots / offhand の中身の形を検証する。非配列・スロット番号や items が想定外の型のまま
-      // 永続化されると、公開プロフィール側の ItemHotbar（slots.find／items.map）が TypeError を
-      // 投げて SSR が 500 になるため、ここで拒否する
-      // （search-craft.tsx の items が string[] であることの検証と同じ考え方・粒度）
-      if (
-        !Array.isArray(layoutsRaw) ||
-        layoutsRaw.some(
-          (layout) =>
-            !layout ||
-            typeof layout.id !== "string" ||
-            !layout.id ||
-            typeof layout.segment !== "string" ||
-            !Array.isArray(layout.slots) ||
-            (layout.slots as unknown[]).some((slot) => !isValidSlotShape(slot)) ||
-            !Array.isArray(layout.offhand) ||
-            (layout.offhand as unknown[]).some((item) => typeof item !== "string") ||
-            (layout.notes !== null && typeof layout.notes !== "string"),
-        )
-      ) {
+      // 形・件数・文字数・セグメント名（空・重複）・id の重複を検証する（lib/item-layouts-payload.ts）。
+      // slots / offhand の中身の形が崩れたまま永続化されると、公開プロフィール側の ItemHotbar
+      // （slots.find／items.map）が TypeError を投げて SSR が 500 になるため、ここで拒否する
+      if (!isValidItemLayoutsPayload(layoutsRaw)) {
         return { error: t("meItems.invalidLayoutData") };
       }
 
@@ -329,6 +301,17 @@ export async function action({ request }: Route.ActionArgs) {
 
       const now = new Date();
       await db.transaction(async (tx) => {
+        // 送られた id を引き継ぐのは「自分の既存行にある id」だけ。それ以外（new- 始まり・他人の id・任意の文字列）は
+        // 新規採番する（任意の文字列を主キーにできると、他人の id の存在を成功・失敗から判定できてしまう）
+        const ownIds = new Set(
+          (
+            await tx.query.itemLayouts.findMany({
+              where: eq(itemLayouts.userId, user.id),
+              columns: { id: true },
+            })
+          ).map((row) => row.id),
+        );
+
         // 既存のレイアウトを全削除
         await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
 
@@ -336,7 +319,7 @@ export async function action({ request }: Route.ActionArgs) {
         for (let i = 0; i < layouts.length; i++) {
           const layout = layouts[i];
           await tx.insert(itemLayouts).values({
-            id: layout.id.startsWith("new-") ? createId() : layout.id,
+            id: ownIds.has(layout.id) ? layout.id : createId(),
             userId: user.id,
             segment: layout.segment,
             slots: JSON.stringify(layout.slots),
@@ -815,8 +798,11 @@ export default function ItemLayoutsPage() {
   const {
     draft: layouts,
     setDraft: setLayouts,
-    syncOnNextSource,
-  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts, { resetKey: activePreset?.id ?? null });
+  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts, {
+    resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+    syncToken: successfulSaveToken(fetcher.data),
+  });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
@@ -833,8 +819,6 @@ export default function ItemLayoutsPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      // 新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
-      syncOnNextSource();
       toast.success(t("meItems.saveSuccess"));
     } else if ("error" in data) {
       toast.error(data.error);

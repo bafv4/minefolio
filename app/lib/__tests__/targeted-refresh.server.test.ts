@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
+  seedUser,
   SHARED_MEMORY_URL,
   schema,
   type TestDb,
@@ -41,6 +42,7 @@ vi.mock("../youtube-cache", () => youtubeCacheMocks);
 import {
   refreshTwitchVodsForLogin,
   refreshYoutubeForChannel,
+  deleteTwitchVodsForLogin,
   deleteYoutubeVideosForChannelIdentifier,
   refreshSrcRankingsForUser,
 } from "../targeted-refresh.server";
@@ -102,16 +104,108 @@ describe("refreshYoutubeForChannel", () => {
   });
 });
 
+/** twitch_vod_cache に VOD を1行入れる */
+async function seedVod(vodId: string, userLogin: string) {
+  await db.insert(schema.twitchVodCache).values({ vodId, userLogin, title: "t", publishedAt: new Date() });
+}
+
+describe("deleteTwitchVodsForLogin", () => {
+  it("自分以外のユーザーが同じloginのtwitchリンクを持っているときは、VODキャッシュを消さない", async () => {
+    const attacker = await seedUser(db, { slug: "attacker", discordId: "d-attacker" });
+    const victim = await seedUser(db, { slug: "victim", discordId: "d-victim" });
+    // 被害者は MixedCase で登録（大文字小文字を無視して一致することも確認する）
+    await db.insert(schema.socialLinks).values({ userId: victim.id, platform: "twitch", identifier: "VictimCh" });
+    await seedVod("1", "victimch");
+
+    // 攻撃者は同じloginでリンクを作って外した（呼び出し時点で攻撃者のリンクは既に無い）
+    await deleteTwitchVodsForLogin("victimch", { userId: attacker.id, mcids: [] });
+
+    expect(await db.query.twitchVodCache.findMany()).toHaveLength(1);
+  });
+
+  it("ほかに登録者がいなければ（自分のリンクだけだったなら）、大文字小文字を無視して削除する", async () => {
+    const me = await seedUser(db, { slug: "me", discordId: "d-me" });
+    // 他人は別チャンネル。自分のリンク行が残っていても「自分以外」ではないので判定に影響しない
+    const other = await seedUser(db, { slug: "other", discordId: "d-other" });
+    await db.insert(schema.socialLinks).values({ userId: other.id, platform: "twitch", identifier: "otherch" });
+    await db.insert(schema.socialLinks).values({ userId: me.id, platform: "twitch", identifier: "MyCh" });
+    await seedVod("1", "mych");
+    await seedVod("2", "otherch");
+
+    await deleteTwitchVodsForLogin("MyCh", { userId: me.id, mcids: [] });
+
+    const rows = await db.query.twitchVodCache.findMany();
+    expect(rows.map((r) => r.vodId)).toEqual(["2"]);
+  });
+
+  it("他人の youtube リンクなど別プラットフォームの同名identifierは判定に使わない", async () => {
+    const me = await seedUser(db, { slug: "me", discordId: "d-me" });
+    const other = await seedUser(db, { slug: "other", discordId: "d-other" });
+    await db.insert(schema.socialLinks).values({ userId: other.id, platform: "youtube", identifier: "mych" });
+    await seedVod("1", "mych");
+
+    await deleteTwitchVodsForLogin("mych", { userId: me.id, mcids: [] });
+
+    expect(await db.query.twitchVodCache.findMany()).toHaveLength(0);
+  });
+});
+
 describe("deleteYoutubeVideosForChannelIdentifier", () => {
-  it("ハンドル形式かつYOUTUBE_API_KEY未設定時はチャンネルIDを解決できずno-opで完了する（throwしない）", async () => {
+  const CHANNEL = "UC000000000000000000gone";
+
+  it("本人のMCIDに帰属した行だけを削除し、他の走者のMCIDに帰属した同一チャンネルの行は残す（大文字小文字は無視）", async () => {
+    await db.insert(schema.youtubeVideoCache).values([
+      { videoId: "mine", channelId: CHANNEL, minefolioMcid: "MyMcid", title: "t", publishedAt: new Date() },
+      { videoId: "theirs", channelId: CHANNEL, minefolioMcid: "VictimMcid", title: "t", publishedAt: new Date() },
+      { videoId: "unattributed", channelId: CHANNEL, minefolioMcid: null, title: "t", publishedAt: new Date() },
+      { videoId: "elsewhere", channelId: "UC000000000000000000else", minefolioMcid: "MyMcid", title: "t", publishedAt: new Date() },
+    ]);
+
+    await deleteYoutubeVideosForChannelIdentifier(CHANNEL, { userId: "u1", mcids: ["mymcid"] });
+
+    const rows = await db.query.youtubeVideoCache.findMany();
+    expect(rows.map((r) => r.videoId).sort()).toEqual(["elsewhere", "theirs", "unattributed"]);
+  });
+
+  it("MCIDを変更する保存では旧・新どちらのMCIDに帰属した行も削除する", async () => {
+    await db.insert(schema.youtubeVideoCache).values([
+      { videoId: "old", channelId: CHANNEL, minefolioMcid: "OldMcid", title: "t", publishedAt: new Date() },
+      { videoId: "new", channelId: CHANNEL, minefolioMcid: "NewMcid", title: "t", publishedAt: new Date() },
+      { videoId: "theirs", channelId: CHANNEL, minefolioMcid: "Other", title: "t", publishedAt: new Date() },
+    ]);
+
+    await deleteYoutubeVideosForChannelIdentifier(CHANNEL, { userId: "u1", mcids: ["OldMcid", null, "NewMcid"] });
+
+    const rows = await db.query.youtubeVideoCache.findMany();
+    expect(rows.map((r) => r.videoId)).toEqual(["theirs"]);
+  });
+
+  it("本人のMCIDが無ければ何も消さない（取得がスキップされるため帰属行も無い）", async () => {
     await db.insert(schema.youtubeVideoCache).values({
-      videoId: "keep1",
-      channelId: "UC000000000000000000keep",
+      videoId: "keep",
+      channelId: CHANNEL,
+      minefolioMcid: "Someone",
       title: "t",
       publishedAt: new Date(),
     });
 
-    await expect(deleteYoutubeVideosForChannelIdentifier("@somehandle")).resolves.toBeUndefined();
+    await deleteYoutubeVideosForChannelIdentifier(CHANNEL, { userId: "u1", mcids: [null] });
+
+    expect(await db.query.youtubeVideoCache.findMany()).toHaveLength(1);
+  });
+
+  it("ハンドル形式かつYOUTUBE_API_KEY未設定時はチャンネルIDを解決できずno-opで完了する（throwしない）", async () => {
+    await db.insert(schema.youtubeVideoCache).values({
+      videoId: "keep1",
+      channelId: "UC000000000000000000keep",
+      minefolioMcid: "Mcid1",
+      title: "t",
+      publishedAt: new Date(),
+    });
+
+    await expect(
+      deleteYoutubeVideosForChannelIdentifier("@somehandle", { userId: "u1", mcids: ["Mcid1"] }),
+    ).resolves.toBeUndefined();
 
     // apiKeyが無ければハンドル解決（resolveChannelId）自体を試みない
     expect(youtubeMocks.resolveChannelId).not.toHaveBeenCalled();
@@ -124,12 +218,13 @@ describe("deleteYoutubeVideosForChannelIdentifier", () => {
     await db.insert(schema.youtubeVideoCache).values({
       videoId: "gone1",
       channelId: "UC000000000000000000gone",
+      minefolioMcid: "Mcid1",
       title: "t",
       publishedAt: new Date(),
     });
 
     await expect(
-      deleteYoutubeVideosForChannelIdentifier("UC000000000000000000gone"),
+      deleteYoutubeVideosForChannelIdentifier("UC000000000000000000gone", { userId: "u1", mcids: ["Mcid1"] }),
     ).resolves.toBeUndefined();
 
     expect(youtubeMocks.resolveChannelId).not.toHaveBeenCalled();

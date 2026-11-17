@@ -197,3 +197,13 @@ const LANGUAGES_WITHOUT_ITEM_DICTIONARY: ReadonlySet<string> = new Set([
 export function hasItemNameDictionary(lang: string): boolean {
   return !LANGUAGES_WITHOUT_ITEM_DICTIONARY.has(lang.toLowerCase());
 }
+
+/**
+ * 言語コードを許可リスト（GAME_LANGUAGE_DEFS）で正規化する。小文字化して一致した定義の値を返し、
+ * 未知のコードは null（描画側がアイテム名辞書の URL に連結するため、自由文字列は保存させない）。
+ */
+export function normalizeGameLanguage(code: unknown): string | null {
+  if (typeof code !== "string") return null;
+  const lower = code.trim().toLowerCase();
+  return GAME_LANGUAGE_DEFS.find((d) => d.value === lower)?.value ?? null;
+}
