@@ -15,6 +15,15 @@
 保存バーが出る画面は、バー自体が未保存のまま離れるのを止める（アプリ内遷移は確認ダイアログ、タブ閉じ/リロードは beforeunload）。
 `dirty = hasChanges && !isSubmitting` なので、保存中は止めない。pathname が変わらない遷移も止めない（`useUnsavedWarning` と同じ）。
 
+- 確認ダイアログ（`UnsavedChangesDialog`）は主ボタン「保存して移動」・「編集を続ける」・「保存せず離れる」（outline＋destructive 文字色。データを失う操作は主ボタンにしない）。
+  「保存して移動」は `onSave` を呼び、送信（`isSubmitting`）の立ち上がりを待つ。送信が終わってから未保存が解消すれば `blocker.proceed()`
+  （画面側は保存結果を受けた後の effect で下書きの基準を入れ替えるので、送信終了のレンダーではまだ未保存のことがある。最大 1 秒待つ＝`SAVE_SETTLE_TIMEOUT_MS`）、
+  1 秒待っても未保存が残る（保存に失敗した）／1.5 秒経っても送信が始まらない（画面側の事前検証で止まった）ときは `blocker.reset()` で閉じて画面のエラーを見せる。
+  保存中はボタンを無効にし「保存して移動中...」と表示、Esc でも閉じない。guide-editor は `onSave` を渡さず、従来の2択のまま。
+- 保存バーの面は不透明の `bg-card`、枠は中立の `border-border/70`（「未保存」バッジの `text-warning` を全テーマで 4.5:1 以上に保つ。
+  warning/10 を card に重ねて light 4.65・dark 5.58・ultra-dark 5.85）。
+- バーが見えている間（`aria-hidden="false"`）は `app/app.css` が `--save-bar-inset`（モバイル 8.75rem・sm 以上 6.5rem）を `--bottom-fixed-inset` に足し、
+  body の `padding-bottom` と `scroll-padding-bottom` に効かせる。Tab で移った欄がバーの裏に隠れない（WCAG 2.4.11）。
 - 既定で有効。`useBlocker` は 1 ルーターに 1 つしか効かないため、自前で `useUnsavedWarning` + `UnsavedChangesDialog` を
   持つ画面は `<FloatingSaveBar unsavedGuard={false} />` を渡して二重にしない（現在は該当なし。`/me/*` の保存バーのある画面はすべて保存バー側に移した）。
 - 自前の分を外して移行するには、その画面から `useUnsavedWarning` の呼び出しと `<UnsavedChangesDialog />` を消し、
@@ -42,7 +51,8 @@
   - `sidebar`（lg 以上のナビ一覧）／ `sidebar-toggle`（lg 未満の開閉ボタン）／ `identity`（サイドバー上部の名前と共有）／ `save-bar`（`FloatingSaveBar` が付ける）は共通部分が持つ
   - **`edit-form`** は `/me/edit` が付ける（プロフィール入力の先頭のカードなど、画面より小さめの要素に）。無い画面では飛ばす
   - 保存バーの手順は、`[data-me-tour="save-bar"]` が DOM にある画面（`FloatingSaveBar` を描く画面）だけで出す。
-    変更が無いあいだ `aria-hidden` でも、存在すれば指す。保存バーの無い画面（/me/import・/me/presets など）では手順ごと飛ばす
+    変更が無いあいだ `aria-hidden` でも、存在すれば指す。その間は `[data-me-tour-active]` の CSS がバーを一時的に見える状態（不透明・位置は本来の位置）にして指す
+    （透明のまま空所を指さない。操作は不可のまま。手順は飛ばさない）。保存バーの無い画面（/me/import・/me/presets など）では手順ごと飛ばす
     （画面下の中央を指す fallback は廃止）。文言は「変更は画面下の保存バーで確定」とだけ言い、反映のタイミングは約束しない
 
 ### 共通レイアウトの挙動（`routes/me/_layout.tsx`、`components/floating-save-bar.tsx`）

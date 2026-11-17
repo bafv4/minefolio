@@ -321,7 +321,8 @@
 
 - 下端に固定する他の UI（クッキーバナー `cookie-consent.tsx`・トップへ戻る `back-to-top-button.tsx` など）は、
   `bottom-[calc(<元の値>+var(--bottom-dock-height,0px))]` のようにドックの高さぶんずらす。フォールバック `0px` を必ず付ける
-- `:root` の `--bottom-fixed-inset`（`--bottom-dock-height` ＋ Cookie バナーの `--cookie-banner-offset`。body の `padding-bottom` と `scroll-padding-bottom` が読む）を、下端インセットの合計として参照してよい
+- `:root` の `--bottom-fixed-inset`（`--bottom-dock-height` ＋ Cookie バナーの `--cookie-banner-offset` ＋ 保存バーの `--save-bar-inset`。body の `padding-bottom` と `scroll-padding-bottom` が読む）を、下端インセットの合計として参照してよい
+- 保存バー（`floating-save-bar.tsx`、`[data-me-tour="save-bar"]`）は見えている間（`aria-hidden="false"`）だけ `:root:has(...)` で `--save-bar-inset`（モバイル 8.75rem・sm 以上 6.5rem ＝ バーの高さ＋上下の余白）を解決し、Tab で移った欄がバーの裏に隠れないようにする（WCAG 2.4.11）。バーの高さを変えたらこの値も合わせる
 - 新しく下端固定の UI を足すときも同じ。ドックを持つページを足すときは、コンテナに `data-bottom-dock` を付け、高さは `--bottom-dock-height` を参照する
 
 ## 11. タブ

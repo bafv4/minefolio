@@ -9,7 +9,8 @@ export interface MeTourStepDef {
   id: MeTourStepId;
   /** 優先順に探す data-me-tour の値。最初に「見えている」ものを使う */
   targets: readonly string[];
-  /** DOM に存在すれば、aria-hidden / 非表示でも指す（変更が無いあいだ隠れている保存バー用）。無ければ手順ごと飛ばす */
+  /** DOM に存在すれば、aria-hidden / 非表示でも指す（変更が無いあいだ隠れている保存バー用）。無ければ手順ごと飛ばす。
+   * 指している間は app.css の `[data-me-tour-active]` が保存バーを見える状態にする（透明のまま指して吹き出しが空所を指すのを防ぐ） */
   allowHidden?: boolean;
 }
 

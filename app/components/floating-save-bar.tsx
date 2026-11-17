@@ -11,9 +11,19 @@ import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
  * useBlocker は1ルーターに1つしか効かないので、自前で useUnsavedWarning を呼ぶ画面は
  * FloatingSaveBar に `unsavedGuard={false}` を渡して、この子コンポーネント自体を描かない。
  */
-function UnsavedGuard({ dirty }: { dirty: boolean }) {
-  const blocker = useUnsavedWarning(dirty);
-  return <UnsavedChangesDialog blocker={blocker} />;
+function UnsavedGuard({
+  hasChanges,
+  onSave,
+  isSubmitting,
+}: {
+  hasChanges: boolean;
+  onSave: () => void;
+  isSubmitting: boolean;
+}) {
+  // 保存中は止めない。ただし blocked 済みの状態は dirty が下がっても保たれるので、
+  // 「保存して移動」は送信完了後に proceed できる
+  const blocker = useUnsavedWarning(hasChanges && !isSubmitting);
+  return <UnsavedChangesDialog blocker={blocker} onSave={onSave} isSubmitting={isSubmitting} hasChanges={hasChanges} />;
 }
 
 interface FloatingSaveBarProps {
@@ -47,7 +57,7 @@ export function FloatingSaveBar({
   const reset = resetLabel ?? t("common.discardChanges");
   return (
     <>
-    {unsavedGuard && <UnsavedGuard dirty={hasChanges && !isSubmitting} />}
+    {unsavedGuard && <UnsavedGuard hasChanges={hasChanges} onSave={onSave} isSubmitting={isSubmitting} />}
     <div
       data-me-tour="save-bar"
       role="region"
@@ -58,8 +68,9 @@ export function FloatingSaveBar({
         "fixed bottom-[calc(1rem+var(--cookie-banner-offset,0px))] left-0 right-0 mx-auto z-50",
         "w-[calc(100%-2rem)] max-w-2xl",
         "flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3",
-        "bg-card/95 backdrop-blur-sm supports-[backdrop-filter]:bg-card/80",
-        "p-3 sm:p-4 rounded-xl border-2 border-primary/20 shadow-xl",
+        // 不透明の面（半透明だと「未保存」バッジの warning 文字が背景次第で 4.5:1 を割る）。枠は中立（primary はリンクの色）
+        "bg-card",
+        "p-3 sm:p-4 rounded-xl border-2 border-border/70 shadow-xl",
         "transition-all duration-200",
         hasChanges ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
         className

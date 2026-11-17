@@ -352,6 +352,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unsavedLeaveDesc: "If you leave this page, your unsaved changes will be lost.",
     keepEditing: "Keep editing",
     leaveWithoutSaving: "Leave without saving",
+    saveAndLeave: "Save and leave",
+    savingAndLeaving: "Saving and leaving",
     savingInProgress: "Saving…",
     saveChanges: "Save changes",
     discardChanges: "Discard changes",

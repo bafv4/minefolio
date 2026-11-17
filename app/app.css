@@ -392,8 +392,23 @@ body {
      （閉じると除去され 0px）。ドックはバナーの下に積まれるので両者を足す。どちらも無ければ 0px。
      カスタムプロパティは使用時に解決されるため、:has() で後から解決される --bottom-dock-height も反映される */
   :root {
-    --bottom-fixed-inset: calc(var(--bottom-dock-height, 0px) + var(--cookie-banner-offset, 0px));
+    --bottom-fixed-inset: calc(
+      var(--bottom-dock-height, 0px) + var(--cookie-banner-offset, 0px) + var(--save-bar-inset, 0px)
+    );
     scroll-padding-bottom: var(--bottom-fixed-inset);
+  }
+
+  /* 保存バー（floating-save-bar.tsx）が見えている間だけ、その高さ＋下の余白 1rem＋上の余白 1rem を足す
+     （Tab で移った欄がバーの裏に隠れないように。WCAG 2.4.11）。変更が無く隠れている間（aria-hidden="true"）は 0。
+     バーの高さ: モバイルは2段で約 106px（8.75rem）、sm 以上は1段で約 72px（6.5rem）。
+     Cookie バナーぶんの持ち上がりは --cookie-banner-offset 側で足されるのでここには含めない */
+  :root:has([data-me-tour="save-bar"][aria-hidden="false"]) {
+    --save-bar-inset: 8.75rem;
+  }
+  @media (width >= 40rem) {
+    :root:has([data-me-tour="save-bar"][aria-hidden="false"]) {
+      --save-bar-inset: 6.5rem;
+    }
   }
 
   /* 上端に貼り付く UI の scroll-padding-top（WCAG 2.4.11: Tab で移ったフォーカス・アンカー移動の着地点を隠さない）。
@@ -1808,4 +1823,9 @@ body {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
   border-radius: var(--radius-lg, 0.5rem);
+}
+/* 変更が無く隠れている保存バーをツアーが指すときは、見える状態にして指す（操作は不可のまま） */
+[data-me-tour="save-bar"][data-me-tour-active] {
+  opacity: 1 !important;
+  transform: none !important;
 }

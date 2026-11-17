@@ -359,6 +359,8 @@ export const PAGES_JA = {
     unsavedLeaveDesc: "このページを離れると、保存されていない変更は失われます。",
     keepEditing: "編集を続ける",
     leaveWithoutSaving: "保存せず離れる",
+    saveAndLeave: "保存して移動",
+    savingAndLeaving: "保存して移動中",
     savingInProgress: "保存中です",
     saveChanges: "変更を保存",
     discardChanges: "変更を取り消す",
