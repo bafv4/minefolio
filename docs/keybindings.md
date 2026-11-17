@@ -530,8 +530,10 @@ type ControllerSettings = {
 `/me/keybindings` の編集ページは v1.4.0 で次のように変更された：
 
 - 上部に **PresetSelector** ドロップダウンを表示（詳細は [`docs/presets.md`](presets.md) 参照）
-- 保存（`save-keybindings` / `save-remaps` / `save-fingers` / `save-custom-keys` / `save-custom-actions` / `save-all`）の各 intent で `syncActivePresetSnapshot(db, userId, kinds)` を呼び、アクティブプリセットの該当 `*Data` JSON を最新化（書き込みスルー）
+- 保存（`save-keybindings` / `save-remaps` / `save-fingers` / `save-custom-actions` / `save-all`）の各 intent で `syncActivePresetSnapshot(db, userId, kinds)` を呼び、アクティブプリセットの該当 `*Data` JSON を最新化（書き込みスルー）
 - カスタムキー定義（`customKeys`）とカスタムアクション（`customActions`）もプリセットスナップショットの対象（`customKeysData` / `customActionsData` カラム）
+- **カスタムキーの保存は保存バー（`save-all`）に統合**されている。専用の保存ボタンと `save-custom-keys` intent は廃止。カスタムキーの変更（追加・編集・削除）は `hasUnsavedChanges` に含まれ、離脱確認・「保存して移動」・「取消」の対象になる。`save-all` の `customKeys`（JSON）は変更があるときだけ送り、他の変更と同じトランザクションで確定する（途中で失敗すると全体がロールバックされ、画面の下書きは残る）。変更履歴の「…を更新」には「カスタムキー」が加わる
+- キーのダイアログのチェックボックスのラベルは、操作名と「割当済」「同じキーに他の操作もあります」の補足の間に sr-only の読点を挟む（「後退、S に割当済」の形に読まれる）
 - 保存リクエストにロード時の `presetId` を含め、別タブ等で切替済みなら `mePresets.staleSession` で拒否
 
 ---

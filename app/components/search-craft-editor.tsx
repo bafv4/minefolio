@@ -341,7 +341,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           <Button
             variant="outline"
             size="sm"
-            className="h-7"
+            className="h-7 max-sm:min-h-11"
             onClick={() => setIsItemDialogOpen(true)}
           >
             <Plus className="size-3 mr-1" />
@@ -373,7 +373,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground max-sm:size-11"
                       disabled={craft.variations.length <= 1}
                       onClick={() => removeVariation(variationIndex)}
                       aria-label={t("meSearchCraft.removeVariation")}
@@ -393,7 +393,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                   />
                   <Label
                     htmlFor={checkboxId}
-                    className="text-xs text-muted-foreground cursor-pointer"
+                    className="flex min-h-11 items-center text-xs text-muted-foreground cursor-pointer sm:min-h-0"
                   >
                     {t("meSearchCraft.withShift")}
                   </Label>
@@ -424,7 +424,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7"
+            className="h-7 max-sm:min-h-11"
             disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
             onClick={addVariation}
           >

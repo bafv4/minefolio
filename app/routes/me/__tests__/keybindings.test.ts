@@ -374,6 +374,54 @@ describe("action - save-all の原子性", () => {
   });
 });
 
+describe("action - save-all のカスタムキー", () => {
+  it("customKeys を同じ保存で追加・更新・削除し、変更履歴に「カスタムキー」を含める", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const [keep] = await db
+      .insert(schema.customKeys)
+      .values({ userId: user.id, keyCode: "Mouse4", keyName: "旧名", category: "mouse" })
+      .returning();
+    const [drop] = await db
+      .insert(schema.customKeys)
+      .values({ userId: user.id, keyCode: "Mouse5", keyName: "消す", category: "mouse" })
+      .returning();
+
+    const res = await callAction(
+      formDataOf({
+        intent: "save-all",
+        presetId: preset.id,
+        remaps: JSON.stringify([]),
+        customKeys: JSON.stringify([
+          { id: keep.id, keyCode: "Mouse4", keyName: "新名", category: "mouse" },
+          { id: drop.id, keyCode: "Mouse5", keyName: "消す", category: "mouse", _delete: true },
+          { keyCode: "Mouse6", keyName: "追加", category: "mouse" },
+        ]),
+      }),
+    );
+
+    expect(res).toEqual({ success: true, message: "設定を保存しました" });
+    const rows = await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) });
+    expect(rows.map((r) => [r.keyCode, r.keyName]).sort()).toEqual([
+      ["Mouse4", "新名"],
+      ["Mouse6", "追加"],
+    ]);
+    const history = await findKeybindingHistory(user.id);
+    expect(history).toHaveLength(1);
+    expect(history[0].changeDescription).toContain("カスタムキー");
+  });
+
+  it("customKeys の payload が不正なら何も書かずにエラーを返す", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(
+      formDataOf({ intent: "save-all", presetId: preset.id, customKeys: "not-json" }),
+    );
+
+    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect(await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) })).toHaveLength(0);
+  });
+});
+
 describe("action - プリセットゲート", () => {
   it("アクティブなプリセットが無い場合は presetRequired エラーを返す", async () => {
     const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
@@ -494,8 +542,8 @@ describe("action - save-all の customActions（トランザクション内の�
   });
 });
 
-describe("action - save-custom-keys（db.batch 経路）", () => {
-  it("削除・更新・追加を1バッチで適用し、スナップショットを同期する", async () => {
+describe("action - save-all のカスタムキー（スナップショット同期）", () => {
+  it("削除・更新・追加を適用し、スナップショットを同期する", async () => {
     const { user, preset } = await setupUserWithActivePreset();
     const now = new Date();
     await db.insert(schema.customKeys).values([
@@ -505,7 +553,7 @@ describe("action - save-custom-keys（db.batch 経路）", () => {
 
     const res = await callAction(
       formDataOf({
-        intent: "save-custom-keys",
+        intent: "save-all",
         presetId: preset.id,
         customKeys: JSON.stringify([
           { id: "ck-del", _delete: true },
@@ -515,7 +563,7 @@ describe("action - save-custom-keys（db.batch 経路）", () => {
       }),
     );
 
-    expect(res.success).toBe(true);
+    expect(res).toEqual({ success: true, message: "設定を保存しました" });
     const rows = await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) });
     expect(rows.map((r) => `${r.keyName}:${r.category}`).sort()).toEqual(["Fresh:keyboard", "Renamed:mouse"]);
     const snapshot = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });

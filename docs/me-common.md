@@ -34,6 +34,19 @@
 
 オーナーの決定: 「ツアーとチェックリストの両方」「閉じた・見たことは DB に保存」。
 
+## 再検証と下書きの同期（`useLoaderSyncedDraft`）
+
+`/me/keybindings` `/me/devices` `/me/items` `/me/search-craft` は、loader の値から画面ローカルの下書きを作る。
+`PresetSelector` は未変更の間、タブ復帰（focus / visibilitychange）で loader を再検証する（別タブでのプリセット切替の検知）。
+「戻る → 応答が返る前に編集」の順でも編集が消えないよう、下書きの同期は次の規則に従う
+（`app/hooks/use-loader-synced-draft.ts`、判定は純粋関数 `resolveSyncedDraft`〔`app/lib/loader-synced-draft.ts`〕）。
+
+- loader の値（source）が変わったとき、**下書きが前回の基準値と同じ（＝未変更）のときだけ新しい値で置き換える**。編集済みなら下書きを残し、基準値（base）だけを新しい値へ進める。比較は既定で JSON 文字列の一致
+- 置き換えは**レンダー中**に行う（effect にしない）。置き換え前の値が 1 フレーム描かれない
+- 保存成功の直後は `syncOnNextSource()` を呼び、次の source 更新では**編集済みでも**置き換える（サーバーで正規化された値・新規行に採番された id に揃える）
+- プリセット切替は未保存の間は無効なので常に「未変更」＝置き換わる。source は参照が安定していること（`useMemo`）
+- `/me/keybindings` の操作割り当ての差分（`keybindingChanges`）は下書きが「id → キー」の差分なので、loader が変わったときに**保存値と同じになった項目だけ**外す（未保存の項目は残す）。保存成功時は従来どおり全クリア
+
 | 何 | 保存先 | 記録する経路 |
 |---|---|---|
 | 初回ツアー | `users.me_tour_completed_at` | `POST /api/me/guide`（フォーム値 `kind=tour`） |

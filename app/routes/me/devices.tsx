@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/devices";
@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
 import { gameLanguageOptions } from "@/lib/game-languages";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -424,12 +425,14 @@ export default function DevicesPage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
-  const isSubmitting = fetcher.state === "submitting";
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
   const data = fetcher.data;
 
   // コントローラー設定の初期値
   // loaderデータからフォーム値を構築するヘルパー
-  const buildFormValues = useCallback(() => {
+  const sourceFormValues = useMemo(() => {
     const ics = parseControllerSettings(config?.controllerSettings);
     return {
       inputMethod: inputMethod ?? "",
@@ -458,17 +461,14 @@ export default function DevicesPage() {
     };
   }, [config, inputMethod]);
 
-  // フォームの値をトラッキング
-  const [formValues, setFormValues] = useState(buildFormValues);
-
-  const initialFormValues = useRef(formValues);
-
-  // loaderデータが変わったらフォーム値と基準値を再同期（プリセット切替時など）
-  useEffect(() => {
-    const next = buildFormValues();
-    setFormValues(next);
-    initialFormValues.current = next;
-  }, [buildFormValues]);
+  // フォームの値をトラッキング。loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、
+  // 未変更の間だけ新しい値へ置き換える（入力中の編集を黙って消さない）
+  const {
+    draft: formValues,
+    setDraft: setFormValues,
+    base: initialFormValues,
+    syncOnNextSource,
+  } = useLoaderSyncedDraft(sourceFormValues);
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
   const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
@@ -494,7 +494,7 @@ export default function DevicesPage() {
   const [presetSwitching, setPresetSwitching] = useState(false);
 
   // 変更チェック
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
   // 入力変更ハンドラ
   const handleChange = useCallback(<K extends keyof typeof formValues>(field: K, value: typeof formValues[K]) => {
@@ -532,9 +532,9 @@ export default function DevicesPage() {
 
   // フォームリセット
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
+    setFormValues(initialFormValues);
     setFieldError(null);
-  }, []);
+  }, [initialFormValues, setFormValues]);
 
   // 保存処理
   const handleSave = useCallback(() => {
@@ -647,7 +647,8 @@ export default function DevicesPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meDevices.saveSuccess"));
-      initialFormValues.current = { ...formValues };
+      // 保存値（サーバーで正規化された値）へ揃えるため、次の loader 更新では編集済みでも置き換える
+      syncOnNextSource();
       setFieldError(null);
     } else if ("error" in data) {
       toast.error(data.error);
@@ -657,7 +658,7 @@ export default function DevicesPage() {
         showFieldError({ field: data.field, message: data.error });
       }
     }
-  }, [data, formValues, showFieldError]);
+  }, [data, showFieldError, syncOnNextSource]);
 
   return (
     <div className="space-y-7 sm:space-y-8 pb-24">
@@ -751,7 +752,7 @@ export default function DevicesPage() {
                     checked={formValues.invertYAxis}
                     onCheckedChange={(checked) => handleChange("invertYAxis", checked)}
                   />
-                  <Label htmlFor="invertYAxis">{t("meDevices.invertYAxis")}</Label>
+                  <Label htmlFor="invertYAxis" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.invertYAxis")}</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
@@ -759,7 +760,7 @@ export default function DevicesPage() {
                     checked={formValues.vibration}
                     onCheckedChange={(checked) => handleChange("vibration", checked)}
                   />
-                  <Label htmlFor="vibration">{t("meDevices.vibration")}</Label>
+                  <Label htmlFor="vibration" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.vibration")}</Label>
                 </div>
               </div>
             </div>
@@ -975,7 +976,7 @@ export default function DevicesPage() {
                   checked={formValues.rawInput}
                   onCheckedChange={(checked) => handleChange("rawInput", checked)}
                 />
-                <Label htmlFor="rawInput">Raw Input</Label>
+                <Label htmlFor="rawInput" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">Raw Input</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -983,7 +984,7 @@ export default function DevicesPage() {
                   checked={formValues.mouseAcceleration}
                   onCheckedChange={(checked) => handleChange("mouseAcceleration", checked)}
                 />
-                <Label htmlFor="mouseAcceleration">{t("meDevices.mouseAcceleration")}</Label>
+                <Label htmlFor="mouseAcceleration" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.mouseAcceleration")}</Label>
               </div>
             </div>
           </div>
@@ -1001,7 +1002,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSprint}
                   onCheckedChange={(checked) => handleChange("toggleSprint", checked)}
                 />
-                <Label htmlFor="toggleSprint">{t("meDevices.toggleSprint")}</Label>
+                <Label htmlFor="toggleSprint" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.toggleSprint")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1009,7 +1010,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSneak}
                   onCheckedChange={(checked) => handleChange("toggleSneak", checked)}
                 />
-                <Label htmlFor="toggleSneak">{t("meDevices.toggleSneak")}</Label>
+                <Label htmlFor="toggleSneak" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.toggleSneak")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1017,7 +1018,7 @@ export default function DevicesPage() {
                   checked={formValues.autoJump}
                   onCheckedChange={(checked) => handleChange("autoJump", checked)}
                 />
-                <Label htmlFor="autoJump">{t("meDevices.autoJump")}</Label>
+                <Label htmlFor="autoJump" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.autoJump")}</Label>
               </div>
             </div>
 

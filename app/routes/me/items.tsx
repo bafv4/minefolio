@@ -89,6 +89,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
@@ -810,18 +811,20 @@ export default function ItemLayoutsPage() {
   const t = useT();
   const { layouts: initialLayouts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
+  // loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、未変更の間だけ置き換える
+  const {
+    draft: layouts,
+    setDraft: setLayouts,
+    syncOnNextSource,
+  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
   const [presetSwitching, setPresetSwitching] = useState(false);
 
-  const isSubmitting = fetcher.state === "submitting";
-
-  // loaderデータが更新されたらローカル状態も更新
-  useEffect(() => {
-    setLayouts(initialLayouts);
-  }, [initialLayouts]);
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
 
   // 保存結果の処理
   useEffect(() => {
@@ -830,6 +833,8 @@ export default function ItemLayoutsPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
+      // 新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+      syncOnNextSource();
       toast.success(t("meItems.saveSuccess"));
     } else if ("error" in data) {
       toast.error(data.error);

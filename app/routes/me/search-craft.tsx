@@ -48,6 +48,7 @@ import {
   type SearchCraftVariation,
 } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
+import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
@@ -455,20 +456,25 @@ export default function SearchCraftPage() {
     presets,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
-  const [loops, setLoops] = useState<SearchCraftLoopItem[]>(initialLoops);
+  // loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、未変更の間だけ置き換える
+  const {
+    draft: crafts,
+    setDraft: setCrafts,
+    syncOnNextSource: syncCraftsOnNextSource,
+  } = useLoaderSyncedDraft<SearchCraftItem[]>(initialCrafts);
+  const {
+    draft: loops,
+    setDraft: setLoops,
+    syncOnNextSource: syncLoopsOnNextSource,
+  } = useLoaderSyncedDraft<SearchCraftLoopItem[]>(initialLoops);
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
   const [presetSwitching, setPresetSwitching] = useState(false);
 
-  const isSubmitting = fetcher.state === "submitting";
-
-  // loaderデータが更新されたらローカル状態も更新
-  useEffect(() => {
-    setCrafts(initialCrafts);
-    setLoops(initialLoops);
-  }, [initialCrafts, initialLoops]);
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
 
   // 保存結果の処理
   useEffect(() => {
@@ -477,6 +483,9 @@ export default function SearchCraftPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
+      // 新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+      syncCraftsOnNextSource();
+      syncLoopsOnNextSource();
       toast.success(t("meSearchCraft.saveSuccess"));
     } else if ("error" in data) {
       toast.error(data.error);
@@ -617,8 +626,9 @@ export default function SearchCraftPage() {
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>
-        {/* エントリが無いうちは公開できる物が無いので、ボタンは出さない（空状態が理由を伝える） */}
-        {crafts.length > 0 && (
+        {/* 保存済みのエントリが無いうちは公開できる物が無いので、ボタンは出さない（空状態が理由を伝える）。
+            未保存の下書きでは出さない（公開側は保存済みの内容を読むため。loader の件数で判定する） */}
+        {initialCrafts.length > 0 && (
           <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
             <Link to="/my-guides/templates">
               <Share2 className="mr-2 h-4 w-4" />
