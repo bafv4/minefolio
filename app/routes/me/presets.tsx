@@ -53,7 +53,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
+import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 
@@ -815,6 +815,55 @@ export async function action({ request }: Route.ActionArgs) {
     return { success: true, message: t("mePresets.mainPresetSet") };
   }
 
+  // プリセットの名前・説明の変更。
+  // 設定内容（スナップショット・ライブテーブル）・編集先・メインには触れない。検証は create-preset と同じ
+  // （名前は trim して必須、説明は trim して空なら null）。updatedAt は設定内容の更新日時なので変えない。名前は走者画面のプリセット選択にも出るが、
+  // 公開される操作設定の内容は変わらないため、履歴の presetId は null（お気に入り走者の動きには出さない）
+  if (intent === "update-preset") {
+    const presetId = formData.get("presetId") as string;
+    const name = formData.get("name") as string | null;
+    const description = formData.get("description") as string | null;
+
+    if (!name?.trim()) {
+      return { error: t("mePresets.presetNameRequired") };
+    }
+    const trimmedName = name.trim();
+    const trimmedDescription = description?.trim() || null;
+
+    const preset = await db.query.configPresets.findFirst({
+      where: and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)),
+      columns: { id: true, name: true, description: true },
+    });
+    if (!preset) {
+      return { error: t("mePresets.presetNotFound") };
+    }
+
+    const nameChanged = preset.name !== trimmedName;
+    const descriptionChanged = (preset.description ?? null) !== trimmedDescription;
+    if (!nameChanged && !descriptionChanged) {
+      return { success: true, message: t("mePresets.presetUpdated") };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(configPresets)
+        .set({ name: trimmedName, description: trimmedDescription })
+        .where(and(eq(configPresets.id, preset.id), eq(configPresets.userId, user.id)));
+      await tx.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "preset_switch",
+        changeDescription: nameChanged
+          ? t("mePresets.renameHistoryDescription", { oldName: preset.name, name: trimmedName })
+          : t("mePresets.descriptionHistoryDescription", { name: trimmedName }),
+        presetId: null,
+        createdAt: now,
+      });
+    });
+
+    return { success: true, message: t("mePresets.presetUpdated") };
+  }
+
   // プリセット適用
   if (intent === "apply-preset") {
     const presetId = formData.get("presetId") as string;
@@ -988,6 +1037,8 @@ export default function PresetsPage() {
   const [newPresetDescription, setNewPresetDescription] = useState("");
   const [sourceType, setSourceType] = useState<"current" | "copy">("current");
   const [sourcePresetId, setSourcePresetId] = useState<string>("");
+  // 名前・説明の変更ダイアログ（対象プリセットと入力中の値）
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; description: string } | null>(null);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -999,6 +1050,7 @@ export default function PresetsPage() {
 
     if ("success" in data && data.success) {
       toast.success(data.message);
+      setRenameTarget(null);
       setIsCreateDialogOpen(false);
       setNewPresetName("");
       setNewPresetDescription("");
@@ -1008,6 +1060,20 @@ export default function PresetsPage() {
       toast.error(data.error);
     }
   }, [fetcher.data]);
+
+  const handleRenamePreset = () => {
+    if (!renameTarget) return;
+    if (!renameTarget.name.trim()) {
+      toast.error(t("mePresets.presetNameRequired"));
+      return;
+    }
+    const formData = new FormData();
+    formData.set("intent", "update-preset");
+    formData.set("presetId", renameTarget.id);
+    formData.set("name", renameTarget.name);
+    formData.set("description", renameTarget.description);
+    fetcher.submit(formData, { method: "post" });
+  };
 
   const handleCreatePreset = () => {
     if (!newPresetName.trim()) {
@@ -1151,6 +1217,9 @@ export default function PresetsPage() {
                 </div>
               </div>
               <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  {t("meSearchCraft.cancel")}
+                </Button>
                 <Button
                   onClick={handleCreatePreset}
                   disabled={isSubmitting || !newPresetName.trim() || (sourceType === "copy" && !sourcePresetId)}
@@ -1162,7 +1231,7 @@ export default function PresetsPage() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {sourceType === "copy" ? t("mePresets.createByCopy") : t("mePresets.save")}
+                  {sourceType === "copy" ? t("mePresets.createByCopy") : t("mePresets.create")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1209,7 +1278,7 @@ export default function PresetsPage() {
                           )}
                           {preset.isActive && (
                             <Badge variant="secondary" className="shrink-0">
-                              <Pencil className="h-3 w-3 mr-1" />
+                              <Crosshair className="h-3 w-3 mr-1" aria-hidden="true" />
                               {t("mePresets.editingBadge")}
                             </Badge>
                           )}
@@ -1254,12 +1323,26 @@ export default function PresetsPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isSubmitting}
+                          onClick={() =>
+                            setRenameTarget({ id: preset.id, name: preset.name, description: preset.description ?? "" })
+                          }
+                          aria-label={t("mePresets.renameAria", { name: preset.name })}
+                          className="touch-manipulation max-sm:min-h-11"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          {t("mePresets.rename")}
+                        </Button>
                         {!preset.isActive && (
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
                             <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.editAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11">
-                              <Pencil className="h-4 w-4" aria-hidden="true" />
+                              <Crosshair className="h-4 w-4" aria-hidden="true" />
                               {t("mePresets.edit")}
                             </Button>
                           </fetcher.Form>
@@ -1391,6 +1474,45 @@ export default function PresetsPage() {
             </p>
           )}
       </PageSection>
+
+      {/* 名前・説明の変更 */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("mePresets.renameTitle")}</DialogTitle>
+            <DialogDescription>{t("mePresets.renameDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="rename-preset-name">{t("mePresets.presetName")}</Label>
+              <Input
+                id="rename-preset-name"
+                value={renameTarget?.name ?? ""}
+                onChange={(e) => setRenameTarget((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rename-preset-description">{t("mePresets.descriptionOptional")}</Label>
+              <Textarea
+                id="rename-preset-description"
+                placeholder={t("mePresets.descriptionPlaceholder")}
+                value={renameTarget?.description ?? ""}
+                onChange={(e) => setRenameTarget((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRenameTarget(null)}>
+              {t("meSearchCraft.cancel")}
+            </Button>
+            <Button onClick={handleRenamePreset} disabled={isSubmitting || !renameTarget?.name.trim()}>
+              {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              {t("mePresets.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -999,6 +999,73 @@ describe("action - set-main / 未知の intent", () => {
     expect(await readLiveConfig(user.id)).toEqual(before);
   });
 
+  it("update-preset は名前・説明だけを更新し、編集先・メイン・設定内容・更新日時には触れず、履歴は公開影響なしで残す", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const main = await insertPreset(user.id, { name: "旧名", isMain: true, isActive: true });
+    const before = await readLiveConfig(user.id);
+    const beforeRow = await findPreset(main.id);
+
+    const res = await callAction({
+      intent: "update-preset",
+      presetId: main.id,
+      name: "  新名  ",
+      description: "  説明文  ",
+    });
+
+    expect(res).toEqual({ success: true, message: "プリセットの名前と説明を更新しました" });
+    const after = await findPreset(main.id);
+    expect(after).toMatchObject({ name: "新名", description: "説明文", isMain: true, isActive: true });
+    expect(after?.keybindingsData).toBe(beforeRow?.keybindingsData);
+    expect(after?.updatedAt).toEqual(beforeRow?.updatedAt);
+    expect(await readLiveConfig(user.id)).toEqual(before);
+    const rows = await db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, user.id),
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      changeType: "preset_switch",
+      changeDescription: "プリセット「旧名」の名前を「新名」に変更",
+      presetId: null,
+    });
+  });
+
+  it("update-preset は説明だけの変更でも履歴を残し、空の説明は null にする。変更が無ければ何も書かない", async () => {
+    const user = await setupUser();
+    const preset = await insertPreset(user.id, { name: "名前", isActive: true });
+    await db.update(schema.configPresets).set({ description: "古い説明" }).where(eq(schema.configPresets.id, preset.id));
+
+    await callAction({ intent: "update-preset", presetId: preset.id, name: "名前", description: "   " });
+    expect((await findPreset(preset.id))?.description).toBeNull();
+    let rows = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].changeDescription).toBe("プリセット「名前」の説明を変更");
+
+    const res = await callAction({ intent: "update-preset", presetId: preset.id, name: "名前", description: "" });
+    expect(res.success).toBe(true);
+    rows = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("update-preset は名前が空・他人のプリセット・存在しない id を拒否する", async () => {
+    const user = await setupUser();
+    const mine = await insertPreset(user.id, { name: "自分", isActive: true });
+    const other = await seedUser(db, { slug: "other", discordId: "discord-other" });
+    const theirs = await insertPreset(other.id, { name: "他人", isActive: true });
+
+    expect(await callAction({ intent: "update-preset", presetId: mine.id, name: "  " })).toEqual({
+      error: "プリセット名を入力してください",
+    });
+    expect(await callAction({ intent: "update-preset", presetId: theirs.id, name: "乗っ取り" })).toEqual({
+      error: "プリセットが見つかりません",
+    });
+    expect(await callAction({ intent: "update-preset", presetId: "nope", name: "x" })).toEqual({
+      error: "プリセットが見つかりません",
+    });
+    expect((await findPreset(theirs.id))?.name).toBe("他人");
+    expect((await findPreset(mine.id))?.name).toBe("自分");
+  });
+
   it("未知の intent はエラーを返す", async () => {
     await setupUser();
 

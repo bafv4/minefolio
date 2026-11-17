@@ -13,12 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -45,7 +39,7 @@ interface PresetSelectorProps {
  *
  * - ドロップダウンで編集先プリセットを切り替え（apply-preset を /me/presets に POST）
  * - 編集中がメインでないときは通知帯で知らせ、「メインに設定」（set-main）を出す
- * - 未保存変更時はドロップダウン・コピー・メインに設定を非活性化
+ * - 未保存変更時はドロップダウン・コピー・メインに設定を非活性化し、理由は見える1文（`aria-describedby` で結ぶ）で示す
  * - プリセットが0件のときは警告のみ表示
  * - タブ復帰（focus / visibilitychange）時に loader を再検証し、
  *   別タブでのプリセット切替による stale 表示を防ぐ
@@ -65,6 +59,7 @@ export function PresetSelector({
   const mainFetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
   const selectId = useId();
   const hintId = useId();
+  const switchHintId = useId();
   // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす
   const isSwitching = fetcher.state !== "idle";
   const lastRevalidatedAt = useRef(0);
@@ -149,93 +144,69 @@ export function PresetSelector({
   };
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div data-me-tour="preset-selector" className={cn("space-y-3", className)}>
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1 sm:max-w-64">
           <Label htmlFor={selectId} className="text-xs font-medium text-muted-foreground">
             {t("mePresets.selectorLabel")}
           </Label>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip open={dropdownDisabled && hasChanges ? undefined : false}>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <Select
-                    value={activePresetId ?? ""}
-                    onValueChange={handleChange}
-                    disabled={dropdownDisabled}
-                  >
-                    <SelectTrigger
-                      id={selectId}
-                      className="w-full data-[size=default]:max-sm:h-11"
-                    >
-                      {isSwitching ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          <span className="truncate">…</span>
-                        </div>
-                      ) : (
-                        <SelectValue placeholder={t("mePresets.selectorPlaceholder")}>
-                          {/* Radix は SSR では選択項目の文字を描けないので、HTML の時点から値が入るよう明示する */}
-                          {activePreset
-                            ? `${activePreset.name}${activePreset.isMain ? t("mePresets.mainSuffix") : ""}`
-                            : undefined}
-                        </SelectValue>
-                      )}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {presets.map((preset) => (
-                        <SelectItem key={preset.id} value={preset.id}>
-                          <div className="flex items-center gap-2">
-                            <span className="truncate">{preset.name}</span>
-                            {preset.isMain && (
-                              <span className="text-xs text-muted-foreground shrink-0">
-                                {t("mePresets.mainSuffix")}
-                              </span>
-                            )}
-                            {preset.isActive && (
-                              <Check className="h-3 w-3 text-primary shrink-0" />
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <Select
+            value={activePresetId ?? ""}
+            onValueChange={handleChange}
+            disabled={dropdownDisabled}
+          >
+            <SelectTrigger
+              id={selectId}
+              aria-describedby={hasChanges ? switchHintId : undefined}
+              className="w-full data-[size=default]:max-sm:h-11"
+            >
+              {isSwitching ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="truncate">…</span>
                 </div>
-              </TooltipTrigger>
-              {hasChanges && (
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs">{t("mePresets.disabledHint")}</p>
-                </TooltipContent>
+              ) : (
+                <SelectValue placeholder={t("mePresets.selectorPlaceholder")}>
+                  {/* Radix は SSR では選択項目の文字を描けないので、HTML の時点から値が入るよう明示する */}
+                  {activePreset
+                    ? `${activePreset.name}${activePreset.isMain ? t("mePresets.mainSuffix") : ""}`
+                    : undefined}
+                </SelectValue>
               )}
-            </Tooltip>
-          </TooltipProvider>
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate">{preset.name}</span>
+                    {preset.isMain && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {t("mePresets.mainSuffix")}
+                      </span>
+                    )}
+                    {preset.isActive && (
+                      <Check className="h-3 w-3 text-primary shrink-0" />
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       <div className="ml-auto flex items-center gap-2">
         {showCopyButton && (
-          <TooltipProvider delayDuration={150}>
-            <Tooltip open={copyDisabled && hasChanges ? undefined : false}>
-              <TooltipTrigger asChild>
-                <span className="flex-1 sm:flex-none">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onCopyFromOther}
-                    disabled={copyDisabled}
-                    className="w-full sm:w-auto max-sm:min-h-11"
-                  >
-                    <Copy className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">{t("mePresets.copyFromOtherPreset")}</span>
-                    <span className="sm:hidden">{t("mePresets.copyShort")}</span>
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {hasChanges && (
-                <TooltipContent side="bottom" align="end">
-                  <p className="text-xs">{t("mePresets.disabledHint")}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCopyFromOther}
+            disabled={copyDisabled}
+            aria-describedby={hasChanges ? switchHintId : undefined}
+            className="flex-1 sm:flex-none sm:w-auto max-sm:min-h-11"
+          >
+            <Copy className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">{t("mePresets.copyFromOtherPreset")}</span>
+            <span className="sm:hidden">{t("mePresets.copyShort")}</span>
+          </Button>
         )}
         <Button
           asChild
@@ -251,6 +222,11 @@ export function PresetSelector({
         </Button>
       </div>
       </div>
+      {hasChanges && (
+        <p id={switchHintId} className="text-xs text-muted-foreground">
+          {t("mePresets.disabledHint")}
+        </p>
+      )}
       {showNotMainNotice && (
         <NoticeBanner tone="info" icon={Info}>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
