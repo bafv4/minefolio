@@ -725,6 +725,7 @@ export default function DevicesPage() {
                   <Label htmlFor="controllerModel">{t("meDevices.model")}</Label>
                   <Input
                     id="controllerModel"
+                    aria-label={t("meDevices.controllerModelAria")}
                     value={formValues.controllerModel}
                     onChange={(e) => handleChange("controllerModel", e.target.value)}
                     placeholder={t("meDevices.modelExampleController")}
@@ -739,7 +740,7 @@ export default function DevicesPage() {
                     max="100"
                     value={formValues.lookSensitivity}
                     onChange={(e) => handleChange("lookSensitivity", e.target.value)}
-                    placeholder="50"
+                    placeholder={t("meDevices.exampleValue", { value: "50" })}
                   />
                 </div>
               </div>
@@ -780,6 +781,7 @@ export default function DevicesPage() {
                 <Label htmlFor="keyboardModel">{t("meDevices.model")}</Label>
                 <Input
                   id="keyboardModel"
+                  aria-label={t("meDevices.keyboardModelAria")}
                   value={formValues.keyboardModel}
                   onChange={(e) => handleChange("keyboardModel", e.target.value)}
                   placeholder={t("meDevices.modelExampleKeyboard")}
@@ -818,6 +820,7 @@ export default function DevicesPage() {
                 <Label htmlFor="mouseModel">{t("meDevices.model")}</Label>
                 <Input
                   id="mouseModel"
+                  aria-label={t("meDevices.mouseModelAria")}
                   value={formValues.mouseModel}
                   onChange={(e) => handleChange("mouseModel", e.target.value)}
                   placeholder={t("meDevices.modelExampleMouse")}
@@ -860,13 +863,15 @@ export default function DevicesPage() {
                       max="1"
                       value={formValues.gameSensitivity}
                       onChange={(e) => handleChange("gameSensitivity", e.target.value)}
-                      placeholder="0.50"
+                      placeholder={t("meDevices.exampleValue", { value: "0.50" })}
                       aria-invalid={errorFor("gameSensitivity") != null || undefined}
                       aria-describedby={
-                        errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                        errorFor("gameSensitivity")
+                          ? "gameSensitivity-error gameSensitivity-range"
+                          : "gameSensitivity-range"
                       }
                     />
-                    <p className="text-xs text-muted-foreground mt-1">0.0~1.0</p>
+                    <p id="gameSensitivity-range" className="text-xs text-muted-foreground mt-1">0.0~1.0</p>
                   </div>
                   <div className="flex-1">
                     <div className="relative">
@@ -881,16 +886,18 @@ export default function DevicesPage() {
                         max="200"
                         value={formValues.gameSensitivityPercent}
                         onChange={(e) => handleChange("gameSensitivityPercent", e.target.value)}
-                        placeholder="100"
+                        placeholder={t("meDevices.exampleValue", { value: "100" })}
                         className="pr-8"
                         aria-invalid={errorFor("gameSensitivity") != null || undefined}
                         aria-describedby={
-                          errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                          errorFor("gameSensitivity")
+                            ? "gameSensitivity-error gameSensitivityPercent-range"
+                            : "gameSensitivityPercent-range"
                         }
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">0~200%</p>
+                    <p id="gameSensitivityPercent-range" className="text-xs text-muted-foreground mt-1">0~200%</p>
                   </div>
                 </div>
                 <FieldErrorText
@@ -947,15 +954,15 @@ export default function DevicesPage() {
                   aria-invalid={errorFor("windowsSpeedMultiplier") != null || undefined}
                   aria-describedby={
                     errorFor("windowsSpeedMultiplier")
-                      ? "windowsSpeedMultiplier-error"
-                      : undefined
+                      ? "windowsSpeedMultiplier-error windowsSpeedMultiplier-hint"
+                      : "windowsSpeedMultiplier-hint"
                   }
                 />
                 <FieldErrorText
                   id="windowsSpeedMultiplier-error"
                   message={errorFor("windowsSpeedMultiplier")}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p id="windowsSpeedMultiplier-hint" className="text-xs text-muted-foreground">
                   {t("meDevices.customMultiplierHint")}
                 </p>
               </div>

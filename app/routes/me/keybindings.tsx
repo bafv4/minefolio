@@ -1089,7 +1089,7 @@ function KeybindingRow({
           onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
           disabled={!kb.keyCode || isUnbound(kb.keyCode)}
           className={cn(
-            "size-8 max-sm:size-11 shrink-0 text-destructive hover:text-destructive",
+            "size-8 max-sm:size-11 shrink-0 text-muted-foreground hover:text-destructive focus-visible:text-destructive",
             (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
           )}
         >

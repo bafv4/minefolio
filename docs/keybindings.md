@@ -299,6 +299,7 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
   | DPI（`mouseDpi`） | `isValidMouseDpi()`（正の整数） | `meDevices.invalidDpi` | `mouseDpi` |
   | Windowsポインター速度（`windowsSpeed`） | 乗数テーブル（1〜20）のキー | `meDevices.invalidWindowsSpeed` | `windowsSpeed` |
   | カスタム係数（`windowsSpeedMultiplier`） | 0 より大きい有限数 | `meDevices.invalidWindowsSpeedMultiplier` | `windowsSpeedMultiplier` |
+  - 補足と欄の対応: 例の値の placeholder は「例: 0.50」のように例だと分かる形（`meDevices.exampleValue`）。範囲などの補足文（`0.0~1.0`・`0~200%`・カスタム係数のヒント）は `aria-describedby` で欄と結ぶ。キーボード・マウス・コントローラーの「モデル」欄は `aria-label` で「キーボードのモデル」等に区別する
 
 - **クライアント側の保存前検証（`app/routes/me/devices.tsx`）**: 上記と同じ `validateMouseSettings()` で事前チェックし、範囲外の値は送信せずその場で該当欄の直下にインラインエラー（`FieldErrorText`、`aria-invalid` / `aria-describedby` 付き）を表示して該当欄までスクロールする（`showFieldError()`）。サーバー側 action からの `field` 付きエラーも同じ表示経路（`fieldError` state）で扱うため、直接 POST 等でサーバー側だけが弾いたケースでも同様にハイライトされる。該当欄を編集するとエラー表示は消える（感度は内部値 `0..1` 欄・パーセント欄のどちらを編集しても解消扱い）
 
