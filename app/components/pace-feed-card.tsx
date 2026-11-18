@@ -37,9 +37,7 @@ export function PaceFeedCard({
   return (
     <div
       className={cn(
-        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
-        // Finish は枠線色だけ強調（背景は全カード共通の bg-background/80）
-        run.timeline === "Finish" && "border-info/60"
+        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
@@ -79,7 +77,7 @@ export function PaceFeedCard({
 
       {/* 区間進行バー（ライブ欄カードと同じ。区間名は下のバッジのテキストで出る） */}
       <div className="mt-3">
-        <StageBar stage={splitStage(run.timeline)} />
+        <StageBar stage={splitStage(run.timeline)} finished={run.timeline === "Finish"} />
       </div>
 
       <div className="mt-3">
