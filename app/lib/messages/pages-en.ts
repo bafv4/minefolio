@@ -336,6 +336,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   common: {
     scrollHorizontalHint: "Scroll horizontally to see more",
+    tableScrollRegion: "Table (scrolls horizontally)",
+    codeScrollRegion: "Code (scrolls horizontally)",
     rangeSeparator: "–",
     listSeparator: ", ",
     listSeparatorComma: ", ",

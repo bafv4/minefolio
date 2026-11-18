@@ -41,6 +41,7 @@
 - ソース: `app/content/api.md`
 - Vite の `?raw` import でファイル内容を JS バンドルに埋め込み
 - 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`prose prose-sm dark:prose-invert max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）
+- 表は横スクロールの器（`overflow-x-auto`）で包み、コードブロック（`pre`）は prose の `overflow-x: auto` のまま使う。狭い画面でもページ全体は横に動かない。はみ出しているときだけ、器に `tabindex="0"`・`role="region"`・`aria-label`（`common.tableScrollRegion` / `common.codeScrollRegion`）を付けてキーボードで横スクロールできるようにする（収まっているときは Tab の停止点を増やさない）
 
 掲載対象は **認証不要の公開 API のみ**。`/api/me/*` や `/api/auth/*` などの認証必須 API、`/api/cron/*` の Cron 専用 API は掲載しない。
 

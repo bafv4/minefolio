@@ -343,6 +343,9 @@ export const PAGES_JA = {
   common: {
     /** 横スクロール可能領域のヒント（はみ出し時のみ表示） */
     scrollHorizontalHint: "横にスクロールできます",
+    /** 横にはみ出した表・コードの器（キーボードで横スクロールできる領域）の名前 */
+    tableScrollRegion: "表（横にスクロールできます）",
+    codeScrollRegion: "コード（横にスクロールできます）",
     /** 数値レンジの区切り（「10:00 〜 12:00」等） */
     rangeSeparator: "〜",
     /** 並列の区切り（「前進・後退」等） */
