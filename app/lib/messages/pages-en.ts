@@ -327,6 +327,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     changeLanguage: "Change language",
   },
   errorPage: {
+    notFoundTitle: "Page not found",
     title: "Oops!",
     errorTitle: "Error",
     genericDetails: "An unexpected error occurred.",
@@ -747,8 +748,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     empty: "No profiles to show",
   },
   compare: {
-    title: "Compare runners",
     playerNotFound: "Runner \"{slug}\" was not found or is not public.",
+    title: "Compare runners",
     description: "Compare the controls and settings of two runners",
     selectRunner: "Select a runner",
     runner1: "Runner 1",
@@ -1640,6 +1641,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     failed: "Login failed",
   },
   onboarding: {
+    resumeNotice: "You have not finished the initial setup.",
+    resumeAction: "Continue setup",
     title: "Welcome - Minefolio",
     description: "Set up your Minefolio profile",
     welcomeTitle: "Welcome, {name}!",
@@ -2761,11 +2764,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     back: "Back to guides",
   },
   meTemplates: {
+    createAndPublish: "Create and publish",
     title: "Search-craft templates - Minefolio",
     userNotFound: "User not found",
     unknownAction: "Unknown action",
     templateNotFound: "Template not found",
-    createAndPublish: "Create and publish",
     titleRequired: "Enter a template name",
     textTooLong: "The input is too long",
     templateLimitReached: "You can create up to {max} templates",
@@ -2892,15 +2895,15 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     cancel: "Cancel",
   },
   playground: {
-    title: "Playground - Minefolio",
-    pageTitle: "Playground",
-    pageDesc:
-      "A sandbox for trying out combinations of search-crafts and key remaps in your browser. No login required.",
     templateViewNotice: "You are viewing a template. Your saved draft is kept until you start editing.",
     openDraft: "Open draft",
     clearedToast: "Cleared everything",
     replacedToast: "Replaced what you were editing",
     undo: "Undo",
+    title: "Playground - Minefolio",
+    pageTitle: "Playground",
+    pageDesc:
+      "A sandbox for trying out combinations of search-crafts and key remaps in your browser. No login required.",
     pageDescription:
       "A sandbox for trying out combinations of search-crafts and key remaps on the spot. Edit the remaps and the keys you actually press for each search string — and the typing test results — update in real time. Your edits are saved automatically in your browser, and you can save them as a preset if you log in.",
     dataSource: "Data:",

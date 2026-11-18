@@ -1,8 +1,13 @@
 import { useT } from "@/hooks/use-locale";
-import { Outlet, useLoaderData } from "react-router";
+import { Link, Outlet, useLoaderData, useLocation, useRouteLoaderData } from "react-router";
 import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
 import type { Route } from "./+types/_layout";
 import { Header, Footer, NavigationProgress } from "@/components/layout";
+import { ErrorView } from "@/components/layout/error-view";
+import { NoticeBanner } from "@/components/notice-banner";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Info } from "lucide-react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -28,6 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!session) {
     return {
       user: null,
+      onboardingPending: false,
       initialFavorites: [] as string[],
       likedGuideIds: [] as string[],
       likedTemplateIds: [] as string[],
@@ -44,12 +50,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       displayName: true,
       displayNameAlphabet: true,
       discordAvatar: true,
+      onboardingCompleted: true,
     },
   });
 
+  // ログイン済みだが初期設定（/onboarding）が未完了。users 行がまだ無い場合も含む
   if (!user) {
     return {
       user: null,
+      onboardingPending: true,
       initialFavorites: [] as string[],
       likedGuideIds: [] as string[],
       likedTemplateIds: [] as string[],
@@ -74,6 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   return {
+    onboardingPending: !user.onboardingCompleted,
     user: {
       mcid: user.mcid,
       slug: user.slug,
@@ -87,10 +97,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-export default function Layout() {
+type LayoutData = Awaited<ReturnType<typeof loader>>;
+
+// 初期設定の再開案内を出さないパス（手順の途中・ログイン画面そのもの）
+const RESUME_NOTICE_HIDDEN_PATHS = ["/onboarding", "/login", "/dev/login"];
+
+function LayoutShell({ data, children }: { data: LayoutData; children: React.ReactNode }) {
   const t = useT();
-  const { user, initialFavorites, likedGuideIds, likedTemplateIds } =
-    useLoaderData<typeof loader>();
+  const { pathname } = useLocation();
+  const { user, onboardingPending, initialFavorites, likedGuideIds, likedTemplateIds } = data;
+  const showResumeNotice =
+    onboardingPending && !RESUME_NOTICE_HIDDEN_PATHS.includes(pathname.replace(/\/+$/, "") || "/");
 
   return (
     <NuqsAdapter>
@@ -110,12 +127,27 @@ export default function Layout() {
         </a>
         <NavigationProgress />
         <Header user={user} />
+        {showResumeNotice && (
+          <div className="container mx-auto px-4 pt-4 sm:px-6 lg:px-8">
+            <NoticeBanner tone="info" icon={Info} className="items-center">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <span>{t("onboarding.resumeNotice")}</span>
+                <Link
+                  to="/onboarding"
+                  className={cn(buttonVariants({ size: "sm" }), "min-h-11 sm:min-h-8")}
+                >
+                  {t("onboarding.resumeAction")}
+                </Link>
+              </div>
+            </NoticeBanner>
+          </div>
+        )}
         <main
           id="main-content"
           tabIndex={-1}
           className="flex-1 flex flex-col container mx-auto px-4 sm:px-6 lg:px-8 py-8 focus-visible:outline-none"
         >
-          <Outlet />
+          {children}
         </main>
         <Footer />
         <BackToTopButton />
@@ -123,5 +155,32 @@ export default function Layout() {
       </LikesProvider>
       </FavoritesProvider>
     </NuqsAdapter>
+  );
+}
+
+export default function Layout() {
+  const data = useLoaderData<typeof loader>();
+  return (
+    <LayoutShell data={data}>
+      <Outlet />
+    </LayoutShell>
+  );
+}
+
+// 子ルートの loader の 404 や描画中の例外を、ヘッダー・フッターの内側で表示する。
+// この layout 自身の loader が落ちたとき（data が無い）は、素の画面で ErrorView だけを出す。
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const data = useRouteLoaderData<typeof loader>("routes/_layout");
+  if (!data) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
+        <ErrorView error={error} plainLinks />
+      </div>
+    );
+  }
+  return (
+    <LayoutShell data={data}>
+      <ErrorView error={error} />
+    </LayoutShell>
   );
 }

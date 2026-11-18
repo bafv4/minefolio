@@ -1,5 +1,4 @@
 import {
-  isRouteErrorResponse,
   Links,
   Meta,
   Outlet,
@@ -12,11 +11,10 @@ import { Analytics } from "@vercel/analytics/react";
 import type { Route } from "./+types/root";
 import { CONTRAST_INIT_SCRIPT } from "@/lib/contrast";
 import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
-import { buttonVariants } from "@/components/ui/button";
+import { ErrorView } from "@/components/layout/error-view";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
 import { BackgroundPattern } from "@/components/layout/background-pattern";
-import { useT } from "@/hooks/use-locale";
 import "./app.css";
 
 /**
@@ -65,42 +63,13 @@ export default function App() {
   );
 }
 
+// 最後の砦。共通レイアウト（routes/_layout.tsx の ErrorBoundary）が受けられない
+// root / _layout 自身の loader の失敗で使う。ルーターが壊れている可能性があるので `<a href>` を使う。
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const t = useT();
-  let message = t("errorPage.title");
-  let details = t("errorPage.genericDetails");
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : t("errorPage.errorTitle");
-    details =
-      error.status === 404
-        ? t("errorPage.notFoundDetails")
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
-  }
-
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <main className="flex-1 flex flex-col items-center justify-center p-4 container mx-auto">
-        <div className="max-w-2xl w-full text-center space-y-6">
-          <div className="space-y-2">
-            <h1 className="text-6xl font-bold">{message}</h1>
-            <p className="text-xl text-muted-foreground">{details}</p>
-          </div>
-          {stack && (
-            <pre className="w-full p-4 overflow-x-auto text-left bg-secondary rounded-lg border">
-              <code className="text-sm">{stack}</code>
-            </pre>
-          )}
-          <div className="pt-4">
-            <a href="/" className={buttonVariants()}>
-              {t("common.backToHome")}
-            </a>
-          </div>
-        </div>
+        <ErrorView error={error} plainLinks />
       </main>
     </div>
   );

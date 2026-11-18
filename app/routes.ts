@@ -83,6 +83,10 @@ export default [
     route("guides/templates/:templateId", "routes/guides/templates/view.tsx"),
     route("guides/:authorSlug", "routes/guides/user.tsx"),
     route("guides/:authorSlug/:guideSlug", "routes/guides/view.tsx"),
+
+    // 未マッチパスのキャッチオール。共通レイアウトの内側に置き、ヘッダー・フッター付きで 404 を出す。
+    // root ローダーを走らせてロケールを確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
+    route("*", "routes/not-found.tsx"),
   ]),
 
   // API routes (outside of layout)
@@ -129,8 +133,4 @@ export default [
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
-
-  // 未マッチパスのキャッチオール（必ず最後）。root ローダーを走らせてロケールを
-  // 確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
-  route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

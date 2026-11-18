@@ -74,6 +74,10 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 - 認証チェック: オプション（`getOptionalSession`）
 - Discordアバター同期: ログイン時にDiscordアバターを最新に更新
 - ナビゲーション: ホーム、走者一覧、ランキング、統計など
+- 未マッチのパス（`app/routes.ts` のキャッチオール `*`、`routes/not-found.tsx`）はこのレイアウトの子ルート
+- **エラー画面**: 404 と、このレイアウト配下のルートの loader・描画のエラーは、`_layout.tsx` の `ErrorBoundary` がヘッダー・フッターの内側に `ErrorView`（`app/components/layout/error-view.tsx`）を描く。HTTP ステータスは変わらない。`<title>` は「ページが見つかりません - Minefolio」など。404 の出口はホーム・探す・ガイドの3つ
+- `_layout` 自身や root の loader が落ちたときは、root（`app/root.tsx`）の `ErrorBoundary` が最後の砦として描く（ルーターが壊れている可能性があるのでリンクは `<a href>`）
+- loader は `onboardingPending`（ログイン済みで初期設定が未完了。`users` の行がまだ無い場合も含む）を返す。true のとき、ヘッダーの下に「初期設定を続ける」（`/onboarding` へ）の案内を出す。`/onboarding`・`/login`・`/dev/login` では出さない
 
 ### ダッシュボードレイアウト (me/_layout.tsx)
 

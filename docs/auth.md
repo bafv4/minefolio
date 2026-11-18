@@ -179,6 +179,7 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
   行が無ければようこそ画面から、行があり未完了ならステップ1から再開する（保存済みの値を各入力の初期値に使う）
 - `getCurrentUser` も `isRegistered` で判定し、未完了なら `/onboarding` へリダイレクトする（`getCurrentUserOrOnboarding` は行の有無も見ない）。
   ウィザードの各ステップはスキップでき、公開範囲を選べば完了するため、実質的なロックにはならない
+- 共通レイアウト（`routes/_layout.tsx`）の loader が `onboardingPending`（ログイン済みで未完了。`users` 行がまだ無い場合も含む）を返し、true のあいだヘッダーの下に「初期設定を続ける」（`/onboarding` へ）の案内を出す。`/onboarding`・`/login`・`/dev/login` では出さない
 
 ### 前提条件
 

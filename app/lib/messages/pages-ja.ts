@@ -332,6 +332,7 @@ export const PAGES_JA = {
   },
   /** ルートのエラーバウンダリ（app/root.tsx） */
   errorPage: {
+    notFoundTitle: "ページが見つかりません",
     title: "おっと！",
     errorTitle: "エラー",
     genericDetails: "予期しないエラーが発生しました。",
@@ -624,9 +625,9 @@ export const PAGES_JA = {
     roleDefaultNote: "ロールを選ばない場合、視聴者は表示されません。",
   },
   compare: {
-    title: "走者比較",
     /** URL で指定された走者が無い・公開されていないとき（どちらの場合も同じ文言にする） */
     playerNotFound: "走者「{slug}」は見つからないか、公開されていません。",
+    title: "走者比較",
     description: "2人の走者のキー配置・設定を比較します",
     selectRunner: "走者を選択",
     runner1: "走者 1",
@@ -1616,6 +1617,9 @@ export const PAGES_JA = {
     failed: "ログインに失敗しました",
   },
   onboarding: {
+    /** 初期設定を途中で離れた人に、共通レイアウトで出す案内 */
+    resumeNotice: "初期設定がまだ終わっていません。",
+    resumeAction: "初期設定を続ける",
     title: "ようこそ - Minefolio",
     description: "Minefolioプロフィールを設定",
     // ようこそ（ステップ0）
@@ -2782,14 +2786,14 @@ export const PAGES_JA = {
     hintText: "ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮",
   },
   meTemplates: {
+    /** 新規作成の確定ボタン（作成と同時に公開される） */
+    createAndPublish: "作成して公開",
     title: "サーチクラフトテンプレート - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     unknownAction: "不明な操作です",
     templateNotFound: "テンプレートが見つかりません",
     titleRequired: "テンプレート名を入力してください",
     textTooLong: "入力が長すぎます",
-    /** 新規作成の確定ボタン（作成と同時に公開される） */
-    createAndPublish: "作成して公開",
     templateLimitReached: "テンプレートは最大{max}件まで作成できます",
     tooManyCrafts: "サーチクラフトが多すぎます（最大{max}件）",
     createSuccess: "テンプレートを公開しました",
@@ -2904,18 +2908,18 @@ export const PAGES_JA = {
     cancel: "キャンセル",
   },
   playground: {
-    title: "Playground - Minefolio",
-    pageTitle: "Playground",
-    pageDesc: "サーチクラフトとキーリマップの組み合わせをブラウザ上で試せる実験場。ログイン不要で利用できます。",
-    pageDescription: "サーチクラフトとキーリマップの組み合わせをその場で試せる実験場です。リマップを編集すると、サーチ文字列ごとの実際に押すキーやタイピングテストの結果がリアルタイムに変わります。編集内容はブラウザに自動保存され、ログインすればプリセットとして保存もできます。",
-    dataSource: "データ:",
-    loadedTemplate: "テンプレート: {title}",
     /** テンプレートを開いたとき、保存済みの下書きが別にある場合の案内 */
     templateViewNotice: "テンプレートを表示しています。保存してある下書きは、編集を始めるまで残ります。",
     openDraft: "下書きを開く",
     clearedToast: "すべてクリアしました",
     replacedToast: "編集中の内容を置き換えました",
     undo: "元に戻す",
+    title: "Playground - Minefolio",
+    pageTitle: "Playground",
+    pageDesc: "サーチクラフトとキーリマップの組み合わせをブラウザ上で試せる実験場。ログイン不要で利用できます。",
+    pageDescription: "サーチクラフトとキーリマップの組み合わせをその場で試せる実験場です。リマップを編集すると、サーチ文字列ごとの実際に押すキーやタイピングテストの結果がリアルタイムに変わります。編集内容はブラウザに自動保存され、ログインすればプリセットとして保存もできます。",
+    dataSource: "データ:",
+    loadedTemplate: "テンプレート: {title}",
     loadedPreset: "自分の設定: {name}",
     loadedDraft: "下書き（自動保存）",
     currentSettingsLabel: "現在の設定",
