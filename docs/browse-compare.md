@@ -106,9 +106,11 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 ### 比較対象の指定
 
-- URLパラメータ `player1`, `player2` で比較対象のMCIDまたはslugを指定
-- 例: `/compare?player1=player_a&player2=player_b`
+- URLパラメータ `p1`, `p2` で比較対象の slug を指定
+- 例: `/compare?p1=player_a&p2=player_b`
 - 画面上の検索フォームからプレイヤーを選択可能
+- 指定した走者を表示できないとき（存在しない、または公開されていない。両者は区別しない）は、その走者の選択欄の下に警告の案内を出し、選択欄は未選択の表示にする。HTTP ステータスは 200 のままで、loader が `notFoundSlugs` を返す
+- URL で指定されて表示が許された走者が選択用の一覧（公開のみ・最大100人）に無いときは、その走者だけを選択肢に足す
 - 各プレイヤーのヘッダー（表示名・MCID の下）に RTA歴を1行で表示する（`rtaStartedYearMonth` を設定している走者のみ、未設定なら何も出さない）。文言・計算はプロフィールページと同じ `rtaCareerView()` / `rtaCareerLabel()`（`app/lib/rta-career.ts`）を共有し、経過期間の基準時刻は loader が返す `now` で SSR とハイドレーションを揃える（`RtaCareerLine`）
 
 ### 比較項目

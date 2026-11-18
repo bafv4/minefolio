@@ -29,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
+import { NoticeBanner } from "@/components/notice-banner";
+import { Search, GitCompare, User, Check, X, ArrowRight, Users, TriangleAlert } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -139,6 +140,48 @@ function applyMainPreset<
   } as unknown as Omit<P, "configPresets">;
 }
 
+// 選択用一覧の列（Select の選択肢に使う分）
+const SELECT_COLUMNS = {
+  mcid: true,
+  uuid: true,
+  slug: true,
+  displayName: true,
+  displayNameAlphabet: true,
+  customSkinUrl: true,
+} as const;
+
+type SelectablePlayer = {
+  mcid: string | null;
+  uuid: string | null;
+  slug: string;
+  displayName: string | null;
+  displayNameAlphabet: string | null;
+  customSkinUrl: string | null;
+};
+
+/**
+ * URL で指定され loader が表示を許した走者が選択用一覧（公開のみ・上限100人）に無いとき、
+ * その走者だけを選択肢の末尾に足す（一覧の方針そのものは変えない）。
+ */
+function withReferencedPlayers<T extends SelectablePlayer>(
+  list: T[],
+  referenced: (SelectablePlayer | null | undefined)[],
+): SelectablePlayer[] {
+  const result: SelectablePlayer[] = [...list];
+  for (const p of referenced) {
+    if (!p || result.some((x) => x.slug === p.slug)) continue;
+    result.push({
+      mcid: p.mcid,
+      uuid: p.uuid,
+      slug: p.slug,
+      displayName: p.displayName,
+      displayNameAlphabet: p.displayNameAlphabet,
+      customSkinUrl: p.customSkinUrl,
+    });
+  }
+  return result;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const appUrl = env.APP_URL || "https://minefolio.app";
@@ -213,7 +256,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     ]);
 
     if (!player1Raw) {
-      return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
+      return {
+        allPlayers,
+        player1: null,
+        player2: null,
+        similarPlayers: [],
+        notFoundSlugs: [p1],
+        appUrl,
+        now,
+      };
     }
     const player1Data = applyMainPreset(player1Raw);
 
@@ -266,19 +317,36 @@ export async function loader({ request }: Route.LoaderArgs) {
       .slice(0, 10);
 
     return {
-      allPlayers,
+      allPlayers: withReferencedPlayers(allPlayers, [player1Data]),
       player1: player1Data,
       player2: null,
       similarPlayers,
+      notFoundSlugs: [] as string[],
       appUrl,
       now,
     };
   }
 
-  // 両方指定されていない場合は選択画面のみ
+  // 両方指定されていない場合は選択画面のみ（p2 だけ指定のときは、その走者の有無だけ確かめる）
   if (!p1 || !p2) {
-    const allPlayers = await allPlayersQuery;
-    return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
+    const [allPlayers, p2Only] = await Promise.all([
+      allPlayersQuery,
+      p2
+        ? db.query.users.findFirst({
+            where: and(eq(users.slug, p2), publiclyReferencableCondition),
+            columns: SELECT_COLUMNS,
+          })
+        : Promise.resolve(undefined),
+    ]);
+    return {
+      allPlayers: withReferencedPlayers(allPlayers, [p2Only]),
+      player1: null,
+      player2: null,
+      similarPlayers: [],
+      notFoundSlugs: p2 && !p2Only ? [p2] : [],
+      appUrl,
+      now,
+    };
   }
 
   // 両走者のデータを取得（slugで検索・メインプリセットのスナップショット優先）
@@ -320,10 +388,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const player2Data = player2Raw ? applyMainPreset(player2Raw) : undefined;
 
   return {
-    allPlayers,
+    allPlayers: withReferencedPlayers(allPlayers, [player1Data, player2Data]),
     player1: player1Data ?? null,
     player2: player2Data ?? null,
     similarPlayers: [],
+    notFoundSlugs: [
+      ...(player1Data ? [] : [p1]),
+      ...(player2Data ? [] : [p2]),
+    ],
     appUrl,
     now,
   };
@@ -341,6 +413,11 @@ function RtaCareerLine({ value, now }: { value: string | null; now: number }) {
   return <p className="text-xs text-muted-foreground">{rtaCareerLabel(t, view)}</p>;
 }
 
+/** 案内に出す slug。極端に長い値は切り詰める */
+function truncateSlug(slug: string): string {
+  return slug.length > 40 ? `${slug.slice(0, 40)}…` : slug;
+}
+
 /** ゲーム内感度の表示用ラベル（%表記）。計算できなければ undefined */
 function sensitivityLabel(sensitivity: number | null | undefined): string | undefined {
   const percent = toSensitivityPercent(sensitivity);
@@ -350,13 +427,17 @@ function sensitivityLabel(sensitivity: number | null | undefined): string | unde
 export default function ComparePage() {
   const t = useT();
   const locale = useLocale();
-  const { allPlayers, player1, player2, similarPlayers, now } = useLoaderData<typeof loader>();
+  const { allPlayers, player1, player2, similarPlayers, notFoundSlugs, now } =
+    useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search1, setSearch1] = useState("");
   const [search2, setSearch2] = useState("");
 
   const selectedP1 = searchParams.get("p1") ?? "";
   const selectedP2 = searchParams.get("p2") ?? "";
+  // loader が「指定されたが表示できなかった」と返した slug（存在しない・非公開は区別しない）
+  const p1Missing = selectedP1 !== "" && notFoundSlugs.includes(selectedP1);
+  const p2Missing = selectedP2 !== "" && notFoundSlugs.includes(selectedP2);
 
   const handleSelectPlayer = (slot: "p1" | "p2", slug: string) => {
     const params = new URLSearchParams(searchParams);
@@ -476,7 +557,7 @@ export default function ComparePage() {
                 className="pl-10"
               />
             </div>
-            <Select value={selectedP1} onValueChange={(v) => handleSelectPlayer("p1", v)}>
+            <Select value={p1Missing ? "" : selectedP1} onValueChange={(v) => handleSelectPlayer("p1", v)}>
               <SelectTrigger>
                 <SelectValue placeholder={t("compare.selectRunner")} />
               </SelectTrigger>
@@ -492,6 +573,11 @@ export default function ComparePage() {
                 ))}
               </SelectContent>
             </Select>
+            {p1Missing && (
+              <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
+                <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selectedP1) })}</span>
+              </NoticeBanner>
+            )}
             {player1 && (
               <Link
                 to={`/player/${player1.slug}`}
@@ -518,7 +604,7 @@ export default function ComparePage() {
                 className="pl-10"
               />
             </div>
-            <Select value={selectedP2} onValueChange={(v) => handleSelectPlayer("p2", v)}>
+            <Select value={p2Missing ? "" : selectedP2} onValueChange={(v) => handleSelectPlayer("p2", v)}>
               <SelectTrigger>
                 <SelectValue placeholder={t("compare.selectRunner")} />
               </SelectTrigger>
@@ -534,6 +620,11 @@ export default function ComparePage() {
                 ))}
               </SelectContent>
             </Select>
+            {p2Missing && (
+              <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
+                <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selectedP2) })}</span>
+              </NoticeBanner>
+            )}
             {player2 && (
               <Link
                 to={`/player/${player2.slug}`}

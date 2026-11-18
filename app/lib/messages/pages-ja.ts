@@ -625,6 +625,8 @@ export const PAGES_JA = {
   },
   compare: {
     title: "走者比較",
+    /** URL で指定された走者が無い・公開されていないとき（どちらの場合も同じ文言にする） */
+    playerNotFound: "走者「{slug}」は見つからないか、公開されていません。",
     description: "2人の走者のキー配置・設定を比較します",
     selectRunner: "走者を選択",
     runner1: "走者 1",

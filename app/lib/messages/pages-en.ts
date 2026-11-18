@@ -748,6 +748,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   compare: {
     title: "Compare runners",
+    playerNotFound: "Runner \"{slug}\" was not found or is not public.",
     description: "Compare the controls and settings of two runners",
     selectRunner: "Select a runner",
     runner1: "Runner 1",
