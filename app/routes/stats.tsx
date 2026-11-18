@@ -12,7 +12,6 @@ import { sql, count } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 import { Keyboard, Mouse, ArrowRight, Users, BarChart3 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
@@ -379,30 +378,31 @@ function StatBar({
   label,
   count,
   total,
-  maxCount,
 }: {
   label: string;
   count: number;
   total: number;
-  maxCount: number;
 }) {
   const t = useT();
-  const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-  const barWidth = maxCount > 0 ? (count / maxCount) * 100 : 0;
+  const ratio = total > 0 ? (count / total) * 100 : 0;
+  const percentage = Math.round(ratio);
+  const countText = `${count}${t("common.peopleUnit")} (${percentage}%)`;
 
   return (
-    <div className="flex items-center gap-3">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="w-20 text-sm font-medium truncate">{label}</div>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
-      <div className="flex-1">
-        <Progress value={barWidth} className="h-6" />
+    // モバイルは「ラベルと人数」の行の下にバーを全幅で置く（横に3つ並べるとバーが 50px ほどしか取れず、
+    // 割合の差が読めない）。sm 以上は ラベル・バー・人数 の1行
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[7rem_minmax(0,1fr)_5rem]">
+      <div className="min-w-0 break-words text-sm font-medium">{label}</div>
+      <div className="order-3 col-span-2 sm:order-2 sm:col-span-1">
+        <Progress
+          value={ratio}
+          aria-label={label}
+          aria-valuetext={countText}
+          className="h-3 sm:h-6"
+        />
       </div>
-      <div className="w-20 text-right text-sm text-muted-foreground">
-        {count}{t("common.peopleUnit")} ({percentage}%)
+      <div aria-hidden="true" className="order-2 text-right text-sm text-muted-foreground sm:order-3">
+        {countText}
       </div>
     </div>
   );
@@ -424,8 +424,6 @@ function ActionToKeyCard({
 
   if (entries.length === 0) return null;
 
-  const maxCount = entries[0]?.[1] || 0;
-
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
@@ -438,7 +436,6 @@ function ActionToKeyCard({
             label={getKeyLabel(t, key)}
             count={count}
             total={totalUsers}
-            maxCount={maxCount}
           />
         ))}
       </CardContent>
@@ -462,8 +459,6 @@ function KeyToActionCard({
 
   if (entries.length === 0) return null;
 
-  const maxCount = entries[0]?.[1] || 0;
-
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
@@ -476,7 +471,6 @@ function KeyToActionCard({
             label={getActionLabel(t, action)}
             count={count}
             total={totalUsers}
-            maxCount={maxCount}
           />
         ))}
       </CardContent>
@@ -496,8 +490,6 @@ function DistributionCard({
 }) {
   const entries = Object.entries(distribution);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
-  const maxCount = Math.max(...entries.map(([, count]) => count));
-
   if (total === 0) return null;
 
   return (
@@ -512,7 +504,6 @@ function DistributionCard({
             label={label}
             count={count}
             total={total}
-            maxCount={maxCount}
           />
         ))}
         {footnote && <p className="pt-1 text-xs text-muted-foreground">{footnote}</p>}
@@ -534,21 +525,14 @@ function BooleanStatCard({
   const total = enabled + disabled;
   if (total === 0) return null;
 
-  const maxCount = Math.max(enabled, disabled);
-
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 px-5">
-        <StatBar label={t("common.on")} count={enabled} total={total} maxCount={maxCount} />
-        <StatBar
-          label={t("common.off")}
-          count={disabled}
-          total={total}
-          maxCount={maxCount}
-        />
+        <StatBar label={t("common.on")} count={enabled} total={total} />
+        <StatBar label={t("common.off")} count={disabled} total={total} />
       </CardContent>
     </Card>
   );
