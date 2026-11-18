@@ -774,6 +774,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     toggleSprint: "Toggle sprint",
     matched: "{matches}/{total} match",
     compareButton: "Compare",
+    diffOnly: "Show differences only",
+    noDifferences: "No differences",
+    actionColumn: "Action",
   },
   keybindings: {
     remapsHeading: "Remaps",

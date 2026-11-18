@@ -652,6 +652,11 @@ export const PAGES_JA = {
     toggleSprint: "ダッシュ切替",
     matched: "{matches}/{total} 一致",
     compareButton: "比較",
+    /** 比較結果を違う行だけに絞るスイッチ（URL の ?diff=1） */
+    diffOnly: "違いだけ表示",
+    noDifferences: "違いはありません",
+    /** 比較表の先頭列の見出し */
+    actionColumn: "操作",
   },
   favorites: {
     title: "お気に入り",

@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useLoaderData, useSearchParams, Link } from "react-router";
+import { useLoaderData, useSearchParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
   Select,
@@ -30,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { NoticeBanner } from "@/components/notice-banner";
-import { Search, GitCompare, User, Check, X, ArrowRight, Users, TriangleAlert } from "lucide-react";
+import { Search, GitCompare, User, Users, TriangleAlert } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -401,6 +402,28 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+// 「違いだけ表示」（?diff=1）だけが変わるナビゲーションではサーバーデータが同一なので再取得しない
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  const strip = (url: URL) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("diff");
+    return `${url.pathname}?${p.toString()}`;
+  };
+  if (strip(currentUrl) === strip(nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
+
+/** 比較の行で、違う行に付ける印（前景色の点＋「異なる」）。色やアイコンだけに頼らず文字で示す */
+function DifferentMark() {
+  const t = useT();
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-foreground" />
+      {t("compare.different")}
+    </span>
+  );
+}
+
 /**
  * 比較ヘッダーに添える RTA歴（設定している走者のみ）。
  * 文言はプロフィールと同じキーを共有し、密度に合わせて 1 行の小さめ表示にする。
@@ -438,6 +461,17 @@ export default function ComparePage() {
   // loader が「指定されたが表示できなかった」と返した slug（存在しない・非公開は区別しない）
   const p1Missing = selectedP1 !== "" && notFoundSlugs.includes(selectedP1);
   const p2Missing = selectedP2 !== "" && notFoundSlugs.includes(selectedP2);
+  // 「違いだけ表示」。共有・再読み込みで保つため URL の ?diff=1 に載せる（既定はオフ＝全行）
+  const diffOnly = searchParams.get("diff") === "1";
+  const setDiffOnly = (checked: boolean) => {
+    const params = new URLSearchParams(searchParams);
+    if (checked) {
+      params.set("diff", "1");
+    } else {
+      params.delete("diff");
+    }
+    setSearchParams(params, { replace: true, preventScrollReset: true });
+  };
 
   const handleSelectPlayer = (slot: "p1" | "p2", slug: string) => {
     const params = new URLSearchParams(searchParams);
@@ -656,11 +690,11 @@ export default function ComparePage() {
                 <div className="text-center px-6">
                   <div className="flex items-center gap-4">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-success">{stats.same}</p>
+                      <p className="text-2xl font-bold">{stats.same}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.same")}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-destructive">{stats.different}</p>
+                      <p className="text-2xl font-bold">{stats.different}</p>
                       <p className="text-xs text-muted-foreground">{t("compare.different")}</p>
                     </div>
                   </div>
@@ -682,52 +716,92 @@ export default function ComparePage() {
             </CardContent>
           </Card>
 
-          {/* キーバインド比較 */}
+          {/* 違いだけ表示（キー配置・デバイスの両方の表に効く）。ラベルごと押せる */}
+          <div className="flex justify-end">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm sm:min-h-8">
+              <Switch checked={diffOnly} onCheckedChange={setDiffOnly} />
+              {t("compare.diffOnly")}
+            </label>
+          </div>
+
+          {/* キーバインド比較。違う行だけ中立な面＋「異なる」の文字で示す（一致・両方未設定は装飾なし） */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
-            {Object.entries(groupedActions).map(([category, actions]) => (
-              <Card key={category} className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <CardTitle className="text-base">{categoryLabelsOf(t)[category]}</CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
-                  <div className="divide-y">
-                    {actions.map((item) => {
-                      const key1 = p1Keybindings[item.action];
-                      const key2 = p2Keybindings[item.action];
-                      const isSame = key1 && key2 && key1 === key2;
-                      const isDifferent = key1 && key2 && key1 !== key2;
-
-                      return (
+            {Object.entries(groupedActions).map(([category, actions]) => {
+              const titleId = `compare-category-${category}`;
+              const isDifferentAction = (action: string) => {
+                const key1 = p1Keybindings[action];
+                const key2 = p2Keybindings[action];
+                return !!key1 && !!key2 && key1 !== key2;
+              };
+              const rows = diffOnly ? actions.filter((item) => isDifferentAction(item.action)) : actions;
+              const name1 = getLocalizedDisplayName(player1, locale);
+              const name2 = getLocalizedDisplayName(player2, locale);
+              return (
+                <Card key={category} className="gap-3 py-5">
+                  <CardHeader className="px-5">
+                    <CardTitle id={titleId} className="text-base">
+                      {categoryLabelsOf(t)[category]}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-5">
+                    {rows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{t("compare.noDifferences")}</p>
+                    ) : (
+                      <div
+                        role="table"
+                        aria-labelledby={titleId}
+                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 divide-y divide-border/60"
+                      >
                         <div
-                          key={item.action}
-                          className={cn(
-                            "flex items-center justify-between py-2 px-2 -mx-2",
-                            isSame && "bg-success/10",
-                            isDifferent && "bg-destructive/10"
-                          )}
+                          role="row"
+                          className="col-span-full -mx-2 grid grid-cols-subgrid items-end px-2 pb-2 text-xs font-medium text-muted-foreground"
                         >
-                          <div className="flex items-center gap-2 flex-1">
-                            {isSame && <Check className="h-4 w-4 text-success" />}
-                            {isDifferent && <X className="h-4 w-4 text-destructive" />}
-                            <span className="text-sm">{getActionLabel(t, item.action)}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key1 ? getKeyLabel(t, key1) : "-"}
-                            </kbd>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key2 ? getKeyLabel(t, key2) : "-"}
-                            </kbd>
-                          </div>
+                          <span role="columnheader">{t("compare.actionColumn")}</span>
+                          <span role="columnheader" title={name1} className="max-w-24 truncate text-center sm:max-w-40">
+                            {name1}
+                          </span>
+                          <span role="columnheader" title={name2} className="max-w-24 truncate text-center sm:max-w-40">
+                            {name2}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                        {rows.map((item) => {
+                          const key1 = p1Keybindings[item.action];
+                          const key2 = p2Keybindings[item.action];
+                          const isDifferent = isDifferentAction(item.action);
+
+                          return (
+                            <div
+                              key={item.action}
+                              role="row"
+                              className={cn(
+                                "col-span-full -mx-2 grid grid-cols-subgrid items-center px-2 py-2",
+                                isDifferent && "bg-secondary/50",
+                              )}
+                            >
+                              <div role="rowheader" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="text-sm">{getActionLabel(t, item.action)}</span>
+                                {isDifferent && <DifferentMark />}
+                              </div>
+                              <div role="cell" className="text-center">
+                                <kbd className="inline-block min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
+                                  {key1 ? getKeyLabel(t, key1) : "-"}
+                                </kbd>
+                              </div>
+                              <div role="cell" className="text-center">
+                                <kbd className="inline-block min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
+                                  {key2 ? getKeyLabel(t, key2) : "-"}
+                                </kbd>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           {/* デバイス・設定の比較 */}
@@ -735,37 +809,51 @@ export default function ComparePage() {
             <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
             <Card className="gap-3 py-5">
               <CardContent className="px-5">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
-                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player1, locale)}</div>
-                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player2, locale)}</div>
-
-                  <CompareRow
-                    label={t("compare.mouseDpi")}
-                    value1={player1.playerConfig?.mouseDpi?.toString()}
-                    value2={player2.playerConfig?.mouseDpi?.toString()}
-                  />
-                  <CompareRow
-                    label={t("compare.inGameSensitivity")}
-                    value1={sensitivityLabel(player1.playerConfig?.gameSensitivity)}
-                    value2={sensitivityLabel(player2.playerConfig?.gameSensitivity)}
-                  />
-                  <CompareRow
-                    label={t("compare.keyboardLayout")}
-                    value1={player1.playerConfig?.keyboardLayout ?? undefined}
-                    value2={player2.playerConfig?.keyboardLayout ?? undefined}
-                  />
-                  <CompareRow
-                    label={t("compare.toggleSprint")}
-                    value1={player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
-                    value2={player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
-                  />
-                  <CompareRow
-                    label="Raw Input"
-                    value1={player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
-                    value2={player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
-                  />
-                </div>
+                {(() => {
+                  const deviceRows = [
+                    {
+                      label: t("compare.mouseDpi"),
+                      value1: player1.playerConfig?.mouseDpi?.toString(),
+                      value2: player2.playerConfig?.mouseDpi?.toString(),
+                    },
+                    {
+                      label: t("compare.inGameSensitivity"),
+                      value1: sensitivityLabel(player1.playerConfig?.gameSensitivity),
+                      value2: sensitivityLabel(player2.playerConfig?.gameSensitivity),
+                    },
+                    {
+                      label: t("compare.keyboardLayout"),
+                      value1: player1.playerConfig?.keyboardLayout ?? undefined,
+                      value2: player2.playerConfig?.keyboardLayout ?? undefined,
+                    },
+                    {
+                      label: t("compare.toggleSprint"),
+                      value1: player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined,
+                      value2: player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined,
+                    },
+                    {
+                      label: "Raw Input",
+                      value1: player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined,
+                      value2: player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined,
+                    },
+                  ];
+                  const visibleRows = diffOnly ? deviceRows.filter((row) => isDifferentValue(row.value1, row.value2)) : deviceRows;
+                  if (visibleRows.length === 0) {
+                    return <p className="text-sm text-muted-foreground">{t("compare.noDifferences")}</p>;
+                  }
+                  const name1 = getLocalizedDisplayName(player1, locale);
+                  const name2 = getLocalizedDisplayName(player2, locale);
+                  return (
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
+                      <div title={name1} className="min-w-0 truncate font-medium text-sm text-center">{name1}</div>
+                      <div title={name2} className="min-w-0 truncate font-medium text-sm text-center">{name2}</div>
+                      {visibleRows.map((row) => (
+                        <CompareRow key={row.label} label={row.label} value1={row.value1} value2={row.value2} />
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>
@@ -784,6 +872,11 @@ export default function ComparePage() {
   );
 }
 
+/** 両方に値があって異なるときだけ「違う」とする（片方・両方が未設定のときは違い扱いにしない。キー配置の行・件数と同じ基準） */
+function isDifferentValue(value1?: string, value2?: string): boolean {
+  return !!value1 && !!value2 && value1 !== value2;
+}
+
 function CompareRow({
   label,
   value1,
@@ -793,28 +886,19 @@ function CompareRow({
   value1?: string;
   value2?: string;
 }) {
-  const isSame = value1 && value2 && value1 === value2;
-  const isDifferent = value1 && value2 && value1 !== value2;
+  // 違う行だけ中立な面＋「異なる」の文字で示す（一致・未設定は装飾なし）
+  const isDifferent = isDifferentValue(value1, value2);
 
   return (
     <>
-      <div className="text-sm py-1">{label}</div>
-      <div
-        className={cn(
-          "text-sm text-center py-1 rounded",
-          isSame && "bg-success/10",
-          isDifferent && "bg-destructive/10"
-        )}
-      >
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm py-1">
+        <span>{label}</span>
+        {isDifferent && <DifferentMark />}
+      </div>
+      <div className={cn("text-sm text-center py-1 rounded", isDifferent && "bg-secondary/50")}>
         {value1 ?? "-"}
       </div>
-      <div
-        className={cn(
-          "text-sm text-center py-1 rounded",
-          isSame && "bg-success/10",
-          isDifferent && "bg-destructive/10"
-        )}
-      >
+      <div className={cn("text-sm text-center py-1 rounded", isDifferent && "bg-secondary/50")}>
         {value2 ?? "-"}
       </div>
     </>
@@ -961,7 +1045,6 @@ export function HydrateFallback() {
                     <Skeleton className="h-4 w-24" />
                     <div className="flex items-center gap-4">
                       <Skeleton className="h-8 w-20" />
-                      <Skeleton className="h-4 w-4" />
                       <Skeleton className="h-8 w-20" />
                     </div>
                   </div>
