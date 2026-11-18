@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Eye, FileText, Languages, Pin } from "lucide-react";
+import { Eye, Languages, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
@@ -271,16 +271,13 @@ export function GuideListView({
             key={guide.id}
             className="group relative flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors"
           >
-            {guide.coverImageUrl ? (
+            {/* カバー画像が無い行はサムネイルの枠を描かない（飾りの面を作らない。カード表示の帯と同じ扱い） */}
+            {guide.coverImageUrl && (
               <img
                 src={guide.coverImageUrl}
                 alt="" loading="lazy" decoding="async"
                 className="w-20 h-14 object-cover rounded-md border border-border/60 shrink-0"
               />
-            ) : (
-              <div className="w-20 h-14 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
-                <FileText className="h-5 w-5 text-muted-foreground/30" />
-              </div>
             )}
             <div className="flex-1 min-w-0">
               <TitleHeading className="flex items-center gap-1.5 text-sm font-medium">

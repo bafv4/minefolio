@@ -112,6 +112,31 @@ export const GUIDE_YOUTUBE_BLOCK_SOURCE =
   String.raw`<div\b[^>]*\sdata-youtube-video(?:="[^"]*")?(?=[\s>])[^>]*>\s*<iframe\b([^>]*)>\s*<\/iframe>\s*<\/div>`;
 
 /**
+ * 本文の iframe を、TipTap の YouTube 埋め込みの形（`<div data-youtube-video><iframe …></iframe></div>`）に揃える。
+ * - `div[data-youtube-video]` で包まれていない iframe（古い保存データ・貼り付けた HTML 等）を同じ形で包む。
+ *   これで本文の直下にあれば、包まれた動画と同じく押してから読み込む表示（splitContentAtEmbeds → YouTubeClickEmbed）になる
+ * - `src` の無い iframe（許可外ホストでサニタイズが src を除去したもの）は、包まれているかに関わらず取り除く（空の枠を描かない）
+ * iframe の src はサニタイズで YouTube の埋め込みホストだけに絞られている（guide-sanitize.server.ts）ので、
+ * src のある iframe は YouTube の動画として扱ってよい。サニタイズの後・titleGuideYouTubeIframes の前に呼ぶ
+ * （番号は包んだ後の本文で数えるので、title と splitContentAtEmbeds の番号は揃ったまま）。
+ */
+export function normalizeGuideIframes(html: string): string {
+  // グループ 1: 包まれた埋め込み全体、2: その iframe の属性列、3: 包まれていない iframe の属性列
+  const pattern = new RegExp(
+    String.raw`(${GUIDE_YOUTUBE_BLOCK_SOURCE})|<iframe\b([^>]*)>[^<]*<\/iframe>`,
+    "g",
+  );
+  return html.replace(
+    pattern,
+    (match, block: string | undefined, blockAttrs: string | undefined, bareAttrs: string | undefined) => {
+      const attrs = (block !== undefined ? blockAttrs : bareAttrs) ?? "";
+      if (!/\ssrc="[^"]+"/.test(attrs)) return "";
+      return block !== undefined ? match : `<div data-youtube-video>${match}</div>`;
+    },
+  );
+}
+
+/**
  * 本文の YouTube の iframe に、番号付きの `title`（読み上げでの名前）と `loading="lazy"` を付ける。
  * 番号は本文中の出現順（1 始まり）で、splitContentAtEmbeds の YouTube セグメントの番号と一致する。
  * 本文の直下の動画は押してから読み込む部品（YouTubeClickEmbed）に置き換わるので、ここでの title が

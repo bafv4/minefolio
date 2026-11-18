@@ -16,7 +16,7 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides } from "@/lib/schema";
+import { users, guides, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
@@ -25,7 +25,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { EmptyState } from "@/components/empty-state";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
 import { SectionHeaderLink } from "@/components/page-section";
-import { BookOpen, ArrowLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, LayoutTemplate } from "lucide-react";
 import { ViewToggle } from "@/components/view-toggle";
 import { GuideListSkeleton, type GuideItem } from "@/components/guide-list-views";
 import { GuidePagedList } from "@/components/guide-paged-list";
@@ -110,21 +110,37 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  const authorGuides = await db.query.guides.findMany({
-    where: and(eq(guides.authorId, author.id), eq(guides.isPublished, true)),
-    orderBy: [desc(guides.updatedAt)],
-    columns: {
-      id: true,
-      slug: true,
-      title: true,
-      summary: true,
-      tags: true,
-      coverImageUrl: true,
-      viewCount: true,
-      updatedAt: true,
-    },
-    extras: { likeCount: guideLikeCountSql().as("like_count") },
-  });
+  // テンプレートへの導線は、公開一覧（/guides/templates?author=）に出るテンプレートの件数で出し分ける。
+  // 公開一覧は公開プロフィールの走者のテンプレートだけを出すので、それ以外の走者は数えない（0件＝導線なし）
+  const [authorGuides, templateCountRows] = await Promise.all([
+    db.query.guides.findMany({
+      where: and(eq(guides.authorId, author.id), eq(guides.isPublished, true)),
+      orderBy: [desc(guides.updatedAt)],
+      columns: {
+        id: true,
+        slug: true,
+        title: true,
+        summary: true,
+        tags: true,
+        coverImageUrl: true,
+        viewCount: true,
+        updatedAt: true,
+      },
+      extras: { likeCount: guideLikeCountSql().as("like_count") },
+    }),
+    author.profileVisibility === "public"
+      ? db
+          .select({ count: sql<number>`count(*)` })
+          .from(searchCraftTemplates)
+          .where(
+            and(
+              eq(searchCraftTemplates.userId, author.id),
+              eq(searchCraftTemplates.isPublished, true),
+            ),
+          )
+      : Promise.resolve([{ count: 0 }]),
+  ]);
+  const templateCount = Number(templateCountRows[0]?.count ?? 0);
 
   // 自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
   const translations = await getGuideTranslations(
@@ -135,14 +151,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const translatedGuides = authorGuides.map((g) => applyGuideTranslation(g, translations));
 
   const appUrl = env.APP_URL || "https://minefolio.app";
-  return { author, guides: translatedGuides, appUrl };
+  return { author, guides: translatedGuides, templateCount, appUrl };
 }
 
 
 export default function UserGuidesPage() {
   const t = useT();
   const locale = useLocale();
-  const { author, guides: authorGuides } = useLoaderData<typeof loader>();
+  const { author, guides: authorGuides, templateCount } = useLoaderData<typeof loader>();
   const authorName = getLocalizedDisplayName(author, locale);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const navigation = useNavigation();
@@ -163,30 +179,35 @@ export default function UserGuidesPage() {
       {/* Author header */}
       {/* 名前が長く右の操作と並ばない幅では、操作を次の行の右端へ回す（名前を細い列で折り返させない） */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        {/* 名前とアバターは走者画面へのリンク。アバターのリンクは名前のリンクと同じ先なので、
-            Tab で止めず読み上げもしない（同じリンクを2回読ませない） */}
+        {/* 走者画面への導線は右の「プロフィールを見る」1つにする（名前・顔もリンクにすると、同じ行き先で
+            Tab の停止点が2つになる） */}
         <div className="flex min-w-0 items-center gap-4">
-          <Link to={`/player/${author.slug}`} tabIndex={-1} aria-hidden className="shrink-0 rounded-xl">
-            <MinecraftAvatar
-              uuid={author.uuid ?? undefined}
-              skinUrl={author.customSkinUrl}
-              size={44}
-              alt=""
-              className="shrink-0 rounded-xl"
-            />
-          </Link>
+          <MinecraftAvatar
+            uuid={author.uuid ?? undefined}
+            skinUrl={author.customSkinUrl}
+            size={44}
+            alt=""
+            className="shrink-0 rounded-xl"
+          />
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold break-words">
-              <Link to={`/player/${author.slug}`} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                {authorName}
-              </Link>
-            </h1>
+            <h1 className="text-2xl font-bold break-words">{authorName}</h1>
             {author.mcid && (
               <p className="text-sm text-muted-foreground">@{author.mcid}</p>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">
               {t("guides.guidesCount", { count: authorGuides.length })}
             </p>
+            {/* この走者のサーチクラフトテンプレート（公開一覧の作成者の絞り込み）。公開一覧に出るものがあるときだけ。
+                押せる高さは負のマージン＋同じ量の padding で広げる（モバイル 44px、sm 以上 28px。行の高さは変えない） */}
+            {templateCount > 0 && (
+              <Link
+                to={`/guides/templates?author=${encodeURIComponent(author.slug)}`}
+                className="-my-3 inline-flex items-center gap-1.5 py-3 text-sm text-primary hover:underline sm:-my-1 sm:py-1"
+              >
+                <LayoutTemplate className="h-3.5 w-3.5" aria-hidden />
+                {t("guides.authorTemplatesLink", { count: templateCount })}
+              </Link>
+            )}
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">

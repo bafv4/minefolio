@@ -37,7 +37,7 @@ import { MyContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
-import { BookOpen, ExternalLink, Plus, Pencil, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
+import { BookOpen, ExternalLink, Plus, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -110,6 +110,9 @@ export async function action({ request }: ActionFunctionArgs) {
   return null;
 }
 
+/** 行の操作ボタンの押せる大きさ（モバイル 44px 四方、sm 以上 32px。ui.md 9 章「タップ領域」） */
+const ROW_ACTION_CLASS = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
+
 export default function MyGuidesPage() {
   const t = useT();
   const locale = useLocale();
@@ -129,7 +132,8 @@ export default function MyGuidesPage() {
       ) : (
       <>
       {/* タイトル・説明・新規ボタンはタブの内側（コンテンツ側）に置く */}
-      <div className="flex items-center justify-between">
+      {/* 見出しの行の組み方はテンプレート一覧（templates.tsx）と同じ（狭い画面は縦積み・新規ボタンは全幅の 44px） */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meGuides.pageTitle")}</h1>
           <p className="text-muted-foreground text-sm">
@@ -150,7 +154,7 @@ export default function MyGuidesPage() {
         </div>
         {/* 0 件のときは空状態の action に同じボタンがあるので出さない */}
         {userGuides.length > 0 && (
-          <Button asChild>
+          <Button asChild className="h-11 w-full shrink-0 sm:h-9 sm:w-auto">
             <Link to="/my-guides/new">
               <Plus className="h-4 w-4 mr-2" />
               {t("meGuides.newGuide")}
@@ -178,25 +182,22 @@ export default function MyGuidesPage() {
           {userGuides.map((guide) => {
             const tags = parseGuideTags(guide.tags);
             return (
-              <Card key={guide.id} className="py-0">
-                <CardContent className="flex items-center gap-4 p-4">
+              // 行全体のクリックはタイトルのリンクの ::after で敷くオーバーレイが担う（ui.md 9 章の after 方式）。
+              // 行の操作（ピン留め・公開ページ・削除）は relative z-10 でオーバーレイより手前に出す
+              <Card
+                key={guide.id}
+                className="relative py-0 transition-colors hover:border-primary/40"
+              >
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      {guide.isPublished ? (
-                        <Link
-                          to={`/guides/${user.slug}/${guide.slug}`}
-                          className="font-medium truncate hover:underline"
-                        >
-                          {guide.title}
-                        </Link>
-                      ) : (
-                        <Link
-                          to={`/my-guides/${guide.slug}/edit`}
-                          className="font-medium truncate hover:underline"
-                        >
-                          {guide.title}
-                        </Link>
-                      )}
+                      {/* 行き先は公開状態に依らず常に編集（公開ページは右の操作から別に開く） */}
+                      <Link
+                        to={`/my-guides/${guide.slug}/edit`}
+                        className="font-medium truncate outline-none hover:underline after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                      >
+                        {guide.title}
+                      </Link>
                       {/* 公開状態はエディタの公開状態のピル（desktop-toolbar.tsx の PublishStatusPill）と同じ丸ピル・同じ語。
                           brand は選択中・進行だけに使うので、公開中も muted にする（ui.md 1 章） */}
                       <StatusPill icon={guide.isPublished ? Globe : Lock} className="shrink-0">
@@ -215,7 +216,7 @@ export default function MyGuidesPage() {
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
                       <span suppressHydrationWarning>
-                        {t("common.updatedAgo", {
+                        {t("meGuides.updatedAgo", {
                           time: formatDistanceToNow(guide.updatedAt, {
                             addSuffix: true,
                             locale: dateFnsLocale(locale),
@@ -243,7 +244,8 @@ export default function MyGuidesPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  {/* 操作はモバイルで 44px 四方・間隔 12px（sm 以上は 32px・間隔 8px）。編集はタイトル（行全体）が担うので置かない */}
+                  <div className="relative z-10 flex shrink-0 items-center gap-3 sm:gap-2">
                     <fetcher.Form method="post">
                       <input type="hidden" name="_action" value="togglePin" />
                       <input type="hidden" name="guideId" value={guide.id} />
@@ -251,6 +253,7 @@ export default function MyGuidesPage() {
                         variant="ghost"
                         size="sm"
                         type="submit"
+                        className={ROW_ACTION_CLASS}
                         title={guide.isPinned ? t("meGuides.unpin") : t("meGuides.pin")}
                         aria-label={guide.isPinned ? t("meGuides.unpin") : t("meGuides.pin")}
                       >
@@ -261,32 +264,26 @@ export default function MyGuidesPage() {
                         )}
                       </Button>
                     </fetcher.Form>
+                    {/* 公開ページ（公開中のときだけ）。新しいタブで開くことを名前でも伝える */}
                     {guide.isPublished && (
-                      <Button variant="ghost" size="sm" asChild>
+                      <Button variant="ghost" size="sm" asChild className={ROW_ACTION_CLASS}>
                         <Link
                           to={`/guides/${user.slug}/${guide.slug}`}
                           target="_blank"
-                          aria-label={t("meGuides.viewPublished")}
+                          rel="noopener noreferrer"
+                          aria-label={`${t("meGuides.viewPublished")}${t("meGuides.opensInNewTab")}`}
                           title={t("meGuides.viewPublished")}
                         >
-                          <Globe className="h-4 w-4" />
+                          <Globe className="h-4 w-4" aria-hidden />
                         </Link>
                       </Button>
                     )}
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link
-                        to={`/my-guides/${guide.slug}/edit`}
-                        aria-label={t("guideEditor.edit")}
-                        title={t("guideEditor.edit")}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Link>
-                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className={ROW_ACTION_CLASS}
                           aria-label={t("meGuides.delete")}
                           title={t("meGuides.delete")}
                         >

@@ -643,7 +643,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   contentSort: {
     label: "Sort",
     newest: "Newest",
-    recentlyUpdated: "Recently updated",
+    newestUpdatedDesc: "Most recently updated first",
+    newestCreatedDesc: "Most recently created first",
     popular: "Popular",
     likes: "Most liked",
     views: "Most viewed",
@@ -678,8 +679,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noPublishedGuides: "No guides have been published yet.",
     title: "Guides - Minefolio",
     pageTitle: "Guides",
-    pageDesc: "Strategy and setup guides written by Minefolio users",
+    pageDesc: "Strategy and setup guides written by runners",
     noGuidesTitle: "No guides yet",
+    noGuidesForQueryTitle: "No guides match “{q}”",
     noGuides: "No guides have been published yet",
     popularPending: "View data is still being collected, so guides are ordered by likes and update time for now",
     searchPlaceholder: "Search by title or summary…",
@@ -702,6 +704,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     loadMore: "Show more ({count} left)",
     findRunner: "Find runners",
     viewProfile: "View profile",
+    authorTemplatesLink: "Search-craft templates: {count}",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraft avatar",
@@ -2470,8 +2473,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "A custom cape is active. It takes priority over the Mojang cape.",
   },
   meGuides: {
-    /** 新規作成ページの「戻る」リンク（/my-guides へ） */
-    backToManagement: "Back to my guides",
+    /** 新規作成ページ・エディタの「戻る」リンク（/my-guides へ。戻り先の見出し pageTitle の名前で呼ぶ） */
+    backToManagement: "Back to Guides",
+    updatedAgo: "Updated {time}",
     title: "Guides - Minefolio",
     pageTitle: "Guides",
     pageDesc: "Write and publish strategy and setup guides",
@@ -2823,7 +2827,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     gifTooLarge:
       "The GIF is too large ({size}MB / limit {max}MB). Try reducing the length, width, or frame rate.",
     gifConvertError: "Failed to convert to GIF",
-    back: "Back to guides",
   },
   meTemplates: {
     createAndPublish: "Create and publish",
@@ -2844,7 +2847,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     pageDescription: "Publish and manage your search-craft setups as templates.",
     create: "Create a template",
     hint:
-      "Published templates can be viewed by other players and applied to their own settings.",
+      "Published templates can be viewed by other runners and applied to their own settings.",
     viewGallery: "Browse templates",
     published: "Published",
     unpublished: "Unpublished",
@@ -2869,7 +2872,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     editorNewDescription:
       "Freely edit search-crafts and remaps to build and publish a template",
     editorEditTitle: "Edit template",
-    backToManagement: "Back to template management",
+    backToManagement: "Back to Search-craft templates",
     basicInfo: "Basic info",
     languageLabel: "In-game language",
     languageHint: "The in-game language these search strings assume (optional)",
@@ -2886,7 +2889,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     title: "Search-craft templates - Minefolio",
     pageTitle: "Search-craft templates",
     pageDesc:
-      "A collection of search-craft setups shared by players. Apply them to your own settings or try them in the Playground.",
+      "A collection of search-craft setups shared by runners. Apply them to your own settings or try them in the Playground.",
     metaDescription: "Search-craft templates published by {name}",
     openPlayground: "Try in Playground",
     byAuthorPrefix: "Author:",
@@ -2904,16 +2907,20 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     resultCountFiltered: "{count} templates ({filters})",
     resultFilterQuery: "search: {q}",
     resultFilterLanguage: "language: {language}",
+    resultFilterAuthor: "by: {name}",
     resultFilterSeparator: ", ",
+    languageOptionWithCount: "{language} ({count})",
     noResultsTitle: "No templates match these filters",
+    noResultsForQueryTitle: "No templates match “{q}”",
     noResultsDescription: "Try different search terms or filters",
-    resetFilters: "Reset filters",
+    resetFilters: "Clear filters",
     notFound: "Template not found",
     notFoundTitle: "Template not found - Minefolio",
     notFoundHint: "Check that the URL is correct and that the template has not been unpublished.",
     skipToCrafts: "Skip to search-craft",
     remapShow: "Show keyboard",
     remapHide: "Hide keyboard",
+    remapListLabel: "List of remaps",
     userNotFound: "User not found",
     unknownAction: "Unknown action",
     invalidTemplateData: "The template data is invalid",

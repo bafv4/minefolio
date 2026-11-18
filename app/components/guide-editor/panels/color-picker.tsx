@@ -21,12 +21,18 @@ export function PickerTrigger({
   children,
   showLabel,
   disabled,
+  size = "sm",
 }: {
   label: string;
   children: ReactNode;
   showLabel?: boolean;
   /** true で Popover を開けなくする（トリガーは残し、ラベルで理由を示す用途）。省略時は他利用箇所と同じ挙動 */
   disabled?: boolean;
+  /**
+   * アイコンだけのトリガーの大きさ。"sm"（既定）は 28px（バブルメニュー）、"default" は 32px
+   * （デスクトップのツールバーのほかのボタン〔ToolbarButton〕と同じ）。showLabel を渡したときは常に高さ 32px
+   */
+  size?: "sm" | "default";
 }) {
   const labelable = showLabel !== undefined;
   return (
@@ -40,7 +46,11 @@ export function PickerTrigger({
             onMouseDown={(e) => e.preventDefault()}
             className={cn(
               "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors disabled:pointer-events-none disabled:opacity-50",
-              labelable ? "h-8 justify-start px-2" : "h-7 w-7 justify-center",
+              labelable
+                ? "h-8 justify-start px-2"
+                : size === "default"
+                  ? "h-8 w-8 justify-center"
+                  : "h-7 w-7 justify-center",
             )}
           >
             {children}
@@ -112,11 +122,20 @@ export function ColorSwatchGrid({
 }
 
 /** インライン整形用の文字色・背景色ピッカー（バブルメニュー / ツールバーで使用） */
-export function InlineColorPicker({ editor, showLabel }: { editor: Editor; showLabel?: boolean }) {
+export function InlineColorPicker({
+  editor,
+  showLabel,
+  size,
+}: {
+  editor: Editor;
+  showLabel?: boolean;
+  /** トリガーの大きさ（PickerTrigger の size） */
+  size?: "sm" | "default";
+}) {
   const t = useT();
   return (
     <Popover>
-      <PickerTrigger label={t("guideEditor.ui.textAndBgColor")} showLabel={showLabel}>
+      <PickerTrigger label={t("guideEditor.ui.textAndBgColor")} showLabel={showLabel} size={size}>
         <Palette className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent

@@ -138,3 +138,82 @@ describe("並び替え", () => {
     expect(first.templates.map((t) => t.id)).toEqual(second.templates.map((t) => t.id));
   });
 });
+
+describe("作成者での絞り込み（?author=<slug>）", () => {
+  async function callWithAuthor(search: string) {
+    return (await callLoader(search)) as unknown as {
+      templates: Array<{ title: string; authorSlug: string }>;
+      author: string;
+      authorFilterName: string;
+    };
+  }
+
+  it("slug の大文字小文字を区別せず、その作成者のテンプレートだけを返す", async () => {
+    const steve = await seedUser(db, { slug: "Steve", profileVisibility: "public", displayName: "スティーブ" });
+    const alex = await seedUser(db, { slug: "alex", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, steve.id, { title: "steve-one" });
+    await seedSearchCraftTemplate(db, alex.id, { title: "alex-one" });
+
+    const res = await callWithAuthor("?author=sTEVE");
+
+    expect(res.templates.map((t) => t.title)).toEqual(["steve-one"]);
+    expect(res.author).toBe("sTEVE");
+    expect(res.authorFilterName).toBe("スティーブ");
+  });
+
+  it("公開プロフィールでない作成者を指定すると0件で、名前は引かず入力の slug をそのまま出す", async () => {
+    for (const [slug, visibility] of [
+      ["hidden", "private"],
+      ["unl", "unlisted"],
+    ] as const) {
+      const user = await seedUser(db, { slug, profileVisibility: visibility, displayName: `name-${slug}` });
+      await seedSearchCraftTemplate(db, user.id, { title: `${slug}-one` });
+
+      const res = await callWithAuthor(`?author=${slug}`);
+
+      expect(res.templates).toEqual([]);
+      expect(res.authorFilterName).toBe(slug);
+    }
+  });
+});
+
+describe("言語ごとの件数（languageCounts）", () => {
+  async function callCounts(search = "") {
+    return (await callLoader(search)) as unknown as {
+      templates: Array<{ title: string }>;
+      languageCounts: Record<string, number>;
+    };
+  }
+
+  it("公開プロフィールの公開テンプレートだけを言語ごとに数え、言語なしは数えない", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    const priv = await seedUser(db, { slug: "priv", profileVisibility: "private" });
+    const unl = await seedUser(db, { slug: "unl", profileVisibility: "unlisted" });
+    await seedSearchCraftTemplate(db, pub.id, { gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, pub.id, { gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, pub.id, { gameLanguage: "en_us" });
+    await seedSearchCraftTemplate(db, pub.id, { gameLanguage: null });
+    await seedSearchCraftTemplate(db, pub.id, { gameLanguage: "en_us", isPublished: false });
+    await seedSearchCraftTemplate(db, priv.id, { gameLanguage: "en_us" });
+    await seedSearchCraftTemplate(db, unl.id, { gameLanguage: "zh_cn" });
+
+    const { languageCounts } = await callCounts();
+
+    expect(languageCounts).toEqual({ ja_jp: 2, en_us: 1 });
+  });
+
+  it("件数はいまの絞り込み（言語・検索語・作成者）に依らない", async () => {
+    const a = await seedUser(db, { slug: "a", profileVisibility: "public" });
+    const b = await seedUser(db, { slug: "b", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, a.id, { title: "alpha", gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, b.id, { title: "beta", gameLanguage: "en_us" });
+    const expected = { ja_jp: 1, en_us: 1 };
+
+    for (const search of ["?lang=ja_jp", "?q=beta", "?author=a", "?lang=en_us&author=a&q=zzz"]) {
+      const res = await callCounts(search);
+      expect(res.languageCounts, search).toEqual(expected);
+    }
+    // 一覧そのものは絞り込まれている
+    expect((await callCounts("?lang=ja_jp")).templates.map((t) => t.title)).toEqual(["alpha"]);
+  });
+});

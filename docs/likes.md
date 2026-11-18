@@ -152,10 +152,10 @@
 
 | 一覧 | 選択肢（表示順） | 定数 |
 |---|---|---|
-| ガイド | 更新順 / いいね数順 / 閲覧数順 / 人気順 | `GUIDE_SORTS` |
+| ガイド | 新着順 / いいね数順 / 閲覧数順 / 人気順 | `GUIDE_SORTS` |
 | テンプレート | 新着順 / いいね数順 | `TEMPLATE_SORTS` |
 
-- ラベルはリストで異なる: ガイドは `updatedAt` 基準で**更新順**、テンプレートは `createdAt` 基準で**新着順**
+- 既定順のラベルはどちらも**新着順**（`contentSort.newest`。兄弟タブの一覧で語をそろえる）。基準の列はガイドが `updatedAt`、テンプレートが `createdAt` で違うので、選択肢の説明（`descriptions.new`）で「更新日時が新しい順」（`contentSort.newestUpdatedDesc`）「作成日時が新しい順」（`contentSort.newestCreatedDesc`）と示す
 - **並び替えは必ず SQL の `ORDER BY` で行う**。テンプレート一覧は `.limit(100)` が先に効くため、メモリ上で並べ替えると「新しい100件をいいね数順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない
 - タイブレークを必ず入れる（初日は全件0いいね・0PVで、無いと順序が不定になりページングも壊れる）
 - **GETフォームには `sort` の hidden input が必要**（GETフォームはクエリを総入れ替えするため、無いと検索のたびにソートが解除される。`tag` / `lang` と同じ対処）
@@ -167,7 +167,7 @@
 
 | `sort` | 意味 | 並び順（タイブレーク込み） |
 |---|---|---|
-| `new`（既定） | 更新順 | `updatedAt DESC, id ASC` |
+| `new`（既定） | 新着順（更新日時が新しい順） | `updatedAt DESC, id ASC` |
 | `likes` | いいね数順（総いいね数） | `likeCount DESC, updatedAt DESC, id ASC` |
 | `views` | 閲覧数順（`guides.viewCount` の累計） | `viewCount DESC, likeCount DESC, updatedAt DESC, id ASC` |
 | `popular` | 人気順（直近7日のページビュー） | `pageviews DESC, likeCount DESC, updatedAt DESC, id ASC` |
@@ -182,7 +182,7 @@
 
 ### 廃止: おすすめ順（v1.11.0）
 
-v1.10.0 で追加した「おすすめ順」（`recommended`。直近30日のいいね数 → 総いいね数 → 更新日時 → id）は v1.11.0 で廃止した。`guideListOrderBy()` の `recommended` 分岐、`RECENT_LIKE_WINDOW_DAYS`（30日）、`recentGuideLikeCountSql`、`recentLikeCutoff` は削除済み。廃止後に届く `?sort=recommended` は前述のとおり `new`（更新順）へフォールバックする。
+v1.10.0 で追加した「おすすめ順」（`recommended`。直近30日のいいね数 → 総いいね数 → 更新日時 → id）は v1.11.0 で廃止した。`guideListOrderBy()` の `recommended` 分岐、`RECENT_LIKE_WINDOW_DAYS`（30日）、`recentGuideLikeCountSql`、`recentLikeCutoff` は削除済み。廃止後に届く `?sort=recommended` は前述のとおり `new`（新着順）へフォールバックする。
 
 ---
 

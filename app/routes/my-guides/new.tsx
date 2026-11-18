@@ -6,6 +6,7 @@ import {
   Link,
   useActionData,
   useLoaderData,
+  useNavigation,
   Form,
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
@@ -24,8 +25,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { ArrowLeft } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 
 export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -116,7 +119,13 @@ export default function NewGuidePage() {
   const t = useT();
   const { authorSlug } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
+  // 入力があれば離脱確認を出す（floating-save-bar と同じく送信中は外す。作成に成功すると action が
+  // 編集ページへリダイレクトするので、その遷移を止めない）。失敗して戻ってきたら入力が残るので再び確認を出す
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state !== "idle" && navigation.formMethod != null;
+  const blocker = useUnsavedWarning((title.trim() !== "" || slug.trim() !== "") && !isSubmitting);
 
   // 入力中はゆるい正規化にとどめ、確定形（保存される値）だけをプレビューに出す
   const resolvedSlug = normalizeSlug(slug);
@@ -143,6 +152,8 @@ export default function NewGuidePage() {
             id="title"
             name="title"
             placeholder={t("meGuides.titlePlaceholder")}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
             required
             autoFocus
             maxLength={200}
@@ -177,6 +188,7 @@ export default function NewGuidePage() {
           {t("meGuides.createAndEdit")}
         </Button>
       </Form>
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

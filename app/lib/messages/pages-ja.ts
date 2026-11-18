@@ -757,10 +757,12 @@ export const PAGES_JA = {
   },
   contentSort: {
     label: "並び替え",
-    /** テンプレート一覧（createdAt 基準） */
+    /** 既定順。ガイド一覧（updatedAt 基準）・テンプレート一覧（createdAt 基準）で同じ語。基準の違いは下の説明で示す */
     newest: "新着順",
-    /** ガイド一覧（updatedAt 基準） */
-    recentlyUpdated: "更新順",
+    /** ガイド一覧の新着順の説明 */
+    newestUpdatedDesc: "更新日時が新しい順",
+    /** テンプレート一覧の新着順の説明 */
+    newestCreatedDesc: "作成日時が新しい順",
     /** ガイド一覧のみ。直近7日のページビューが多い順（page_view_stats） */
     popular: "人気順",
     /** ガイド一覧・テンプレート一覧。総いいね数が多い順 */
@@ -2446,8 +2448,10 @@ export const PAGES_JA = {
     customCapeActive: "カスタムマントが有効です。Mojangのマントより優先されます。",
   },
   meGuides: {
-    /** 新規作成ページの「戻る」リンク（/my-guides へ） */
-    backToManagement: "マイガイドへ戻る",
+    /** 新規作成ページ・エディタの「戻る」リンク（/my-guides へ。戻り先の見出し pageTitle の名前で呼ぶ） */
+    backToManagement: "ガイドに戻る",
+    /** 一覧の行の更新日時（{time} は「4か月前」などの相対時刻） */
+    updatedAgo: "{time}に更新",
     title: "ガイド - Minefolio",
     pageTitle: "ガイド",
     pageDesc: "攻略法や設定のガイドを作成・公開できます",
@@ -2824,7 +2828,6 @@ export const PAGES_JA = {
     gifDecodeError: "動画を読み込めませんでした。MP4 / WebM など、ブラウザで再生できる形式をお試しください。",
     gifTooLarge: "GIFが大きすぎます（{size}MB / 上限 {max}MB）。長さ・幅・フレームレートを下げてください。",
     gifConvertError: "GIFへの変換に失敗しました",
-    back: "ガイド一覧に戻る",
   },
   guides: {
     autoTranslatedMark: "タイトルと概要は自動翻訳です",
@@ -2837,8 +2840,10 @@ export const PAGES_JA = {
     noPublishedGuides: "まだガイドが公開されていません。",
     title: "ガイド一覧 - Minefolio",
     pageTitle: "ガイド一覧",
-    pageDesc: "Minefolioユーザーによる攻略・設定ガイド",
+    pageDesc: "走者による攻略・設定ガイド",
     noGuidesTitle: "ガイドがありません",
+    /** 検索語で絞り込んで 0 件のときの空状態の見出し */
+    noGuidesForQueryTitle: "「{q}」に一致するガイドがありません",
     noGuides: "公開されているガイドはまだありません",
     /** 人気順を選んでも page_view_stats がまだ空のとき（cron 未稼働・集計前）の注記 */
     popularPending: "閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています",
@@ -2862,6 +2867,8 @@ export const PAGES_JA = {
     loadMore: "もっと見る（残り {count} 件）",
     findRunner: "走者を探す",
     viewProfile: "プロフィールを見る",
+    /** 著者別のガイド一覧から、その走者のテンプレート（/guides/templates?author=）への導線 */
+    authorTemplatesLink: "サーチクラフトテンプレート {count}件",
   },
   fullbodyViewer: {
     avatarLabel: "Minecraftアバター",
@@ -2891,7 +2898,7 @@ export const PAGES_JA = {
     pageTitle: "サーチクラフトテンプレート",
     pageDescription: "サーチクラフト設定をテンプレートとして公開・管理できます。",
     create: "テンプレートを作成",
-    hint: "公開したテンプレートは他のプレイヤーが閲覧し、自分の設定に反映できます。",
+    hint: "公開したテンプレートはほかの走者が閲覧し、自分の設定に反映できます。",
     viewGallery: "テンプレート一覧を見る",
     published: "公開中",
     unpublished: "非公開",
@@ -2915,7 +2922,8 @@ export const PAGES_JA = {
     editorNewTitle: "テンプレートを作成",
     editorNewDescription: "サーチクラフトとリマップを自由に編集してテンプレートを作成・公開します",
     editorEditTitle: "テンプレートを編集",
-    backToManagement: "テンプレート管理へ戻る",
+    /** 作成・編集ページの「戻る」リンク（/my-guides/templates へ。戻り先の見出し pageTitle の名前で呼ぶ） */
+    backToManagement: "サーチクラフトテンプレートに戻る",
     basicInfo: "基本情報",
     languageLabel: "ゲーム内言語",
     languageHint: "サーチ文字列が想定するゲーム内言語（任意）",
@@ -2930,7 +2938,7 @@ export const PAGES_JA = {
   templates: {
     title: "サーチクラフトテンプレート - Minefolio",
     pageTitle: "サーチクラフトテンプレート",
-    pageDesc: "プレイヤーが公開しているサーチクラフト設定のテンプレート集。自分の設定に反映したり、Playgroundで試したりできます。",
+    pageDesc: "走者が公開しているサーチクラフト設定のテンプレート集。自分の設定に反映したり、Playgroundで試したりできます。",
     metaDescription: "{name}さんが公開しているサーチクラフトテンプレート",
     openPlayground: "Playgroundで試す",
     byAuthorPrefix: "作成者:",
@@ -2948,16 +2956,25 @@ export const PAGES_JA = {
     resultCountFiltered: "{count} 件（{filters}）",
     resultFilterQuery: "検索: {q}",
     resultFilterLanguage: "言語: {language}",
+    /** 作成者（?author=）で絞り込んでいるとき */
+    resultFilterAuthor: "作成者: {name}",
     resultFilterSeparator: "、",
+    /** 言語の絞り込みの選択肢（公開一覧にある件数つき） */
+    languageOptionWithCount: "{language}（{count}）",
     noResultsTitle: "条件に一致するテンプレートがありません",
+    /** 検索語で絞り込んで 0 件のときの空状態の見出し */
+    noResultsForQueryTitle: "「{q}」に一致するテンプレートがありません",
     noResultsDescription: "条件を変えて再度検索してみてください",
-    resetFilters: "絞り込みをリセット",
+    /** ガイド一覧（guides.clearFilters）と同じ語 */
+    resetFilters: "絞り込みを解除",
     notFound: "テンプレートが見つかりません",
     notFoundTitle: "テンプレートが見つかりません - Minefolio",
     notFoundHint: "URL が正しいか、公開が取り下げられていないかを確認してください。",
     skipToCrafts: "サーチクラフトへ移動",
     remapShow: "キーボードを表示",
     remapHide: "キーボードを隠す",
+    /** モバイルで常に出すリマップ一覧（元のキー → 先）の名前 */
+    remapListLabel: "リマップの一覧",
     userNotFound: "ユーザーが見つかりません",
     unknownAction: "不明な操作です",
     invalidTemplateData: "テンプレートのデータが不正です",

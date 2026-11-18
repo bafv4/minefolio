@@ -39,9 +39,12 @@ export function applyGuideFontSize(editor: Editor, value: string): void {
 export function FontSizePicker({
   editor,
   showLabel,
+  size,
 }: {
   editor: Editor;
   showLabel?: boolean;
+  /** トリガーの大きさ（PickerTrigger の size） */
+  size?: "sm" | "default";
 }) {
   const t = useT();
   const current = currentFontSize(editor);
@@ -53,6 +56,7 @@ export function FontSizePicker({
         label={editable ? t("guideEditor.fontSize") : t("guideEditor.fontSizeDisabledInHeading")}
         showLabel={showLabel}
         disabled={!editable}
+        size={size}
       >
         <AArrowUp className="h-4 w-4" />
       </PickerTrigger>

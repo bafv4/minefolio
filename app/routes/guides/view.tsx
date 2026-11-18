@@ -46,6 +46,7 @@ import { isGuideTableOverflowing, normalizeGuideTables } from "@/lib/guide-table
 import {
   annotateGuideCallouts,
   leadingHeadingMatchesTitle,
+  normalizeGuideIframes,
   removeLeadingHeading,
   titleGuideYouTubeIframes,
 } from "@/lib/guide-view-html";
@@ -340,10 +341,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     warning: tView("guideEditor.callout.warning"),
     danger: tView("guideEditor.callout.danger"),
   };
+  // 包まれていない YouTube の iframe も埋め込みの形に揃え（押してから読み込む表示にするため）、src の無い iframe は外す
   const contentWithIds = titleGuideYouTubeIframes(
-    annotateGuideCallouts(
-      blankGenericImageAlt(demoteGuideHeadings(tocHtml)),
-      (type) => calloutLabels[type] ?? null,
+    normalizeGuideIframes(
+      annotateGuideCallouts(
+        blankGenericImageAlt(demoteGuideHeadings(tocHtml)),
+        (type) => calloutLabels[type] ?? null,
+      ),
     ),
     (n) => tView("guideView.youtubeTitle", { n }),
   );
@@ -721,7 +725,7 @@ function GuideContent({
       <div ref={contentRef} className="guide-content guide-content-demoted prose max-w-none">
         {segments.map((seg, i) => {
           if (seg.type === "html") {
-            return <div key={i} dangerouslySetInnerHTML={{ __html: seg.content }} />;
+            return <div key={i} data-guide-segment="" dangerouslySetInnerHTML={{ __html: seg.content }} />;
           }
           if (seg.type === "youtube") {
             // 本文の直下の動画は押してから読み込む（ui.md 8 章。入れ子の動画は iframe のまま。guide-embeds.tsx）

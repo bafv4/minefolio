@@ -12,7 +12,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { parseTemplateCrafts } from "@/lib/search-craft-templates";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyState } from "@/components/empty-state";
@@ -37,7 +37,6 @@ import {
   Pencil,
   Eye,
   EyeOff,
-  ExternalLink,
   Globe,
   Lock,
   LayoutTemplate,
@@ -205,7 +204,7 @@ export default function MyTemplatesPage() {
         </div>
         {/* 0 件のときは空状態の action に同じボタンがあるので出さない */}
         {templates.length > 0 && (
-          <Button asChild className="w-full sm:w-auto h-11 sm:h-10">
+          <Button asChild className="h-11 w-full shrink-0 sm:h-9 sm:w-auto">
             <Link to="/my-guides/templates/new">
               <Plus className="mr-2 h-4 w-4" />
               {t("meTemplates.create")}
@@ -216,9 +215,9 @@ export default function MyTemplatesPage() {
 
       <p className="text-sm text-muted-foreground">
         {t("meTemplates.hint")}{" "}
-        <Link to="/guides/templates" className="text-primary hover:underline inline-flex items-center gap-1">
+        {/* 同じタブで開く内部リンクなので、外部リンクのアイコンは付けない */}
+        <Link to="/guides/templates" className="text-primary hover:underline">
           {t("meTemplates.viewGallery")}
-          <ExternalLink className="h-3 w-3" aria-hidden />
         </Link>
       </p>
 
@@ -327,7 +326,9 @@ export default function MyTemplatesPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
+                          {/* 取り消せない削除の確定はガイドの削除と同じ destructive */}
                           <AlertDialogAction
+                            className={buttonVariants({ variant: "destructive" })}
                             onClick={() =>
                               submitAction({ _action: "delete", templateId: template.id })
                             }

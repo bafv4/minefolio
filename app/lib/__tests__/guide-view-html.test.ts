@@ -6,6 +6,7 @@ import {
   htmlDepthDelta,
   lastHeadingLevel,
   leadingHeadingMatchesTitle,
+  normalizeGuideIframes,
   parseGuideYouTubeEmbedUrl,
   removeLeadingHeading,
   titleGuideYouTubeIframes,
@@ -264,5 +265,61 @@ describe("embedGroupHeadingLevels", () => {
 
   it("h3 始まりの本文（降格で h2 に上がる）の下も h3", () => {
     expect(levels(`<h3>A</h3>${sc}`)).toEqual([null, "h3"]);
+  });
+});
+
+describe("normalizeGuideIframes", () => {
+  const bare = (src: string) => `<iframe src="${src}" width="640" height="360"></iframe>`;
+
+  it("包まれていない iframe を div[data-youtube-video] で包む", () => {
+    const out = normalizeGuideIframes(`<p>前</p>${bare(YT)}<p>後</p>`);
+    expect(out).toBe(`<p>前</p><div data-youtube-video>${bare(YT)}</div><p>後</p>`);
+  });
+
+  it("包んだ後は titleGuideYouTubeIframes と splitContentAtEmbeds が埋め込みとして扱える", () => {
+    const out = normalizeGuideIframes(`<p>前</p>${bare(YT)}`);
+    expect(titleGuideYouTubeIframes(out, (i) => `動画 ${i}`)).toContain('title="動画 1"');
+    const segments = splitContentAtEmbeds(out);
+    expect(segments.some((s) => s.type === "youtube")).toBe(true);
+  });
+
+  it("すでに包まれている埋め込みは二重に包まない（属性の順・値の有無によらず）", () => {
+    const wrapped = youtube(YT);
+    expect(normalizeGuideIframes(wrapped)).toBe(wrapped);
+    const bareAttr = `<div class="x" data-youtube-video><iframe src="${YT}"></iframe></div>`;
+    expect(normalizeGuideIframes(bareAttr)).toBe(bareAttr);
+    // 2回かけても変わらない（冪等）
+    const once = normalizeGuideIframes(bare(YT));
+    expect(normalizeGuideIframes(once)).toBe(once);
+  });
+
+  it("src の無い iframe は、包まれていてもいなくても取り除く", () => {
+    expect(normalizeGuideIframes(`<p>a</p><iframe width="640"></iframe><p>b</p>`)).toBe("<p>a</p><p>b</p>");
+    expect(normalizeGuideIframes(`<p>a</p><div data-youtube-video=""><iframe width="640"></iframe></div>`)).toBe(
+      "<p>a</p>",
+    );
+    expect(normalizeGuideIframes(`<iframe src=""></iframe>`)).toBe("");
+  });
+
+  it("包まれた埋め込みと包まれていない iframe が混在しても、それぞれを扱う", () => {
+    const html = `${youtube(YT)}${bare(YT)}<iframe></iframe>`;
+    expect(normalizeGuideIframes(html)).toBe(`${youtube(YT)}<div data-youtube-video>${bare(YT)}</div>`);
+  });
+
+  it("ホストは見ない（src があれば包む）。YouTube 以外を落とすのはサニタイズの役目", () => {
+    // 前提: サニタイズの後に呼ぶ。この関数単体は src の有無だけを見る
+    const other = bare("https://example.com/embed/x");
+    expect(normalizeGuideIframes(other)).toBe(`<div data-youtube-video>${other}</div>`);
+  });
+
+  it("サニタイズを通すと、YouTube 以外の iframe は取り除かれ、YouTube だけが包まれて残る", () => {
+    const html = sanitizeGuideHtml(
+      `<p>a</p><iframe src="https://example.com/embed/x"></iframe><iframe src="${YT}"></iframe><p>b</p>`,
+    );
+    const out = normalizeGuideIframes(html);
+    expect(out).not.toContain("example.com");
+    // サニタイズは許可外ホストの src だけを除去し（`<iframe></iframe>` が残る）、ここでそれを取り除く
+    expect(html).toContain("<iframe></iframe>");
+    expect(out).toBe(`<p>a</p><div data-youtube-video><iframe src="${YT}"></iframe></div><p>b</p>`);
   });
 });

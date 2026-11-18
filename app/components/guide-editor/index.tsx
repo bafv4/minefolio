@@ -166,6 +166,9 @@ export function GuideEditor({
     prevResultRef.current = saveResult;
     if (saveResult.error) {
       toast.error(saveResult.error);
+      // save() は送信の時点で未保存を解消しているので、失敗したら未保存に戻す（保存ボタンは変更が無いと
+      // 押せない状態になるため、戻さないと編集し直すまで保存し直せない。離脱確認も効かせ直す）
+      setDirty(true);
       return;
     }
     if (saveResult.slug && saveResult.slug !== guideSlug) {
@@ -418,6 +421,7 @@ export function GuideEditor({
             livePublished={livePublished}
             publishSetting={isPublished}
             draftSaveAvailable={draftSaveAvailable}
+            hasSavedDraft={draftActive}
             onSaveDraft={() => save("draft")}
             onSavePublish={() => save("publish")}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -438,7 +442,8 @@ export function GuideEditor({
             <Button variant="ghost" size="sm" asChild className="-ml-2">
               <Link to="/my-guides">
                 <ArrowLeft className="h-4 w-4 mr-1" />
-                {t("guideEditor.back")}
+                {/* 戻り先（/my-guides）の見出しの名前で呼ぶ（新規作成ページの戻るリンクと同じ文言） */}
+                {t("meGuides.backToManagement")}
               </Link>
             </Button>
           </div>

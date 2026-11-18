@@ -3,11 +3,13 @@ import {
   useLoaderData,
   useSearchParams,
   useNavigation,
+  useLocation,
   Form,
   Link,
   type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -190,6 +192,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
+/** 表示形式（?view=list）を除いたクエリ。表示形式だけが変わったかの判定に使う */
+function searchWithoutView(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("view");
+  return params.toString();
+}
+
+/**
+ * 表示形式（view）の値だけが変わり、ほかは同じ遷移か。同じ URL への再検証（いいねの fetcher の後・同じ検索の
+ * 再送信など）は当てはまらない（view が変わっていない）ので、従来どおり再検証される
+ */
+function isViewToggle(
+  current: { pathname: string; search: string },
+  next: { pathname: string; search: string },
+): boolean {
+  return (
+    current.pathname === next.pathname &&
+    new URLSearchParams(current.search).get("view") !== new URLSearchParams(next.search).get("view") &&
+    searchWithoutView(current.search) === searchWithoutView(next.search)
+  );
+}
+
+// 表示形式（view）だけを切り替えたときはサーバーデータが同一なので再取得しない（/browse と同じ考え方）
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (isViewToggle(currentUrl, nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
+
 export default function GuidesIndexPage() {
   const t = useT();
   const locale = useLocale();
@@ -204,9 +234,25 @@ export default function GuidesIndexPage() {
   } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
+  const location = useLocation();
+  // 表示形式の切替だけのナビゲーション（このルートの loader は再実行しない。親のレイアウトは再検証される）では
+  // 一覧をスケルトンに差し替えない
+  const isViewOnlyNavigation = !!navigation.location && isViewToggle(location, navigation.location);
+  const isNavigating = navigation.state === "loading" && !isViewOnlyNavigation;
   const { isTabSwitching } = useTabNavigation();
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  // 表示形式は URL の ?view=list に保持する（既定のカードはパラメータなし。/browse と同じ形）。
+  // 戻る・再読み込みでも保たれる。切替は履歴を積まない replace で行う
+  const viewMode: "card" | "list" = searchParams.get("view") === "list" ? "list" : "card";
+  const setViewMode = (mode: "card" | "list") => {
+    setSearchParams(
+      (prev) => {
+        if (mode === "list") prev.set("view", "list");
+        else prev.delete("view");
+        return prev;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  };
   const tagNavRef = useRef<HTMLElement | null>(null);
 
   // 選択中のタグが横スクロールのレールの外にあるときだけ、初回に見える位置へ寄せる
@@ -313,6 +359,7 @@ export default function GuidesIndexPage() {
           {tag && <input type="hidden" name="tag" value={tag} />}
           {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
           {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
+          {viewMode === "list" && <input type="hidden" name="view" value="list" />}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
             <Input
@@ -398,9 +445,11 @@ export default function GuidesIndexPage() {
               value={sort}
               onChange={handleSortChange}
               options={GUIDE_SORTS}
-              newestLabel={t("contentSort.recentlyUpdated")}
+              // 既定順の語はテンプレート一覧と同じ「新着順」。ガイドは更新日時で並ぶので、説明でそれを示す
+              newestLabel={t("contentSort.newest")}
               // 同じ「人気順」でも一覧ごとに基準が違うため、説明は呼び出し側で用意する
               descriptions={{
+                new: t("contentSort.newestUpdatedDesc"),
                 likes: t("contentSort.likesDesc"),
                 views: t("contentSort.viewsDesc"),
                 popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
@@ -422,7 +471,7 @@ export default function GuidesIndexPage() {
       ) : guideItems.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
-          title={t("guides.noGuidesTitle")}
+          title={q ? t("guides.noGuidesForQueryTitle", { q }) : t("guides.noGuidesTitle")}
           description={tag || q ? t("guides.noMatchDesc") : t("guides.noGuides")}
           action={
             tag || q ? (
@@ -433,9 +482,9 @@ export default function GuidesIndexPage() {
           }
         />
       ) : (
-        // 条件（検索語・タグ・並び順）が変わったら出す件数を戻す
+        // 条件（検索語・タグ・並び順）が変わったら出す件数を戻す（表示形式の切替では戻さない）
         <GuidePagedList
-          key={searchParams.toString()}
+          key={searchWithoutView(searchParams.toString())}
           guides={guideItems}
           linkFn={linkFn}
           viewMode={viewMode}

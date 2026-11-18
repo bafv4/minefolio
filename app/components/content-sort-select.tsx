@@ -29,7 +29,7 @@ export function ContentSortSelect({
   onChange: (value: ContentSort) => void;
   /** 表示する選択肢（一覧ごとに異なる。GUIDE_SORTS / TEMPLATE_SORTS） */
   options: readonly ContentSort[];
-  /** 既定順のラベル。ガイドは updatedAt 基準で「更新順」、テンプレートは createdAt 基準で「新着順」 */
+  /** 既定順のラベル。ガイド（updatedAt 基準）・テンプレート（createdAt 基準）とも「新着順」で、基準の違いは descriptions.new で示す */
   newestLabel: string;
   /**
    * 各選択肢の「何を基準に並ぶか」を補足する説明（翻訳済みの文字列）。

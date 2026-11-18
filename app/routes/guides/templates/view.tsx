@@ -74,6 +74,7 @@ import {
   type SearchCraftLoopRowData,
 } from "@/components/search-craft-loop-view";
 import { VirtualKeyboard } from "@/components/virtual-keyboard";
+import { getRemapOutputLabel, getRemapSourceLabel } from "@/lib/remap-utils";
 import {
   ArrowLeft,
   ChevronDown,
@@ -472,9 +473,10 @@ export default function TemplateViewPage() {
         {/* MinecraftAvatar は div を描くので、p ではなく div で包む（p の中に div は置けずハイドレーションが壊れる） */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <span>{t("templates.byAuthorPrefix")}</span>
+          {/* 押せる高さは負のマージン＋同じ量の padding で広げる（モバイル 44px、sm 以上 24px。行の高さは変えない） */}
           <Link
             to={`/player/${author.slug}`}
-            className="inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-primary"
+            className="-my-3 inline-flex items-center gap-1.5 py-3 text-foreground transition-colors hover:text-primary sm:-my-0.5 sm:py-0.5"
           >
             <MinecraftAvatar
               uuid={author.uuid}
@@ -527,12 +529,13 @@ export default function TemplateViewPage() {
         </div>
       </div>
 
-      {/* アクションボタン */}
+      {/* アクションボタン。モバイルは主操作（反映）だけを全幅で1段目に置き、残り（Playground・シェア・いいね・管理）は
+          アイコンだけの 44px のボタンで2段目の1行に収める（名前は sr-only で残す）。sm 以上は従来どおり文字つきで1行 */}
       <div className="flex flex-wrap items-center gap-2">
         {isLoggedIn ? (
           <Dialog open={applyDialogOpen} onOpenChange={handleApplyDialogOpenChange}>
             <DialogTrigger asChild>
-              <Button disabled={isSubmitting} className="h-11 sm:h-9">
+              <Button disabled={isSubmitting} className="h-11 w-full sm:h-9 sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
                 {t("templates.apply")}
               </Button>
@@ -689,23 +692,25 @@ export default function TemplateViewPage() {
             </DialogContent>
           </Dialog>
         ) : (
-          <Button asChild className="h-11 sm:h-9">
+          <Button asChild className="h-11 w-full sm:h-9 sm:w-auto">
             <Link to={loginHref}>
               <LogIn className="mr-2 h-4 w-4" />
               {t("templates.loginToApply")}
             </Link>
           </Button>
         )}
-        <Button asChild variant="outline" className="h-11 sm:h-9">
+        <Button asChild variant="outline" className="size-11 sm:size-auto sm:h-9">
           <Link to={`/playground?template=${template.id}`}>
-            <FlaskConical className="mr-2 h-4 w-4" />
-            {t("templates.tryInPlayground")}
+            <FlaskConical className="h-4 w-4 sm:mr-2" aria-hidden />
+            <span className="sr-only sm:not-sr-only">{t("templates.tryInPlayground")}</span>
           </Link>
         </Button>
         <ShareButton
           title={`${template.title} - ${t("templates.pageTitle")} | Minefolio`}
           url={`${appUrl}/guides/templates/${template.id}`}
-          className="h-11 sm:h-8"
+          compactOnMobile
+          compactBelow="sm"
+          className="h-11 max-sm:min-w-11 sm:h-8"
         />
         <LikeButton
           variant="detail"
@@ -713,13 +718,14 @@ export default function TemplateViewPage() {
           targetId={template.id}
           likeCount={template.likeCount}
           isOwn={isOwner}
-          className="h-11 sm:h-8"
+          compactLabel
+          className="h-11 max-sm:min-w-11 sm:h-8"
         />
         {isOwner && (
-          <Button asChild variant="ghost" size="sm" className="ml-auto h-11 sm:h-8">
+          <Button asChild variant="ghost" size="sm" className="ml-auto size-11 sm:size-auto sm:h-8">
             <Link to="/my-guides/templates">
-              <Settings className="mr-2 h-4 w-4" />
-              {t("templates.manage")}
+              <Settings className="h-4 w-4 sm:mr-2" aria-hidden />
+              <span className="sr-only sm:not-sr-only">{t("templates.manage")}</span>
             </Link>
           </Button>
         )}
@@ -774,7 +780,9 @@ export default function TemplateViewPage() {
             見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、lg 以上は全部開いて、lg 未満は先頭が長ければ全部閉じて始める。
             閉じた本体も DOM に残す（ページ内検索で見つかる）。凡例は「すべて開く」と同じ行に置く */}
         <SearchCraftGroupedList
-          toolbarStart={<KeyBadgeLegend showCraftMarker={loops.length > 0} />}
+          toolbarStart={
+            <KeyBadgeLegend showCraftMarker={loops.length > 0} showRemapped={remaps.length > 0} />
+          }
           framed={false}
           collapsible={countSearchCraftGroups(parsedSearchCrafts, searchCraftLoopTimings) > 1}
           openFirstMaxCount={SEARCH_CRAFT_OPEN_FIRST_MAX}
@@ -818,6 +826,23 @@ export default function TemplateViewPage() {
           <p className="text-sm text-muted-foreground">
             {t("templates.remapSectionDescription")}
           </p>
+          {/* md 未満: 鍵盤（約1120px）は横スクロールしないと読めないので、リマップは「元のキー → 先」の一覧で常に出す
+              （/keybindings/visual の AssignmentAccordion と同じ表記）。鍵盤は下の「キーボードを表示」で補助として開く */}
+          <ul
+            aria-label={t("templates.remapListLabel")}
+            className="flex flex-wrap gap-1.5 md:hidden"
+          >
+            {remaps.map((remap, index) => (
+              <li
+                key={`${remap.sourceKey}-${index}`}
+                className="inline-flex max-w-full items-center gap-1 rounded bg-secondary/80 px-1.5 py-0.5 font-mono text-xs break-all"
+              >
+                {getRemapSourceLabel(t, remap.sourceKey, keyboardLayout)}
+                <span className="text-muted-foreground">→</span>
+                {getRemapOutputLabel(t, remap, keyboardLayout)}
+              </li>
+            ))}
+          </ul>
           <div
             id="template-remap-panel"
             className={cn("space-y-3", !remapOpen && "hidden md:block")}

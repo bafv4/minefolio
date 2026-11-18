@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNotNull } from "drizzle-orm";
 import { templateLikeCountSql } from "@/lib/likes.server";
 import { useT, useLocale } from "@/hooks/use-locale";
 import {
@@ -77,19 +77,50 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const lang = (url.searchParams.get("lang") ?? "").trim();
+  // 作成者（走者の slug）での絞り込み。著者別のガイド一覧（/guides/:author）からの導線で使う
+  const authorSlug = (url.searchParams.get("author") ?? "").trim();
   // テンプレートは新着順・いいね数順のみ（未対応の値は既定順へ落ちる）
   const sort: ContentSort = parseContentSort(url.searchParams.get("sort"), TEMPLATE_SORTS);
 
   // 言語はSQLで絞り込む（完全一致）
   // 非公開・限定公開の著者のテンプレートは公開一覧（discovery）に出さない
   // （ガイド一覧 guides/index.tsx と同じルール）
-  const conditions = [
+  const publicConditions = [
     eq(searchCraftTemplates.isPublished, true),
     eq(users.profileVisibility, "public"),
   ];
+  const conditions = [...publicConditions];
   if (lang) {
     conditions.push(eq(searchCraftTemplates.gameLanguage, lang));
   }
+  if (authorSlug) {
+    // slug の大文字小文字を区別せず一致させる（/guides/:author と同じポリシー）
+    conditions.push(sql`lower(${users.slug}) = ${authorSlug.toLowerCase()}`);
+  }
+
+  // 言語の絞り込みの選択肢は、公開一覧に出るテンプレートがある言語だけ（件数つき）。
+  // 数える範囲は一覧と同じ条件（公開・公開プロフィールの著者）で、いまの絞り込み（言語・検索語・作成者）には依らない
+  const languageCountsPromise = db
+    .select({
+      gameLanguage: searchCraftTemplates.gameLanguage,
+      count: sql<number>`count(*)`,
+    })
+    .from(searchCraftTemplates)
+    .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
+    .where(and(...publicConditions, isNotNull(searchCraftTemplates.gameLanguage)))
+    .groupBy(searchCraftTemplates.gameLanguage);
+
+  // 作成者で絞り込んでいるときは、件数の文言に出す名前を引く（0件でも名前を出せるよう一覧とは別に引く）。
+  // 公開一覧と同じく、公開プロフィールの走者だけ
+  const filterAuthorPromise = authorSlug
+    ? db.query.users.findFirst({
+        where: and(
+          sql`lower(${users.slug}) = ${authorSlug.toLowerCase()}`,
+          eq(users.profileVisibility, "public"),
+        ),
+        columns: { slug: true, displayName: true, displayNameAlphabet: true, mcid: true },
+      })
+    : Promise.resolve(undefined);
 
   // craftCount / hasRemaps / likeCount はSQLで算出し、craftsData/remapsData 本体は転送・パースしない
   const likeCount = templateLikeCountSql();
@@ -128,7 +159,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .orderBy(...orderBy)
     .limit(100);
 
-  const [viewer, rows] = await Promise.all([viewerPromise, rowsPromise]);
+  const [viewer, rows, languageCountRows, filterAuthor] = await Promise.all([
+    viewerPromise,
+    rowsPromise,
+    languageCountsPromise,
+    filterAuthorPromise,
+  ]);
+  const languageCounts: Record<string, number> = {};
+  for (const row of languageCountRows) {
+    if (row.gameLanguage) languageCounts[row.gameLanguage] = Number(row.count);
+  }
 
   let templates = rows.map((row) => ({
     id: row.id,
@@ -161,16 +201,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 
-  return { templates, q, lang, sort, isLoggedIn: !!viewer, appUrl };
+  const authorFilterName = authorSlug
+    ? filterAuthor
+      ? pickDisplayName(
+          { displayName: filterAuthor.displayName, displayNameAlphabet: filterAuthor.displayNameAlphabet },
+          locale,
+        ) || filterAuthor.mcid || filterAuthor.slug
+      : authorSlug
+    : "";
+
+  return {
+    templates,
+    q,
+    lang,
+    author: authorSlug,
+    authorFilterName,
+    languageCounts,
+    sort,
+    isLoggedIn: !!viewer,
+    appUrl,
+  };
 }
 
 export default function TemplatesIndexPage() {
   const t = useT();
   const locale = useLocale();
-  const { templates, q, lang, sort } = useLoaderData<typeof loader>();
+  const { templates, q, lang, author, authorFilterName, languageCounts, sort } =
+    useLoaderData<typeof loader>();
   const [langValue, setLangValue] = useState(lang || "__all");
   const [searchParams, setSearchParams] = useSearchParams();
-  const hasFilters = !!q || !!lang;
+  const hasFilters = !!q || !!lang || !!author;
   // タブ切替（→ /guides）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
   // 検索・絞り込み・並び替え等でのナビゲーション中は一覧をスケルトンに差し替える（guides/index.tsx と同型）
@@ -207,15 +267,26 @@ export default function TemplatesIndexPage() {
     setLangValue(lang || "__all");
   }, [lang]);
 
+  // 言語の選択肢は、公開一覧にテンプレートがある言語だけ（件数つき）。URL で選ばれている言語は
+  // 0 件でも残す（選択中の値が選択肢に無いとコンボボックスが空表示になるため）
   const languageOptions = [
     { value: "__all", label: t("templates.allLanguages") },
-    ...gameLanguageOptions(t, locale),
+    ...gameLanguageOptions(t, locale)
+      .filter((option) => (languageCounts[option.value] ?? 0) > 0 || option.value === lang)
+      .map((option) => ({
+        value: option.value,
+        label: t("templates.languageOptionWithCount", {
+          language: option.label,
+          count: languageCounts[option.value] ?? 0,
+        }),
+      })),
   ];
 
-  // 件数の文言（ガイド一覧と同じ形）。絞り込み中は「n 件（検索: …、言語: …）」
+  // 件数の文言（ガイド一覧と同じ形）。絞り込み中は「n 件（検索: …、言語: …、作成者: …）」
   const activeFilters = [
     q ? t("templates.resultFilterQuery", { q }) : "",
     lang ? t("templates.resultFilterLanguage", { language: getGameLanguageName(t, locale, lang) }) : "",
+    author ? t("templates.resultFilterAuthor", { name: authorFilterName }) : "",
   ].filter(Boolean);
   const resultCountText =
     activeFilters.length > 0
@@ -225,11 +296,12 @@ export default function TemplatesIndexPage() {
         })
       : t("templates.resultCount", { count: templates.length });
 
-  // 絞り込み（検索語・言語）だけを外す。並び順は保つ
+  // 絞り込み（検索語・言語・作成者）だけを外す。並び順は保つ
   const clearFiltersHref = (() => {
     const params = new URLSearchParams(searchParams);
     params.delete("q");
     params.delete("lang");
+    params.delete("author");
     const qs = params.toString();
     return qs ? `?${qs}` : "?";
   })();
@@ -244,15 +316,17 @@ export default function TemplatesIndexPage() {
       ) : (
       <>
       {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      {/* Playground は一覧の上の主ボタンにせず、見出しの行の右端に置く副次の操作（ghost）。
+          モバイルはアイコンだけ（名前は sr-only で残す）にして、一覧の1件目を押し下げない */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">{t("templates.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("templates.pageDesc")}</p>
         </div>
-        <Button asChild variant="outline" className="h-11 w-full sm:h-9 sm:w-auto">
+        <Button asChild variant="ghost" size="sm" className="-mr-2 size-11 shrink-0 sm:size-auto sm:min-h-8">
           <Link to="/playground">
-            <FlaskConical className="mr-2 h-4 w-4" />
-            {t("templates.openPlayground")}
+            <FlaskConical className="h-4 w-4 sm:mr-1.5" aria-hidden />
+            <span className="sr-only sm:not-sr-only">{t("templates.openPlayground")}</span>
           </Link>
         </Button>
       </div>
@@ -292,6 +366,7 @@ export default function TemplatesIndexPage() {
             />
           </div>
           {langValue !== "__all" && <input type="hidden" name="lang" value={langValue} />}
+          {author && <input type="hidden" name="author" value={author} />}
           {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（lang と同じ理由） */}
           {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
           <Button type="submit" className="hidden sm:inline-flex">
@@ -321,7 +396,7 @@ export default function TemplatesIndexPage() {
               onChange={handleSortChange}
               options={TEMPLATE_SORTS}
               newestLabel={t("contentSort.newest")}
-              descriptions={{ likes: t("contentSort.likesDesc") }}
+              descriptions={{ new: t("contentSort.newestCreatedDesc"), likes: t("contentSort.likesDesc") }}
             />
           </div>
         </div>
@@ -394,7 +469,8 @@ export default function TemplatesIndexPage() {
                       alt=""
                       className="shrink-0 rounded-md"
                     />
-                    <span className="truncate">{t("templates.byAuthorPrefix")} {template.authorName}</span>
+                    {/* 作成者はガイド一覧と同じ書き方（顔＋名前。「作成者:」の前置きは付けない） */}
+                    <span className="truncate">{template.authorName}</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <Search className="h-3 w-3" aria-hidden />
@@ -406,10 +482,11 @@ export default function TemplatesIndexPage() {
                       {t("templates.includesRemaps")}
                     </span>
                   )}
+                  {/* 適用数は数字だけにせず「適用 n回」と見える文で出す（アイコンと数字だけでは何の数か分からないため。
+                      行はオーバーレイのリンクに覆われていて title のツールチップが出ないので、見える文にする） */}
                   <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" aria-hidden />
-                    <span aria-hidden>{template.applyCount}</span>
-                    <span className="sr-only">{t("templates.applyCount", { count: template.applyCount })}</span>
+                    {t("templates.applyCount", { count: template.applyCount })}
                   </span>
                   <LikeButton
                     variant="compact"
@@ -434,7 +511,7 @@ export default function TemplatesIndexPage() {
       ) : hasFilters ? (
         <EmptyState
           icon={<Search className="h-12 w-12" />}
-          title={t("templates.noResultsTitle")}
+          title={q ? t("templates.noResultsForQueryTitle", { q }) : t("templates.noResultsTitle")}
           description={t("templates.noResultsDescription")}
           action={
             <Button asChild variant="outline" className="min-h-11 sm:min-h-9">

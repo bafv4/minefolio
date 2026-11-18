@@ -106,6 +106,8 @@ interface DesktopToolbarProps {
   publishSetting: boolean;
   /** 下書き保存を出すか（公開版があるときだけ。use-guide-save の hasDraftSave）。false なら保存ボタンは1つ */
   draftSaveAvailable: boolean;
+  /** 下書き保存した内容（DB のドラフト）があるか。未保存の変更が無くても「公開」でドラフトを公開版へ反映できる */
+  hasSavedDraft: boolean;
   onSaveDraft: () => void;
   onSavePublish: () => void;
   onOpenSettings: () => void;
@@ -291,6 +293,7 @@ export function DesktopToolbar({
   livePublished,
   publishSetting,
   draftSaveAvailable,
+  hasSavedDraft,
   onSaveDraft,
   onSavePublish,
   onOpenSettings,
@@ -338,6 +341,12 @@ export function DesktopToolbar({
   const publishMessages = PUBLISH_ACTION_MESSAGES[publishAction];
   // 公開版が無いガイドでは Ctrl+S がこのボタンと同じ保存をする。ただし初めて公開する保存はショートカットでは行わない（index.tsx）
   const shortcutSavesHere = !draftSaveAvailable && publishAction !== "publish";
+  // 保存しても何も変わらないときは押せない状態にする（Ctrl+S が変更の無いときに何もしないのと揃える）。
+  // フォーカスとツールチップは残すため disabled ではなく aria-disabled（保存中は従来どおり disabled）。
+  // 下書き保存は未保存の変更があるときだけ。保存（公開）は、未保存の変更・下書き保存した内容（公開版へ反映できる）・
+  // 未保存の公開の設定のどれかがあるとき
+  const draftSaveInert = !isDirty;
+  const publishSaveInert = !isDirty && !hasSavedDraft && livePublished === publishSetting;
 
   // fixed 化に伴うスペーサー高さ計測
   const barRef = useRef<HTMLDivElement>(null);
@@ -450,8 +459,10 @@ export function DesktopToolbar({
                 <TooltipTrigger asChild>
                   <Button asChild type="button" variant="ghost" size="sm">
                     <Link to={previewUrl} target="_blank" rel="noopener noreferrer">
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4" aria-hidden />
                       <span className="hidden md:inline">{t("guideEditor.preview")}</span>
+                      {/* 新しいタブで開くことを読み上げでも伝える（書き方の手引きのリンクと同じ文） */}
+                      <span className="sr-only">{t("meGuides.opensInNewTab")}</span>
                     </Link>
                   </Button>
                 </TooltipTrigger>
@@ -473,8 +484,10 @@ export function DesktopToolbar({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={onSaveDraft}
+                      onClick={draftSaveInert ? undefined : onSaveDraft}
                       disabled={saving}
+                      aria-disabled={draftSaveInert || undefined}
+                      className={cn(draftSaveInert && "opacity-50")}
                       aria-keyshortcuts={SAVE_ARIA_KEYSHORTCUTS}
                     >
                       <FileEdit className="h-4 w-4" />
@@ -490,8 +503,10 @@ export function DesktopToolbar({
                     type="button"
                     variant="default"
                     size="sm"
-                    onClick={onSavePublish}
+                    onClick={publishSaveInert ? undefined : onSavePublish}
                     disabled={saving}
+                    aria-disabled={publishSaveInert || undefined}
+                    className={cn(publishSaveInert && "opacity-50")}
                     aria-keyshortcuts={shortcutSavesHere ? SAVE_ARIA_KEYSHORTCUTS : undefined}
                   >
                     <Save className="h-4 w-4" />
@@ -567,8 +582,9 @@ export function DesktopToolbar({
                 <ToolbarButton label={t("guideEditor.code")} shortcut="Ctrl E" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
                   <Code className="h-4 w-4" />
                 </ToolbarButton>
-                <FontSizePicker editor={editor} />
-      <InlineColorPicker editor={editor} />
+                {/* ほかのツールボタンと同じ 32px（バブルメニューの中では従来の 28px のまま） */}
+                <FontSizePicker editor={editor} size="default" />
+                <InlineColorPicker editor={editor} size="default" />
                 <ToolbarSeparator />
                 <ToolbarButton label={t("guideEditor.unorderedList")} active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}>
                   <List className="h-4 w-4" />

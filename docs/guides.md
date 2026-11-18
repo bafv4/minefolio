@@ -323,6 +323,7 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
   - 保存データ・エディタの本文は変えない（作者が自分で消せる）
   - エディタでは、本文の先頭がタイトルと一致する間だけ、タイトル・概要の下に注記と「この見出しを削除」を出す（下記「エディタ基盤」の「本文の上のタイトルと概要」）
 - **コールアウト**: `annotateGuideCallouts` が `role="note"` と種類名の `aria-label` を付ける
+- **iframe の正規化**: `normalizeGuideIframes` が、`div[data-youtube-video]` で包まれていない iframe（古い保存データ・貼り付けた HTML 等）を同じ形で包み（本文の直下なら下の YouTube と同じく押してから読み込む表示になる）、`src` の無い iframe を包まれているかに関わらず取り除く。iframe の src はサニタイズで YouTube の埋め込みホストだけに絞られている（サニタイズの方針は変えていない）。`titleGuideYouTubeIframes` より前に掛けるので番号は揃う。段落など別の要素の中にある包まれていない iframe は、包んでも本文の直下ではないので iframe のまま（入れ子の動画と同じ）
 - **YouTube**: `titleGuideYouTubeIframes` が iframe に番号付きの `title`（`guideView.youtubeTitle`「YouTube 動画 {n}」。番号は本文中の出現順）と `loading="lazy"` を付ける。`splitContentAtEmbeds`（`guide-embeds.tsx`）は**本文の直下（要素の深さ 0）**の動画だけを `youtube` セグメントに分け、`YouTubeClickEmbed`（押してから youtube-nocookie.com の iframe を読み込む。サムネイルは i.ytimg.com）で描く。再生ボタンの名前は `guideView.youtubePlay`「YouTube 動画 {n} を再生」。埋め込み URL は iframe の src から `getYouTubeEmbedUrl()` で作り直し、`start` だけ引き継ぐ。src が無い（許可外ホストでサニタイズが除去した）直下の動画は描かない。再生リスト（TipTap の `/embed/videoseries?list=…`・`list` 付き）は動画 1 本の URL に直すと再生リストが失われるので、直下でも iframe のまま残す。コールアウト・トグル・段組の中の動画は、そこで切ると開閉タグが別の断片に分かれて構造が壊れるため、iframe のまま残す（従来どおり表示時に読み込む）
 - **コードブロックのコピーボタン**（`useCodeCopyButtons`）: 見た目 28px、押せる範囲は `::after` で 44px。タッチ端末（`hover: none`）では常に表示し、コードの 1 行目が隠れないよう `pre` の右に余白を取る。成功すると名前を「コピーしました」（`guideView.copied`）に替え、`role="status"` の sr-only 領域でも読み上げる。原文/訳文の切替で本文が差し替わっても差し込み直す（`html` を依存に持つ）
 - **表**（`useGuideTableScroll`）: 表の実幅と器（`.table-scroll-wrapper`）の幅を ResizeObserver で比べる（`isGuideTableOverflowing`、`app/lib/guide-tables.ts`。1px までの差は収まっている扱い）
@@ -340,20 +341,23 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 
 - 全ユーザーの公開ガイドを一覧表示（著者が公開プロフィールのもののみ）
 - **グリッド表示**: カード形式で表示。カバー画像がないカードは帯（プレースホルダー）を出さず、タイトルから始める（フッター直前の `flex-1` で兄弟カードと区切り線の高さは揃う）。カバー画像の下端には `border-b border-border/60` を付け、白地の画像（国旗など）がカードの面に溶けないようにする
-- **リスト表示**: リスト形式で表示。カバー画像を左端に表示（サムネイルにも `border border-border/60`）
-- 表示切替が可能
+- **リスト表示**: リスト形式で表示。カバー画像を左端に表示（サムネイルにも `border border-border/60`）。カバー画像が無い行はサムネイルの枠を描かない（カード表示の帯と同じ扱い。飾りの面を作らない）
+- 表示切替が可能。表示形式は URL の `?view=list` に保持する（既定のカードはパラメータなし。`/browse` と同じ形。localStorage は使わない）。戻る・再読み込みでも保たれ、切替は履歴を積まない `replace`。`view` だけが変わるナビゲーションでは `shouldRevalidate` でこのルートの loader を再実行せず、一覧もスケルトンに差し替えない。検索フォームは hidden input で `view` を持ち越し、ページ送りの件数（`GuidePagedList` の `key`）は `view` を除いたクエリで決める（切替で 24 件に戻さない）。`/guides/:authorSlug` の表示切替は従来どおり保存しない
 - **件数とページ送り**: ローダーは絞り込み後の全件を返し、クライアントが `GuidePagedList`（`guide-paged-list.tsx`）で最初の 24 件（`GUIDE_PAGE_SIZE`）だけ描画する。残りは「もっと見る（残り n 件）」で 24 件ずつ出し、追加分の最初のカードのタイトルリンクへフォーカスを移す。24 件以下ならボタンは出ない。条件（検索語・タグ・並び順）が変わると出す件数は 24 に戻る（`key` に `searchParams`）。`/guides/:authorSlug` も同じ
 - **件数表示**: 並び替えの行の左に「n 件」（絞り込み中は「n 件（検索: …、タグ: …）」）を出す（`aria-live="polite"` は件数の `<p>` だけ）。この `<p>`（`id="guide-results"`、`tabIndex=-1`）は一覧の先頭で、タグの後ろにあるスキップリンク「結果へスキップ」（フォーカス時だけ見える）の飛び先になる
-- **テンプレート一覧の言語絞り込み**: 言語を選ぶと即時に絞り込む（`setSearchParams`。並び替えと同じ形で `q` / `sort` は保ち、「すべての言語」は `lang` を外す）。並び替えの行の左に件数「n 件」（絞り込み中は「n 件（検索: …、言語: …）」。`aria-live="polite"` は件数の `<p>` だけ）と、絞り込み中は「絞り込みをリセット」（検索語・言語だけ外し並び順は保つ。0件の EmptyState も同じ）を出す。適用数（`Download` アイコン＋数字）は、アイコンと数字を `aria-hidden`、`sr-only` の「適用 n回」で読ませる
-- **ツールバーの組み方**（テンプレート一覧と共通）: ページ見出し＋説明文（`guides.pageDesc`）→ 検索（`role="search"`、入力欄は `aria-label`。検索ボタンは狭い画面は入力欄の右端、sm 以上は右隣）→ 絞り込み（ガイドはタグ、テンプレートは言語）→ 並び替え（→ ガイドのみ表示切替）。並び順の既定の呼び名は、ガイドが「更新順」（`updatedAt` 基準）、テンプレートが「新着順」（`createdAt` 基準）で、並べ替えに使う列が違うため別の名前のままにしている
+- **テンプレート一覧の言語絞り込み**: 言語を選ぶと即時に絞り込む（`setSearchParams`。並び替えと同じ形で `q` / `sort` は保ち、「すべての言語」は `lang` を外す）。選択肢は**公開一覧にテンプレートがある言語だけ**を「言語名（件数）」で出す（loader が公開・公開プロフィールの著者のテンプレートを `game_language` ごとに `count(*)` で集計。いまの絞り込み〔言語・検索語・作成者〕には依らない）。URL で選ばれている言語は 0 件でも選択肢に残す（コンボボックスが空表示にならないように）。並び替えの行の左に件数「n 件」（絞り込み中は「n 件（検索: …、言語: …、作成者: …）」。`aria-live="polite"` は件数の `<p>` だけ）と、絞り込み中は「絞り込みを解除」（ガイド一覧と同じ語。検索語・言語・作成者だけ外し並び順は保つ。0件の EmptyState も同じ）を出す。適用数は「適用 n回」の見える文で出す（行はオーバーレイのリンクに覆われ title のツールチップが出ないため、数字だけにしない）
+- **テンプレート一覧の作成者の絞り込み**: `?author=<走者の slug>`（大文字小文字を無視）。著者別のガイド一覧（`/guides/:authorSlug`）からの導線で使い、件数の文言に「作成者: {名前}」を出す（名前は公開プロフィールの走者だけ引く。見つからなければ slug のまま）。検索フォームは hidden input で持ち越す
+- **テンプレート一覧の見出し**: 「Playgroundで試す」は一覧の上の主ボタンにせず、見出しの行の右端の副次の操作（`ghost`。モバイルは 44px のアイコンだけ・名前は `sr-only`）。行の作成者はガイド一覧と同じく顔＋名前だけ（「作成者:」の前置きは付けない）
+- **0 件の見出し**: 検索語で絞り込んで 0 件のときは、見出しに検索語を引用する（`guides.noGuidesForQueryTitle`「「{q}」に一致するガイドがありません」・`templates.noResultsForQueryTitle`）。検索語が無い絞り込みは従来の見出し
+- **ツールバーの組み方**（テンプレート一覧と共通）: ページ見出し＋説明文（`guides.pageDesc`）→ 検索（`role="search"`、入力欄は `aria-label`。検索ボタンは狭い画面は入力欄の右端、sm 以上は右隣）→ 絞り込み（ガイドはタグ、テンプレートは言語）→ 並び替え（→ ガイドのみ表示切替）。並び順の既定の呼び名はどちらも「新着順」（`contentSort.newest`）。並べ替えに使う列はガイドが `updatedAt`、テンプレートが `createdAt` で違うので、選択肢の説明（`descriptions.new`）で「更新日時が新しい順」「作成日時が新しい順」と示す
 - ガイド／テンプレートを切り替えるタブ（`ContentTabs`）の `nav` には `aria-label`（`guides.contentTabsLabel`）が付き、タブの高さはモバイル 44px（`h-11 sm:h-9`）
-- **並び替え**: `?sort=` で「更新順（既定、`updatedAt` 降順）」「いいね数順（総いいね数降順）」「閲覧数順（`guides.viewCount` 累計降順）」「人気順（直近7日のページビュー降順）」の4種を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、いずれも `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す。旧「おすすめ順」（`?sort=recommended`）は廃止済みで、更新順へフォールバックする。詳細は [`docs/likes.md`](./likes.md#並び替え)
+- **並び替え**: `?sort=` で「新着順（既定、`updatedAt` 降順）」「いいね数順（総いいね数降順）」「閲覧数順（`guides.viewCount` 累計降順）」「人気順（直近7日のページビュー降順）」の4種を切り替えられる（`ContentSortSelect`）。並び順の定義は `guideListOrderBy()`（`app/lib/likes.server.ts`）が単一情報源で、いずれも `updatedAt` → `id` でタイブレークする。検索フォームは hidden input で並び順を持ち越す。旧「おすすめ順」（`?sort=recommended`）は廃止済みで、新着順（既定）へフォールバックする。詳細は [`docs/likes.md`](./likes.md#並び替え)
   - 選択肢を開くと、各項目の下段に「何を基準に並ぶか」の1行説明（例: いいね数順→「総いいね数」、人気順→「直近7日でよく見られた順」）が表示される（`ContentSortSelect` の `descriptions`）。トリガー自体は選択中の項目名のみの1行表示のまま
   - 人気順のページビューは Vercel Web Analytics を cron で集計した `page_view_stats` を参照し、未集計時はいいね数順へ自然に落ちる。人気順を選んでいる間は、各カードに累計閲覧数の隣に直近7日PVを根拠数値として表示する（`PageViews7dMeta`。`TrendingUp` アイコン＋短いラベル「7日」/ "7d"＋数字。見た目のラベルは `aria-hidden` で、読み上げは `sr-only` の「直近7日の閲覧数」を数字の前に読む。累計は目のアイコン＋数字なので、ラベルの有無で区別する）。`page_view_stats` がまだ1件も無い（cron 未稼働・集計前）環境では、一覧上部に「閲覧データを収集中のため、現在はいいね数・更新日時順で表示しています」の注記（`guides.popularPending`）を出す
   - 検索フォームは狭い画面では縦積みになる（`flex-col sm:flex-row`）。1行のままだと検索入力が潰れる
 - **カードのメタ行の読み上げ**: 閲覧数（Eye）・いいね数（静的表示の `LikeButton`）は、アイコンを `aria-hidden`、見える数字を `aria-hidden` にして `sr-only` の「閲覧 N」「いいね N 件」を読ませる（裸の数字にしない。見た目は数字のまま）
 - **著者の顔**: `/guides`（カード・リスト）のメタ行は、著者名の左に `MinecraftAvatar` 20px（`rounded-md`・`alt=""`）を出す。`GuideItem.authorAvatar`（`{ uuid, skinUrl }`）を渡した一覧だけが出し、ローダーは著者の `users.uuid` / `customSkinUrl` を同じ JOIN で取る（追加クエリなし）。ホームの新着ガイドも同じ列を渡す。著者が全部同じ一覧（`/guides/:authorSlug`・走者画面のガイドタブ）はもともと著者名を出さないので顔も出さない。テンプレート一覧の行も著者名の左に同じ 20px の顔を出す
-- **作成者の表記と顔（統一）**: 走者の名前を出す箇所は「作成者:」＋名前に揃え（`templates.byAuthorPrefix`。旧 `templates.byAuthor`「by {name}」は廃止）、名前の前に `MinecraftAvatar` 20px（`rounded-md`・`alt=""`）を置く。対象: テンプレート一覧の行・テンプレート詳細（loader が `users.uuid` / `customSkinUrl` を同じ関連読み込みで取る）・記事内のテンプレート埋め込み（`EmbedTemplateData` の `authorUuid` / `authorSkinUrl`。`resolveEmbedTemplates` の既存 JOIN に列を足した）・エディタのテンプレート埋め込み検索（`/api/guides/templates-search` が `authorUuid` / `authorSkinUrl` を返す）・エディタのガイドリンク検索（`/api/guides/search` が同じ2列を返す）。記事の筆者行（36px）・著者ヘッダー（44px）・「この走者のほかのガイド」（36px）は ui.md 6 章どおりの既存の寸法。保存済みのガイドリンクカード（`guide-link` ノードの HTML 属性）は名前だけで顔は出さない（属性に uuid を保存していないため）
+- **作成者の表記と顔（統一）**: 走者の名前を出す箇所は「作成者:」＋名前に揃え（`templates.byAuthorPrefix`。旧 `templates.byAuthor`「by {name}」は廃止。ただしテンプレート一覧の行は、ガイド一覧と同じ顔＋名前だけにした）、名前の前に `MinecraftAvatar` 20px（`rounded-md`・`alt=""`）を置く。対象: テンプレート一覧の行・テンプレート詳細（loader が `users.uuid` / `customSkinUrl` を同じ関連読み込みで取る）・記事内のテンプレート埋め込み（`EmbedTemplateData` の `authorUuid` / `authorSkinUrl`。`resolveEmbedTemplates` の既存 JOIN に列を足した）・エディタのテンプレート埋め込み検索（`/api/guides/templates-search` が `authorUuid` / `authorSkinUrl` を返す）・エディタのガイドリンク検索（`/api/guides/search` が同じ2列を返す）。記事の筆者行（36px）・著者ヘッダー（44px）・「この走者のほかのガイド」（36px）は ui.md 6 章どおりの既存の寸法。保存済みのガイドリンクカード（`guide-link` ノードの HTML 属性）は名前だけで顔は出さない（属性に uuid を保存していないため）
 - **テンプレート一覧の行**: sm 未満はゲーム言語（`Languages` アイコンは `text-primary`・`text-xs font-medium`）を1行目、タイトルを2行目（`line-clamp-2`）に置く。sm 以上はタイトル左・言語右の横並び（`line-clamp-1`）。両方を描いて CSS で出し分ける（非表示側は読み上げにも出ない）
 - **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
   - カード全体のクリックは**オーバーレイのリンク**が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない。リンクは**タイトル見出しの中のリンクの `::after`** をカード外枠（`group relative`）いっぱいに広げて敷く（読み上げがタイトル1回になる。サムネイルの `alt=""`・Pin は `aria-hidden`）。`line-clamp` は flex の見出しではなく内側の span に付ける
@@ -363,7 +367,8 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 ### /guides/:authorSlug — 著者別ガイド一覧
 
 - 特定著者のガイドのみをフィルタ表示
-- 著者名が h1（文字のみ。リンクにしない）。プロフィール（`/player/:slug`）へは見出し行の右の `SectionHeaderLink`（「プロフィールを見る」、モバイルは 44px のアイコン）。カードのタイトルは h2
+- 著者名が h1（文字のみ。リンクにしない。顔もリンクにしない）。プロフィール（`/player/:slug`）へは見出し行の右の `SectionHeaderLink`（「プロフィールを見る」、モバイルは 44px のアイコン）の1つだけ（同じ行き先で Tab の停止点を2つにしない）。カードのタイトルは h2
+- その走者の公開テンプレートがあるときは、ガイドの件数の下に「サーチクラフトテンプレート n件」（`guides.authorTemplatesLink`）のリンクを出し、テンプレート一覧の作成者の絞り込み（`/guides/templates?author=<slug>`）へ案内する。件数は公開一覧に出るもの（公開済み）だけで、公開一覧は公開プロフィールの走者のテンプレートしか出さないので、限定公開の走者には出さない
 - 身元の顔は `MinecraftAvatar` 44px（`rounded-xl`・`alt=""`。ui.md 6 章のアバターの大きさ別の角丸。ページの顔なので記事の筆者行の 36px より一段大きい）。戻るリンクは記事・テンプレート詳細と同じ `h-11 sm:h-8`
 - 著者が存在しない・非公開のときの 404 は「走者が見つかりません」（`guides.userNotFound`）。「ガイド一覧」へ戻るほか「走者を探す」（`/browse`）を出す
 
@@ -379,7 +384,7 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - **目次ドロワー（xl 未満）のフォーカス**: 開くと `onOpenAutoFocus` で Radix 既定（閉じるボタン）を止め、現在の項目（`aria-current="location"`）、無ければ最初の項目へフォーカスする（項目のリンクには `focus-visible` のリングがある）。閉じるボタンは `SheetContent` 既定の右上 X 1つだけで、読み上げ名は `closeLabel`（`guideToc.close`）で翻訳して渡す（`ui/sheet.tsx` の既定は "Close" のまま）。選んで閉じたあとに見出しへフォーカスを移す `onCloseAutoFocus` は従来どおり
 - **タグ**は `/guides?tag=<タグ>`（一覧の絞り込みクエリ）へのリンク
 - **末尾の「この走者のほかのガイド」**（`PageSection`・h2）: 筆者のアバター・名前・`@MCID`（プロフィールへのリンク）と、同じ筆者の**公開済み**のほかのガイドを更新日の新しい順に最大3件（このガイドは除く。下書き・非公開は含めない。ローダーの `otherGuides` は `slug` / `title` のみ）。見出し右に「すべてのガイド」（`/guides/:authorSlug`）。ほかのガイドが0件なら、リストと「すべてのガイド」は出さず筆者のリンクだけにし、見出しを「筆者」（`guideView.aboutAuthor`）に替える（欄・h2・`id` は保ち、筆者への導線を残す）
-- **目次**（`app/components/guide-toc-nav.tsx`。xl（1280px）以上は本文左の sticky サイドバー、未満はバー＋ドロワー）: 箱を作らず、見出し「目次」（`text-sm font-semibold`）と左の細い縦線のリスト（アクティブ項目だけ線が `border-brand`）。サイドバーの置き場所は、2xl（1536px）以上は本文（`max-w-5xl` 中央寄せ）の左ガター（`w-56`）、xl〜2xl 未満はガターが狭いので本文を右へ寄せ（`xl:max-w-[74rem] xl:pl-60`、本文の幅は約 912px で 2xl の 960px と大差ない）、その左の余白（`w-52`）に置く（`guides/view.tsx`）。本文の行の長さは制限しない（全幅・左寄せ）。**折りたたみ**: 項目の最小 level の項目だけを常に出し、それより下の階層は節（最上位項目から次の最上位項目の手前まで）が開いているときだけ出す。既定では「いま読んでいる節」だけが開く（`visibleTocItems`、`app/lib/guide-toc.ts`）。ただし**最上位の項目が1つだけ**の目次（本文全体を1つの見出しの下にまとめた形。タイトルと同じ文の先頭の見出しは表示時に取り除く〔「公開表示の本文」〕ので、言い換えた見出しで始まる記事などが当たる）は、その節を既定で開く（畳むと目次が最初1行だけになるため）。この節にもシェブロンと「すべて開く／閉じる」は出し、利用者の開閉は既定より優先する。先頭の最上位より前の孤立した下位見出しの塊は従来どおり（読んでいるときだけ見える）。最上位が2つ以上の目次は変わらない。サイドバーとドロワーで同じ規則
+- **目次**（`app/components/guide-toc-nav.tsx`。xl（1280px）以上は本文左の sticky サイドバー、未満はバー＋ドロワー）: 箱を作らず、見出し「目次」（`text-sm font-semibold`）と左の細い縦線のリスト（アクティブ項目だけ線が `border-brand`）。サイドバーの置き場所は、2xl（1536px）以上は本文（`max-w-5xl` 中央寄せ）の左ガター（`w-56`）、xl〜2xl 未満はガターが狭いので本文を右へ寄せ（`xl:max-w-[74rem] xl:pl-60`、本文の幅は約 912px で 2xl の 960px と大差ない）、その左の余白（`w-52`）に置く（`guides/view.tsx`）。**折りたたみ**: 項目の最小 level の項目だけを常に出し、それより下の階層は節（最上位項目から次の最上位項目の手前まで）が開いているときだけ出す。既定では「いま読んでいる節」だけが開く（`visibleTocItems`、`app/lib/guide-toc.ts`）。ただし**最上位の項目が1つだけ**の目次（本文全体を1つの見出しの下にまとめた形。タイトルと同じ文の先頭の見出しは表示時に取り除く〔「公開表示の本文」〕ので、言い換えた見出しで始まる記事などが当たる）は、その節を既定で開く（畳むと目次が最初1行だけになるため）。この節にもシェブロンと「すべて開く／閉じる」は出し、利用者の開閉は既定より優先する。先頭の最上位より前の孤立した下位見出しの塊は従来どおり（読んでいるときだけ見える）。最上位が2つ以上の目次は変わらない。サイドバーとドロワーで同じ規則
   - **手動の開閉**: 最上位の各項目に、配下を開閉するシェブロンのボタン（`aria-expanded`・`aria-controls`・`aria-label` は `guideToc.sectionToggle`。配下が無い項目には出さない）。利用者が手で開閉した節はその操作を既定より優先する（`visibleTocItems` の `overrides`）。畳んでいる間も配下の `<ul>` は `hidden` で残す（`aria-controls` の参照先）。状態は保存せず、記事を移ると初期値に戻る（`GuideTocSidebar` / `GuideTocMobile` に `key={guide.id}`）。ボタンはサイドバー 28px、ドロワー 44px。開閉ボタンのシェブロンの回転は `motion-reduce:transition-none`、そのほかの開閉に動きは付けない
   - **現在地の判定**（`useActiveHeading`）: 見出しの上端が「貼り付く UI の下端（`:root` の `scroll-padding-top`。xl 未満は目次バーのぶん深い）＋8px」を最後に超えたものを現在地にする（以前は固定の 96px で、xl 未満では目次から移った見出しがしきい値より下に着地して現在地にならなかった）。末尾まで来たら最後の見出しを現在地にする: ページの最下部（スクロール位置は切り上げ）か、本文（`.guide-content`）の終わりが画面に入り最後の見出しも画面内にあるとき（記事の下に「他のガイド」やフッターが続くと、ページの最下部より先に本文を読み終えるため）。最初の見出しより上にいる間は現在地なし（`null`。SSR の初期値も `null`）で、モバイルのバーは「目次」だけを出し（名前も「目次」）、サイドバーはどの節も強調・自動展開しない。ページの先頭（`scrollY` が 0）では末尾の上書きもしない（1画面に収まる短い記事で、開いた直後から最後の見出しが現在地になるため）
   - **xl 未満の目次バー**: 面は不透明（`bg-background`）。モバイルはレイアウトの左右の余白まで覆う（`-mx-4`。ui.md 10 章）。バーの直前の 1px の番兵を IntersectionObserver で見て、ヘッダーの直下に貼り付いている間はバーに `data-toc-stuck="true"` を付け、`app/app.css` がその間サイトヘッダーを不透明にする（半透明のヘッダーの下に不透明なバーがあると食い違うため。走者画面の `data-stuck` とは属性を分ける。あちらは `--sticky-bar-inset` も変える）
@@ -439,6 +444,8 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - 説明文の隣に、書き方の手引き（公式ガイド `/guides/bfmkn/guide-writing-guide`、`GUIDE_WRITING_GUIDE_PATH`）へのリンク。新しいタブで開き、外部リンクのアイコンと sr-only の「（新しいタブで開きます）」で伝える。ガイドが無い環境（ローカル DB）ではリンク先が 404 になるだけ
 - 削除の確認ダイアログの実行ボタンは destructive（`buttonVariants({ variant: "destructive" })`）。削除ボタンのスピナーは、そのガイドの削除（`_action === "delete"`）を送っている間だけ回す（ピン留めも同じ fetcher・同じ `guideId` で送るため、`guideId` だけでは回ってしまっていた）
 - 0 件のときは見出し横の「新規」ボタンを出さない（空状態の action に同じボタンがあるため。テンプレート管理も同じ）
+- 見出しの行はテンプレート管理と同じ組み方（狭い画面は縦積み、新規ボタンはモバイル全幅の 44px・sm 以上 36px）
+- **各行**: 行全体がタイトルのリンクの `::after` で敷くオーバーレイ（ui.md 9 章）で、行き先は公開状態に依らず常に**編集**（`/my-guides/:slug/edit`）。公開ページへは右の操作の Globe（公開中のときだけ。新しいタブで開き、名前に「（新しいタブで開きます）」を含める）。編集は行全体が担うので鉛筆のボタンは置かない。操作（ピン留め・公開ページ・削除）は `relative z-10` でオーバーレイより手前に出し、モバイルは 44px 四方・間隔 12px、sm 以上は 32px（`min-h-11 min-w-11 sm:min-h-8 sm:min-w-8`）。狭い画面は操作をタイトルの下の段へ回す。更新日時は「4か月前に更新」（`meGuides.updatedAgo`）
 - 各行の状態は ui.md 6 章の丸ピル（`StatusPill`。エディタの公開状態のピル `PublishStatusPill` と同じ見た目・同じ語）。公開中は「公開中」（Globe）、非公開は「非公開」（Lock、`meGuides.statusPrivate`。以前の「下書き」はエディタ・プレビューの帯の「非公開」と食い違っていたのでそろえた）。どちらも muted（brand は選択中・進行だけ。ui.md 1 章）
 - 公開中のガイドに下書き保存した未公開の変更（`draftUpdatedAt` が null でない）があるときは、警告色の丸ピル「未公開の変更あり」（`meGuides.statusUnpublishedChanges`）を添える。非公開のガイドに残っている下書き（下書き保存が非公開のガイドにも出ていた頃のもの）では出さない（読者に見える公開版が無く「未公開」の区別に意味が無い。エディタの `draftBannerUnpublished`・プレビューの帯で非公開の帯だけを出すのと同じ扱い）
 
@@ -448,6 +455,8 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - 本文は空の段落（`<p></p>`）で始める。タイトルはガイド設定と公開ページの h1 が持つ（以前は `<h1>タイトル</h1><p></p>` で始めていて、公開ページでタイトルが重なっていた。既存の記事は表示時に取り除く。上記「公開表示の本文」）。空の本文には、エディタの案内「本文を書く。/ でブロックや埋め込みを挿入」（`guideEditor.contentPlaceholder`）が出る
 - 構成は他の管理ページ（`/my-guides/templates/new`）と同じ「戻るリンク（`/my-guides`）＋ h1 ＋ 説明 ＋ フォーム」。カードには入れない
 - ページの `<title>` は「新しいガイドを作成 - Minefolio」
+- タイトルか URL に入力があれば、離れるときに確認を出す（`useUnsavedWarning` ＋ `UnsavedChangesDialog`）。送信中（`navigation.formMethod` あり）は外すので、作成に成功したあとの編集ページへのリダイレクトは止めない。失敗して戻ったら入力が残るので再び確認を出す
+- 戻るリンクの呼び名は戻り先の見出しの名前（「ガイドに戻る」`meGuides.backToManagement`。エディタの戻るリンクも同じ。テンプレートの作成・編集は「サーチクラフトテンプレートに戻る」）
 - **スラッグは必須入力**。タイトルからの自動生成は行わない（日本語のみのタイトルは `normalizeSlug()` で空になり、`guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため）
   - 入力欄は `softNormalizeSlug()` でタイプ中に許可外文字を落とすため、日本語だけを打つと空のままになり、`required` でそのまま送信できない
   - サーバー側でも `normalizeSlug()` 後に空なら `errorSlugRequired`、同一著者内で重複していれば `errorSlugTaken` を返す（重複時に連番・乱数を自動付与しない）
@@ -458,6 +467,8 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - 既存ガイドの編集画面（`(authorId, slug)` で本人のガイドを特定）
 - **独立レイアウト**: `me/_layout` のサイドバーに依存しないフルスクリーン編集画面
 - タイトル/本文/サマリー/タグ inputs はブラウザ標準の綴りバリデーション（`spellcheck`）を無効化
+- **保存ボタンの押せる状態**: 保存しても何も変わらないときは `aria-disabled`（フォーカスとツールチップは残す。保存中は従来どおり `disabled`）。下書き保存は未保存の変更があるときだけ押せる（Ctrl+S と同じ）。保存（公開）は、未保存の変更・下書き保存した内容（公開版へ反映できる）・未保存の公開の設定のどれかがあるときに押せる（`DesktopToolbar` の `hasSavedDraft`）
+- プレビューのリンク（新しいタブ）には sr-only の「（新しいタブで開きます）」を添える。ホームのリボンの「文字サイズ」「文字色」は、ほかのツールボタンと同じ 32px（`PickerTrigger` の `size="default"`。バブルメニューの中は 28px のまま）
 - ツールバーの面は不透明（`bg-background`）。エディタではサイトヘッダーも不透明にする（`:root:has([data-editor-toolbar]) header.sticky`、`app/app.css`。ヘッダーだけ半透明だと、その下の不透明なツールバーと食い違うため）
 - **URL（スラッグ）の編集**: 設定モーダルの「URL」欄で変更できる。下書き保存・保存いずれの保存でも即反映される（`slug` はライブ列）。
   - 保存時、`normalizeSlug()` で正規化した値が現在と異なれば、同一著者内での重複を確認する。重複時は `meGuides.errorSlugTaken` を返し、その保存自体を中止（トースト表示、他フィールドも保存されない）。正規化結果が空なら `meGuides.errorSlugRequired`。
