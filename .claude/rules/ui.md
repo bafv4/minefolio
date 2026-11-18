@@ -294,6 +294,12 @@
 - 幅で表示を切り替える部品は、両方を描いて CSS で出し分ける（`useMediaQuery` で描き分けない。SSR とずれるため）
 - `Button` の中の svg は基底の `[&_svg:not([class*='size-'])]:size-4` で 16px になる。他の大きさにするときは `h-5 w-5` ではなく `size-5` を使う（`h-*` は効かない）
 
+### フォーカスリング
+- `app/components/ui/` の部品のフォーカスリングは、**不透明の `--ring` の 2px**（`focus-visible:ring-ring focus-visible:ring-2`）。半透明（`ring-ring/50`）にしない（背景に対して 3:1 を切る。ハイコントラストは 4.5:1 以上）
+- 塗りのボタン（brand・destructive）は面とリングが同系色なので、背景色のすき間を入れる（`focus-visible:ring-offset-2 focus-visible:ring-offset-background`）
+- エラー時（`aria-invalid`）にフォーカスしたリングは不透明の `--destructive`
+- 端で切れる部品は内側に描く（仮想キーボードのキー・フォルダ型タブ）。自作の部品も、同じ色・太さにそろえる
+
 ### 名前と読み上げ
 - アクセシブルネームは、見えている短いラベルを含める（label in name）。短い表示と完全な文を出し分けるときは、見える短い文＋ `sr-only` の完全な文の組にする
 - 同じ情報を2回描くとき（アイコン＋文字など）は、片方を `aria-hidden` にする

@@ -64,6 +64,7 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 - 判定: localStorage `contrast`（`"more"` / `"normal"`）が明示の選択で、キーなし（または不正値）は OS の `prefers-contrast: more` に従う。純粋関数は `app/lib/contrast.ts` の `resolveContrast`。サーバー・Cookie へは送らない（プライバシーポリシーの「テーマ設定の保存（ローカルストレージ）」の範囲）
 - 初回描画前に `root.tsx` の head のインラインスクリプト（`CONTRAST_INIT_SCRIPT`）が属性を付ける（ちらつき防止）。以降は `app/hooks/use-contrast.ts`（`useContrast` / `ContrastSync`）が OS の設定の変更・別タブ（storage）に追従する
 - 明示の選択を解除して OS 追従へ戻す UI は無い（オン・オフだけ見せる）
+- フォーカスリング: `app/components/ui/` の部品（button・badge・checkbox・input・radio-group・select・slider・switch・textarea・toggle）は不透明の `--ring` の 2px（`ring-ring ring-2`。半透明に薄めない）。塗りのボタン（既定の brand・destructive）は面とリングが同系色なので `ring-offset-2 ring-offset-background` のすき間を挟む。`aria-invalid` の要素のフォーカスは不透明の `--destructive`。ネイティブのアウトラインの既定色（`app/app.css` の base の `*`）も不透明の `outline-ring`
 - ホバー・ハイライトも HC では面の濃淡に頼らず、前景色のアウトライン・強い枠・下線・反転で示す（`app/app.css` の「ハイコントラストのホバー・ハイライト」。詳細は `.claude/rules/ui.md` 3章）
 
 ## レイアウト

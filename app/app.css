@@ -560,7 +560,7 @@ body {
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
 
   /* Respect prefers-reduced-motion: 動きとスクロール挙動を抑制 */
