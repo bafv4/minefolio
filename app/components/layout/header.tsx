@@ -137,8 +137,10 @@ export function Header({ user }: HeaderProps) {
                     <Button
                       variant="ghost"
                       className="relative h-9 w-9 rounded-full"
+                      aria-label={t("nav.userMenu", { name: userName })}
                     >
-                      <Avatar className="h-9 w-9">
+                      {/* 名前はボタンの aria-label が担う（頭文字のフォールバックを「H」と読ませない） */}
+                      <Avatar className="h-9 w-9" aria-hidden>
                         <AvatarImage
                           src={user.discordAvatar ?? undefined}
                           alt={userName}
@@ -233,6 +235,7 @@ export function Header({ user }: HeaderProps) {
               </div>
               <SheetContent
                 side="right"
+                closeLabel={t("common.close")}
                 className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
               >
                 <SheetTitle className="sr-only">{t("nav.navigation")}</SheetTitle>

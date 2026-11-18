@@ -350,7 +350,7 @@ export function SearchCraftWorkbench({
                 {t("playground.typingTestSection")}
               </Button>
               <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

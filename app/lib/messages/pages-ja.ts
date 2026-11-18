@@ -329,6 +329,8 @@ export const PAGES_JA = {
     theme: "テーマ",
     language: "言語",
     changeLanguage: "言語を変更",
+    /** ヘッダーのユーザーメニューのボタン（見た目はアバターだけ） */
+    userMenu: "ユーザーメニュー（{name}）",
   },
   /** ルートのエラーバウンダリ（app/root.tsx） */
   errorPage: {

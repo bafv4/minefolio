@@ -8,10 +8,15 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/** ラジオ項目を DropdownMenuItem と同じ見た目にする（左の丸印を隠し、余白とアイコン色を揃える） */
+const MENU_RADIO_ITEM_CLASS =
+  "cursor-pointer py-2.5 pl-2 md:py-1.5 [&>span:first-child]:hidden [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 /** テーマの選択肢（デスクトップのドロップダウンとモバイルの切替で共有） */
 // ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
@@ -37,17 +42,22 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {THEME_OPTIONS.map(({ value, labelKey, icon: Icon }) => (
-          <DropdownMenuItem
-            key={value}
-            onSelect={() => setTheme(value)}
-            className="cursor-pointer"
-          >
-            <Icon className="mr-2 h-4 w-4" />
-            {t(labelKey)}
-            {theme === value && <Check className="ml-auto h-4 w-4" aria-hidden />}
-          </DropdownMenuItem>
-        ))}
+        {/* 選択肢はラジオ項目（role=menuitemradio・aria-checked で現在のテーマが読み上げられる）。
+            見た目は従来の項目のまま: 左の丸印（基底の先頭 span）を隠し、余白・アイコン色を DropdownMenuItem に合わせ、
+            右端のチェックは飾り（aria-hidden）として残す */}
+        <DropdownMenuRadioGroup value={theme ?? ""} onValueChange={setTheme}>
+          {THEME_OPTIONS.map(({ value, labelKey, icon: Icon }) => (
+            <DropdownMenuRadioItem
+              key={value}
+              value={value}
+              className={MENU_RADIO_ITEM_CLASS}
+            >
+              <Icon className="mr-2 h-4 w-4" />
+              {t(labelKey)}
+              {theme === value && <Check className="ml-auto h-4 w-4" aria-hidden />}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
         {/* ハイコントラストはテーマとは別のオン・オフ（3テーマそれぞれに効く）。
             メニューの中なので、役割はチェック項目（role=menuitemcheckbox・aria-checked は Radix が付ける）のまま、
             見た目だけトグルスイッチにする（ui/switch.tsx と同じクラス。操作できる button を項目の中に入れ子にしない）。

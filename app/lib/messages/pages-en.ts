@@ -325,6 +325,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     theme: "Theme",
     language: "Language",
     changeLanguage: "Change language",
+    userMenu: "User menu ({name})",
   },
   errorPage: {
     notFoundTitle: "Page not found",

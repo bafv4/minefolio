@@ -4,12 +4,17 @@ import { Languages, Check } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useLocale, useT, useSetLocale } from "@/hooks/use-locale";
-import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
+import { SUPPORTED_LOCALES, LOCALE_NAMES, type Locale } from "@/lib/locale";
+
+/** ラジオ項目を DropdownMenuItem と同じ見た目にする（左の丸印を隠し、余白とアイコン色を揃える） */
+const MENU_RADIO_ITEM_CLASS =
+  "py-2.5 pl-2 md:py-1.5 [&>span:first-child]:hidden [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 export function LocaleSwitcher() {
   const currentLocale = useLocale();
@@ -24,16 +29,23 @@ export function LocaleSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {SUPPORTED_LOCALES.map((locale) => (
-          <DropdownMenuItem
-            key={locale}
-            onClick={() => setLocale(locale)}
-            aria-current={currentLocale === locale}
-          >
-            {LOCALE_NAMES[locale]}
-            {currentLocale === locale && <Check className="ml-auto h-4 w-4" aria-hidden />}
-          </DropdownMenuItem>
-        ))}
+        {/* 選択肢はラジオ項目（role=menuitemradio・aria-checked で現在の言語が読み上げられる）。
+            右端のチェックは飾り（aria-hidden） */}
+        <DropdownMenuRadioGroup
+          value={currentLocale}
+          onValueChange={(value) => setLocale(value as Locale)}
+        >
+          {SUPPORTED_LOCALES.map((locale) => (
+            <DropdownMenuRadioItem
+              key={locale}
+              value={locale}
+              className={MENU_RADIO_ITEM_CLASS}
+            >
+              {LOCALE_NAMES[locale]}
+              {currentLocale === locale && <Check className="ml-auto h-4 w-4" aria-hidden />}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
