@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/playground";
 import { createDb } from "@/lib/db";
 import { resolvePublicPresetId } from "@/lib/config-history";
@@ -73,9 +73,11 @@ import {
 } from "@/components/search-craft-workbench";
 import type { SearchCraftDraft } from "@/components/search-craft-editor";
 import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
+import { NoticeBanner } from "@/components/notice-banner";
 import { cn } from "@/lib/utils";
 import {
   FlaskConical,
+  Info,
   Loader2,
   RotateCcw,
   Save,
@@ -495,15 +497,24 @@ export default function PlaygroundPage() {
         : null,
   );
 
-  // ブラウザの下書き復元（テンプレート指定時は優先しない）。SSRとの表示差異を避けるためマウント後に実行する。
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => {
-    if (templateData) {
-      setIsHydrated(true);
-      return;
-    }
-    const draft = loadDraftFromStorage();
-    if (draft) {
+  // テンプレートを読み込んだ直後の内容（参照で比較する）。利用者が編集するまで下書きを上書きしない判定に使う
+  const [templateBaseline, setTemplateBaseline] = useState<{
+    remaps: WorkbenchRemap[];
+    crafts: SearchCraftDraft[];
+    loops: SearchCraftLoopDraft[];
+    layout: KeyboardLayoutOption;
+  } | null>(() => (templateData ? { remaps, crafts, loops, layout } : null));
+  const isTemplatePristine =
+    templateBaseline !== null &&
+    templateBaseline.remaps === remaps &&
+    templateBaseline.crafts === crafts &&
+    templateBaseline.loops === loops &&
+    templateBaseline.layout === layout;
+  // テンプレート表示中に、空でない下書きが別に保存されているか（マウント後に localStorage から判定）
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+
+  const applyDraft = useCallback(
+    (draft: PlaygroundDraft) => {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
       // 旧形式の下書き（Loop 機能追加前・バリエーション対応前）には variations や withShift が
       // 無いことがあるため resolveVariations() で正準化する。
@@ -537,28 +548,88 @@ export default function PlaygroundPage() {
       );
       setLayout(draft.layout);
       setLoadedLabel(t("playground.loadedDraft"));
+    },
+    [t],
+  );
+
+  // ブラウザの下書き復元（テンプレート指定時は優先しない）。SSRとの表示差異を避けるためマウント後に実行する。
+  const [isHydrated, setIsHydrated] = useState(false);
+  useEffect(() => {
+    const draft = loadDraftFromStorage();
+    if (templateData) {
+      // テンプレート表示中は下書きを読み込まず、残っているかだけ見る
+      setHasSavedDraft(
+        !!draft && (draft.remaps.length > 0 || draft.crafts.length > 0 || draft.loops.length > 0),
+      );
+    } else if (draft) {
+      applyDraft(draft);
     }
     setIsHydrated(true);
     // 初回マウント時のみ実行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 変更のたびにブラウザへ仮保存する
+  // 変更のたびにブラウザへ仮保存する。テンプレートを読み込んだ状態から編集するまでは書き込まない
   useEffect(() => {
     if (!isHydrated) return;
+    if (isTemplatePristine) return;
     saveDraftToStorage({ remaps, crafts, loops, layout });
-  }, [isHydrated, remaps, crafts, loops, layout]);
+    setHasSavedDraft(false);
+  }, [isHydrated, isTemplatePristine, remaps, crafts, loops, layout]);
+
+  const navigate = useNavigate();
+  const handleOpenDraft = useCallback(() => {
+    const draft = loadDraftFromStorage();
+    if (draft) applyDraft(draft);
+    setTemplateBaseline(null);
+    setHasSavedDraft(false);
+    // クエリを外して、再読み込みでテンプレートに戻らないようにする
+    navigate("/playground", { replace: true });
+  }, [applyDraft, navigate]);
 
   // 保存ペイロード用の有効なリマップ（ワークベンチ内の表示と同じ導出）
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
-  const loadData = useCallback((data: PlaygroundData, label: string) => {
-    const nextCrafts = toPlaygroundCrafts(data.crafts);
-    setRemaps(toPlaygroundRemaps(data.remaps));
-    setCrafts(nextCrafts);
-    setLoops(toPlaygroundLoops(data.loops, nextCrafts));
-    setLoadedLabel(label);
-  }, []);
+  // 取り消し用に、置き換え前の内容を常に最新で持っておく
+  const latestRef = useRef({ remaps, crafts, loops, loadedLabel });
+  latestRef.current = { remaps, crafts, loops, loadedLabel };
+
+  /** 編集中の内容を置き換える。置き換え前が空でなければ、取り消しつきのトーストを出す */
+  const replaceContent = useCallback(
+    (apply: () => void, message: string) => {
+      const prev = latestRef.current;
+      const hadContent = prev.remaps.length > 0 || prev.crafts.length > 0 || prev.loops.length > 0;
+      apply();
+      if (!hadContent) return;
+      toast(message, {
+        // 取り消しに気づいて押すまでの余裕を取る（既定の 4 秒では短い）
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => {
+            setRemaps(prev.remaps);
+            setCrafts(prev.crafts);
+            setLoops(prev.loops);
+            setLoadedLabel(prev.loadedLabel);
+          },
+        },
+      });
+    },
+    [t],
+  );
+
+  const loadData = useCallback(
+    (data: PlaygroundData, label: string) => {
+      replaceContent(() => {
+        const nextCrafts = toPlaygroundCrafts(data.crafts);
+        setRemaps(toPlaygroundRemaps(data.remaps));
+        setCrafts(nextCrafts);
+        setLoops(toPlaygroundLoops(data.loops, nextCrafts));
+        setLoadedLabel(label);
+      }, t("playground.replacedToast"));
+    },
+    [replaceContent, t],
+  );
 
   // ========== 読み込み・保存ダイアログ ==========
 
@@ -659,6 +730,17 @@ export default function PlaygroundPage() {
         </p>
       </div>
 
+      {templateData && isTemplatePristine && hasSavedDraft && (
+        <NoticeBanner tone="info" icon={Info}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span>{t("playground.templateViewNotice")}</span>
+            <Button variant="outline" size="sm" onClick={handleOpenDraft}>
+              {t("playground.openDraft")}
+            </Button>
+          </div>
+        </NoticeBanner>
+      )}
+
       {/* データ読み込み・保存バー */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
@@ -673,12 +755,14 @@ export default function PlaygroundPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
+                onClick={() => {
+                  // 読み込んだままで未編集なら置き換える物が無い（下書きも上書きしない）
+                  if (isTemplatePristine) return;
                   loadData(
                     templateData,
                     t("playground.loadedTemplate", { title: templateData.title }),
-                  )
-                }
+                  );
+                }}
               >
                 <RotateCcw className="mr-2 size-3.5" />
                 {t("playground.reloadTemplate")}
@@ -739,12 +823,14 @@ export default function PlaygroundPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setRemaps([]);
-                setCrafts([]);
-                setLoops([]);
-                setLoadedLabel(null);
-              }}
+              onClick={() =>
+                replaceContent(() => {
+                  setRemaps([]);
+                  setCrafts([]);
+                  setLoops([]);
+                  setLoadedLabel(null);
+                }, t("playground.clearedToast"))
+              }
             >
               <X className="mr-2 size-3.5" />
               {t("playground.clearAll")}

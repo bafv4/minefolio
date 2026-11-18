@@ -2908,6 +2908,12 @@ export const PAGES_JA = {
     pageDescription: "サーチクラフトとキーリマップの組み合わせをその場で試せる実験場です。リマップを編集すると、サーチ文字列ごとの実際に押すキーやタイピングテストの結果がリアルタイムに変わります。編集内容はブラウザに自動保存され、ログインすればプリセットとして保存もできます。",
     dataSource: "データ:",
     loadedTemplate: "テンプレート: {title}",
+    /** テンプレートを開いたとき、保存済みの下書きが別にある場合の案内 */
+    templateViewNotice: "テンプレートを表示しています。保存してある下書きは、編集を始めるまで残ります。",
+    openDraft: "下書きを開く",
+    clearedToast: "すべてクリアしました",
+    replacedToast: "編集中の内容を置き換えました",
+    undo: "元に戻す",
     loadedPreset: "自分の設定: {name}",
     loadedDraft: "下書き（自動保存）",
     currentSettingsLabel: "現在の設定",

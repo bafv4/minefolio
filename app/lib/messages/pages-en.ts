@@ -2895,6 +2895,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     pageTitle: "Playground",
     pageDesc:
       "A sandbox for trying out combinations of search-crafts and key remaps in your browser. No login required.",
+    templateViewNotice: "You are viewing a template. Your saved draft is kept until you start editing.",
+    openDraft: "Open draft",
+    clearedToast: "Cleared everything",
+    replacedToast: "Replaced what you were editing",
+    undo: "Undo",
     pageDescription:
       "A sandbox for trying out combinations of search-crafts and key remaps on the spot. Edit the remaps and the keys you actually press for each search string — and the typing test results — update in real time. Your edits are saved automatically in your browser, and you can save them as a preset if you log in.",
     dataSource: "Data:",
