@@ -76,12 +76,36 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
   // （タブ切替は preventScrollReset でスクロール位置を保つため、深くスクロールしたままだと新タブの先頭が画面の上に外れる）
   // クリック（Root の onValueChange 経由）・数字キー・戻る/進むのどれでも activeValue の変化で一本化して処理する。
   // 番兵がこの位置より上にあれば、貼り付き（ヘッダーの裏へ出た状態）に必ずなっているので、貼り付き判定は別に持たない
+  // md 未満（ホットバーは下端固定で番兵は display:none）は、新タブのタイトル h2（profile.tsx の ProfileTabTitle）が
+  // 画面の上（サイトヘッダーの裏を含む）に外れているときだけ、:root の scroll-padding-top（--sticky-bar-inset）の位置へ戻す。
+  // 見えているとき（身元帯が見える浅い位置など）は動かさない
   const prevActiveRef = React.useRef(activeValue);
   React.useEffect(() => {
     if (prevActiveRef.current === activeValue) return;
     prevActiveRef.current = activeValue;
+    if (!window.matchMedia("(min-width: 768px)").matches) {
+      // 新しいパネルの中身は、この effect の時点ではまだ DOM に無い（Radix の TabsContent は Presence 経由で、
+      // 選択が変わった次のコミットで子を描く）。タイトルが現れるまでフレームごとに待ち、現れた次のフレーム
+      // （ブラウザのスクロールアンカーによる位置の補正が済んだ後）で位置を測って戻す
+      let frame = 0;
+      let tries = 0;
+      const restore = () => {
+        const title = document.getElementById(`profile-tab-title-${activeValue}`);
+        if (!title) {
+          if (++tries < 30) frame = requestAnimationFrame(restore);
+          return;
+        }
+        frame = requestAnimationFrame(() => {
+          const inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+          const titleTop = title.getBoundingClientRect().top;
+          if (titleTop < inset) window.scrollBy({ top: titleTop - inset });
+        });
+      };
+      restore();
+      return () => cancelAnimationFrame(frame);
+    }
     const el = sentinelRef.current;
-    if (!el || !window.matchMedia("(min-width: 768px)").matches) return;
+    if (!el) return;
     const top = el.getBoundingClientRect().top;
     if (top < SCROLL_RESTORE_SENTINEL_TOP_PX) window.scrollBy({ top: top - SCROLL_RESTORE_SENTINEL_TOP_PX });
   }, [activeValue]);
