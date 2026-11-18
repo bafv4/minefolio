@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -43,7 +43,6 @@ import {
 } from "@/lib/keybindings";
 import {
   fromSensitivityPercent,
-  MOUSE_SETTINGS_FIELDS,
   parseMouseSettingsInput,
   toSensitivityPercent,
   validateMouseSettings,
@@ -417,14 +416,51 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: true };
 }
 
-type FieldErrorState = { field: MouseSettingsField; message: string };
+/** 欄の下にエラーを出す欄（マウス設定の4欄＋ゲーム内設定の FOV・GUI スケール） */
+type DevicesField = MouseSettingsField | "fov" | "guiScale";
+type FieldErrorState = { field: DevicesField; message: string };
+
+/** 保存時に最初の欄へ案内するための、画面上の並び順（上から） */
+const DEVICES_FIELD_ORDER: readonly DevicesField[] = [
+  "mouseDpi",
+  "gameSensitivity",
+  "windowsSpeed",
+  "windowsSpeedMultiplier",
+  "fov",
+  "guiScale",
+];
 
 /**
- * action が返す field はマウス設定欄以外（"fov" / "guiScale" 等）も含みうるため、
+ * action が返す field は他の欄も含みうるため、
  * インライン表示・スクロール対象（fieldRefs で ref を持つ欄）だけに絞り込む。
  */
-function isMouseSettingsField(field: string): field is MouseSettingsField {
-  return (MOUSE_SETTINGS_FIELDS as readonly string[]).includes(field);
+function isDevicesField(field: string): field is DevicesField {
+  return (DEVICES_FIELD_ORDER as readonly string[]).includes(field);
+}
+
+type DevicesFieldValues = Record<MouseSettingsField | "fov" | "guiScale", string>;
+
+/**
+ * 1欄だけを保存時（action）と同じ規則で検証し、エラーの翻訳キーを返す（問題なければ null）。
+ * マウス設定は他の欄を空扱いにして validateMouseSettings に通す（その欄のエラーだけが出る）。
+ * FOV・GUI スケールは action と同じ Number() + isValidFov / isValidGuiScale
+ */
+function validateDevicesField(field: DevicesField, values: DevicesFieldValues): MessageKey | null {
+  if (field === "fov" || field === "guiScale") {
+    const raw = values[field];
+    if (!raw) return null;
+    const n = Number(raw);
+    if (field === "fov") return isValidFov(n) ? null : "meDevices.fovInvalid";
+    return isValidGuiScale(n) ? null : "meDevices.guiScaleInvalid";
+  }
+  const parsed = parseMouseSettingsInput({
+    mouseDpi: "",
+    gameSensitivity: "",
+    windowsSpeed: "",
+    windowsSpeedMultiplier: "",
+    [field]: values[field],
+  });
+  return validateMouseSettings(parsed)?.messageKey ?? null;
 }
 
 /** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
@@ -527,15 +563,20 @@ export default function DevicesPage() {
   });
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
-  const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
-  const fieldRefs = useRef<Partial<Record<MouseSettingsField, HTMLDivElement | null>>>({});
-  const errorFor = (field: MouseSettingsField) =>
-    fieldError?.field === field ? fieldError.message : null;
+  // 欄ごとに持つ（2つの欄が範囲外なら両方に出す）
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<DevicesField, string>>>({});
+  const fieldRefs = useRef<Partial<Record<DevicesField, HTMLDivElement | null>>>({});
+  const errorFor = (field: DevicesField) => fieldErrors[field] ?? null;
 
   // エラー箇所を表示して該当欄までスクロールする（コントローラー表示中など、
-  // 対象欄が描画されていない場合はスクロールだけスキップする）
-  const showFieldError = useCallback((error: FieldErrorState) => {
-    setFieldError(error);
+  // 対象欄が描画されていない場合はスクロールだけスキップする）。
+  // others は同時に見つかった他の欄のエラー（スクロールは error の欄だけ）
+  const showFieldError = useCallback((error: FieldErrorState, others: FieldErrorState[] = []) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const e of [error, ...others]) next[e.field] = e.message;
+      return next;
+    });
     requestAnimationFrame(() => {
       fieldRefs.current[error.field]?.scrollIntoView({
         block: "center",
@@ -555,12 +596,12 @@ export default function DevicesPage() {
   // 入力変更ハンドラ
   const handleChange = useCallback(<K extends keyof typeof formValues>(field: K, value: typeof formValues[K]) => {
     // 該当欄を編集したらインラインエラーを消す（感度は 0-1 / % のどちらの入力でも解消扱い）
-    setFieldError((prev) => {
-      if (!prev) return null;
-      const resolved =
-        prev.field === field ||
-        (prev.field === "gameSensitivity" && field === "gameSensitivityPercent");
-      return resolved ? null : prev;
+    setFieldErrors((prev) => {
+      const target: string = field === "gameSensitivityPercent" ? "gameSensitivity" : field;
+      if (!isDevicesField(target) || prev[target] == null) return prev;
+      const next = { ...prev };
+      delete next[target];
+      return next;
     });
     setFormValues((prev) => {
       const newValues = { ...prev, [field]: value };
@@ -588,28 +629,22 @@ export default function DevicesPage() {
 
   // 欄から離れたとき（blur）に、その欄だけ保存時と同じ検証を走らせる。
   // - 触っていない欄（保存済みの値のまま）は検証しない（古い範囲外の値を開いただけで出さない）
-  // - 他の欄を検証対象に含めない（null 扱い）ので、blur した欄のエラーだけが出る
-  // - 保存時と同じく最初の1件だけを持つ。別の欄の blur で既存のエラーは消さない
+  // - 他の欄を検証対象に含めない（空扱い）ので、blur した欄のエラーだけが出る
+  // - エラーは欄ごとに持つ。別の欄の blur で既存のエラーは消さない
   const handleBlurValidate = useCallback(
-    (field: MouseSettingsField) => {
+    (field: DevicesField) => {
       const keys =
         field === "gameSensitivity"
           ? (["gameSensitivity", "gameSensitivityPercent"] as const)
           : ([field] as const);
       if (keys.every((k) => formValues[k] === initialFormValues[k])) return;
-      const parsed = parseMouseSettingsInput({
-        mouseDpi: "",
-        gameSensitivity: "",
-        windowsSpeed: "",
-        windowsSpeedMultiplier: "",
-        [field]: formValues[field],
-      });
-      const error = validateMouseSettings(parsed);
-      setFieldError((prev) => {
-        if (error) {
-          return prev && prev.field !== field ? prev : { field, message: t(error.messageKey) };
-        }
-        return prev?.field === field ? null : prev;
+      const messageKey = validateDevicesField(field, formValues);
+      setFieldErrors((prev) => {
+        if (messageKey) return { ...prev, [field]: t(messageKey) };
+        if (prev[field] == null) return prev;
+        const next = { ...prev };
+        delete next[field];
+        return next;
       });
     },
     [formValues, initialFormValues, t],
@@ -618,7 +653,7 @@ export default function DevicesPage() {
   // フォームリセット
   const handleReset = useCallback(() => {
     setFormValues(initialFormValues);
-    setFieldError(null);
+    setFieldErrors({});
   }, [initialFormValues, setFormValues]);
 
   // 保存処理
@@ -628,15 +663,21 @@ export default function DevicesPage() {
     // プリセット未作成時は保存できる項目が無い（入力方法は /me/playstyle で編集する）
     if (!hasPresets) return;
 
-    // 範囲外の値は送信せず、その場で該当欄にインライン表示する（トーストは補助）
-    const validationError = validateMouseSettings(parseMouseSettingsInput(formValues));
-    if (validationError) {
-      const error = { field: validationError.field, message: t(validationError.messageKey) };
-      showFieldError(error);
-      toast.error(error.message);
+    // 範囲外の値は送信せず、その場で該当欄すべてにインライン表示する（トーストは補助）。
+    // スクロールとトーストは画面上で最初の欄
+    const errors: FieldErrorState[] = [];
+    for (const field of DEVICES_FIELD_ORDER) {
+      const messageKey = validateDevicesField(field, formValues);
+      if (messageKey) errors.push({ field, message: t(messageKey) });
+    }
+    if (errors.length > 0) {
+      const [first, ...others] = errors;
+      setFieldErrors({});
+      showFieldError(first, others);
+      toast.error(first.message);
       return;
     }
-    setFieldError(null);
+    setFieldErrors({});
 
     if (activePreset) {
       formData.set("presetId", activePreset.id);
@@ -732,12 +773,12 @@ export default function DevicesPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meDevices.saveSuccess"));
-      setFieldError(null);
+      setFieldErrors({});
     } else if ("error" in data) {
       toast.error(data.error);
       // どの欄が弾かれたか分かるエラーはインライン表示＋該当欄へスクロール
-      // （fov/guiScale 等 fieldRefs に ref を持たない欄はトーストのみで通知する）
-      if ("field" in data && data.field && isMouseSettingsField(data.field)) {
+      // （fieldRefs に ref を持たない欄はトーストのみで通知する）
+      if ("field" in data && data.field && isDevicesField(data.field)) {
         showFieldError({ field: data.field, message: data.error });
       }
     }
@@ -1123,29 +1164,55 @@ export default function DevicesPage() {
                   allowCustomValue={true}
                 />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.fov = el;
+                }}
+              >
                 <Label htmlFor="fov">FOV</Label>
                 <Input
                   id="fov"
                   type="number"
                   min="30"
                   max="110"
+                  step="1"
                   value={formValues.fov}
                   onChange={(e) => handleChange("fov", e.target.value)}
+                  onBlur={() => handleBlurValidate("fov")}
                   placeholder={t("meDevices.fovExample")}
+                  aria-invalid={errorFor("fov") != null || undefined}
+                  aria-describedby={errorFor("fov") ? "fov-error fov-range" : "fov-range"}
                 />
+                {/* 範囲は action の isValidFov と同じ（save-limits.ts） */}
+                <p id="fov-range" className="text-xs text-muted-foreground">30~110</p>
+                <FieldErrorText id="fov-error" message={errorFor("fov")} />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.guiScale = el;
+                }}
+              >
                 <Label htmlFor="guiScale">{t("meDevices.guiScale")}</Label>
                 <Input
                   id="guiScale"
                   type="number"
                   min="0"
                   max="10"
+                  step="1"
                   value={formValues.guiScale}
                   onChange={(e) => handleChange("guiScale", e.target.value)}
+                  onBlur={() => handleBlurValidate("guiScale")}
                   placeholder={t("meDevices.guiScaleExample")}
+                  aria-invalid={errorFor("guiScale") != null || undefined}
+                  aria-describedby={
+                    errorFor("guiScale") ? "guiScale-error guiScale-range" : "guiScale-range"
+                  }
                 />
+                {/* 範囲は action の isValidGuiScale と同じ（save-limits.ts） */}
+                <p id="guiScale-range" className="text-xs text-muted-foreground">0~10</p>
+                <FieldErrorText id="guiScale-error" message={errorFor("guiScale")} />
               </div>
             </div>
 

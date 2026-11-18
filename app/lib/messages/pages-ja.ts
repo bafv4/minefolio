@@ -192,6 +192,8 @@ export const PAGES_JA = {
     groupLabelMouse: "マウス",
     /** aria-describedby で読む操作の説明 */
     arrowKeyHint: "矢印キーでキーを移動できます。",
+    /** 拡大ダイアログのタッチ向け案内（md 未満） */
+    touchHint: "横にスクロールできます。情報のあるキーをタップすると詳細が出ます。",
   },
   /** 指割り当ての名称 */
   fingerLabels: {
@@ -848,6 +850,14 @@ export const PAGES_JA = {
     /** 0 件の説明（EmptyState） */
     emptyFilteredHint: "フィルタを解除するか、条件を変えてみてください。",
     emptyHint: "この表に載せる設定を登録した走者がまだいません。",
+    /** 絞り込み後の走者は居るが、このタブのデータを持つ人が居ないとき */
+    emptyNoTabData: "このタブの設定を登録している走者はいません",
+    emptyNoTabDataHint: "絞り込んだ走者の中に、このタブの設定を登録している人がいません。ほかのタブを見るか、フィルタを解除してください。",
+    /** ビジュアル表示の副題 */
+    visualDescription: "RTA走者のキー配置を、キーボードの図で見比べられます。",
+    /** フィルタの数値欄が有効範囲の外のとき（欄の下に出す） */
+    rangeErrorBetween: "{min}〜{max}の値を入力してください",
+    rangeErrorMin: "{min}以上の値を入力してください",
     /** フィルタ: 範囲チップ・数値欄 */
     removeFilterChip: "「{label}」の絞り込みを外す",
     rangeMin: "最小",
@@ -1871,7 +1881,7 @@ export const PAGES_JA = {
     copiedFromPreset: "{name}からデバイス設定をコピーしました",
     deviceChangeHistory: "デバイス・設定を更新",
     pageTitle: "デバイス",
-    pageDescription: "使用機器とゲーム内設定を管理します。",
+    pageDescription: "使用機器とゲーム内設定を管理します。ここでの変更は下書きで、ページ下の保存で確定します。",
     presetRequired: "デバイス・設定を保存するには、先にプリセットを作成してください",
     presetRequiredNotice: "プリセットを作成すると、デバイス・ゲーム内設定を編集できます。登録済みの設定は表示のみ可能です。",
     presetRequiredLink: "プリセットを作成",
@@ -2007,8 +2017,8 @@ export const PAGES_JA = {
     searchItems: "アイテムを検索...",
     clear: "クリア",
     complete: "完了",
-    segmentPlaceholder: "セグメント名を選択または入力...",
-    segmentSearch: "セグメント名を検索...",
+    segmentPlaceholder: "区間名を選択または入力...",
+    segmentSearch: "区間名を検索...",
     noPresetItems: "プリセットがありません",
     deleteLayoutTitle: "配置を削除しますか？",
     deleteLayoutDescription: "この操作は保存するまで確定されません。",
@@ -2018,13 +2028,13 @@ export const PAGES_JA = {
     notesPlaceholder: "この配置についてのメモ...",
     saveSuccess: "アイテム配置を保存しました",
     itemLayoutChangeHistory: "アイテム配置を更新",
-    segmentRequired: "セグメント名を入力してください",
-    duplicateSegment: "同じセグメント名が重複しています",
+    segmentRequired: "区間名を入力してください",
+    duplicateSegment: "同じ区間名が重複しています",
     copyNoData: "コピーするデータがありません",
     parseFailed: "データの解析に失敗しました",
     copiedFromPreset: "{name}からアイテム配置をコピーしました",
     pageTitle: "アイテム配置",
-    pageDescription: "ゲームの各場面に応じたホットバーやインベントリの配置を設定します。",
+    pageDescription: "ゲームの各場面に応じたホットバーやインベントリの配置を設定します。ここでの変更は下書きで、ページ下の保存で確定します。",
     presetRequired: "アイテム配置を保存するには、先にプリセットを作成してください",
     presetRequiredNotice: "プリセットを作成すると編集できます。登録済みの設定は表示のみ可能です。",
     presetRequiredLink: "プリセットを作成",
@@ -2034,6 +2044,8 @@ export const PAGES_JA = {
     copyDialogTitle: "他のプリセットからコピー",
     copyDialogDescription: "コピー元のプリセットを選択してください",
     itemLayouts: "アイテム配置",
+    /** 配置の一覧の欄見出し（h1「アイテム配置」と同じ文にしない） */
+    layoutListHeading: "区間ごとの配置",
     noData: "データなし",
     noOtherPresets: "他のプリセットがありません",
     errorTitle: "エラーが発生しました",
@@ -2080,7 +2092,7 @@ export const PAGES_JA = {
     copyNoData: "コピーするデータがありません",
     copiedFromPreset: "{name}からサーチクラフトをコピーしました",
     pageTitle: "サーチクラフト",
-    pageDescription: "スピードラン用のクラフト検索を設定します。",
+    pageDescription: "スピードラン用のクラフト検索を設定します。ここでの変更は下書きで、ページ下の保存で確定します。",
     presetRequired: "サーチクラフトを保存するには、先にプリセットを作成してください",
     presetRequiredNotice: "プリセットを作成すると編集できます。登録済みの設定は表示のみ可能です。",
     presetRequiredLink: "プリセットを作成",
@@ -2277,7 +2289,7 @@ export const PAGES_JA = {
     categoryInventory: "インベントリ",
     categoryUi: "UI",
     pageTitle: "キー配置",
-    pageDescription: "キー配置・リマップ・指割り当てを設定します。",
+    pageDescription: "キー配置・リマップ・指割り当てを設定します。ここでの変更は下書きで、ページ下の保存で確定します。",
     controllerView: "コントローラービュー",
     controllerViewDesc: "コントローラーボタンに操作を割り当てます。左スティック（移動）・右スティック（視点）は固定です。",
     buttons: "ボタン",
@@ -2327,6 +2339,8 @@ export const PAGES_JA = {
     deleteCustomKeyAria: "このカスタムキーを削除",
     customKeyCategoryAria: "カスタムキーの種類",
     remapSourceAria: "変更元のキー",
+    /** キー入力欄が未選択のときの読み上げ（見える表示は「変更元」「変更先」で、欄の名前と重なる） */
+    remapKeyUnset: "未選択",
     remapTargetAria: "変更先のキー",
     remapOutputTypeAria: "変更先の種類",
     remapTargetCharAria: "変更先の文字",

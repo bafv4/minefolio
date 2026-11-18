@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useReducer } from "react";
+import { useState, useMemo, useCallback, useEffect, useReducer, useRef, type ReactNode } from "react";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +53,23 @@ import { Eraser, Keyboard, Plus } from "lucide-react";
  * バーチャルキーボード（キークリックでリマップ登録）→ キーリマップ編集 → サーチクラフト編集。
  * タイピングテストはバーチャルキーボードカードのヘッダーにあるボタンから開くモーダル
  */
+
+/** 欄見出し。level 省略時は従来の CardTitle（div）、指定時は同じ見た目の見出し要素 */
+function WorkbenchSectionTitle({
+  level,
+  children,
+}: {
+  level?: "h2" | "h3";
+  children: ReactNode;
+}) {
+  if (!level) return <CardTitle className="text-lg">{children}</CardTitle>;
+  const Heading = level;
+  return (
+    <Heading data-slot="card-title" className="text-lg leading-none font-semibold">
+      {children}
+    </Heading>
+  );
+}
 
 export type WorkbenchRemap = {
   id: string;
@@ -268,6 +285,7 @@ export function SearchCraftWorkbench({
   onRemapsChange,
   layout,
   onLayoutChange,
+  sectionHeadingLevel,
 }: {
   crafts: SearchCraftDraft[];
   onCraftsChange: (next: SearchCraftDraft[]) => void;
@@ -277,6 +295,12 @@ export function SearchCraftWorkbench({
   onRemapsChange: (next: WorkbenchRemap[]) => void;
   layout: KeyboardLayoutOption;
   onLayoutChange: (layout: KeyboardLayoutOption) => void;
+  /**
+   * 3つの欄（キーボード／リマップ／サーチクラフト）の見出しの段。
+   * 省略時は従来どおり見出し要素にしない（CardTitle の div）。
+   * ページの h1 の直下に置くときは "h2" を渡して段を飛ばさない
+   */
+  sectionHeadingLevel?: "h2" | "h3";
 }) {
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
@@ -321,6 +345,39 @@ export function SearchCraftWorkbench({
     [remaps, onRemapsChange],
   );
 
+  // リマップ一覧の行操作後のフォーカス移動。
+  // 追加: 新しい行の変更元（最初の操作）。削除: 前の行（無ければ追加ボタン）。いずれも消えた/増えた要素にフォーカスが残らないように
+  const remapListRef = useRef<HTMLDivElement>(null);
+  const addRemapButtonRef = useRef<HTMLButtonElement>(null);
+  const [autoFocusRemapId, setAutoFocusRemapId] = useState<string | null>(null);
+  const [pendingFocus, setPendingFocus] = useState<{ rowIndex: number | null } | null>(null);
+  useEffect(() => {
+    if (!pendingFocus) return;
+    // 行は並び順（index）で探す。行の id を DOM の属性に出すと、SSR とクライアントで id が違う下書きの復元時に
+    // ハイドレーションの不一致になる
+    const el =
+      pendingFocus.rowIndex !== null
+        ? remapListRef.current?.children[pendingFocus.rowIndex]?.querySelector<HTMLElement>('[role="combobox"]')
+        : addRemapButtonRef.current;
+    (el ?? addRemapButtonRef.current)?.focus();
+    setPendingFocus(null);
+  }, [pendingFocus]);
+
+  const addRemapRow = useCallback(() => {
+    const id = draftId("remap");
+    setAutoFocusRemapId(id);
+    onRemapsChange([...remaps, { id, sourceKey: "", targetKey: null }]);
+  }, [remaps, onRemapsChange]);
+
+  const deleteRemapRowAt = useCallback(
+    (index: number) => {
+      // 前の行へ。キー入力待ちになる変更元ではなく、安全な出力タイプの選択へ置く
+      setPendingFocus({ rowIndex: index > 0 ? index - 1 : null });
+      onRemapsChange(remaps.filter((_, i) => i !== index));
+    },
+    [remaps, onRemapsChange],
+  );
+
   // バーチャルキーボードのキークリック → リマップ登録モーダル
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
 
@@ -341,7 +398,7 @@ export function SearchCraftWorkbench({
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-lg">{t("playground.keyboardSection")}</CardTitle>
+              <WorkbenchSectionTitle level={sectionHeadingLevel}>{t("playground.keyboardSection")}</WorkbenchSectionTitle>
               <CardDescription>{t("playground.keyboardSectionDescription")}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -387,21 +444,23 @@ export function SearchCraftWorkbench({
       {/* リマップエディタ */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{t("playground.remapSection")}</CardTitle>
+          <WorkbenchSectionTitle level={sectionHeadingLevel}>{t("playground.remapSection")}</WorkbenchSectionTitle>
           <CardDescription>{t("playground.remapSectionDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           {remaps.length > 0 ? (
-            <div className="divide-y border-y">
+            <div ref={remapListRef} className="divide-y border-y">
               {remaps.map((remap, index) => (
-                <RemapRow
-                  key={remap.id}
-                  remap={remap}
-                  index={index}
-                  keyboardLayout={layout}
-                  onUpdate={updateRemapAt}
-                  onDelete={deleteRemapAt}
-                />
+                <div key={remap.id}>
+                  <RemapRow
+                    remap={remap}
+                    index={index}
+                    keyboardLayout={layout}
+                    onUpdate={updateRemapAt}
+                    onDelete={deleteRemapRowAt}
+                    autoFocusSource={remap.id === autoFocusRemapId}
+                  />
+                </div>
               ))}
             </div>
           ) : (
@@ -410,15 +469,11 @@ export function SearchCraftWorkbench({
             </p>
           )}
           <Button
+            ref={addRemapButtonRef}
             variant="outline"
             size="sm"
             className="mt-4"
-            onClick={() =>
-              onRemapsChange([
-                ...remaps,
-                { id: draftId("remap"), sourceKey: "", targetKey: null },
-              ])
-            }
+            onClick={addRemapRow}
           >
             <Plus className="mr-2 h-4 w-4" />
             {t("playground.addRemap")}
@@ -500,7 +555,7 @@ export function SearchCraftWorkbench({
       {/* サーチクラフト＋繋ぎ方（Loop）編集（タイミングブロック型） */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{t("playground.craftSection")}</CardTitle>
+          <WorkbenchSectionTitle level={sectionHeadingLevel}>{t("playground.craftSection")}</WorkbenchSectionTitle>
           <CardDescription>{t("playground.craftSectionDescription")}</CardDescription>
         </CardHeader>
         <CardContent>

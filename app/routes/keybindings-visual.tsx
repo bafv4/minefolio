@@ -11,7 +11,7 @@ import { localeFromMatches } from "@/lib/locale";
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
   const title = t("keybindings.visualMetaTitle");
-  const description = t("keybindings.description");
+  const description = t("keybindings.visualDescription");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = `${appUrl}/icon.png`;
   return [

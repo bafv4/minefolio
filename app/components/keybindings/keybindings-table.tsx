@@ -47,6 +47,8 @@ interface KeybindingsTableProps {
   preset: PresetKey;
   /** 表のアクセシブルネームに使うタブ名 */
   label: string;
+  /** 絞り込み後の走者は居るが、このタブのデータを持つ人が居ない（0 件の文言を分ける） */
+  noTabData?: boolean;
 }
 
 /**
@@ -72,7 +74,7 @@ const RESIZE_STEP = 16;
 const RESIZE_STEP_LARGE = 64;
 const RESIZE_MAX = 1200;
 
-export function KeybindingsTable({ rows, preset, label }: KeybindingsTableProps) {
+export function KeybindingsTable({ rows, preset, label, noTabData }: KeybindingsTableProps) {
   const t = useT();
   const locale = useLocale();
   const columns = useMemo<KeybindingsColumnDef[]>(
@@ -171,7 +173,7 @@ export function KeybindingsTable({ rows, preset, label }: KeybindingsTableProps)
     rootRef.current?.style.setProperty("--kb-scroll-left", `${scrollLeft}px`);
   };
 
-  if (rowModel.rows.length === 0) return <KeybindingsEmptyState />;
+  if (rowModel.rows.length === 0) return <KeybindingsEmptyState noTabData={noTabData} />;
 
   const headers = table.getHeaderGroups()[0]?.headers ?? [];
 
@@ -243,7 +245,7 @@ export function KeybindingsTable({ rows, preset, label }: KeybindingsTableProps)
                       type="button"
                       onClick={header.column.getToggleSortingHandler()}
                       // md 未満は狭い列でも見出しが読めるよう、矢印を文字の下に置く
-                      className="inline-flex min-w-0 items-center gap-1 rounded text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:min-h-11 max-md:flex-col max-md:justify-center max-md:gap-0.5"
+                      className="inline-flex min-w-0 items-center gap-1 rounded text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-6 max-md:min-h-11 max-md:flex-col max-md:justify-center max-md:gap-0.5"
                     >
                       {/* 省略せず折り返して全文を読めるようにする */}
                       <span id={`${idBase}-${header.id}`} className="min-w-0 break-words leading-snug">

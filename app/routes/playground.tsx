@@ -451,6 +451,25 @@ function loadDraftFromStorage(): PlaygroundDraft | null {
   }
 }
 
+/** 保存済みの下書きをそのままの文字列で読む（取り消しで書き戻すための退避用。無ければ null） */
+function readRawDraftFromStorage(): string | null {
+  try {
+    return window.localStorage.getItem(DRAFT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 退避しておいた下書きの文字列を書き戻す（null なら下書きを消す） */
+function restoreRawDraftToStorage(raw: string | null) {
+  try {
+    if (raw === null) window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    else window.localStorage.setItem(DRAFT_STORAGE_KEY, raw);
+  } catch {
+    // 仮保存と同じくベストエフォート
+  }
+}
+
 function saveDraftToStorage(draft: PlaygroundDraft) {
   try {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
@@ -591,16 +610,21 @@ export default function PlaygroundPage() {
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
   // 取り消し用に、置き換え前の内容を常に最新で持っておく
-  const latestRef = useRef({ remaps, crafts, loops, loadedLabel });
-  latestRef.current = { remaps, crafts, loops, loadedLabel };
+  const latestRef = useRef({ remaps, crafts, loops, loadedLabel, isTemplatePristine, hasSavedDraft });
+  latestRef.current = { remaps, crafts, loops, loadedLabel, isTemplatePristine, hasSavedDraft };
 
   /** 編集中の内容を置き換える。置き換え前が空でなければ、取り消しつきのトーストを出す */
   const replaceContent = useCallback(
     (apply: () => void, message: string) => {
       const prev = latestRef.current;
       const hadContent = prev.remaps.length > 0 || prev.crafts.length > 0 || prev.loops.length > 0;
+      // テンプレートを未編集で表示中は、置き換えると初めて下書きが上書きされる。
+      // 取り消しで下書きと「下書きは残ります」の案内も戻せるよう、置き換え前の下書きを退避する
+      const storedDraft = prev.isTemplatePristine
+        ? { raw: readRawDraftFromStorage(), hasSavedDraft: prev.hasSavedDraft }
+        : null;
       apply();
-      if (!hadContent) return;
+      if (!hadContent && !storedDraft?.hasSavedDraft) return;
       toast(message, {
         // 取り消しに気づいて押すまでの余裕を取る（既定の 4 秒では短い）
         duration: 10000,
@@ -611,6 +635,11 @@ export default function PlaygroundPage() {
             setCrafts(prev.crafts);
             setLoops(prev.loops);
             setLoadedLabel(prev.loadedLabel);
+            if (storedDraft) {
+              // 内容が置き換え前の参照に戻るので未編集扱いに戻り、仮保存の effect は書き込まない
+              restoreRawDraftToStorage(storedDraft.raw);
+              setHasSavedDraft(storedDraft.hasSavedDraft);
+            }
           },
         },
       });
@@ -755,6 +784,7 @@ export default function PlaygroundPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11 sm:min-h-8"
                 onClick={() => {
                   // 読み込んだままで未編集なら置き換える物が無い（下書きも上書きしない）
                   if (isTemplatePristine) return;
@@ -772,7 +802,7 @@ export default function PlaygroundPage() {
             {isLoggedIn && myPresets.length > 0 && (
               <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
                     <User className="mr-2 size-3.5" />
                     {t("playground.loadMySettings")}
                   </Button>
@@ -823,6 +853,7 @@ export default function PlaygroundPage() {
             <Button
               variant="outline"
               size="sm"
+              className="min-h-11 sm:min-h-8"
               onClick={() =>
                 replaceContent(() => {
                   setRemaps([]);
@@ -838,10 +869,11 @@ export default function PlaygroundPage() {
 
             {isLoggedIn && (
               <>
-                <div className="h-4 w-px bg-border mx-1" />
+                {/* 折り返すモバイルでは行末に残るので出さない */}
+                <div aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
                   <DialogTrigger asChild>
-                    <Button size="sm">
+                    <Button size="sm" className="min-h-11 sm:min-h-8">
                       <Save className="mr-2 size-3.5" />
                       {t("mePresets.save")}
                     </Button>
@@ -1006,7 +1038,10 @@ export default function PlaygroundPage() {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
+        {/* テンプレートを未編集で表示中は仮保存しない（上の案内と食い違うので出さない） */}
+        {!(templateData && isTemplatePristine) && (
+          <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
+        )}
       </div>
 
       {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
@@ -1019,6 +1054,7 @@ export default function PlaygroundPage() {
         onRemapsChange={setRemaps}
         layout={layout}
         onLayoutChange={setLayout}
+        sectionHeadingLevel="h2"
       />
 
       {/* 保存への導線 */}

@@ -548,7 +548,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
           {...listeners}
           type="button"
           aria-label={`${t("meSearchCraft.dragHandle")} (${index + 1})`}
-          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>

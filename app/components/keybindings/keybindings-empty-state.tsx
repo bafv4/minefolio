@@ -6,23 +6,32 @@ import { EmptyState } from "@/components/empty-state";
 import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { useT } from "@/hooks/use-locale";
 
-export function KeybindingsEmptyState() {
+/**
+ * @param noTabData 絞り込み後の走者は居るが、このタブのデータを持つ人が居ない（表のタブ用）。
+ *   フィルタに一致する走者が居ないのとは原因が違うので、文言を分ける
+ */
+export function KeybindingsEmptyState({ noTabData = false }: { noTabData?: boolean } = {}) {
   const t = useT();
   const { hasActiveFilters, clearFilters } = useKeybindingsFilters();
+  const filteredButNoTabData = hasActiveFilters && noTabData;
 
   return (
     <div className="p-4">
       <EmptyState
         icon={<Users className="h-12 w-12" />}
         title={
-          hasActiveFilters
-            ? t("keybindings.emptyFiltered")
-            : t("keybindings.noPlayers")
+          filteredButNoTabData
+            ? t("keybindings.emptyNoTabData")
+            : hasActiveFilters
+              ? t("keybindings.emptyFiltered")
+              : t("keybindings.noPlayers")
         }
         description={
-          hasActiveFilters
-            ? t("keybindings.emptyFilteredHint")
-            : t("keybindings.emptyHint")
+          filteredButNoTabData
+            ? t("keybindings.emptyNoTabDataHint")
+            : hasActiveFilters
+              ? t("keybindings.emptyFilteredHint")
+              : t("keybindings.emptyHint")
         }
         action={
           hasActiveFilters ? (

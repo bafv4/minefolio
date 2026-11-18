@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { useT } from "@/hooks/use-locale";
 import { Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -155,7 +155,11 @@ export function KeyboardScaledPreview({
       </div>
       {open && scaled && (
         <DialogContent className="h-[calc(100dvh-2rem)] max-w-[calc(100%-1rem)] grid-rows-[auto_1fr] overflow-auto p-4 sm:max-w-[calc(100%-2rem)]">
-          <DialogTitle className="text-sm">{dialogTitle}</DialogTitle>
+          <DialogHeader className="gap-1">
+            <DialogTitle className="text-sm">{dialogTitle}</DialogTitle>
+            {/* タッチ向けの案内（md 未満のみ。キーボード操作の案内は各キーボードの arrowKeyHint が担う） */}
+            <DialogDescription className="text-xs md:hidden">{t("keyboardView.touchHint")}</DialogDescription>
+          </DialogHeader>
           <div className="min-h-0 overflow-auto" style={{ touchAction: "pan-x pan-y pinch-zoom" }}>
             <div className="w-max">{children}</div>
           </div>

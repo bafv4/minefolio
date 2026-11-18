@@ -50,6 +50,18 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** 入力が有効範囲（inputMin〜inputMax）の外か。空欄は範囲外にしない */
+function isOutOfRange(value: string, inputMin?: number, inputMax?: number): boolean {
+  const n = parseNumber(value);
+  if (n == null) return false;
+  return (inputMin != null && n < inputMin) || (inputMax != null && n > inputMax);
+}
+
+/** 数値欄の有効範囲（入力の下限・上限。欄の min/max 属性と範囲外の判定に使う） */
+const DPI_INPUT_MIN = 1;
+const SENS_INPUT_MIN = 0;
+const CM360_INPUT_MIN = 0;
+
 /**
  * min > max（入力の取り違え）は適用をブロックせず自動で入れ替えて救済する。
  * 「0件になって理由が分からない」より、意図どおりの範囲で結果を出すほうが摩擦が少ないため。
@@ -102,8 +114,14 @@ export function FilterDialog({
     );
 
   // 「適用」で初めて URL（クエリ）へ反映する。min > max は orderedRange で入れ替えて救済する
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // 範囲外の欄があれば適用しない。欄の下にエラーが出ているので、最初の欄へフォーカスを移す
+    const invalid = e.currentTarget.querySelector<HTMLInputElement>('[aria-invalid="true"]');
+    if (invalid) {
+      invalid.focus();
+      return;
+    }
     const [dpiMin, dpiMax] = orderedRange(parseNumber(draftDpiMin), parseNumber(draftDpiMax));
     const [sensMin, sensMax] = orderedRange(parseNumber(draftSensMin), parseNumber(draftSensMax));
     const [cm360Min, cm360Max] = orderedRange(
@@ -204,6 +222,8 @@ export function FilterDialog({
           <form
             id="keybindings-numeric-filter"
             onSubmit={handleSubmit}
+            // 範囲外は欄の下のエラー文で知らせる（ブラウザの吹き出しは出さない）
+            noValidate
             className="space-y-4"
           >
             <Label className="text-sm font-medium">
@@ -217,7 +237,7 @@ export function FilterDialog({
               max={draftDpiMax}
               onMin={setDraftDpiMin}
               onMax={setDraftDpiMax}
-              inputMin={1}
+              inputMin={DPI_INPUT_MIN}
             />
             <FilterRange
               label={t("keybindings.inGameSensitivityRange")}
@@ -226,7 +246,7 @@ export function FilterDialog({
               onMin={setDraftSensMin}
               onMax={setDraftSensMax}
               suffix="%"
-              inputMin={0}
+              inputMin={SENS_INPUT_MIN}
               inputMax={SENSITIVITY_PERCENT_MAX}
               hint={t("keybindings.sensitivityRangeHint")}
             />
@@ -237,7 +257,7 @@ export function FilterDialog({
               onMin={setDraftCm360Min}
               onMax={setDraftCm360Max}
               suffix="cm"
-              inputMin={0}
+              inputMin={CM360_INPUT_MIN}
             />
           </form>
         </div>
@@ -418,6 +438,20 @@ function FilterRange({
   const id = useId();
   const minId = `${id}-min`;
   const maxId = `${id}-max`;
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const minInvalid = isOutOfRange(min, inputMin, inputMax);
+  const maxInvalid = isOutOfRange(max, inputMin, inputMax);
+  const errorText =
+    inputMin != null && inputMax != null
+      ? t("keybindings.rangeErrorBetween", { min: inputMin, max: inputMax })
+      : inputMin != null
+        ? t("keybindings.rangeErrorMin", { min: inputMin })
+        : null;
+  /** 欄ごとの説明（補足は常に、エラーはその欄が範囲外のときだけ結ぶ） */
+  const describedBy = (invalid: boolean) =>
+    [hint ? hintId : null, invalid && errorText ? errorId : null].filter(Boolean).join(" ") ||
+    undefined;
   // 見える見出しは範囲全体の名前。最小・最大の欄はそれぞれ sr-only の Label で区別する
   return (
     <div role="group" aria-labelledby={`${id}-group`} className="space-y-2">
@@ -438,6 +472,8 @@ function FilterRange({
             value={min}
             onChange={(e) => onMin(e.target.value)}
             placeholder={t("keybindings.rangeMin")}
+            aria-invalid={minInvalid || undefined}
+            aria-describedby={describedBy(minInvalid)}
             className="max-md:min-h-11"
           />
           {suffix && (
@@ -460,6 +496,8 @@ function FilterRange({
             value={max}
             onChange={(e) => onMax(e.target.value)}
             placeholder={t("keybindings.rangeMax")}
+            aria-invalid={maxInvalid || undefined}
+            aria-describedby={describedBy(maxInvalid)}
             className="max-md:min-h-11"
           />
           {suffix && (
@@ -469,7 +507,16 @@ function FilterRange({
           )}
         </div>
       </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
+      {(minInvalid || maxInvalid) && errorText && (
+        <p id={errorId} className="text-xs text-destructive">
+          {errorText}
+        </p>
+      )}
     </div>
   );
 }

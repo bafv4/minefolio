@@ -905,6 +905,36 @@ const KEYBINDING_DISPLAY_GROUPS = [
   },
 ] as const;
 
+/** コントローラーの操作の並び（DB カテゴリ準拠） */
+const CONTROLLER_CATEGORY_ORDER = ["movement", "combat", "inventory", "ui"];
+
+/**
+ * 操作の表示グループ。ページの「操作割り当て」一覧とキー設定ダイアログの両方がこれを使い、
+ * 分類・並び順をそろえる。キーボード/マウスはプロフィールと同一の3グループ（移動 / インベントリ /
+ * 戦闘・UI）・意味順、コントローラーは DB カテゴリ準拠
+ */
+function groupKeybindingsForDisplay<KB extends { action: string; category: string }>(
+  t: Translator,
+  kbs: KB[],
+  isControllerMode: boolean,
+): { key: string; label: string; bindings: KB[] }[] {
+  if (isControllerMode) {
+    return CONTROLLER_CATEGORY_ORDER.map((category) => ({
+      key: category,
+      label: categoryLabelsOf(t)[category],
+      bindings: kbs.filter((kb) => kb.category === category),
+    }));
+  }
+  const byAction = new Map(kbs.map((kb) => [kb.action, kb]));
+  return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
+    key: group.key,
+    label: t(group.labelKey),
+    bindings: group.actions
+      .map((action) => byAction.get(action))
+      .filter((kb): kb is KB => kb !== undefined),
+  }));
+}
+
 // =====================================
 // リマップ関連の型定義
 // =====================================
@@ -1492,44 +1522,11 @@ export default function KeybindingsPage() {
     [keybindingsWithLocalChanges]
   );
 
-  // Group by category
-  const byCategory = useMemo(() =>
-    keybindingsWithLocalChanges.reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) {
-          acc[kb.category] = [];
-        }
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof keybindingsWithLocalChanges>
-    ),
-    [keybindingsWithLocalChanges]
+  // 操作割り当てタブの表示グループ（キー設定ダイアログと同じ定義。groupKeybindingsForDisplay）
+  const displayGroups = useMemo(
+    () => groupKeybindingsForDisplay(t, keybindingsWithLocalChanges, isControllerMode),
+    [t, keybindingsWithLocalChanges, isControllerMode],
   );
-
-  const categoryOrder = ["movement", "combat", "inventory", "ui"];
-
-  // 操作割り当てタブの表示グループ:
-  // キーボード/マウスはプロフィールと同一の3グループ（移動 / インベントリ / 戦闘・UI）・意味順、
-  // コントローラーは従来どおり DB カテゴリ準拠
-  const displayGroups = useMemo(() => {
-    if (isControllerMode) {
-      return categoryOrder.map((category) => ({
-        key: category,
-        label: categoryLabelsOf(t)[category],
-        bindings: byCategory[category] ?? [],
-      }));
-    }
-    const byAction = new Map(keybindingsWithLocalChanges.map((kb) => [kb.action, kb]));
-    return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
-      key: group.key,
-      label: t(group.labelKey),
-      bindings: group.actions
-        .map((action) => byAction.get(action))
-        .filter((kb): kb is (typeof keybindingsWithLocalChanges)[number] => kb !== undefined),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isControllerMode, byCategory, keybindingsWithLocalChanges]);
 
   // キーボードレイアウト
   const keyboardLayout = (playerConfig?.keyboardLayout as "US" | "JIS") || "US";
@@ -1708,16 +1705,10 @@ export default function KeybindingsPage() {
     [validKeybindings, modalKeybindingChanges]
   );
 
-  const modalByCategory = useMemo(() =>
-    modalKeybindingsWithLocalChanges.reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) acc[kb.category] = [];
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof modalKeybindingsWithLocalChanges>
-    ),
-    [modalKeybindingsWithLocalChanges]
+  // キー設定ダイアログの操作の一覧。ページの「操作割り当て」と同じ分類・並び順で出す
+  const modalDisplayGroups = useMemo(
+    () => groupKeybindingsForDisplay(t, modalKeybindingsWithLocalChanges, isControllerMode),
+    [t, modalKeybindingsWithLocalChanges, isControllerMode],
   );
 
   const modalAssignedCountOnKey = useMemo(
@@ -2695,14 +2686,14 @@ export default function KeybindingsPage() {
                   : t("meKeybindings.presetRequired")}
               </p>
               <div>
-                {categoryOrder.map((category) => {
-                  const bindings = modalByCategory[category];
-                  if (!bindings || bindings.length === 0) return null;
+                {modalDisplayGroups.map((group) => {
+                  const bindings = group.bindings;
+                  if (bindings.length === 0) return null;
 
                   return (
-                    <div key={category} className="mb-3 last:mb-0">
+                    <div key={group.key} className="mb-3 last:mb-0">
                       <p className="text-xs font-medium mb-1.5">
-                        {categoryLabelsOf(t)[category]}
+                        {group.label}
                       </p>
                       <div className="space-y-1.5 pl-2">
                         {bindings.map((kb) => {

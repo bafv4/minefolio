@@ -179,20 +179,25 @@ export function ActualKeyBadges({
 export function KeyBadgeLegend({
   showFingers = false,
   showCraftMarker = false,
+  showRemapped = true,
 }: {
   showFingers?: boolean;
   /** Loop（繋ぎ方）表示があるページでのみ、制御キー（BS/←/Home/⇧Home）バッジの説明を追加する */
   showCraftMarker?: boolean;
+  /** 「リマップ済み」の説明を出すか。リマップが1件も無い表示（リマップ0件のテンプレート等）では false を渡す */
+  showRemapped?: boolean;
 }) {
   const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-3.5 w-3.5 rounded border-2 bg-secondary/50 border-border/50 ring-2 ring-primary ring-offset-1 ring-offset-background" />
-        <span className="text-[11px] text-muted-foreground">
-          {t("playerProfile.legendRemapped")}
-        </span>
-      </div>
+      {showRemapped && (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-3.5 w-3.5 rounded border-2 bg-secondary/50 border-border/50 ring-2 ring-primary ring-offset-1 ring-offset-background" />
+          <span className="text-[11px] text-muted-foreground">
+            {t("playerProfile.legendRemapped")}
+          </span>
+        </div>
+      )}
       <div className="flex items-center gap-1.5">
         <span className="inline-flex h-3.5 items-center justify-center rounded-lg border-2 border-warning/50 bg-warning/10 px-0.5 text-warning">
           <ShiftMark className="size-2.5" />
@@ -615,13 +620,20 @@ function SearchCraftGroupCard({
     </>
   );
 
+  // Loop だけのグループ（crafts 0件）は、新しい表示（箱なし・折りたたみ）では件数を出さない。
+  // 既定の Card 表示は従来どおり 0 も出す
+  const showCount = crafts.length > 0 || (framed && !collapsible);
+  // 開閉ボタンの名前は「グループ名、n件」に固定する（中身から名前を組むと「指定なし1、1件」のように数字が続いて
+  // 読まれたという指摘があったため、件数が1回だけになるよう名前を明示する）。見えている文字（グループ名・数字）を含む
+  const toggleLabel =
+    title !== undefined
+      ? `${title}${showCount ? t("playerProfile.craftGroupCountSr", { count: crafts.length }) : ""}`
+      : undefined;
   const titleContent = (
     <>
       {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
       {title}
-      {/* Loop だけのグループ（crafts 0件）は、新しい表示（箱なし・折りたたみ）では件数を出さない。
-          既定の Card 表示は従来どおり 0 も出す */}
-      {(crafts.length > 0 || (framed && !collapsible)) && (
+      {showCount && (
         <>
           <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">{crafts.length}</span>
           <span className="sr-only">{t("playerProfile.craftGroupCountSr", { count: crafts.length })}</span>
@@ -648,6 +660,7 @@ function SearchCraftGroupCard({
                 type="button"
                 aria-expanded={cssOpenAtLg ? undefined : open}
                 aria-controls={mountBody ? bodyId : undefined}
+                aria-label={toggleLabel}
                 onClick={onToggle}
                 // モバイルは押せる範囲を 44px に（行の高さは負のマージンで変えない。見出しの flow-root で閉じ込める。ui.md 9 章）。
                 // sm 以上は従来の 32px
@@ -699,6 +712,7 @@ function SearchCraftGroupCard({
                 type="button"
                 aria-expanded={cssOpenAtLg ? undefined : open}
                 aria-controls={mountBody ? bodyId : undefined}
+                aria-label={toggleLabel}
                 onClick={onToggle}
                 className="flex w-full items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >

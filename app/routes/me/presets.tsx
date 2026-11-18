@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
+import { StatusPill } from "@/components/status-pill";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 
@@ -1297,10 +1298,10 @@ export default function PresetsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium truncate">{preset.name}</p>
                           {preset.isMain && (
-                            <Badge variant="default" className="shrink-0">
-                              <Star className="h-3 w-3 mr-1" />
+                            // 公開状態の印は muted の丸ピル（ui.md 6章。メインを primary で塗らない）
+                            <StatusPill icon={Star} className="shrink-0">
                               {t("mePresets.mainBadge")}
-                            </Badge>
+                            </StatusPill>
                           )}
                           {preset.isActive && (
                             <Badge variant="secondary" className="shrink-0">
@@ -1386,7 +1387,7 @@ export default function PresetsPage() {
                         {deleteBlockedReason ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span tabIndex={0} className="inline-flex rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+                              <span tabIndex={0} className="inline-flex rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                                 <Button
                                   variant="ghost"
                                   size="sm"

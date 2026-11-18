@@ -65,6 +65,8 @@ export function KeyCaptureButton({
   allowModifiers = false,
   className,
   ariaLabel,
+  emptyAriaText,
+  autoFocus,
 }: {
   value: string;
   placeholder: string;
@@ -74,6 +76,10 @@ export function KeyCaptureButton({
   className?: string;
   /** 何のキーを入れる欄か（例: 「変更元のキー」）。見えている値の前に付け、「Q」だけの名前にならないようにする */
   ariaLabel?: string;
+  /** 未選択のとき ariaLabel の後ろに付ける読み上げ用の文言（例: 「未選択」）。省略時は見えている placeholder。placeholder が欄の名前と重なるときに使う */
+  emptyAriaText?: string;
+  /** マウント時にフォーカスする（行を追加した直後の最初の操作用）。フォーカスするとキー入力待ちになる */
+  autoFocus?: boolean;
 }) {
   const t = useT();
   const [isCapturing, setIsCapturing] = useState(false);
@@ -102,7 +108,12 @@ export function KeyCaptureButton({
   return (
     <button
       type="button"
-      aria-label={ariaLabel ? `${ariaLabel}: ${visibleText}` : undefined}
+      aria-label={
+        ariaLabel
+          ? `${ariaLabel}: ${!isCapturing && !value && emptyAriaText ? emptyAriaText : visibleText}`
+          : undefined
+      }
+      autoFocus={autoFocus}
       data-key-capturing={isCapturing ? "true" : undefined}
       onFocus={() => setIsCapturing(true)}
       onBlur={() => {

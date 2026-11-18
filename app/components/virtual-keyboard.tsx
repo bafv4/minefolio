@@ -54,7 +54,8 @@ function buildKeyAriaLabel(t: Translator, opts: {
     ...opts.remaps.map((r) =>
       t("keyboardView.ariaRemap", {
         from: getRemapSourceLabel(t, r.sourceKey, opts.layout),
-        to: getRemapOutputLabel(t, r, opts.layout),
+        // 無効化は見える表示が「×」だが、読み上げでは意味が伝わらないので文言にする
+        to: r.targetKey === null ? t("keyboardView.remapDisabled") : getRemapOutputLabel(t, r, opts.layout),
       }),
     ),
   ].join(t("keyboardView.ariaSeparator"));
@@ -1549,8 +1550,12 @@ export function VirtualMouse({
         onKeyDown={onKeyDown}
         className={cn("inline-block", className)}
       >
+        {/* 同じ説明がキーボード・テンキー・マウスで3回続けて読まれないよう、本文の流れに置くのはキーボードの分だけ。
+            テンキー・マウスは hidden（aria-describedby からは hidden の要素も読まれるので、グループの説明は残る） */}
         {hasFocusableKeys && (
-          <p id={hintId} className="sr-only">{t("keyboardView.arrowKeyHint")}</p>
+          <p id={hintId} hidden>
+            {t("keyboardView.arrowKeyHint")}
+          </p>
         )}
         {body}
       </div>
@@ -1854,8 +1859,12 @@ export function VirtualNumpad({
         onKeyDown={onKeyDown}
         className={cn("inline-block", className)}
       >
+        {/* 同じ説明がキーボード・テンキー・マウスで3回続けて読まれないよう、本文の流れに置くのはキーボードの分だけ。
+            テンキー・マウスは hidden（aria-describedby からは hidden の要素も読まれるので、グループの説明は残る） */}
         {hasFocusableKeys && (
-          <p id={hintId} className="sr-only">{t("keyboardView.arrowKeyHint")}</p>
+          <p id={hintId} hidden>
+            {t("keyboardView.arrowKeyHint")}
+          </p>
         )}
         {body}
       </div>

@@ -36,8 +36,14 @@ import type { MessageKey } from "@/lib/messages";
 /** インベントリのタブに載る操作（ホットバー 1〜9 を含む） */
 const INVENTORY_TAB_ACTIONS: readonly string[] = [...INVENTORY_ACTIONS, ...HOTBAR_ACTIONS];
 
-/** ページ共通タイトル。h1 はビュー（表 / ビジュアル / 統計）の名前、説明文は共通 */
-export function KeybindingsPageTitle({ title }: { title?: string }) {
+/** ページ共通タイトル。h1 はビュー（表 / ビジュアル / 統計）の名前、説明文はビューごとに渡す（省略時は表の説明） */
+export function KeybindingsPageTitle({
+  title,
+  description,
+}: {
+  title?: string;
+  description?: string;
+}) {
   const t = useT();
   return (
     <div>
@@ -46,7 +52,7 @@ export function KeybindingsPageTitle({ title }: { title?: string }) {
         {title ?? t("keybindings.title")}
       </h1>
       <p className="text-sm text-muted-foreground mt-1">
-        {t("keybindings.description")}
+        {description ?? t("keybindings.description")}
       </p>
     </div>
   );
@@ -125,6 +131,7 @@ export function KeybindingsListLayout({
     <div className="flex-1 flex flex-col space-y-6">
       <KeybindingsPageTitle
         title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
+        description={mode === "visual" ? t("keybindings.visualDescription") : undefined}
       />
 
       {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
@@ -184,6 +191,7 @@ export function KeybindingsListLayout({
                   rows={rowsByTab[value]}
                   preset={value as PresetKey}
                   label={t(labelKey)}
+                  noTabData={filteredPlayers.length > 0}
                 />
               </TabsContent>
             ))}

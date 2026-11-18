@@ -746,7 +746,7 @@ function EditableLayoutRow({
           {...listeners}
           type="button"
           aria-label={t("meItems.dragHandleAria", { name: layout.segment.trim() || t("meItems.unnamedLayout") })}
-          className="flex size-8 max-sm:size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex size-8 max-sm:size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -979,7 +979,7 @@ export default function ItemLayoutsPage() {
       <PageSection
         id="item-layouts"
         icon={<Package className="h-5 w-5 text-primary" aria-hidden="true" />}
-        title={t("meItems.itemLayouts")}
+        title={t("meItems.layoutListHeading")}
         className={cn(!hasPresets && "pointer-events-none opacity-50")}
       >
       {layouts.length > 0 ? (

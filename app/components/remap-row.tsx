@@ -116,6 +116,7 @@ export function RemapRow({
   onDelete,
   showRemapType = false,
   disabledRemapTypes,
+  autoFocusSource = false,
 }: {
   remap: RemapRowEntry;
   index: number;
@@ -124,6 +125,8 @@ export function RemapRow({
   onDelete: (index: number) => void;
   showRemapType?: boolean;
   disabledRemapTypes?: KeyRemapType[];
+  /** マウント時に変更元のキー欄へフォーカスする（行を追加した直後に、呼び出し側が新しい行だけ true にする） */
+  autoFocusSource?: boolean;
 }) {
   const t = useT();
   const { selectedOutputType, handleOutputTypeChange } = useRemapOutputType(remap.targetKey, index, onUpdate);
@@ -154,6 +157,8 @@ export function RemapRow({
           onCapture={(key) => onUpdate(index, { sourceKey: key })}
           allowModifiers={true}
           ariaLabel={t("meKeybindings.remapSourceAria")}
+          emptyAriaText={t("meKeybindings.remapKeyUnset")}
+          autoFocus={autoFocusSource}
         />
 
         <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -189,6 +194,7 @@ export function RemapRow({
             allowModifiers={false}
             className="w-40"
             ariaLabel={t("meKeybindings.remapTargetAria")}
+            emptyAriaText={t("meKeybindings.remapKeyUnset")}
           />
         ) : null}
 
