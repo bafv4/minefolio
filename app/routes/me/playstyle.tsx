@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Layers, SlidersHorizontal, Sparkles, AlertCircle, ExternalLink } from "lucide-react";
+import { Layers, SlidersHorizontal, Sparkles, AlertCircle } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import {
@@ -710,9 +710,9 @@ export default function PlaystylePage() {
             className="w-full sm:w-72"
           >
             <p className="text-xs text-muted-foreground">{t("mePlaystyle.searchCraftHint")}</p>
+            {/* サイト内のリンク（/me/devices）なので外部リンクのアイコンは付けない */}
             {!hidesSearchCraft(formValues.searchCraft) && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <ExternalLink className="h-3 w-3 shrink-0" />
+              <p className="text-xs text-muted-foreground">
                 <Link to="/me/devices" className="underline underline-offset-2">
                   {t("mePlaystyle.gameLanguageLink")}
                 </Link>

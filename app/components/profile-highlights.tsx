@@ -323,25 +323,6 @@ export function ProfileHighlights({
           {failedValue}
         </HighlightTile>
       ) : null}
-      {eloLoading ? (
-        <LoadingHighlightTile icon={<Trophy className="h-4 w-4" />} label={t("playerProfile.highlightElo")} />
-      ) : eloFailed ? (
-        <HighlightTile
-          icon={<Trophy className="h-4 w-4" />}
-          label={t("playerProfile.highlightElo")}
-          onClick={() => onSelectTab("stats")}
-        >
-          {failedValue}
-        </HighlightTile>
-      ) : elo != null ? (
-        <HighlightTile
-          icon={<Trophy className="h-4 w-4" />}
-          label={t("playerProfile.highlightElo")}
-          onClick={() => onSelectTab("stats")}
-        >
-          <span className="font-mono">{Math.round(elo)}</span>
-        </HighlightTile>
-      ) : null}
       {sensitivityPercent != null && (
         <HighlightTile
           icon={<Gauge className="h-4 w-4" />}
@@ -366,6 +347,26 @@ export function ProfileHighlights({
           {searchCraftValue}
         </HighlightTile>
       )}
+      {/* Elo は最後に置く。読み込み中の枠が「未登録」と分かって消えても、値の分かったほかのタイルが横にずれないようにするため */}
+      {eloLoading ? (
+        <LoadingHighlightTile icon={<Trophy className="h-4 w-4" />} label={t("playerProfile.highlightElo")} />
+      ) : eloFailed ? (
+        <HighlightTile
+          icon={<Trophy className="h-4 w-4" />}
+          label={t("playerProfile.highlightElo")}
+          onClick={() => onSelectTab("stats")}
+        >
+          {failedValue}
+        </HighlightTile>
+      ) : elo != null ? (
+        <HighlightTile
+          icon={<Trophy className="h-4 w-4" />}
+          label={t("playerProfile.highlightElo")}
+          onClick={() => onSelectTab("stats")}
+        >
+          <span className="font-mono">{Math.round(elo)}</span>
+        </HighlightTile>
+      ) : null}
     </div>
     </HorizontalScrollArea>
   );

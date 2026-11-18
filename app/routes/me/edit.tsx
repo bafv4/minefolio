@@ -1381,7 +1381,6 @@ export default function EditProfilePage() {
                 onUploadComplete={(url) => setCustomSkinUrl(url)}
                 onDelete={() => setCustomSkinUrl(null)}
               />
-              <p className="text-xs text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
             </div>
 
             <Separator />
@@ -1406,6 +1405,7 @@ export default function EditProfilePage() {
                 onUploadComplete={(url) => setCustomCapeUrl(url)}
                 onDelete={() => setCustomCapeUrl(null)}
               />
+              {/* スキンとマントの両方に当てはまる注意なので、2つのアップロード欄の後に1回だけ出す */}
               <p className="text-xs text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
             </div>
 

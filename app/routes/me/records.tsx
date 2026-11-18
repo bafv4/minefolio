@@ -729,6 +729,9 @@ export default function RecordsPage() {
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <h3 className="min-w-0 break-words font-medium text-sm line-clamp-2">
                           {pb.category?.data?.name ?? "Unknown"}
+                          {/* 同じカテゴリでバージョン違いの記録が並ぶと見出しが同名になるので、見出しにバージョンを含める
+                              （見た目のバージョンは下の行に出ているので、見出しの中は読み上げ用だけ） */}
+                          {pb.versionName && <span className="sr-only"> ({pb.versionName})</span>}
                         </h3>
                         <Badge variant="outline" className="shrink-0">
                           #{pb.place}

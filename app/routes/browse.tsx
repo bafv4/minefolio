@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, useSearchParams, useNavigation, Form, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useRef } from "react";
+import { useLoaderData, useSearchParams, useNavigation, Form, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import type { Route } from "./+types/browse";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -27,8 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label as RadixLabel } from "@/components/ui/label";
-import { Search, Users, ArrowUpDown, Loader2, Filter, X } from "lucide-react";
+import { Search, Users, ArrowUpDown, Loader2, Filter, X, Shuffle } from "lucide-react";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import {
@@ -37,6 +36,7 @@ import {
   getViewerFavoriteSlugs,
 } from "@/lib/browse-query.server";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useT } from "@/hooks/use-locale";
 import { useFavorites } from "@/hooks/use-favorites";
@@ -131,6 +131,31 @@ export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate 
   };
   if (strip(currentUrl) === strip(nextUrl)) return false;
   return defaultShouldRevalidate;
+}
+
+/**
+ * 絞り込みダイアログの1行（チェックボックス＋ラベル）。行全体を label で包み、モバイルは高さ 44px 全体を押せるようにする
+ */
+function FilterCheckboxRow({
+  id,
+  checked,
+  onCheckedChange,
+  children,
+}: {
+  id: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="-mx-2 flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 text-sm hover:bg-muted/50 sm:min-h-9"
+    >
+      <Checkbox id={id} checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
+      <span>{children}</span>
+    </label>
+  );
 }
 
 export default function BrowsePage() {
@@ -342,10 +367,19 @@ export default function BrowsePage() {
     <div className="space-y-6">
       {/* ヘッダー */}
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Users className="h-6 w-6" />
-          {t("browse.title")}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Users className="h-6 w-6" />
+            {t("browse.title")}
+          </h1>
+          {/* 副次の操作: ランダムな走者のプロフィールへ（/random-player はリダイレクトだけのリソースルートなので文書ごと読み込む） */}
+          <Button variant="outline" size="sm" asChild className="min-h-11 sm:min-h-8">
+            <Link to="/random-player" reloadDocument>
+              <Shuffle className="h-4 w-4" aria-hidden="true" />
+              {t("browse.randomRunner")}
+            </Link>
+          </Button>
+        </div>
         <p className="text-sm text-muted-foreground">
           {t(countKey, { count: totalCount })}
         </p>
@@ -371,10 +405,10 @@ export default function BrowsePage() {
                   onChange={(e) => setInputValue(e.target.value)}
                   onCompositionStart={() => setIsComposing(true)}
                   onCompositionEnd={() => setIsComposing(false)}
-                  className="pl-10"
+                  className="h-11 pl-10 sm:h-9"
                 />
               </div>
-              <Button type="submit">
+              <Button type="submit" className="min-h-11 sm:min-h-9">
                 <Search className="mr-2 h-4 w-4" />
                 {t("common.search")}
               </Button>
@@ -384,7 +418,7 @@ export default function BrowsePage() {
             {/* フィルタ */}
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" className="min-h-11 gap-2 sm:min-h-9">
                   <Filter className="h-4 w-4" />
                   {t("browse.filter")}
                   {activeFilterCount > 0 && (
@@ -409,158 +443,67 @@ export default function BrowsePage() {
                     {draftFilters.roles.length === 0 && (
                       <p className="text-xs text-muted-foreground">{t("browse.roleDefaultNote")}</p>
                     )}
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="role-runner"
-                          checked={draftFilters.roles.includes("runner")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("roles", "runner", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="role-runner" className="cursor-pointer">{t("browse.roleRunner")}</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="role-viewer"
-                          checked={draftFilters.roles.includes("viewer")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("roles", "viewer", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="role-viewer" className="cursor-pointer">{t("browse.roleViewer")}</RadixLabel>
-                      </div>
+                    <div className="space-y-0.5">
+                      <FilterCheckboxRow id="role-runner" checked={draftFilters.roles.includes("runner")} onCheckedChange={(checked) => handleDraftFilterChange("roles", "runner", checked)}>
+                        {t("browse.roleRunner")}
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="role-viewer" checked={draftFilters.roles.includes("viewer")} onCheckedChange={(checked) => handleDraftFilterChange("roles", "viewer", checked)}>
+                        {t("browse.roleViewer")}
+                      </FilterCheckboxRow>
                     </div>
                   </div>
 
                   {/* エディション */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.edition")}</div>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="edition-java"
-                          checked={draftFilters.editions.includes("java")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("editions", "java", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="edition-java" className="cursor-pointer">{t("browse.editionJava")}</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="edition-bedrock"
-                          checked={draftFilters.editions.includes("bedrock")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("editions", "bedrock", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="edition-bedrock" className="cursor-pointer">{t("browse.editionBedrock")}</RadixLabel>
-                      </div>
+                    <div className="space-y-0.5">
+                      <FilterCheckboxRow id="edition-java" checked={draftFilters.editions.includes("java")} onCheckedChange={(checked) => handleDraftFilterChange("editions", "java", checked)}>
+                        {t("browse.editionJava")}
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="edition-bedrock" checked={draftFilters.editions.includes("bedrock")} onCheckedChange={(checked) => handleDraftFilterChange("editions", "bedrock", checked)}>
+                        {t("browse.editionBedrock")}
+                      </FilterCheckboxRow>
                     </div>
                   </div>
 
                   {/* プラットフォーム */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.platform")}</div>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-windows"
-                          checked={draftFilters.platforms.includes("pc_windows")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "pc_windows", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-windows" className="cursor-pointer">Windows</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-mac"
-                          checked={draftFilters.platforms.includes("pc_mac")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "pc_mac", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-mac" className="cursor-pointer">Mac</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-linux"
-                          checked={draftFilters.platforms.includes("pc_linux")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "pc_linux", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-linux" className="cursor-pointer">Linux</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-switch"
-                          checked={draftFilters.platforms.includes("switch")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "switch", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-switch" className="cursor-pointer">Switch</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-mobile"
-                          checked={draftFilters.platforms.includes("mobile")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "mobile", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-mobile" className="cursor-pointer">Mobile</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="platform-other"
-                          checked={draftFilters.platforms.includes("other")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("platforms", "other", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="platform-other" className="cursor-pointer">{t("browse.platformOther")}</RadixLabel>
-                      </div>
+                    <div className="space-y-0.5">
+                      <FilterCheckboxRow id="platform-windows" checked={draftFilters.platforms.includes("pc_windows")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "pc_windows", checked)}>
+                        Windows
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="platform-mac" checked={draftFilters.platforms.includes("pc_mac")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "pc_mac", checked)}>
+                        Mac
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="platform-linux" checked={draftFilters.platforms.includes("pc_linux")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "pc_linux", checked)}>
+                        Linux
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="platform-switch" checked={draftFilters.platforms.includes("switch")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "switch", checked)}>
+                        Switch
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="platform-mobile" checked={draftFilters.platforms.includes("mobile")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "mobile", checked)}>
+                        {t("meEdit.mobile")}
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="platform-other" checked={draftFilters.platforms.includes("other")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "other", checked)}>
+                        {t("browse.platformOther")}
+                      </FilterCheckboxRow>
                     </div>
                   </div>
 
                   {/* 入力方法 */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.inputMethod")}</div>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="input-kbm"
-                          checked={draftFilters.inputMethods.includes("keyboard_mouse")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("inputMethods", "keyboard_mouse", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="input-kbm" className="cursor-pointer">{t("browse.inputKeyboardMouse")}</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="input-controller"
-                          checked={draftFilters.inputMethods.includes("controller")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("inputMethods", "controller", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="input-controller" className="cursor-pointer">{t("browse.inputController")}</RadixLabel>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="input-touch"
-                          checked={draftFilters.inputMethods.includes("touch")}
-                          onCheckedChange={(checked) => {
-                            handleDraftFilterChange("inputMethods", "touch", !!checked);
-                          }}
-                        />
-                        <RadixLabel htmlFor="input-touch" className="cursor-pointer">{t("browse.inputTouch")}</RadixLabel>
-                      </div>
+                    <div className="space-y-0.5">
+                      <FilterCheckboxRow id="input-kbm" checked={draftFilters.inputMethods.includes("keyboard_mouse")} onCheckedChange={(checked) => handleDraftFilterChange("inputMethods", "keyboard_mouse", checked)}>
+                        {t("browse.inputKeyboardMouse")}
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="input-controller" checked={draftFilters.inputMethods.includes("controller")} onCheckedChange={(checked) => handleDraftFilterChange("inputMethods", "controller", checked)}>
+                        {t("browse.inputController")}
+                      </FilterCheckboxRow>
+                      <FilterCheckboxRow id="input-touch" checked={draftFilters.inputMethods.includes("touch")} onCheckedChange={(checked) => handleDraftFilterChange("inputMethods", "touch", checked)}>
+                        {t("browse.inputTouch")}
+                      </FilterCheckboxRow>
                     </div>
                   </div>
                 </div>
@@ -600,7 +543,7 @@ export default function BrowsePage() {
             {/* ソート */}
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
             <Select value={sortBy} onValueChange={handleSortChange}>
-              <SelectTrigger className="w-[140px]" aria-label={t("contentSort.label")}>
+              <SelectTrigger className="min-h-11 w-[140px] sm:min-h-9" aria-label={t("contentSort.label")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -623,14 +566,15 @@ export default function BrowsePage() {
 
         {/* アクティブフィルタの表示 */}
         {activeFilterCount > 0 && (
-          <div className="flex flex-wrap gap-2">
+          // × の押せる範囲（上下に 10px 広げる）が次の行のチップに重ならないよう、行の間隔を広めに取る
+          <div className="flex flex-wrap gap-x-2 gap-y-4">
             {filters.roles.map((role) => (
               <Badge key={role} variant="secondary" className="gap-1 overflow-visible">
                 {roleLabels(t)[role]}
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
                   aria-label={t("browse.removeFilterAria", { label: roleLabels(t)[role] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -642,7 +586,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("edition", edition, false)}
                   aria-label={t("browse.removeFilterAria", { label: editionLabels(t)[edition] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -654,7 +598,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
                   aria-label={t("browse.removeFilterAria", { label: platformLabel(t, platform, "short") ?? platform })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -666,7 +610,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
                   aria-label={t("browse.removeFilterAria", { label: inputMethodLabels(t)[inputMethod] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-1 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -765,16 +709,22 @@ export default function BrowsePage() {
       {infinite.items.length > 0 && infinite.hasMore && (
         <div className="flex flex-col items-center gap-3 py-6">
           <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
-          <Button
-            variant="outline"
-            onClick={infinite.loadMore}
-            disabled={infinite.isLoadingMore}
-          >
-            {infinite.isLoadingMore && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-            )}
-            {t("browse.loadMore")}
-          </Button>
+          {infinite.loadError ? (
+            <div className="w-full">
+              <FeedErrorNotice message={t("browse.loadMoreFailed")} onRetry={infinite.retry} />
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={infinite.loadMore}
+              disabled={infinite.isLoadingMore}
+            >
+              {infinite.isLoadingMore && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              )}
+              {t("browse.loadMore")}
+            </Button>
+          )}
         </div>
       )}
       {infinite.items.length > 0 && !infinite.hasMore && totalCount > 0 && (

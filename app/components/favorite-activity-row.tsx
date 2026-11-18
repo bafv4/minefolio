@@ -188,8 +188,9 @@ export function FavoriteActivityRow({
     : time === "clock"
       ? at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
       : formatRelativeTimeInMinutes(t, at);
+  // 名前は隣の文（ActivitySentence）にあるので、アバターの alt は空にする（同じ名前を2回読ませない）
   const avatar = (
-    <MinecraftAvatar uuid={item.uuid} skinUrl={item.customSkinUrl} mcid={item.mcid} size={36} className="rounded-lg" />
+    <MinecraftAvatar uuid={item.uuid} skinUrl={item.customSkinUrl} mcid={item.mcid} size={36} alt="" className="rounded-lg" />
   );
 
   if (item.kind === "pace" && item.runId != null && item.mcid) {

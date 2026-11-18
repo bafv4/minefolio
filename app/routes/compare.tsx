@@ -19,20 +19,21 @@ import { rtaCareerLabel, rtaCareerView } from "@/lib/rta-career";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { NoticeBanner } from "@/components/notice-banner";
-import { Search, GitCompare, User, Users, TriangleAlert } from "lucide-react";
-import { useState, useMemo } from "react";
+import { ArrowLeftRight, Check, ChevronsUpDown, GitCompare, User, Users, TriangleAlert } from "lucide-react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import type { Translator } from "@/lib/messages";
@@ -447,14 +448,173 @@ function sensitivityLabel(sensitivity: number | null | undefined): string | unde
   return percent != null ? `${percent}%` : undefined;
 }
 
+/**
+ * 走者を選ぶコンボボックス（検索欄と候補を1つにまとめた物。見た目は ui/combobox と同じ）。
+ * ui/combobox は候補が文字列のラベルだけで、検索が value（slug）にしか当たらないため、ここで Popover＋Command を直接組む。
+ * 検索は表示名・アルファベット表記・MCID・slug（cmdk の keywords）。名前は見出し（labelId）＋選択中の名前で読む
+ */
+function RunnerPicker({
+  labelId,
+  allPlayers,
+  options,
+  value,
+  onValueChange,
+}: {
+  labelId: string;
+  /** 選択中の名前を引く一覧（相手の走者を除く前） */
+  allPlayers: SelectablePlayer[];
+  /** 候補（相手で選ばれている走者を除いた一覧） */
+  options: SelectablePlayer[];
+  value: string;
+  onValueChange: (slug: string) => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  const valueId = `${labelId}-value`;
+  // 選択中の走者は loader の一覧（withReferencedPlayers で URL 指定の走者を含む）から引くので、SSR の時点で名前が出る
+  const selected = allPlayers.find((p) => p.slug === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          role="combobox"
+          aria-expanded={open}
+          aria-labelledby={`${labelId} ${valueId}`}
+          className="min-h-11 w-full justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input sm:min-h-9"
+        >
+          <span id={valueId} className={cn("flex min-w-0 items-center gap-2", !selected && "text-muted-foreground")}>
+            {selected ? (
+              <>
+                <MinecraftAvatar uuid={selected.uuid} size={20} skinUrl={selected.customSkinUrl} alt="" className="shrink-0" />
+                <span className="truncate">{getLocalizedDisplayName(selected, locale)}</span>
+              </>
+            ) : (
+              t("compare.selectRunner")
+            )}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={t("compare.searchPlaceholder")} aria-label={t("compare.searchPlaceholder")} />
+          <CommandList>
+            <CommandEmpty>{t("compare.noRunnerMatch")}</CommandEmpty>
+            <CommandGroup>
+              {options.map((p) => (
+                <CommandItem
+                  key={p.slug}
+                  value={p.slug}
+                  keywords={[p.displayName, p.displayNameAlphabet, p.mcid].filter((k): k is string => !!k)}
+                  onSelect={() => {
+                    if (p.slug !== value) onValueChange(p.slug);
+                    setOpen(false);
+                  }}
+                >
+                  <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} alt="" className="shrink-0" />
+                  <span className="min-w-0 truncate">{getLocalizedDisplayName(p, locale)}</span>
+                  {p.mcid && <span className="shrink-0 text-xs text-muted-foreground">@{p.mcid}</span>}
+                  <Check className={cn("ml-auto h-4 w-4", p.slug === value ? "opacity-100" : "opacity-0")} aria-hidden="true" />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** 比較する走者（列見出しに出す分） */
+type CompareColumnPlayer = Pick<SelectablePlayer, "uuid" | "customSkinUrl" | "mcid" | "slug" | "displayName" | "displayNameAlphabet">;
+
+type CompareTableRow = {
+  key: string;
+  label: string;
+  value1: ReactNode;
+  value2: ReactNode;
+  different: boolean;
+};
+
+/**
+ * 2人の値を並べる表（キー配置・デバイスで同じ形）。列は「項目｜走者1｜走者2」、列見出しはアバター＋名前。
+ * 違う行だけ行全体を中立な面＋「異なる」の文字で示す（一致・両方未設定は装飾なし）
+ */
+function CompareTable({
+  labelledBy,
+  firstColumnLabel,
+  player1,
+  player2,
+  rows,
+}: {
+  labelledBy: string;
+  firstColumnLabel: string;
+  player1: CompareColumnPlayer;
+  player2: CompareColumnPlayer;
+  rows: CompareTableRow[];
+}) {
+  const locale = useLocale();
+  const columnHeader = (player: CompareColumnPlayer) => {
+    const name = getLocalizedDisplayName(player, locale);
+    return (
+      <span role="columnheader" title={name} className="flex min-w-0 max-w-28 items-center justify-center gap-1.5 sm:max-w-40">
+        <MinecraftAvatar uuid={player.uuid} size={20} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
+        <span className="min-w-0 truncate">{name}</span>
+      </span>
+    );
+  };
+  return (
+    <div
+      role="table"
+      aria-labelledby={labelledBy}
+      className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 divide-y divide-border/60"
+    >
+      <div
+        role="row"
+        className="col-span-full -mx-2 grid grid-cols-subgrid items-end px-2 pb-2 text-xs font-medium text-muted-foreground"
+      >
+        <span role="columnheader">{firstColumnLabel}</span>
+        {columnHeader(player1)}
+        {columnHeader(player2)}
+      </div>
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          role="row"
+          className={cn(
+            "col-span-full -mx-2 grid grid-cols-subgrid items-center px-2 py-2",
+            row.different && "bg-secondary/50",
+          )}
+        >
+          <div role="rowheader" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-sm">{row.label}</span>
+            {row.different && <DifferentMark />}
+          </div>
+          <div role="cell" className="text-center">{row.value1}</div>
+          <div role="cell" className="text-center">{row.value2}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KeyChip({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="inline-block min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
+      {children}
+    </kbd>
+  );
+}
+
 export default function ComparePage() {
   const t = useT();
   const locale = useLocale();
   const { allPlayers, player1, player2, similarPlayers, notFoundSlugs, now } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search1, setSearch1] = useState("");
-  const [search2, setSearch2] = useState("");
 
   const selectedP1 = searchParams.get("p1") ?? "";
   const selectedP2 = searchParams.get("p2") ?? "";
@@ -483,30 +643,19 @@ export default function ComparePage() {
     setSearchParams(params);
   };
 
-  // フィルタリングされた走者一覧
-  const filteredPlayers1 = useMemo(() => {
-    if (!search1) return allPlayers;
-    const lower = search1.toLowerCase();
-    return allPlayers.filter(
-      (p) =>
-        p.slug.toLowerCase().includes(lower) ||
-        p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower) ||
-        p.displayNameAlphabet?.toLowerCase().includes(lower)
-    );
-  }, [allPlayers, search1]);
+  // 走者 1 と 2 を入れ替える（URL の p1 / p2 を入れ替える。片方だけ指定でも入れ替える）
+  const swapPlayers = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("p1");
+    params.delete("p2");
+    if (selectedP2) params.set("p1", selectedP2);
+    if (selectedP1) params.set("p2", selectedP1);
+    setSearchParams(params, { preventScrollReset: true });
+  };
 
-  const filteredPlayers2 = useMemo(() => {
-    if (!search2) return allPlayers;
-    const lower = search2.toLowerCase();
-    return allPlayers.filter(
-      (p) =>
-        p.slug.toLowerCase().includes(lower) ||
-        p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower) ||
-        p.displayNameAlphabet?.toLowerCase().includes(lower)
-    );
-  }, [allPlayers, search2]);
+  // もう片方で選ばれている走者は候補から外す（同じ走者どうしを比べない）
+  const options1 = useMemo(() => allPlayers.filter((p) => !selectedP2 || p.slug !== selectedP2), [allPlayers, selectedP2]);
+  const options2 = useMemo(() => allPlayers.filter((p) => !selectedP1 || p.slug !== selectedP1), [allPlayers, selectedP1]);
 
   // キーバインドをマップ化
   const p1Keybindings = useMemo(() => {
@@ -541,7 +690,7 @@ export default function ComparePage() {
     return groups;
   }, []);
 
-  // 一致・不一致の統計
+  // 一致・不一致の統計（行の印・「違いだけ表示」と同じ基準 compareValues）。両方未設定（どちらも「-」）は一致に数える
   const stats = useMemo(() => {
     if (!player1 || !player2) return { same: 0, different: 0, total: 0 };
 
@@ -549,19 +698,48 @@ export default function ComparePage() {
     let different = 0;
 
     for (const item of COMPARE_ACTIONS) {
-      const k1 = p1Keybindings[item.action];
-      const k2 = p2Keybindings[item.action];
-      if (k1 && k2) {
-        if (k1 === k2) {
-          same++;
-        } else {
-          different++;
-        }
-      }
+      const result = compareValues(p1Keybindings[item.action], p2Keybindings[item.action]);
+      if (result === "different") different++;
+      else same++;
     }
 
     return { same, different, total: same + different };
   }, [player1, player2, p1Keybindings, p2Keybindings]);
+
+  const runnerSlot = (slot: "p1" | "p2") => {
+    const labelId = `compare-${slot}-label`;
+    const selected = slot === "p1" ? selectedP1 : selectedP2;
+    const missing = slot === "p1" ? p1Missing : p2Missing;
+    const player = slot === "p1" ? player1 : player2;
+    return (
+      <div className="min-w-0 space-y-2">
+        <h2 id={labelId} className="text-sm font-medium text-muted-foreground">
+          {slot === "p1" ? t("compare.runner1") : t("compare.runner2")}
+        </h2>
+        <RunnerPicker
+          labelId={labelId}
+          allPlayers={allPlayers}
+          options={slot === "p1" ? options1 : options2}
+          value={missing ? "" : selected}
+          onValueChange={(v) => handleSelectPlayer(slot, v)}
+        />
+        {missing && (
+          <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
+            <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selected) })}</span>
+          </NoticeBanner>
+        )}
+        {player && (
+          <Link
+            to={`/player/${player.slug}`}
+            className="inline-flex min-h-11 items-center gap-2 text-sm text-primary hover:underline sm:min-h-6"
+          >
+            <User className="h-4 w-4" aria-hidden="true" />
+            {t("compare.viewProfile")}
+          </Link>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -575,101 +753,24 @@ export default function ComparePage() {
         </p>
       </div>
 
-      {/* 走者選択 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("compare.runner1")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t("compare.searchPlaceholder")}
-                value={search1}
-                onChange={(e) => setSearch1(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={p1Missing ? "" : selectedP1} onValueChange={(v) => handleSelectPlayer("p1", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("compare.selectRunner")} />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {filteredPlayers1.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{getLocalizedDisplayName(p, locale)}</span>
-                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {p1Missing && (
-              <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
-                <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selectedP1) })}</span>
-              </NoticeBanner>
-            )}
-            {player1 && (
-              <Link
-                to={`/player/${player1.slug}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <User className="h-4 w-4" />
-                {t("compare.viewProfile")}
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("compare.runner2")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t("compare.searchPlaceholder")}
-                value={search2}
-                onChange={(e) => setSearch2(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={p2Missing ? "" : selectedP2} onValueChange={(v) => handleSelectPlayer("p2", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("compare.selectRunner")} />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {filteredPlayers2.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{getLocalizedDisplayName(p, locale)}</span>
-                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {p2Missing && (
-              <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
-                <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selectedP2) })}</span>
-              </NoticeBanner>
-            )}
-            {player2 && (
-              <Link
-                to={`/player/${player2.slug}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <User className="h-4 w-4" />
-                {t("compare.viewProfile")}
-              </Link>
-            )}
-          </CardContent>
-        </Card>
+      {/* 走者選択（箱にせず、2つの選択欄と入れ替えボタンを1行に。モバイルは縦に積む） */}
+      <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-4">
+        {runnerSlot("p1")}
+        <div className="flex justify-center md:pt-7">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={swapPlayers}
+            disabled={!selectedP1 && !selectedP2}
+            aria-label={t("compare.swapRunners")}
+            title={t("compare.swapRunners")}
+            className="size-11 sm:size-9"
+          >
+            <ArrowLeftRight className="max-md:rotate-90" aria-hidden="true" />
+          </Button>
+        </div>
+        {runnerSlot("p2")}
       </div>
 
       {/* 比較結果 */}
@@ -688,6 +789,8 @@ export default function ComparePage() {
                   </div>
                 </div>
                 <div className="text-center px-6">
+                  {/* 下の件数はキー配置の表だけを数える（デバイス・設定の表は含めない）ので、対象を明示する */}
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">{t("compare.keybindingComparison")}</p>
                   <div className="flex items-center gap-4">
                     <div className="text-center">
                       <p className="text-2xl font-bold">{stats.same}</p>
@@ -724,138 +827,119 @@ export default function ComparePage() {
             </label>
           </div>
 
-          {/* キーバインド比較。違う行だけ中立な面＋「異なる」の文字で示す（一致・両方未設定は装飾なし） */}
-          <div className="space-y-4">
+          {/* キーバインド比較。デスクトップでは表の幅を絞り、操作名と値の間の視線の往復を減らす */}
+          <div className="max-w-3xl space-y-4">
             <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
-            {Object.entries(groupedActions).map(([category, actions]) => {
-              const titleId = `compare-category-${category}`;
-              const isDifferentAction = (action: string) => {
-                const key1 = p1Keybindings[action];
-                const key2 = p2Keybindings[action];
-                return !!key1 && !!key2 && key1 !== key2;
-              };
-              const rows = diffOnly ? actions.filter((item) => isDifferentAction(item.action)) : actions;
-              const name1 = getLocalizedDisplayName(player1, locale);
-              const name2 = getLocalizedDisplayName(player2, locale);
+            {(() => {
+              const categories = Object.entries(groupedActions).map(([category, actions]) => {
+                const rows: CompareTableRow[] = actions.map((item) => {
+                  const key1 = p1Keybindings[item.action];
+                  const key2 = p2Keybindings[item.action];
+                  return {
+                    key: item.action,
+                    label: getActionLabel(t, item.action),
+                    value1: <KeyChip>{key1 ? getKeyLabel(t, key1) : "-"}</KeyChip>,
+                    value2: <KeyChip>{key2 ? getKeyLabel(t, key2) : "-"}</KeyChip>,
+                    different: compareValues(key1, key2) === "different",
+                  };
+                });
+                return { category, rows: diffOnly ? rows.filter((row) => row.different) : rows };
+              });
+              // 「違いだけ表示」で違いの無いカテゴリは、カードを並べずに末尾の1行にまとめる
+              const shown = categories.filter((c) => c.rows.length > 0);
+              const hiddenCount = categories.length - shown.length;
               return (
-                <Card key={category} className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle id={titleId} className="text-base">
-                      {categoryLabelsOf(t)[category]}
-                    </CardTitle>
-                  </CardHeader>
+                <>
+                  {shown.map(({ category, rows }) => {
+                    const titleId = `compare-category-${category}`;
+                    return (
+                      <Card key={category} className="gap-3 py-5">
+                        <CardHeader className="px-5">
+                          <CardTitle id={titleId} className="text-base">
+                            {categoryLabelsOf(t)[category]}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-5">
+                          <CompareTable
+                            labelledBy={titleId}
+                            firstColumnLabel={t("compare.actionColumn")}
+                            player1={player1}
+                            player2={player2}
+                            rows={rows}
+                          />
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {hiddenCount > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {shown.length === 0 ? t("compare.noDifferences") : t("compare.otherCategoriesNoDifferences")}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* デバイス・設定の比較（キー配置と同じ形の表） */}
+          <div className="max-w-3xl space-y-4">
+            <h2 id="compare-device-heading" className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
+            {(() => {
+              const onOff = (value: boolean | null | undefined) =>
+                value != null ? (value ? t("common.on") : t("common.off")) : undefined;
+              const deviceRows = [
+                {
+                  label: t("compare.mouseDpi"),
+                  value1: player1.playerConfig?.mouseDpi?.toString(),
+                  value2: player2.playerConfig?.mouseDpi?.toString(),
+                },
+                {
+                  label: t("compare.inGameSensitivity"),
+                  value1: sensitivityLabel(player1.playerConfig?.gameSensitivity),
+                  value2: sensitivityLabel(player2.playerConfig?.gameSensitivity),
+                },
+                {
+                  label: t("compare.keyboardLayout"),
+                  value1: player1.playerConfig?.keyboardLayout ?? undefined,
+                  value2: player2.playerConfig?.keyboardLayout ?? undefined,
+                },
+                {
+                  label: t("compare.toggleSprint"),
+                  value1: onOff(player1.playerConfig?.toggleSprint),
+                  value2: onOff(player2.playerConfig?.toggleSprint),
+                },
+                {
+                  label: "Raw Input",
+                  value1: onOff(player1.playerConfig?.rawInput),
+                  value2: onOff(player2.playerConfig?.rawInput),
+                },
+              ];
+              const rows: CompareTableRow[] = deviceRows.map((row) => ({
+                key: row.label,
+                label: row.label,
+                value1: <span className="text-sm">{row.value1 ?? "-"}</span>,
+                value2: <span className="text-sm">{row.value2 ?? "-"}</span>,
+                different: compareValues(row.value1, row.value2) === "different",
+              }));
+              const visibleRows = diffOnly ? rows.filter((row) => row.different) : rows;
+              return (
+                <Card className="gap-3 py-5">
                   <CardContent className="px-5">
-                    {rows.length === 0 ? (
+                    {visibleRows.length === 0 ? (
                       <p className="text-sm text-muted-foreground">{t("compare.noDifferences")}</p>
                     ) : (
-                      <div
-                        role="table"
-                        aria-labelledby={titleId}
-                        className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 divide-y divide-border/60"
-                      >
-                        <div
-                          role="row"
-                          className="col-span-full -mx-2 grid grid-cols-subgrid items-end px-2 pb-2 text-xs font-medium text-muted-foreground"
-                        >
-                          <span role="columnheader">{t("compare.actionColumn")}</span>
-                          <span role="columnheader" title={name1} className="max-w-24 truncate text-center sm:max-w-40">
-                            {name1}
-                          </span>
-                          <span role="columnheader" title={name2} className="max-w-24 truncate text-center sm:max-w-40">
-                            {name2}
-                          </span>
-                        </div>
-                        {rows.map((item) => {
-                          const key1 = p1Keybindings[item.action];
-                          const key2 = p2Keybindings[item.action];
-                          const isDifferent = isDifferentAction(item.action);
-
-                          return (
-                            <div
-                              key={item.action}
-                              role="row"
-                              className={cn(
-                                "col-span-full -mx-2 grid grid-cols-subgrid items-center px-2 py-2",
-                                isDifferent && "bg-secondary/50",
-                              )}
-                            >
-                              <div role="rowheader" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className="text-sm">{getActionLabel(t, item.action)}</span>
-                                {isDifferent && <DifferentMark />}
-                              </div>
-                              <div role="cell" className="text-center">
-                                <kbd className="inline-block min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                                  {key1 ? getKeyLabel(t, key1) : "-"}
-                                </kbd>
-                              </div>
-                              <div role="cell" className="text-center">
-                                <kbd className="inline-block min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                                  {key2 ? getKeyLabel(t, key2) : "-"}
-                                </kbd>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <CompareTable
+                        labelledBy="compare-device-heading"
+                        firstColumnLabel={t("compare.item")}
+                        player1={player1}
+                        player2={player2}
+                        rows={visibleRows}
+                      />
                     )}
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
-
-          {/* デバイス・設定の比較 */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
-            <Card className="gap-3 py-5">
-              <CardContent className="px-5">
-                {(() => {
-                  const deviceRows = [
-                    {
-                      label: t("compare.mouseDpi"),
-                      value1: player1.playerConfig?.mouseDpi?.toString(),
-                      value2: player2.playerConfig?.mouseDpi?.toString(),
-                    },
-                    {
-                      label: t("compare.inGameSensitivity"),
-                      value1: sensitivityLabel(player1.playerConfig?.gameSensitivity),
-                      value2: sensitivityLabel(player2.playerConfig?.gameSensitivity),
-                    },
-                    {
-                      label: t("compare.keyboardLayout"),
-                      value1: player1.playerConfig?.keyboardLayout ?? undefined,
-                      value2: player2.playerConfig?.keyboardLayout ?? undefined,
-                    },
-                    {
-                      label: t("compare.toggleSprint"),
-                      value1: player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined,
-                      value2: player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined,
-                    },
-                    {
-                      label: "Raw Input",
-                      value1: player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined,
-                      value2: player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined,
-                    },
-                  ];
-                  const visibleRows = diffOnly ? deviceRows.filter((row) => isDifferentValue(row.value1, row.value2)) : deviceRows;
-                  if (visibleRows.length === 0) {
-                    return <p className="text-sm text-muted-foreground">{t("compare.noDifferences")}</p>;
-                  }
-                  const name1 = getLocalizedDisplayName(player1, locale);
-                  const name2 = getLocalizedDisplayName(player2, locale);
-                  return (
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
-                      <div title={name1} className="min-w-0 truncate font-medium text-sm text-center">{name1}</div>
-                      <div title={name2} className="min-w-0 truncate font-medium text-sm text-center">{name2}</div>
-                      {visibleRows.map((row) => (
-                        <CompareRow key={row.label} label={row.label} value1={row.value1} value2={row.value2} />
-                      ))}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
+            })()}
           </div>
         </>
       )}
@@ -872,37 +956,14 @@ export default function ComparePage() {
   );
 }
 
-/** 両方に値があって異なるときだけ「違う」とする（片方・両方が未設定のときは違い扱いにしない。キー配置の行・件数と同じ基準） */
-function isDifferentValue(value1?: string, value2?: string): boolean {
-  return !!value1 && !!value2 && value1 !== value2;
-}
-
-function CompareRow({
-  label,
-  value1,
-  value2,
-}: {
-  label: string;
-  value1?: string;
-  value2?: string;
-}) {
-  // 違う行だけ中立な面＋「異なる」の文字で示す（一致・未設定は装飾なし）
-  const isDifferent = isDifferentValue(value1, value2);
-
-  return (
-    <>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm py-1">
-        <span>{label}</span>
-        {isDifferent && <DifferentMark />}
-      </div>
-      <div className={cn("text-sm text-center py-1 rounded", isDifferent && "bg-secondary/50")}>
-        {value1 ?? "-"}
-      </div>
-      <div className={cn("text-sm text-center py-1 rounded", isDifferent && "bg-secondary/50")}>
-        {value2 ?? "-"}
-      </div>
-    </>
-  );
+/**
+ * 2人の値の比べ方（キー配置・デバイスの表、要約の件数、「違いだけ表示」、「異なる」の印で共有）。
+ * 両方に値があって異なる・片方だけ値がある → "different"、両方に値があって同じ → "same"、両方未設定 → "unset"（違いではない）
+ */
+function compareValues(value1?: string | null, value2?: string | null): "same" | "different" | "unset" {
+  if (!value1 && !value2) return "unset";
+  if (!value1 || !value2) return "different";
+  return value1 === value2 ? "same" : "different";
 }
 
 function SimilarPlayersSection({
@@ -944,7 +1005,8 @@ function SimilarPlayersSection({
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="font-bold text-success">
+                    {/* 一致率は良し悪しの色を付けない（前景色） */}
+                    <p className="font-bold">
                       {Math.round(player.similarity * 100)}%
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -955,6 +1017,7 @@ function SimilarPlayersSection({
                     size="sm"
                     variant="outline"
                     onClick={() => onSelectPlayer(player.slug)}
+                    className="min-h-11 sm:min-h-8"
                   >
                     {t("compare.compareButton")}
                   </Button>
@@ -980,19 +1043,17 @@ export function HydrateFallback() {
         <Skeleton className="h-5 w-72" />
       </div>
 
-      {/* 走者選択スケルトン */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* 走者選択スケルトン（本物と同じ: 見出し＋選択欄が2つ、間に入れ替えボタン） */}
+      <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i} className="gap-3 py-5">
-            <CardHeader className="px-5">
-              <Skeleton className="h-5 w-24" />
-            </CardHeader>
-            <CardContent className="space-y-3 px-5">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </CardContent>
-          </Card>
+          <div key={i} className={cn("space-y-2", i === 1 && "order-3")}>
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-11 w-full sm:h-9" />
+          </div>
         ))}
+        <div className="order-2 flex justify-center md:pt-7">
+          <Skeleton className="size-11 sm:size-9" />
+        </div>
       </div>
 
       {/* 統計サマリースケルトン */}

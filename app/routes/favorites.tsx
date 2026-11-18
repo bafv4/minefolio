@@ -146,10 +146,11 @@ export default function FavoritesPage() {
             {t("favorites.title")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {`${t("favorites.totalCount")} (${players.length}${t("common.peopleUnit")})`}
+            {t("favorites.totalCountWithNumber", { count: players.length })}
           </p>
         </div>
-        <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
+        {/* 副次の導線なので目立たせない（全幅の主ボタン級にしない） */}
+        <Button asChild variant="ghost" size="sm" className="self-start min-h-11 text-muted-foreground sm:self-auto sm:min-h-8">
           <Link to="/">
             <ArrowLeft className="h-4 w-4 mr-2" />
             {t("common.backToHome")}
@@ -202,7 +203,7 @@ export function HydrateFallback() {
           <Skeleton className="h-8 w-48 mb-2" />
           <Skeleton className="h-5 w-64" />
         </div>
-        <Skeleton className="h-10 w-32" />
+        <Skeleton className="h-8 w-28" />
       </div>
       <FavoriteCardSkeletonGrid />
     </div>

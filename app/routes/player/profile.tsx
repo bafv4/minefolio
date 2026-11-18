@@ -29,7 +29,6 @@ import {
   StatsServiceLoadingCard,
 } from "@/components/player-stats-cards";
 import { platformLabel } from "@/lib/platform-label";
-import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
 import { format, formatDistanceToNow } from "date-fns";
@@ -60,7 +59,7 @@ import {
   rtaCareerLabel,
   rtaCareerView,
 } from "@/lib/rta-career";
-import { isHttpUrl, safeExternalHref } from "@/lib/safe-url";
+import { safeExternalHref } from "@/lib/safe-url";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import {
   getProfileReactionCounts,
@@ -183,7 +182,6 @@ import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-d
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -203,8 +201,6 @@ import {
   Pencil,
   Calendar,
   History,
-  Target,
-  CheckCircle2,
   Package,
   Search,
   BarChart3,
@@ -232,6 +228,7 @@ import type { loader as layoutLoader } from "../_layout";
 import { PageSection } from "@/components/page-section";
 import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
 import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
+import { RecordCard, type RecordCardRecord } from "@/components/record-card";
 import {
   Dialog,
   DialogContent,
@@ -788,6 +785,8 @@ export default function PlayerProfilePage() {
     () => parseFingerAssignments(player.playerConfig?.fingerAssignments),
     [player.playerConfig?.fingerAssignments],
   );
+  // 指色の割り当てが1つでもあるか（無い走者ではキーが指色で塗られないので、指色の凡例を出さない）
+  const hasFingerAssignments = Object.values(userFingerAssignments).some((fingers) => fingers.length > 0);
 
   // サーチクラフト（items JSON列をパース）。SearchCraftGroupedList・Loop 表示のクラフト
   // 参照解決の両方で使うため一度だけ計算する
@@ -1241,20 +1240,25 @@ export default function PlayerProfilePage() {
   // キー配置・デバイス・アイテム・サーチクラフトで同じ位置、空状態のタブでも同じ）。表示条件は showPresetSelector
   // lg 以上はホットバーの行の右端（ProfileHotbarTabs の trailing）、lg 未満はパネル上端の右に1行（下端ドックには入れない）。
   // 同じ部品を2か所に描き、表示側を CSS（max-lg:hidden / lg:hidden）で切り替える
+  // メインの印（「 (メイン)」）。名前がメインの表示そのもの（「メイン」）なら重ねて付けない（「メイン (メイン)」を避ける）
+  const presetMainLabel = t("playerProfile.presetMainLabel").toLowerCase();
+  const presetOptionLabel = (preset: { name: string; isMain: boolean }) =>
+    preset.isMain && preset.name.trim().toLowerCase() !== presetMainLabel
+      ? `${preset.name}${t("playerProfile.presetMainSuffix")}`
+      : preset.name;
   const presetSelectorNode = showPresetSelector ? (
     <div className="flex min-w-0 items-center justify-end gap-2">
       <Select value={selectedPresetId ?? ""} onValueChange={handlePresetChange}>
         <SelectTrigger size="sm" aria-label={t("playerProfile.preset")} className="w-auto min-w-0 max-w-[min(100%,16rem)] sm:max-w-56">
           <SelectValue placeholder={t("playerProfile.currentSetting")}>
             {/* SSR の最初の描画から名前を出す（children なしだと選択項目の描画がハイドレーション後になり空のピルになる） */}
-            {selectedPreset ? `${selectedPreset.name}${selectedPreset.isMain ? t("playerProfile.presetMainSuffix") : ""}` : undefined}
+            {selectedPreset ? presetOptionLabel(selectedPreset) : undefined}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {presets.map((preset) => (
             <SelectItem key={preset.id} value={preset.id}>
-              {preset.name}
-              {preset.isMain && t("playerProfile.presetMainSuffix")}
+              {presetOptionLabel(preset)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1707,7 +1711,7 @@ export default function PlayerProfilePage() {
               >
                 {/* ツールバー: 凡例・Trigger/Chat 切替・案内・画像保存 */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <FingerLegend />
+                  {hasFingerAssignments && <FingerLegend />}
                   <HintTip message={t("playerProfile.keyAbbrHint")} className="text-xs text-muted-foreground">
                     <span className="underline decoration-dotted underline-offset-4">OH / HB</span>
                     <CircleHelp className="h-3.5 w-3.5" aria-hidden />
@@ -1912,7 +1916,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<Keyboard className="h-12 w-12" />}
               title={t("playerProfile.noKeybindingsTitle")}
-              description={t("playerProfile.noKeybindings")}
+              description={t(isOwner ? "playerProfile.noKeybindingsOwner" : "playerProfile.noKeybindings")}
               action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
             />
           )}
@@ -1979,7 +1983,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<Gamepad2 className="h-12 w-12" />}
               title={t("playerProfile.noPlaystyleTitle")}
-              description={t("playerProfile.noPlaystyle")}
+              description={t(isOwner ? "playerProfile.noPlaystyleOwner" : "playerProfile.noPlaystyle")}
               action={
                 isOwner ? (
                   <Button asChild size="sm" variant="outline" className="mt-4">
@@ -2014,7 +2018,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<Package className="h-12 w-12" />}
               title={t("playerProfile.noItemLayoutsTitle")}
-              description={t("playerProfile.noItemLayouts")}
+              description={t(isOwner ? "playerProfile.noItemLayoutsOwner" : "playerProfile.noItemLayouts")}
               action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
             />
           )}
@@ -2115,7 +2119,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<Search className="h-12 w-12" />}
               title={t("playerProfile.searchCraftNoneTitle")}
-              description={t("playerProfile.noSearchCraft")}
+              description={t(isOwner ? "playerProfile.noSearchCraftOwner" : "playerProfile.noSearchCraft")}
               action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
             />
           )}
@@ -2306,7 +2310,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<Mouse className="h-12 w-12" />}
               title={t("playerProfile.noDevicesTitle")}
-              description={t("playerProfile.noDevices")}
+              description={t(isOwner ? "playerProfile.noDevicesOwner" : "playerProfile.noDevices")}
               action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
             />
           )}
@@ -2342,7 +2346,7 @@ export default function PlayerProfilePage() {
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
               title={t("playerProfile.noGuidesTitle")}
-              description={t("playerProfile.noGuidesDescription")}
+              description={t(isOwner ? "playerProfile.noGuidesDescriptionOwner" : "playerProfile.noGuidesDescription")}
               action={isOwner ? <OwnerEditAction to="/my-guides" label={t("playerProfile.editLinkGuides")} /> : visitorEmptyAction}
             />
           )}
@@ -2503,76 +2507,6 @@ function ItemLayoutRow({
 }
 
 // KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
-
-type RecordCardRecord = {
-  id: string;
-  category: string;
-  categoryDisplayName: string;
-  subcategory: string | null;
-  personalBest: number | null;
-  targetTime: number | null;
-  achieved: boolean;
-  pbVideoUrl: string | null;
-  pbNotes: string | null;
-  isPinned?: boolean;
-};
-
-function RecordCard({
-  record,
-}: {
-  record: RecordCardRecord;
-}) {
-  const t = useT();
-  return (
-    // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
-    <Card className={cn("gap-3 py-5", record.isPinned && "md:col-span-2 border-primary/40")}>
-      <CardHeader className="px-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle role="heading" aria-level={4} className="text-base flex items-center gap-1.5">
-              {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
-              {record.categoryDisplayName}
-            </CardTitle>
-            {record.subcategory && (
-              <CardDescription>{record.subcategory}</CardDescription>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="px-5 space-y-2">
-        {record.personalBest && (
-          <div className="flex items-baseline gap-2">
-            <span className={cn("font-mono font-bold", record.isPinned ? "text-3xl" : "text-2xl")}>
-              {formatTime(record.personalBest)}
-            </span>
-            <span className="text-sm text-muted-foreground">{t("playerProfile.pb")}</span>
-          </div>
-        )}
-        {record.targetTime && (
-          <div className="flex items-center gap-2 text-sm">
-            <Target className="h-4 w-4 text-muted-foreground" />
-            <span>{t("playerProfile.target")}: {formatTime(record.targetTime)}</span>
-            {record.achieved && (
-              <CheckCircle2 className="h-4 w-4 text-success" />
-            )}
-          </div>
-        )}
-        {record.pbVideoUrl && isHttpUrl(record.pbVideoUrl) && (
-          <Button variant="outline" size="sm" asChild className="w-full mt-2">
-            <a
-              href={record.pbVideoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              {t("playerProfile.watchVideo")}
-            </a>
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 function SocialIcon({
   platform,
@@ -2834,8 +2768,9 @@ function TurnDistanceValue({ config }: { config: MouseReasonConfig }) {
   return (
     <>
       {/* calculateCm360 は半回転（180°）の距離を返す。身元帯のハイライト・ホームと同じ小数1桁＋cm/180° */}
-      {cm360.toFixed(1)}
-      <span className="text-muted-foreground ml-1">cm/180°</span>
+      {/* 数値と単位の間は余白ではなく空白文字で区切る（コピー・読み上げでも「1.5 cm/180°」になり、身元帯と表記がそろう） */}
+      {cm360.toFixed(1)}{" "}
+      <span className="text-muted-foreground">cm/180°</span>
     </>
   );
 }
@@ -3264,7 +3199,7 @@ function StatsContent({
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}
-          description={t("playerProfile.noStatsDescription")}
+          description={t(isOwner ? "playerProfile.noStatsDescriptionOwner" : "playerProfile.noStatsDescription")}
           action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
         />
       )}

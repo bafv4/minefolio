@@ -22,7 +22,8 @@ export function platformLabel(
     case "switch":
       return "Switch";
     case "mobile":
-      return "Mobile";
+      // 設定フォーム（/me/edit）の選択肢と同じ文言（ja「スマホ」・en「Mobile」）
+      return t("meEdit.mobile");
     case "other":
       return t("browse.platformOther");
     default:

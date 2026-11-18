@@ -44,7 +44,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // セッションの有無で Cache-Control を出し分け、匿名分は CDN でキャッシュさせる
   // （ログイン中は private/no-store。同一URLでのcookie変種混同を避けるため、
   // URL 側の分離は browse.tsx コンポーネントが useInfiniteScroll の extraParams で
-  // fetcher リクエストURLにのみ auth=1 を付与する形で行う）。
+  // 追加読み込みの fetch リクエストURLにのみ auth=1 を付与する形で行う）。
   const cacheControl = session
     ? "private, no-store"
     : "public, s-maxage=30, stale-while-revalidate=300";

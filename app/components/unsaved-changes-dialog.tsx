@@ -154,7 +154,11 @@ export function UnsavedChangesDialog({
               </AlertDialogAction>
             </>
           ) : (
-            <AlertDialogAction className="max-sm:min-h-11" onClick={() => blocker.proceed?.()}>
+            // 3択の分岐と同じく、データを失う操作は主ボタンにしない（outline＋文字だけ destructive 色）
+            <AlertDialogAction
+              className={cn(buttonVariants({ variant: "outline" }), "text-destructive max-sm:min-h-11")}
+              onClick={() => blocker.proceed?.()}
+            >
               {t("common.leaveWithoutSaving")}
             </AlertDialogAction>
           )}

@@ -191,14 +191,17 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
                 // lg 未満（768〜1023px）は8個がバー幅に収まるよう左右の余白を詰める
                 "md:group-data-[stuck=true]/bar:h-10 md:group-data-[stuck=true]/bar:w-auto md:group-data-[stuck=true]/bar:flex-row md:group-data-[stuck=true]/bar:gap-1 md:group-data-[stuck=true]/bar:px-1.5",
                 "lg:group-data-[stuck=true]/bar:gap-1.5 lg:group-data-[stuck=true]/bar:px-3",
-                "hover:bg-muted/60 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                // フォーカスの輪は不透明の --ring の 2px（ui.md 9章）。矢印キーで動かしている間は輪だけが手がかりになる。
+                // 隣のスロットとの間隔（モバイル gap-0.5）に重ならないよう内側に描く
+                "hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 // 選択状態は aria-selected で判定する。ツールチップ付きのスロットは TooltipTrigger（asChild）が
                 // data-state を closed / delayed-open で上書きするため、data-[state=active] が効かない
                 "aria-selected:border-foreground aria-selected:bg-secondary/50 aria-selected:text-foreground",
                 // 空スロットは破線＋薄い表示（押せる状態は保つ）。選択中は aria-selected: が優先される。
+                // 枠の色は中身のあるスロットより目立たせない（border 程度）。判別は破線の形と名前の「、未登録」に任せる。
                 // 薄くするのはアイコンだけ（下）。押せる部品のラベルなので文字は 4.5:1 を保つため薄めない
                 item.empty
-                  ? "border-dashed border-muted-foreground/70"
+                  ? "border-dashed border-border"
                   : "border-transparent md:border-border/70",
                 item.empty && "aria-selected:border-solid",
               )}

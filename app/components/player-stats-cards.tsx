@@ -29,7 +29,7 @@ import type { PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 // ============================================
 // 箱あり / 箱なしの切り替え
 // ============================================
-// 各カード部品は `framed`（既定 true）を受け取る。true は従来どおりの Card（/player/:slug/stats など）。
+// 各カード部品は `framed`（既定 true）を受け取る。true は従来どおりの Card（既定の表示。単独ページ /player/:slug/stats も今は箱なし）。
 // false は走者画面の記録タブ用の「箱なし・上罫線」で、Card の代わりに PageSection（h3・アイコンなし）で描く。
 // 箱なしのときだけ、中の1件ずつのタイルは rounded-xl、中の小見出しは h4（text-base。走者画面はタブタイトル h2 ＞ 欄 h3 ＞ 小見出し h4）にする。
 
@@ -38,7 +38,7 @@ const SECTION_TILE_RADIUS = "rounded-xl";
 /** 箱なしのときの欄内の小見出し（h4）の class */
 const SECTION_SUBHEADING_CLASS = "text-base font-semibold";
 
-/** 欄内の小見出し。箱あり（/player/:slug/stats ほか）は従来どおり h3、箱なし（走者画面: タブ h2 ＞ 欄 h3 ＞ 小見出し）は h4 */
+/** 欄内の小見出し。箱あり（既定の Card 表示。単独ページ /player/:slug/stats も今は箱なし）は従来どおり h3、箱なし（走者画面: タブ h2 ＞ 欄 h3 ＞ 小見出し）は h4 */
 function SubHeading({ framed, children }: { framed: boolean; children: ReactNode }) {
   const Tag = framed ? "h3" : "h4";
   return <Tag className={framed ? "text-sm font-medium text-muted-foreground" : SECTION_SUBHEADING_CLASS}>{children}</Tag>;

@@ -91,10 +91,11 @@ export default function FavoritesActivityPage() {
     <div className="space-y-6">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-xl bg-primary/10 p-2">
-            <Activity className="h-6 w-6 text-primary" aria-hidden="true" />
-          </div>
-          <h1 className="text-2xl font-bold">{t("favorites.activityTitle")}</h1>
+          {/* /favorites と同じ形（素のアイコン＋h1）。丸背景のアイコンチップは公開一覧ページのヘッダだけ（ui.md 13章） */}
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Activity className="h-6 w-6" aria-hidden="true" />
+            {t("favorites.activityTitle")}
+          </h1>
           {count != null && count > 0 && (
             <span className="inline-flex items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
               {t("favorites.activityCount", { count })}
@@ -158,7 +159,7 @@ export function HydrateFallback() {
   return (
     <div className="space-y-6">
       <Skeleton className="h-10 w-72" />
-      <Skeleton className="h-11 w-64 rounded-full" />
+      <Skeleton className="h-11 w-64 rounded-b-none sm:h-9" />
       <ActivitySkeleton />
     </div>
   );

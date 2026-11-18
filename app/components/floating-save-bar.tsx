@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +79,19 @@ export function FloatingSaveBar({
   const t = useT();
   const save = saveLabel ?? t("common.saveChanges");
   const reset = resetLabel ?? t("common.discardChanges");
+  // 取消の後は、押したボタンが（バーごと）隠れてフォーカスが body に落ちるので、ページの h1 へ移して
+  // 取り消したことをトーストで知らせる。h1 は各画面が持つ（tabIndex が無ければここで -1 を付ける）。
+  // 「元に戻す」は付けない（下書きの持ち方が画面ごとに違い、取消の前の状態を共通の部品から復元できないため）
+  const handleReset = () => {
+    if (!onReset) return;
+    onReset();
+    toast.success(t("common.changesDiscarded"));
+    const heading = document.querySelector<HTMLElement>("main h1") ?? document.querySelector<HTMLElement>("h1");
+    if (heading) {
+      if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+      heading.focus();
+    }
+  };
   return (
     <>
     {unsavedGuard && (
@@ -132,7 +146,7 @@ export function FloatingSaveBar({
           <Button
             type="button"
             variant="ghost"
-            onClick={onReset}
+            onClick={handleReset}
             disabled={isSubmitting}
             className="flex-none min-h-11 sm:min-h-9 text-muted-foreground touch-manipulation"
           >

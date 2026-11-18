@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Outlet, NavLink, useLoaderData, useLocation, useNavigation, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/_layout";
 import { createDb } from "@/lib/db";
@@ -73,16 +73,41 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return { user, appUrl, checklist };
 }
 
-// 主要なナビゲーション項目（プロフィールのホットバーと同じ 2 群: 人物系 | セットアップ系。群の間に区切りを入れる）
-const mainNavItems = [
-  { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil, startsGroup: false },
-  { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy, startsGroup: false },
-  { to: "/me/playstyle", labelKey: "meLayout.playstyle" as const, icon: Gamepad2, startsGroup: true },
-  { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard, startsGroup: false },
-  { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse, startsGroup: false },
-  { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package, startsGroup: false },
-  { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search, startsGroup: false },
+// ナビゲーションの3群（見出し付き）。並び順は従来どおりで、群の境目を「プリセットに保存されるか」で引く。
+// 2群目は編集中のプリセットに保存される画面（各画面にプリセットの選択がある。ツアーの「編集中のプリセット」の手順と同じ4画面）。
+// プレイスタイルはプリセットに属さない（users 側に保存）ので1群目。3群目は補助（プリセット管理・インポート・アカウント）
+const navGroups = [
+  {
+    key: "profile",
+    labelKey: "meLayout.groupProfile" as const,
+    items: [
+      { to: "/me/edit", labelKey: "meLayout.editProfile" as const, icon: Pencil },
+      { to: "/me/records", labelKey: "meLayout.records" as const, icon: Trophy },
+      { to: "/me/playstyle", labelKey: "meLayout.playstyle" as const, icon: Gamepad2 },
+    ],
+  },
+  {
+    key: "preset",
+    labelKey: "meLayout.groupPreset" as const,
+    items: [
+      { to: "/me/keybindings", labelKey: "meLayout.keybindings" as const, icon: Keyboard },
+      { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse },
+      { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package },
+      { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search },
+    ],
+  },
+  {
+    key: "manage",
+    labelKey: "meLayout.groupManage" as const,
+    items: [
+      { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Save },
+      { to: "/me/import", labelKey: "meLayout.import" as const, icon: Upload },
+      { to: "/me/account", labelKey: "meLayout.account" as const, icon: UserCog },
+    ],
+  },
 ];
+
+type MeNavItem = (typeof navGroups)[number]["items"][number];
 
 // ナビのリンクの見た目。現在地は brand（ヘッダーの現在ページと同じ text-brand bg-brand/10。NavLink が aria-current="page" を付ける）。
 // md 未満は押せる高さを 44px にする
@@ -96,13 +121,6 @@ function navLinkClass({ isActive, isPending }: { isActive: boolean; isPending: b
       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
   );
 }
-
-// 補助的なナビゲーション項目（区切り線の下）
-const secondaryNavItems = [
-  { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Save },
-  { to: "/me/import", labelKey: "meLayout.import" as const, icon: Upload },
-  { to: "/me/account", labelKey: "meLayout.account" as const, icon: UserCog },
-];
 
 export default function MeLayout() {
   const t = useT();
@@ -121,8 +139,17 @@ export default function MeLayout() {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
-  const currentItem = [...mainNavItems, ...secondaryNavItems].find((item) => item.to === location.pathname);
+  const currentItem = navGroups.flatMap<MeNavItem>((group) => group.items).find((item) => item.to === location.pathname);
   const currentLabel = currentItem ? t(currentItem.labelKey) : t("meLayout.home");
+  // 開いたメニューは Esc で閉じ、フォーカスを開閉ボタンへ戻す（lg 未満のみ。lg 以上は常に開いたサイドバー）
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const handleNavBarKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || !mobileMenuOpen) return;
+    if (!window.matchMedia("(max-width: 1023.98px)").matches) return;
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    toggleRef.current?.focus();
+  };
 
   return (
     <div className="flex flex-col lg:flex-row lg:gap-8">
@@ -130,8 +157,10 @@ export default function MeLayout() {
           包むコンテナの直下に出す（sticky は直近の親の中でしか貼り付かないため） */}
       <aside className="lg:w-64 shrink-0 max-lg:contents">
         <nav aria-label={t("meLayout.navLabel")} className="sticky top-24 space-y-1 max-lg:contents">
-          <div data-me-tour="identity" className="mb-3 pb-3 lg:mb-4 lg:pb-4 border-b flex items-start justify-between gap-2">
-            <div className="min-w-0">
+          {/* lg 未満は1行に詰める（名前と @MCID を横並び、共有ボタンは押せる高さ 44px を負のマージンで保ったまま行の高さを取らない）。
+              開閉バーの上でページの h1 を押し下げないため */}
+          <div data-me-tour="identity" className="max-lg:pb-2 lg:mb-4 lg:pb-4 border-b flex items-center lg:items-start justify-between gap-2">
+            <div className="min-w-0 max-lg:flex max-lg:items-baseline max-lg:gap-2">
               <p className="font-medium truncate">
                 {userName}
               </p>
@@ -142,7 +171,7 @@ export default function MeLayout() {
             <ShareButton
               title={`${userName} - Minefolio`}
               url={`${appUrl}/player/${user.slug}`}
-              className="min-h-11 md:min-h-0"
+              className="shrink-0 max-md:min-h-11 max-md:-my-1.5"
             />
           </div>
 
@@ -151,9 +180,11 @@ export default function MeLayout() {
               lg 以上は display:contents で、従来のサイドバーのまま */}
           <div
             data-me-nav-bar
+            onKeyDown={handleNavBarKeyDown}
             className="max-lg:sticky max-lg:top-[64px] max-lg:z-30 max-lg:-mx-2 max-lg:bg-background max-lg:px-2 max-lg:py-2 space-y-1 lg:contents"
           >
           <Button
+            ref={toggleRef}
             type="button"
             variant="outline"
             data-me-tour="sidebar-toggle"
@@ -168,56 +199,42 @@ export default function MeLayout() {
           </Button>
 
           <div id="me-mobile-menu" data-me-tour="sidebar" className={cn("space-y-1 max-lg:max-h-[calc(100dvh-9rem)] max-lg:overflow-y-auto", !mobileMenuOpen && "hidden", "lg:block")}>
-          {/* 主要なナビゲーション項目 */}
-          {mainNavItems.map((item) => (
-            <Fragment key={item.to}>
-            {item.startsGroup && <div aria-hidden="true" className="my-3 border-t" />}
-            <NavLink
-              to={item.to}
-              end
-              className={({ isActive, isPending }) =>
-                navLinkClass({ isActive, isPending })
-              }
-            >
-              {({ isPending }) => (
-                <>
-                  {isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <item.icon className="h-4 w-4" />
-                  )}
-                  {t(item.labelKey)}
-                </>
-              )}
-            </NavLink>
-            </Fragment>
-          ))}
-
-          {/* 区切り線 */}
-          <div aria-hidden="true" className="my-3 border-t" />
-
-          {/* 補助的なナビゲーション項目 */}
-          {secondaryNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end
-              className={({ isActive, isPending }) =>
-                navLinkClass({ isActive, isPending })
-              }
-            >
-              {({ isPending }) => (
-                <>
-                  {isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <item.icon className="h-4 w-4" />
-                  )}
-                  {t(item.labelKey)}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {navGroups.map((group, index) => {
+            const headingId = `me-nav-group-${group.key}`;
+            return (
+              <div
+                key={group.key}
+                role="group"
+                aria-labelledby={headingId}
+                className={cn("space-y-1", index > 0 && "mt-3 border-t pt-3")}
+              >
+                <p id={headingId} className="px-3 pb-1 text-xs font-medium text-muted-foreground">
+                  {t(group.labelKey)}
+                </p>
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end
+                    className={({ isActive, isPending }) =>
+                      navLinkClass({ isActive, isPending })
+                    }
+                  >
+                    {({ isPending }) => (
+                      <>
+                        {isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <item.icon className="h-4 w-4" />
+                        )}
+                        {t(item.labelKey)}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
           </div>
           </div>
         </nav>
@@ -225,7 +242,7 @@ export default function MeLayout() {
 
       {/* Main Content */}
       {/* <main> はサイトの共通レイアウト（routes/_layout.tsx）が持つので、ここは div にする */}
-      <div className="flex-1 min-w-0 max-lg:mt-6">
+      <div className="flex-1 min-w-0 max-lg:mt-4">
         <div className={cn(
           "transition-opacity duration-150",
           isNavigating && "opacity-50 pointer-events-none"
