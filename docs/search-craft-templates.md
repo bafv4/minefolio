@@ -78,7 +78,9 @@ type TemplateLoop = {
   - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（バーチャルキーボード → キーリマップ編集 → サーチクラフト編集。タイピングテストはバーチャルキーボードカード右上のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
   - サーチクラフト＋繋ぎ方（Loop）編集部は **`SearchCraftTimingBoard`**（`app/components/search-craft-editor.tsx`）によるタイミングブロック型UI（「指定なし」+ 6種のタイミング、計7ブロックを常時表示。timing の変更はブロック間D&D）。クラフト行はアイテムチップ + サーチ文字列 + 「Shiftを押しながら」チェックボックス + コメント常時表示。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」を参照。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
-  - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。作成時は `isPublished: true` で公開される。
+  - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。作成時は `isPublished: true` で公開される（確定ボタンの文言は作成画面が「作成して公開」、編集画面が「保存」）。
+  - **離脱確認**: 名前・説明・ゲーム内言語・サーチクラフト・リマップ・Loop のいずれかが、開いたときの値（保存に成功した後は、その送信内容）と違う間は未保存として扱う。キーボード配列の表示切替は数えない。未保存のままアプリ内で遷移しようとすると確認ダイアログ（「編集を続ける」「保存せず離れる」）を出し、タブを閉じる・再読み込みではブラウザの警告を出す（`useUnsavedWarning` / `UnsavedChangesDialog`）。
+  - **保存後の遷移**: 保存に成功したら未保存を解消してから `/my-guides/templates` へ移る（離脱確認は出ない）。失敗したときは入力を残し、遷移しない。
 - `/me/search-craft` の「テンプレートとして公開」ボタンから `/my-guides/templates` へ遷移できる。
 
 ### 公開ページ

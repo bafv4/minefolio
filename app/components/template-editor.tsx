@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ import {
 } from "@/lib/search-craft-templates";
 import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { toast } from "sonner";
 import { Download, Loader2, Save, X } from "lucide-react";
 
@@ -60,6 +62,10 @@ export function TemplateEditorForm({
   keyboardLayout,
   isSubmitting,
   onSubmit,
+  submitLabel,
+  saveResult,
+  saveSucceeded,
+  onSaved,
 }: {
   initial: TemplateEditorData;
   /** 「現在の設定を読み込む」用のライブ設定（空なら非表示） */
@@ -71,6 +77,14 @@ export function TemplateEditorForm({
   keyboardLayout: string | null;
   isSubmitting: boolean;
   onSubmit: (data: TemplateEditorData) => void;
+  /** 確定ボタンの文言（省略時は「保存」） */
+  submitLabel?: string;
+  /** 直近の保存結果（fetcher.data をそのまま渡す。送信のたびに新しい参照になる） */
+  saveResult?: unknown;
+  /** saveResult が成功を表すか */
+  saveSucceeded?: boolean;
+  /** 保存成功後、未保存の表示を消してから呼ぶ（遷移などはここで行う。離脱確認に止められない） */
+  onSaved?: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -84,6 +98,45 @@ export function TemplateEditorForm({
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() =>
     normalizeLayout(keyboardLayout),
   );
+
+  // 未保存判定: 現在値が基準（開いたときの値。保存に成功したらその送信内容）と違うか。表示レイアウトは含めない
+  const currentKey = useMemo(
+    () => JSON.stringify({ title, description, gameLanguage, crafts, remaps, loops }),
+    [title, description, gameLanguage, crafts, remaps, loops],
+  );
+  const [baselineKey, setBaselineKey] = useState(() =>
+    JSON.stringify({
+      title: initial.title,
+      description: initial.description,
+      gameLanguage: initial.gameLanguage,
+      crafts: initial.crafts,
+      remaps: initial.remaps,
+      loops: initial.loops,
+    }),
+  );
+  const dirty = currentKey !== baselineKey;
+  const blocker = useUnsavedWarning(dirty);
+  const submittedKeyRef = useRef<string | null>(null);
+  const handledResultRef = useRef<unknown>(saveResult);
+  const [savedPending, setSavedPending] = useState(false);
+
+  // 保存に成功したら、送信した内容を基準にして未保存を解消する
+  useEffect(() => {
+    if (saveResult === undefined || saveResult === handledResultRef.current) return;
+    handledResultRef.current = saveResult;
+    if (saveSucceeded && submittedKeyRef.current !== null) {
+      setBaselineKey(submittedKeyRef.current);
+      setSavedPending(true);
+    }
+  }, [saveResult, saveSucceeded]);
+
+  // 未保存が解消された後のレンダーで onSaved を呼ぶ（useUnsavedWarning の blocker が更新された後なので止められない）
+  useEffect(() => {
+    if (savedPending && !dirty) {
+      setSavedPending(false);
+      onSaved?.();
+    }
+  }, [savedPending, dirty, onSaved]);
 
   const hasCurrentSettings =
     !!currentSettings &&
@@ -138,6 +191,7 @@ export function TemplateEditorForm({
       toast.error(t("meSearchCraft.loopEntryRequired"));
       return;
     }
+    submittedKeyRef.current = currentKey;
     onSubmit({
       title: title.trim(),
       description: description.trim(),
@@ -146,7 +200,7 @@ export function TemplateEditorForm({
       remaps,
       loops,
     });
-  }, [crafts, description, gameLanguage, loops, onSubmit, remaps, title]);
+  }, [crafts, currentKey, description, gameLanguage, loops, onSubmit, remaps, title]);
 
   return (
     <div className="space-y-6">
@@ -182,7 +236,7 @@ export function TemplateEditorForm({
           ) : (
             <Save className="mr-2 h-4 w-4" />
           )}
-          {t("meTemplates.save")}
+          {submitLabel ?? t("meTemplates.save")}
         </Button>
       </div>
 
@@ -254,6 +308,8 @@ export function TemplateEditorForm({
         layout={layout}
         onLayoutChange={setLayout}
       />
+
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

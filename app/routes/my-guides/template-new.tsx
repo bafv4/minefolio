@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-new";
 import { createDb } from "@/lib/db";
@@ -110,11 +110,12 @@ export default function TemplateNewPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meTemplates.createSuccess"));
-      navigate("/my-guides/templates");
     } else if ("error" in data && data.error) {
       toast.error(data.error);
     }
-  }, [fetcher.data, navigate]);
+  }, [fetcher.data]);
+
+  const handleSaved = useCallback(() => navigate("/my-guides/templates"), [navigate]);
 
   return (
     <div className="space-y-6">
@@ -143,6 +144,10 @@ export default function TemplateNewPage() {
         currentSettings={currentSettings}
         keyboardLayout={keyboardLayout}
         isSubmitting={fetcher.state === "submitting"}
+        saveResult={fetcher.data}
+        saveSucceeded={!!fetcher.data && "success" in fetcher.data && !!fetcher.data.success}
+        onSaved={handleSaved}
+        submitLabel={t("meTemplates.createAndPublish")}
         onSubmit={(data) => {
           const formData = new FormData();
           formData.set("title", data.title);

@@ -2786,6 +2786,8 @@ export const PAGES_JA = {
     templateNotFound: "テンプレートが見つかりません",
     titleRequired: "テンプレート名を入力してください",
     textTooLong: "入力が長すぎます",
+    /** 新規作成の確定ボタン（作成と同時に公開される） */
+    createAndPublish: "作成して公開",
     templateLimitReached: "テンプレートは最大{max}件まで作成できます",
     tooManyCrafts: "サーチクラフトが多すぎます（最大{max}件）",
     createSuccess: "テンプレートを公開しました",

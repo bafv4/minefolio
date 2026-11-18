@@ -2764,6 +2764,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     userNotFound: "User not found",
     unknownAction: "Unknown action",
     templateNotFound: "Template not found",
+    createAndPublish: "Create and publish",
     titleRequired: "Enter a template name",
     textTooLong: "The input is too long",
     templateLimitReached: "You can create up to {max} templates",
