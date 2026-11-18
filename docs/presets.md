@@ -363,7 +363,7 @@
 - `syncActivePresetSnapshot` はライブテーブルへの書き込みトランザクションの**外**で実行される。ライブ書き込み成功後・同期完了前に処理が中断した場合、ライブテーブルとアクティブプリセットのスナップショットが一時的に乖離しうる（次回保存時に解消される）。表示面はメイン ＝ 編集中ならライブを使うため影響しないが、そのプリセットを適用し直すと古い内容でライブが上書きされる。乖離の検出・修復は `scripts/resync-active-preset-snapshots.ts`（一回限り・dry-run 既定）で行う。
 - `syncActivePresetSnapshot` の導入（2026-05）より前に行われたライブ設定の編集は、スナップショットに反映されていない。上記スクリプトで再同期する。
 - `isActive` / `isMain` の「ユーザーごとに高々1件」はDB制約（部分ユニークインデックス等）では強制されておらず、アプリケーションロジックで維持している。過去の不具合等で複数プリセットがアクティブになったデータは `scripts/fix-duplicate-active-presets.ts` で修復できる。
-- キー割当統計（`app/lib/keybindings-stats.server.ts`）と全体統計（`app/routes/stats.tsx`）はライブテーブルへの SQL 集計のため、**編集中の内容が集計に含まれる**（メイン基準化はスナップショットの JS 集計化が必要でフォローアップ）。
+- キー割当統計（`app/lib/keybindings-stats.server.ts`）はライブテーブルへの SQL 集計のため、**編集中の内容が集計に含まれる**（メイン基準化はスナップショットの JS 集計化が必要でフォローアップ）。
 - `is_main` 列の追加・バックフィルは `scripts/add-main-preset-column.ts`（一回限り・dry-run 既定）で行う。
 
 ---

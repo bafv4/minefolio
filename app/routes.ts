@@ -35,7 +35,7 @@ export default [
     route("keybindings/visual", "routes/keybindings-visual.tsx"),
     route("keybindings/stats", "routes/keybindings-stats.tsx"),
     route("rankings", "routes/rankings.tsx"),
-    route("stats", "routes/stats.tsx"),
+    route("stats", "routes/stats.ts"),
     route("compare", "routes/compare.tsx"),
     route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),

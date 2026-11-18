@@ -12,8 +12,7 @@ export const UNASSIGNED_INPUT_KEY = "__unassigned__";
 
 /**
  * ゲーム内感度の分布区分（表示% 基準・両端とも閉端）。
- * /keybindings の統計タブ（keybindings-stats.server.ts）と /stats（stats.tsx）の
- * 双方がここから区分を組み立てる（ラベルは各消費側でロケールに合わせて生成する）。
+ * /keybindings/stats の集計（keybindings-stats.server.ts）がここから区分を組み立てる。
  */
 export const SENSITIVITY_PERCENT_BINS: { min: number; max: number }[] = [
   { min: 0, max: 19 },
@@ -27,3 +26,11 @@ export const SENSITIVITY_PERCENT_BINS: { min: number; max: number }[] = [
   { min: 160, max: 179 },
   { min: 180, max: SENSITIVITY_PERCENT_MAX },
 ];
+
+/** 「キー → 操作」の統計で見るキー（この順に並べる。DB の key_code はこの形式に統一されている） */
+export const KEY_ACTION_STATS_KEYS = [
+  "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC", "KeyX", "KeyZ", "KeyG", "KeyV",
+  "ShiftLeft", "ControlLeft", "Tab", "CapsLock", "Space",
+  "Mouse0", "Mouse1", "Mouse2", "Mouse3", "Mouse4",
+  "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9",
+] as const;

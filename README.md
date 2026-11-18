@@ -85,7 +85,6 @@ Minefolio は、Minecraft RTA走者が自分のプロフィールやプレイ設
 - `/player/:slug` : 公開プロフィール
 - `/guides` : ガイド記事一覧
 - `/rankings` : ランキング
-- `/stats` : 統計
 - `/privacy` `/terms` : プライバシーポリシー・利用規約
 - `/me/*` : 自分の設定管理（編集・キー配置・プリセット など）
 - `/my-guides/*` : 自分のガイド記事の執筆・管理

@@ -8,8 +8,15 @@
 // （keybindings-list.server.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { loadKeybindingsStats } from "../keybindings-stats.server";
+import { KEY_ACTION_STATS_KEYS } from "../keybindings-stats-shared";
+import { UNBOUND_KEY } from "../keybindings";
 import { invalidateCache } from "../cache";
-import { createTestDb, seedUser, seedPlayerConfig } from "./helpers/test-db";
+import {
+  createTestDb,
+  seedUser,
+  seedPlayerConfig,
+  seedKeybinding,
+} from "./helpers/test-db";
 
 const CACHE_KEY = "keybindings:stats";
 
@@ -94,5 +101,138 @@ describe("loadKeybindingsStats - 感度統計（*200スケール）", () => {
 
     expect(stats.sensitivityStats.totalCount).toBe(1);
     expect(stats.sensitivityStats.excludedCount).toBe(0);
+  });
+});
+
+describe("loadKeybindingsStats - キー → 操作の統計（keyActionStats）", () => {
+  it("KEY_ACTION_STATS_KEYS と同じ長さ・同じ順で返し、データの無いキーは totalCount 0", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner" });
+    await seedKeybinding(db, user.id, { action: "inventory", keyCode: "KeyE" });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.keyActionStats.map((k) => k.keyCode)).toEqual([...KEY_ACTION_STATS_KEYS]);
+    const empty = stats.keyActionStats.find((k) => k.keyCode === "KeyQ");
+    expect(empty).toEqual({ keyCode: "KeyQ", topActions: [], totalCount: 0 });
+    expect(stats.keyActionStats.find((k) => k.keyCode === "KeyE")?.totalCount).toBe(1);
+  });
+
+  it("追跡対象外の操作は keyActionStats には出るが、keybindingStats には出ない", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner" });
+    await seedKeybinding(db, user.id, { action: "playerList", keyCode: "Tab" });
+
+    const stats = await loadKeybindingsStats(db);
+
+    const tab = stats.keyActionStats.find((k) => k.keyCode === "Tab");
+    expect(tab?.totalCount).toBe(1);
+    expect(tab?.topActions.map((a) => a.action)).toEqual(["playerList"]);
+    expect(stats.keybindingStats.map((s) => s.action)).not.toContain("playerList");
+    expect(stats.keybindingStats.every((s) => s.totalCount === 0)).toBe(true);
+  });
+
+  it("1人が同じキーに2操作を置くと、totalCount は1人・各操作の percentage は 100", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner" });
+    await seedKeybinding(db, user.id, { action: "sneak", keyCode: "ShiftLeft" });
+    await seedKeybinding(db, user.id, { action: "playerList", keyCode: "ShiftLeft" });
+
+    const stats = await loadKeybindingsStats(db);
+
+    const shift = stats.keyActionStats.find((k) => k.keyCode === "ShiftLeft");
+    expect(shift?.totalCount).toBe(1);
+    expect(shift?.topActions).toHaveLength(2);
+    for (const a of shift!.topActions) {
+      expect(a.count).toBe(1);
+      expect(a.percentage).toBe(100);
+      expect(a.players.map((p) => p.slug)).toEqual(["runner"]);
+    }
+  });
+
+  it("未割り当て（_UNBOUND）の行は数えない", async () => {
+    const db = await createTestDb();
+    const user = await seedUser(db, { slug: "runner" });
+    await seedKeybinding(db, user.id, { action: "inventory", keyCode: UNBOUND_KEY });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.keyActionStats.every((k) => k.totalCount === 0)).toBe(true);
+  });
+
+  it("上位5件に切り、count の降順に並べる", async () => {
+    const db = await createTestDb();
+    // 操作 a1..a7 を、a_i が (8 - i) 人に割り当てられるよう 7 人で Space に置く
+    const users = [];
+    for (let i = 0; i < 7; i++) users.push(await seedUser(db, { slug: `runner-${i}` }));
+    for (let a = 1; a <= 7; a++) {
+      for (let u = 0; u < 8 - a; u++) {
+        await seedKeybinding(db, users[u].id, { action: `a${a}`, keyCode: "Space" });
+      }
+    }
+
+    const stats = await loadKeybindingsStats(db);
+
+    const space = stats.keyActionStats.find((k) => k.keyCode === "Space");
+    expect(space?.totalCount).toBe(7);
+    expect(space?.topActions).toHaveLength(5);
+    expect(space?.topActions.map((a) => a.action)).toEqual(["a1", "a2", "a3", "a4", "a5"]);
+    expect(space?.topActions.map((a) => a.count)).toEqual([7, 6, 5, 4, 3]);
+  });
+
+  it("非公開の走者と視聴者ロールの走者は keyActionStats に入らない", async () => {
+    const db = await createTestDb();
+    const pub = await seedUser(db, { slug: "public-runner" });
+    const priv = await seedUser(db, { slug: "private-runner", profileVisibility: "private" });
+    const viewer = await seedUser(db, { slug: "viewer", role: "viewer" });
+    for (const u of [pub, priv, viewer]) {
+      await seedKeybinding(db, u.id, { action: "inventory", keyCode: "KeyE" });
+    }
+
+    const stats = await loadKeybindingsStats(db);
+
+    const e = stats.keyActionStats.find((k) => k.keyCode === "KeyE");
+    expect(e?.totalCount).toBe(1);
+    expect(e?.topActions[0].players.map((p) => p.slug)).toEqual(["public-runner"]);
+  });
+});
+
+describe("loadKeybindingsStats - ON/OFF 設定（マウス加速・ダッシュ切替）", () => {
+  it("true / false / null が混ざっても null は母数に入らず、players が正しい側に入る", async () => {
+    const db = await createTestDb();
+    const on = await seedUser(db, { slug: "on" });
+    const off = await seedUser(db, { slug: "off" });
+    const unset = await seedUser(db, { slug: "unset" });
+    await seedPlayerConfig(db, on.id, { mouseAcceleration: true, toggleSprint: false });
+    await seedPlayerConfig(db, off.id, { mouseAcceleration: false, toggleSprint: true });
+    await seedPlayerConfig(db, unset.id, { mouseAcceleration: null, toggleSprint: null });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.mouseAccelerationStats.onCount).toBe(1);
+    expect(stats.mouseAccelerationStats.offCount).toBe(1);
+    expect(stats.mouseAccelerationStats.totalCount).toBe(2);
+    expect(stats.mouseAccelerationStats.onPlayers.map((p) => p.slug)).toEqual(["on"]);
+    expect(stats.mouseAccelerationStats.offPlayers.map((p) => p.slug)).toEqual(["off"]);
+    expect(stats.toggleSprintStats.totalCount).toBe(2);
+    expect(stats.toggleSprintStats.onPlayers.map((p) => p.slug)).toEqual(["off"]);
+    expect(stats.toggleSprintStats.offPlayers.map((p) => p.slug)).toEqual(["on"]);
+  });
+
+  it("非公開の走者と視聴者ロールの走者は mouseAcceleration / toggleSprint に入らない", async () => {
+    const db = await createTestDb();
+    const pub = await seedUser(db, { slug: "public-runner" });
+    const priv = await seedUser(db, { slug: "private-runner", profileVisibility: "private" });
+    const viewer = await seedUser(db, { slug: "viewer", role: "viewer" });
+    for (const u of [pub, priv, viewer]) {
+      await seedPlayerConfig(db, u.id, { mouseAcceleration: true, toggleSprint: true });
+    }
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.mouseAccelerationStats.onPlayers.map((p) => p.slug)).toEqual(["public-runner"]);
+    expect(stats.mouseAccelerationStats.totalCount).toBe(1);
+    expect(stats.toggleSprintStats.onPlayers.map((p) => p.slug)).toEqual(["public-runner"]);
+    expect(stats.toggleSprintStats.totalCount).toBe(1);
   });
 });

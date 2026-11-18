@@ -37,7 +37,7 @@
 | `/keybindings*`・`/playground`・`/me/{keybindings,devices,presets,import,items,search-craft}`／仮想キーボード・リマップ・プリセット・サーチクラフト | `keybindings-worker` |
 | `/player/:slug*`・`/me/{index,edit,account,playstyle,records}`・`/browse`・`/compare`・`/favorites`・`/random-player`／スキン・アバター・リアクション | `profiles-worker` |
 | `/guides/*`・`/my-guides/*`／TipTap エディタ・ガイド画像・いいね | `guides-worker` |
-| `/`（ホーム）・`/paces`・`/live`・`/videos`・`/rankings`・`/stats`／`api/cron/*`・PaceMan・外部統計 | `rankings-worker` |
+| `/`（ホーム）・`/paces`・`/live`・`/videos`・`/rankings`／`api/cron/*`・PaceMan・外部統計 | `rankings-worker` |
 | `/login`・`/onboarding`・`/developers*`・`/feedback`・`api/*`（cron 以外）・共通レイアウト・`app/root.tsx`・`app/app.css`・**`app/lib/schema.ts`** | `platform-worker` |
 | `docs/`・`changelog.md`・翻訳キー（`pages-ja.ts`）・依存の軽微更新・ファイル整理 | `chores-worker` |
 | `**/__tests__/*`（Vitest） | `test-worker` |

@@ -16,7 +16,7 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 
 - **ホーム**: `/`（home.tsx、ペースフィード統合）
 - **ペース/ライブ**: `/paces`, `/live`（→ホームへリダイレクト）, `api/paces`
-- **ランキング・統計**: `/rankings`, `/stats`, `/playground`
+- **ランキング・統計**: `/rankings`, `/playground`
 - **Cron**: `api/cron/update-paceman-cache`, `api/cron/update-rankings`, `api/cron/youtube-update`
 - **API**: `api/home-feed`
 - **コンポーネント**: `pace-card.tsx`, `pace-feed-card.tsx`, `recent-pace-card.tsx`, `live-pace-list.tsx`,

@@ -292,7 +292,7 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 マウス設定フォームの妥当性検証（パース・検証条件）は `app/lib/mouse-settings.ts` の `parseMouseSettingsInput()` / `validateMouseSettings()` に一本化されており、サーバー側 action・クライアント側の保存前チェックの両方がこれを呼ぶ（値は該当 Input の `id` と揃えた `MouseSettingsField` = `gameSensitivity` / `mouseDpi` / `windowsSpeed` / `windowsSpeedMultiplier` で返す）。
 
 - **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される。エラーは `{ error, field }` の形で返す
-- **`/me/devices` の欄を離れたときの検証（クライアント）**: DPI・ゲーム内感度（0-1 / % の両方）・Win Sens 乗数は、フォーカスが外れた（blur）時点でその欄だけ保存時と同じ `validateMouseSettings` を走らせ、誤りを欄の下に出す（入力の途中では出さない）。保存済みの値のまま触っていない欄は検証しない。エラーは保存時と同じく最初の1件だけを保持し、別の欄の blur では消えず、その欄を直して blur（または編集）すると消える。感度の組は `gameSensitivity` に出す。保存時の検証・案内は変わらない
+- **`/me/devices` の欄を離れたときの検証（クライアント）**: DPI・ゲーム内感度（0-1 / % の両方）・Win Sens 乗数は、フォーカスが外れた（blur）時点でその欄だけ保存時と同じ `validateMouseSettings` を走らせ、誤りを欄の下に出す（入力の途中では出さない）。保存済みの値のまま触っていない欄は検証しない。エラーは欄ごとに保持し（2つの欄が範囲外なら両方に出す）、別の欄の blur では消えず、その欄を直して blur（または編集）すると消える。感度の組は `gameSensitivity` に出す。**FOV・GUI スケール**も同じ形で検証する（保存と同じ `isValidFov` / `isValidGuiScale`。欄の下に範囲のヒント「30~110」「0~10」を常時出す）。保存時は範囲外の欄すべてにエラーを出し、画面上で最初の欄へスクロールしてトーストを出す。action が返した `field`（`fov` / `guiScale` を含む）も該当の欄に出す
 
   | 項目 | 条件 | 違反時のエラーキー | `field` |
   |---|---|---|---|
@@ -496,6 +496,7 @@ type ControllerSettings = {
   - 数値の絞り込みは**キーボードのタブにも効く**（DPI・感度・振り向きのいずれかを指定すると、マウス設定がある走者だけに絞られる。`dpiMin=400&dpiMax=800` で移動タブも該当者のみになる）。この挙動は保ち、ダイアログの数値の欄に注記する（`keybindings.numericFilterNote`）
   - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
   - 各入力欄は number input の `min` / `max` 属性で有効範囲を示し（DPI: `min=1`、感度: `0〜200`、振り向き: `min=0`）、感度欄には有効範囲の補足テキスト（`keybindings.sensitivityRangeHint`）を常時表示する（`FilterRange` の `inputMin` / `inputMax` / `hint`）
+  - 範囲外の値（DPI が 1 未満、感度が 0〜200 の外、振り向きが 0 未満）は、その欄に `aria-invalid` を付け、欄の下にエラー文（`keybindings.rangeErrorBetween` / `rangeErrorMin`）を出して `aria-describedby` で結ぶ。フォームは `noValidate`（ブラウザの吹き出しは出さない）で、範囲外の欄があると「適用」しても閉じず、最初の範囲外の欄へフォーカスを移す
   - 「適用」時に **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
@@ -515,25 +516,27 @@ type ControllerSettings = {
 
 ### /keybindings/stats（統計ページ）
 
-キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。`loadKeybindingsStats`（`lib/keybindings-stats.server.ts`）の集計結果は60秒インメモリキャッシュされる（内部的には対象アクション分を `inArray` で1クエリにまとめて取得し、JS側で集計）。
+キー配置の統計・傾向分析ページ。各アクションに対するキー割り当ての分布や、マウスDPI/感度の傾向を表示する。`loadKeybindingsStats`（`lib/keybindings-stats.server.ts`）の集計結果は60秒インメモリキャッシュされる（内部的には全アクション分を1クエリにまとめて取得し、JS側で「操作 → キー」（追跡対象のみ）と「キー → 操作」（全操作）に分けて集計）。
 
 視聴者ロールは集計から除外している（v1.4.0〜）。h1 は「操作設定統計」。
 
 - **統計は公開走者の全員が対象**（一覧の絞り込みは効かない）。概要に注記を出す。DPI の区分は幅がそろっていないので、棒の長さは人数の割合であることを欄の説明に添える
 - **キーの統計の「未割り当て」**: 集計は不使用（`UNBOUND_KEY`）の割り当ても 1 つのキーとして数える。その行は「-」というキーではなく「未割り当て」と表示する（F3 欄の未設定〔`UNASSIGNED_INPUT_KEY`〕と同じ `keybindingsStats.unassigned`）。Minus キーは「-」のまま。「未割り当て」の走者群から表へのリンクは `users` のみ（`bind` では絞れない）
-- 統計の行ボタンのアクセシブルネームは「5位、2キー、1人、1%、走者を見る」のようなまとまった文（`keybindingsStats.rowAria` / `rangeRowAria`）。走者一覧ダイアログには `DialogDescription`（人数と案内）を付ける
+- 統計の行ボタンのアクセシブルネームは「5位、2キー、1人、1%、走者を見る」のようなまとまった文（`keybindingsStats.rowAria` / `rangeRowAria`）。割合のバー（`Progress`）にも名前（行のラベル）と値（`aria-valuetext`＝見えている「N人 (P%)」）を付ける（旧 `/stats` の `StatBar` の書き方を引き継いだもの）。割合の表記は整数の %（`formatPercent`、四捨五入）にそろえる。走者一覧ダイアログには `DialogDescription`（人数と案内）を付ける
 - **走者一覧ダイアログから表へ**: キー・F3・マウスの各区分の走者一覧ダイアログに「この N 人を表で見る」リンクを出す。行き先は `/keybindings?users=<slug,…>&tab=<その操作が載っているタブ>`（キーの操作は `tabForAction`、F3 は `remaps`、マウス系・Raw Input は `mouse`。`buildKeybindingsTableHref`）。`users` に載せるのは **100 人まで**（`MAX_USERS_IN_LINK`。URL が長くなりすぎるため）。超えたときは、キーの統計なら `users` の代わりに `bind=<操作>:<キー>` で同じ走者群を表で絞り込む。それ以外（マウスの区分）はリンクを出さない。F3 の区分は、リマップした走者（元のキーごとの区分）は `remaps` タブへリンクし、「F3 のまま」の区分（リマップ行を持たず表のリマップタブに出ない）はリンクを出さない。表の行数は、統計（ライブのテーブル）と一覧（メインプリセットのスナップショット・公開走者）の母集団の違いで、ダイアログの人数と一致しないことがある（マウスタブは DPI・感度・Windows 速度のある走者のみ）
 - Raw Input の ON / OFF（統計・表）はどちらも同じ見た目（`Badge variant="secondary"`）で、文字だけで区別する。走者の設定値に優劣・多数派/少数派を思わせる装飾をしない
+- **キー → 操作タブ**（旧 `/stats` から移した）: キーを起点に、そのキーへ何の操作が割り当てられているかを見る。対象は `KEY_ACTION_STATS_KEYS`（`keybindings-stats-shared.ts`、E/Q/R/F/C/X/Z/G/V・Shift/Ctrl/Tab/CapsLock/Space・Mouse0〜4・数字 1〜9 の28個）で、元データは追跡対象外の操作も含む全操作（集計クエリは操作 → キーと共通の1本で、JS 側で分ける）。未割り当て（不使用）の行はキーとして数えない。`totalCount` はそのキーに何かを割り当てている走者数、各操作の割合の分母もそれ。1人が同じキーに複数の操作を置けるので割合の合計は100%を超えうる（タブ冒頭にその旨を添える）。上位5件、データの無いキーの欄は出さない（全部空なら `EmptyState`）。行を押すと走者ダイアログ（題は「キー名: 操作名」）、表リンクは `tabForAction`（表に無い操作はリンクなし）。キーコードの正規化はしない（DB の `key_code` はこの形式に統一されている）
+- **ON / OFF 分布**: Raw Input・マウス加速（マウスタブ）・ダッシュ切替（キーボードタブの「ダッシュ」の直後）は共通部品 `BooleanDistribution`。`BooleanSettingStats`（`mouseConfigs` 由来、null は母数に入れない）。マウス加速の表リンクは `mouse` タブ、ダッシュ切替は表に列が無いのでリンクなし。ON / OFF は同じ見た目
 - 概要の人数は母集団が違うので、名前と注記で区別する: **登録走者数**（操作設定を登録している公開走者。`/keybindings` の一覧と同じ母集団で、`loadKeybindingsListPlayers` の件数）／**キー配置の登録者**・**マウス設定の登録者**（ライブの `keybindings` / `playerConfigs`（DPI あり）テーブルを数える）／**公開プロフィール**（公開設定の全走者）。割合は母集団が揃わないため出さない
 - 注意: 一覧は「メインプリセットが非アクティブならそのスナップショット」を、統計の集計はライブテーブルを元にする（今は未統一）
-- サブタブ（キーボード／マウス）は URL の `statsTab`（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要はタイル（`rounded-xl bg-secondary/50`）
+- サブタブ（キーボード〔操作 → キー〕／キー → 操作／マウス）は URL の `statsTab`（`keyboard` / `keys` / `mouse`）（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要はタイル（`rounded-xl bg-secondary/50`）
 
 #### 感度分布（`SENSITIVITY_RANGES`）
 
 - 表示・CSV・編集画面と同じ **0〜200%**（Minecraft準拠）基準の**10区分**（`< 20%`, `20-39%`, `40-59%`, `60-79%`, `80-99%`, `100-119%`, `120-139%`, `140-159%`, `160-179%`, `180-200%`）。区分は閉端（最終区分の `200%` を含む）で、換算は一覧・CSVと同じ `toSensitivityPercent()` を使う。数値境界の実体は `SENSITIVITY_PERCENT_BINS`（`app/lib/keybindings-stats-shared.ts`）で、`SENSITIVITY_RANGES` はそこからラベルを付けて導出する
 - **有効範囲（内部値 `0..1` ＝ 表示 `0〜200%`）外の感度は、分布・平均の母数から除外**する（`isValidSensitivity()` で判定。感度統計に中央値は無い）。感度ちょうど `0%` は含む
 - 除外した人数（感度は登録済みだが範囲外）はカード下に注記として表示する（`SensitivityStats.excludedCount`、`keybindingsStats.excludedOutOfRange`）。0人のときは注記自体を出さない
-- サイト全体統計（`/stats`、`app/routes/stats.tsx`）の感度分布も同じ `SENSITIVITY_PERCENT_BINS` から区分を組み立て（ラベルのみロケール対応で各自生成）、除外方針も共通の `isOutOfRangeSensitivity()` で揃えている。同様に除外人数の注記（`stats.sensitivityExcludedNote`）を分布カード下に表示する（未設定=`null`は元々対象外なので除外人数には含めない）
+- 旧サイト全体統計（`/stats`）は `/keybindings/stats` へ統合した。感度分布の除外方針は `isOutOfRangeSensitivity()` で一覧・CSV と揃える（未設定=`null`は元々対象外なので除外人数には含めない）
 
 ### CSVエクスポート
 

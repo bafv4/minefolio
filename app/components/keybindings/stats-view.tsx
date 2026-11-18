@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { Keyboard, Mouse, Users, TrendingUp, Table2 } from "lucide-react";
@@ -14,8 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getKeyLabel, isUnbound } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, isUnbound } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MOUSE_KEY_BADGE_CLASS } from "@/components/keybindings/keybindings-cells";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -30,6 +31,8 @@ import {
   type Tab,
 } from "@/lib/keybindings-search-params";
 import type {
+  BooleanSettingStats,
+  KeyActionStats,
   KeybindingStats,
   F3RemapStats,
   KeybindingsStatsData,
@@ -48,8 +51,13 @@ interface StatsViewProps {
 type TableTarget = { tab: Tab; bind?: BindCondition };
 type PlayerClickHandler = (title: string, players: PlayerInfo[], target?: TableTarget) => void;
 
+/** 割合の表記（整数の %、四捨五入）。見える文・行の名前・バーの値で共有する */
+function formatPercent(percentage: number): string {
+  return String(Math.round(percentage));
+}
+
 /** 統計ビュー内のサブタブ（URL の statsTab）。表の `tab` とは別名にする（ビュー切替リンクが tab を引き継ぐため） */
-const STATS_TABS = ["keyboard", "mouse"] as const;
+const STATS_TABS = ["keyboard", "keys", "mouse"] as const;
 const statsTabParser = parseAsStringEnum([...STATS_TABS]).withDefault("keyboard");
 
 export function StatsView({ data }: StatsViewProps) {
@@ -62,11 +70,17 @@ export function StatsView({ data }: StatsViewProps) {
     cm180Stats,
     sensitivityStats,
     rawInputStats,
+    mouseAccelerationStats,
+    toggleSprintStats,
+    keyActionStats,
     registeredPlayers,
     publicProfiles,
     playersWithKeybindings,
     playersWithMouseSettings,
   } = data;
+
+  // 描画するのはデータのあるキーだけ
+  const keysWithData = keyActionStats.filter((k) => k.totalCount > 0);
 
   const [statsTab, setStatsTab] = useQueryState("statsTab", statsTabParser);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -142,6 +156,10 @@ export function StatsView({ data }: StatsViewProps) {
             <Keyboard className="h-4 w-4" />
             {t("keybindingsStats.keyboardTab")}
           </TabsTrigger>
+          <TabsTrigger value="keys" className="gap-1.5">
+            <Keyboard className="h-4 w-4" />
+            {t("keybindingsStats.keysTab")}
+          </TabsTrigger>
           <TabsTrigger value="mouse" className="gap-1.5">
             <Mouse className="h-4 w-4" />
             {t("keybindingsStats.mouseTab")}
@@ -153,14 +171,50 @@ export function StatsView({ data }: StatsViewProps) {
           <h2 className="sr-only">{t("keybindingsStats.keyboardTab")}</h2>
           <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
             {keybindingStats.map((stat) => (
-              <KeybindingStatCard
-                key={stat.action}
-                stat={stat}
-                onPlayerClick={openPlayersDialog}
-              />
+              <Fragment key={stat.action}>
+                <KeybindingStatCard stat={stat} onPlayerClick={openPlayersDialog} />
+                {/* ダッシュ切替は「ダッシュ」の欄のすぐ後ろ */}
+                {stat.action === "sprint" && (
+                  <BooleanDistribution
+                    id="kb-stat-togglesprint"
+                    title={t("keybindingsStats.toggleSprint")}
+                    name={t("keybindingsStats.toggleSprint")}
+                    stats={toggleSprintStats}
+                    onPlayerClick={openPlayersDialog}
+                  />
+                )}
+              </Fragment>
             ))}
             <F3RemapStatCard stat={f3RemapStats} onPlayerClick={openPlayersDialog} />
           </div>
+        </TabsContent>
+
+        {/* キー → 操作の統計 */}
+        <TabsContent value="keys">
+          <h2 className="sr-only">{t("keybindingsStats.keysTab")}</h2>
+          {keysWithData.length === 0 ? (
+            <EmptyState
+              size="compact"
+              icon={<Keyboard className="h-5 w-5" />}
+              title={t("keybindingsStats.noData")}
+              description={t("keybindingsStats.keysEmptyDescription")}
+            />
+          ) : (
+            <>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {t("keybindingsStats.keyActionNote")}
+              </p>
+              <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
+                {keysWithData.map((stat) => (
+                  <KeyActionStatCard
+                    key={stat.keyCode}
+                    stat={stat}
+                    onPlayerClick={openPlayersDialog}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </TabsContent>
 
         {/* マウス統計 */}
@@ -223,54 +277,22 @@ export function StatsView({ data }: StatsViewProps) {
               onPlayerClick={openPlayersDialog}
             />
 
-            <StatBlock
+            <BooleanDistribution
               id="kb-stat-rawinput"
-              icon={<TrendingUp className="h-5 w-5 text-primary" />}
               title={t("keybindingsStats.rawInputSetting")}
-              description={t("keybindingsStats.dataCount", { count: rawInputStats.totalCount })}
-            >
-              <div className="space-y-4">
-                {(
-                  [
-                    { on: true, count: rawInputStats.onCount, players: rawInputStats.onPlayers },
-                    { on: false, count: rawInputStats.offCount, players: rawInputStats.offPlayers },
-                  ] as const
-                ).map(({ on, count, players }) => {
-                  const percentage =
-                    rawInputStats.totalCount > 0 ? (count / rawInputStats.totalCount) * 100 : 0;
-                  return (
-                    <button
-                      key={on ? "on" : "off"}
-                      type="button"
-                      className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
-                      disabled={count === 0}
-                      aria-label={t("keybindingsStats.rangeRowAria", {
-                        label: on ? "Raw Input ON" : "Raw Input OFF",
-                        count,
-                        percent: percentage.toFixed(1),
-                      })}
-                      onClick={() =>
-                        openPlayersDialog(on ? "Raw Input ON" : "Raw Input OFF", players, {
-                          tab: "mouse",
-                        })
-                      }
-                    >
-                      <div className="flex justify-between text-sm">
-                        <span className="flex items-center gap-2">
-                          {/* ON / OFF はどちらも同じ見た目（設定値に優劣の色を付けない） */}
-                          <Badge variant="secondary">{on ? "ON" : "OFF"}</Badge>
-                        </span>
-                        <span className="text-muted-foreground">
-                          {count}
-                          {t("common.peopleUnit")} ({percentage.toFixed(1)}%)
-                        </span>
-                      </div>
-                      <Progress value={percentage} className="h-2" />
-                    </button>
-                  );
-                })}
-              </div>
-            </StatBlock>
+              name="Raw Input"
+              stats={rawInputStats}
+              target={{ tab: "mouse" }}
+              onPlayerClick={openPlayersDialog}
+            />
+            <BooleanDistribution
+              id="kb-stat-mouseacceleration"
+              title={t("keybindingsStats.mouseAcceleration")}
+              name={t("keybindingsStats.mouseAcceleration")}
+              stats={mouseAccelerationStats}
+              target={{ tab: "mouse" }}
+              onPlayerClick={openPlayersDialog}
+            />
           </div>
         </TabsContent>
       </Tabs>
@@ -418,12 +440,12 @@ function RangeDistribution({
           <button
             key={range.label}
             type="button"
-            className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
+            className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
             disabled={range.count === 0}
             aria-label={t("keybindingsStats.rangeRowAria", {
               label: range.label,
               count: range.count,
-              percent: range.percentage.toFixed(1),
+              percent: formatPercent(range.percentage),
             })}
             onClick={() =>
               onPlayerClick(dialogTitle(range.label), range.players, { tab: "mouse" })
@@ -434,11 +456,19 @@ function RangeDistribution({
               <span className="text-muted-foreground">
                 {t("keybindingsStats.peoplePercent", {
                   count: range.count,
-                  percent: range.percentage.toFixed(1),
+                  percent: formatPercent(range.percentage),
                 })}
               </span>
             </div>
-            <Progress value={range.percentage} className="h-2" />
+            <Progress
+              value={range.percentage}
+              aria-label={range.label}
+              aria-valuetext={t("keybindingsStats.peoplePercent", {
+                count: range.count,
+                percent: formatPercent(range.percentage),
+              })}
+              className="h-2"
+            />
           </button>
         ))}
       </div>
@@ -446,7 +476,121 @@ function RangeDistribution({
   );
 }
 
-/** キーの統計 1 行から、その操作が載っている表のタブと、操作＝キーの条件を作る */
+/** ON / OFF の 2 値設定の分布（Raw Input・マウス加速・ダッシュ切替で共通）。name は読み上げとダイアログの題に使う設定名 */
+function BooleanDistribution({
+  id,
+  title,
+  name,
+  stats,
+  target,
+  onPlayerClick,
+}: {
+  id: string;
+  title: string;
+  name: string;
+  stats: BooleanSettingStats;
+  /** 表の行き先。その設定が表の列に無いときは渡さない（リンクなし） */
+  target?: TableTarget;
+  onPlayerClick: PlayerClickHandler;
+}) {
+  const t = useT();
+  return (
+    <StatBlock
+      id={id}
+      icon={<TrendingUp className="h-5 w-5 text-primary" />}
+      title={title}
+      description={t("keybindingsStats.dataCount", { count: stats.totalCount })}
+    >
+      <div className="space-y-4">
+        {(
+          [
+            { on: true, count: stats.onCount, players: stats.onPlayers },
+            { on: false, count: stats.offCount, players: stats.offPlayers },
+          ] as const
+        ).map(({ on, count, players }) => {
+          const percentage = stats.totalCount > 0 ? (count / stats.totalCount) * 100 : 0;
+          const label = `${name} ${on ? "ON" : "OFF"}`;
+          return (
+            <button
+              key={on ? "on" : "off"}
+              type="button"
+              className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
+              disabled={count === 0}
+              aria-label={t("keybindingsStats.rangeRowAria", {
+                label,
+                count,
+                percent: formatPercent(percentage),
+              })}
+              onClick={() => onPlayerClick(label, players, target)}
+            >
+              <div className="flex justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  {/* ON / OFF はどちらも同じ見た目（設定値に優劣の色を付けない） */}
+                  <Badge variant="secondary">{on ? "ON" : "OFF"}</Badge>
+                </span>
+                <span className="text-muted-foreground">
+                  {t("keybindingsStats.peoplePercent", {
+                    count,
+                    percent: formatPercent(percentage),
+                  })}
+                </span>
+              </div>
+              <Progress
+                value={percentage}
+                aria-label={label}
+                aria-valuetext={t("keybindingsStats.peoplePercent", {
+                  count,
+                  percent: formatPercent(percentage),
+                })}
+                className="h-2"
+              />
+            </button>
+          );
+        })}
+      </div>
+    </StatBlock>
+  );
+}
+
+/** キー → 操作の統計 1 キーぶん（そのキーに割り当てられている操作の上位） */
+function KeyActionStatCard({
+  stat,
+  onPlayerClick,
+}: {
+  stat: KeyActionStats;
+  onPlayerClick: PlayerClickHandler;
+}) {
+  const t = useT();
+  const title = getKeyLabel(t, stat.keyCode);
+  return (
+    <StatBlock
+      id={`kb-stat-key-${stat.keyCode}`}
+      title={title}
+      description={t("keybindingsStats.dataCount", { count: stat.totalCount })}
+    >
+      <div className="space-y-2">
+        {stat.topActions.map((entry, index) => {
+          const label = getActionLabel(t, entry.action);
+          return (
+            <StatRow
+              key={entry.action}
+              index={index}
+              label={label}
+              isMouse={false}
+              count={entry.count}
+              percentage={entry.percentage}
+              onClick={() =>
+                onPlayerClick(`${title}: ${label}`, entry.players, keyTarget(entry.action, stat.keyCode))
+              }
+            />
+          );
+        })}
+      </div>
+    </StatBlock>
+  );
+}
+
+/** キーの統計 1 行から、その操作/** キーの統計 1 行から、その操作が載っている表のタブと、操作＝キーの条件を作る */
 function keyTarget(action: string, keyCode: string): TableTarget | undefined {
   const tab = tabForAction(action);
   if (!tab) return undefined;
@@ -587,13 +731,13 @@ function StatRow({
   return (
     <button
       type="button"
-      className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors cursor-pointer"
+      className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer"
       // 子の「5.」「キー名」「2人 (1%)」がつながって「5.21人」と読まれないよう、まとまった文にする
       aria-label={t("keybindingsStats.rowAria", {
         rank: index + 1,
         label,
         count,
-        percent: percentage.toFixed(0),
+        percent: formatPercent(percentage),
       })}
       onClick={onClick}
     >
@@ -620,11 +764,19 @@ function StatRow({
         <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
           {t("keybindingsStats.peoplePercent", {
             count,
-            percent: percentage.toFixed(0),
+            percent: formatPercent(percentage),
           })}
         </span>
       </div>
-      <Progress value={percentage} className="h-1.5" />
+      <Progress
+        value={percentage}
+        aria-label={label}
+        aria-valuetext={t("keybindingsStats.peoplePercent", {
+          count,
+          percent: formatPercent(percentage),
+        })}
+        className="h-1.5"
+      />
     </button>
   );
 }

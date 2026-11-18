@@ -87,11 +87,9 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 ## 統計ページ
 
-### /stats — プラットフォーム全体統計
+### /stats — 廃止（`/keybindings/stats` へ統合）
 
-- Minefolio全体の統合統計データを表示
-- 集計結果の生データのみをインメモリキャッシュする（キー `stats:raw`、TTL 5分）。ロケール非依存の生データだけを保持し、ラベルは毎回ロケールに応じて生成する
-- 感度分布は `/keybindings/stats` の感度区分（0〜200%基準の10区分・有効範囲外は集計から除外）と揃えている。詳細は [`docs/keybindings.md`](./keybindings.md) の「感度分布（`SENSITIVITY_RANGES`）」を参照
+- `/stats` は `/keybindings/stats` へ統合し、301 でリダイレクトする（`app/routes/stats.ts`。クエリ文字列は引き継がない）。旧ページは非公開の走者も集計に含めていたが、統合後は公開の走者だけを集計する
 
 ### /keybindings/stats — キー配置統計
 
@@ -208,7 +206,7 @@ cron は同じ MCSR Ranked 応答の `statistics.total.bestTime`（数値、ま�
 ### ページ
 
 - `app/routes/rankings.tsx` — ランキングページ
-- `app/routes/stats.tsx` — プラットフォーム統計ページ
+- `app/routes/stats.ts` — 旧 `/stats` から `/keybindings/stats` への 301 リダイレクト
 - `app/routes/player/stats.tsx` — プレイヤー個別統計ページ
 - `app/routes/player/profile.tsx` — プレイヤープロフィール（活動・記録タブでMCSR Ranked等の外部統計カードを表示）
 - `app/routes/keybindings-stats.tsx` — キー配置統計ページ

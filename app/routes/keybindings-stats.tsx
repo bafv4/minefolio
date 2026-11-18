@@ -48,7 +48,10 @@ export default function KeybindingsStatsPage() {
   const { isTabSwitching, targetPathname } = useTabNavigation();
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <KeybindingsPageTitle title={t("keybindingsStats.title")} />
+      <KeybindingsPageTitle
+        title={t("keybindingsStats.title")}
+        description={t("keybindingsStats.description")}
+      />
       <ViewSwitcher />
       {isTabSwitching ? (
         <TabContentSkeleton
