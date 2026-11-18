@@ -463,6 +463,17 @@ body {
 :root[data-contrast="more"] .border-foreground\/15 {
   border-color: color-mix(in oklab, var(--border) 60%, transparent);
 }
+/* 仮想キーボードのキーの枠。通常時は「空き（border-border）＜データあり・押せる空き（border-muted-foreground/70）＜
+   リマップ済み（border-primary）」の順に強い。ハイコントラストでは --border が強くなって空きキーがデータありより濃くなるので、
+   空きは /60 相当（ほかの枠線と同じ）、データありは不透明の --muted-foreground にして順序を保つ。
+   リマップ済み・保持中（border-primary / border-warning）はクラスが置き換わるので当たらない。
+   ホバーの枠（下の hover:border- のルール）より前に置き、同じ詳細度で後ろのルールを勝たせる */
+:root[data-contrast="more"] [data-slot="virtual-keyboard"] .border-border {
+  border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+:root[data-contrast="more"] [data-slot="virtual-keyboard"] .border-muted-foreground\/70 {
+  border-color: var(--muted-foreground);
+}
 /* ダークの outline ボタンは枠に --input（塗り色）を使う。ハイコントラストでは枠線の色にする */
 .dark[data-contrast="more"] .dark\:border-input,
 .ultra-dark[data-contrast="more"] .dark\:border-input {

@@ -361,6 +361,32 @@ JIS配列とUS配列で同一キーコードの表示ラベルが異なる。キ
 - 保存時（`validateFingerAssignments`）: 値はすべて「有効な指の配列」であること。キー数は 200 以下、キー名は 1〜32 文字、1 キーの指は 12 個以下。1 つでも不正なら `invalidPayload` のエラーを返し、保存しない（null・空で上書きしない）。通す経路: `/me/keybindings` の `save-fingers` / `save-all`、レガシー API 取り込み（`legacy-import.ts`。不正な項目は落とす `sanitizeFingerAssignments`）。`/me/import` と playground は指割り当てを書き込まない。プリセットのスナップショットは保存済みの検証済みデータの複製で、「他のプリセットからコピー」はクライアントで `parseFingerAssignments` を通してから取り込む
 - 読み取り時（`parseFingerAssignments` → `sanitizeFingerAssignments`）: 配列でない項目・有効でない指・上限超過を落として返す（すでに不正な行が保存されていても、公開ページの描画を落とさない保険）。`VirtualKeyboard` / `VirtualMouse` も配列でない値は無視する
 
+### 仮想キーボードのキーの状態
+
+`VirtualKeyboard`（メインのキー・JIS Enter・カスタムキー）・`VirtualMouse`・`VirtualNumpad` のキーの面・枠・ラベル色は、`getKeySurface`（`virtual-keyboard.tsx`）1か所で決める。「情報がある」の判定は `KeyInfoTrigger` と同じ述語 `hasKeyInfo`（`key-info-trigger.tsx`。操作・リマップ・カスタムアクション・指のどれかがある）を使う。
+
+| 状態 | 条件 | 見た目 |
+|---|---|---|
+| 指色 | `showFingerAssignments` かつ指あり | `getFingerKeyStyle` の指色（従来どおり） |
+| データあり | 指色でない、かつ情報がある | 面 `bg-secondary`・枠 `border-muted-foreground/70`・ラベル `text-foreground` |
+| 空き・読み取り専用 | 情報が無く、押せない（`onKeyClick` なし） | 面 `bg-secondary/50`・枠 `border-border`・ラベル muted。後ろへ引かせる |
+| 空き・編集 | 情報が無く、押せる（`onKeyClick` あり） | 面 `bg-secondary/50`・枠 `border-muted-foreground/70`（フォーム部品と同じ、3:1 以上）・ラベル muted |
+| リマップ済み | `showRemaps` でそのキーにリマップがある | 上の状態の枠だけ `border-primary` に上書き（指色のキーにも適用） |
+
+- 一時的な強調（`highlightedKeys`）は `ring-primary` のリングなので、リマップの枠と重ねられる。保持中（`heldKeys`）の warning の枠はリマップより優先する
+- 押せないキーにはホバーの見た目を付けない（JIS Enter の `group-hover` も同じ）。押せるキーのホバー・active は従来どおり
+
+### 仮想キーボードのキーボード操作
+
+`VirtualKeyboard`（`section` で分けた main / nav はそれぞれ別）・`VirtualMouse`・`VirtualNumpad` の1インスタンスを1つの複合部品として扱う（roving tabindex。`useRovingKeyFocus` in `app/hooks/use-roving-key-focus.ts`）。
+
+- ルートは `role="group"` と名前（「キーボード（US）」「キーボード（ナビゲーションキー）」「テンキー」「マウス」。`keyboardView.groupLabel*`）。フォーカスできるキーがあるときだけ、`aria-describedby` の sr-only の一文で矢印キーで移動できることを伝える
+- **フォーカスできるキー**: 編集（`onKeyClick` / `onButtonClick` あり）では全キー。読み取り専用では、`hasKeyInfo` が true のキー（ツールチップ／モバイルの情報ダイアログを持つキー）と、カスタムキー・カスタムボタン（`alwaysShow`）だけ。読み取り専用で情報の無いキーは `button` ではなく `aria-hidden="true"` の `div` で描く（見た目は同じ。JIS Enter も同じ）
+- **Tab 停止点は1インスタンスにつき1つ**（`tabIndex=0` は「現在のキー」だけ、ほかは `-1`）。現在のキーは最後にフォーカスしたキーで、初期値（SSR の HTML を含む）は DOM 順で最初のフォーカスできるキー。現在のキーが描画から消えたら（配列・プリセット・`section`・リマップの変更）最初のキーに戻す。フォーカスできるキーが0個なら Tab 停止点を持たない
+- **矢印キー**（修飾キー併用は無視。移動したら `preventDefault`）: ←/→ は同じ段でその方向のいちばん近いキー、↑/↓ はその方向でキーのある最も近い段の、x の中心がいちばん近いキー。Home / End はその段の最初／最後のキー。行き先が無ければ何もしない。「同じ段」は、片方の中心 y が相手の縦の範囲に入ること（2段ぶんの高さのキー〔JIS Enter・テンキーの + / Enter・マウスの左中右〕は両方の段に属する）。行き先は keydown 時の `getBoundingClientRect` から純粋関数 `findNextKeyInGrid`（`app/lib/key-grid-navigation.ts`）で求める。移動先は `scrollIntoView({ block: "nearest", inline: "nearest" })` で横スクロールの枠の中に入れる
+- フォーカスリングは `--ring` の 2px のアウトラインを内側（`-outline-offset-2`）に描く（横スクロールの枠で左端・上端のキーのリングが切れないため）。JIS Enter は L 字の外接矩形に描く
+- React のイベントはポータルを越えて上がるので、keydown は「そのルートの DOM 内のキー」から来たものだけを扱う（モバイルの情報ダイアログ内の矢印キーは無視）
+
 ---
 
 ## コントローラー設定

@@ -173,6 +173,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     remapDisabled: "Disabled",
     remapOutputsChar: "Outputs the character “{char}”",
     customKeys: "Custom keys",
+    groupLabel: "Keyboard ({layout})",
+    groupLabelNav: "Keyboard (navigation keys)",
+    groupLabelNumpad: "Numpad",
+    groupLabelMouse: "Mouse",
+    arrowKeyHint: "Use the arrow keys to move between keys.",
   },
   fingerLabels: {
     leftPinky: "L pinky",

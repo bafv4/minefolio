@@ -241,6 +241,13 @@
 ### 仮想キーボード・指色
 - キーボードの表示は `VirtualKeyboard`。指の色は `getFingerKeyStyle`（同じファイル）を使い、色の組み立てをその場で書かない
 - 使えないリマップの表示など、トークン同士を混ぜる色は `color-mix()` でトークンから作る
+- キーの状態（指色の付かないキー。クラスの正は `virtual-keyboard.tsx` の `KEY_STATE_CLASS` / `getKeySurface`。メインのキー・JIS Enter・カスタムキー・`VirtualMouse`・`VirtualNumpad` で共有）:
+  - **データあり**（操作・リマップ・カスタムアクション・指のどれかがある。判定は `hasKeyInfo`）: 面 `bg-secondary`、枠 `border-muted-foreground/70`（3:1 以上）、文字は前景色
+  - **空き**: 後ろへ引かせる（`bg-secondary/50`、枠 `border-border`、文字 muted）。押せる編集画面の空きキーは操作部品なので、枠だけ `border-muted-foreground/70`
+  - **リマップ済み**: 枠を `border-primary`（指色のキーにも）。サーチクラフトのキーバッジは外側リングだが、キーボードでは外側リングを一時的な強調（`highlightedKeys`）に使い、端のキーで切れるので枠色で示す
+  - 枠の強さは「空き＜データあり＜リマップ済み」。ハイコントラストでもこの順を保つ（`app.css` の `[data-slot="virtual-keyboard"]` のルール）
+  - 押せないキーにホバーの見た目を付けない
+- キーボード操作: 1インスタンス（`section` で分けた main / nav、マウス、テンキーもそれぞれ）につき Tab の停止点は1つ（`useRovingKeyFocus`）。矢印キー・Home / End でキー間を移動する。読み取り専用で情報の無いキーは `aria-hidden` の `div`（ボタンにしない）。フォーカスリングは内側 2px の `--ring`
 
 ### 区間・進行
 - `StageBar`: 現在区間と人数ありは `bg-brand`、到達済みは `bg-brand/40`、未到達は `bg-muted`

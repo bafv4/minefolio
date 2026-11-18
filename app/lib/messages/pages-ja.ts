@@ -181,6 +181,13 @@ export const PAGES_JA = {
     remapDisabled: "無効化",
     remapOutputsChar: "文字「{char}」を出力",
     customKeys: "カスタムキー",
+    /** 仮想キーボード1枚の role="group" の名前 */
+    groupLabel: "キーボード（{layout}）",
+    groupLabelNav: "キーボード（ナビゲーションキー）",
+    groupLabelNumpad: "テンキー",
+    groupLabelMouse: "マウス",
+    /** aria-describedby で読む操作の説明 */
+    arrowKeyHint: "矢印キーでキーを移動できます。",
   },
   /** 指割り当ての名称 */
   fingerLabels: {
