@@ -1,12 +1,13 @@
 // アイコン + h1 + prose シェルで markdown 本文を表示する静的ドキュメントページ共通部分。
 // privacy / terms / developers/changelog / developers/api の4ページで同一だった
 // マークアップ（ReactMarkdown + remarkGfm + rehypeSanitize、prose クラス）を集約する。
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Link } from "react-router";
 import ReactMarkdown, { type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { useT } from "@/hooks/use-locale";
+import { useHorizontalOverflow } from "@/hooks/use-horizontal-overflow";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -23,32 +24,6 @@ interface MarkdownDocPageProps {
 /** 横スクロールの器のキーボードフォーカス（--ring の 2px） */
 const SCROLL_FOCUS_CLASS =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
-
-/**
- * 要素が横にはみ出しているか（中身の幅 > 器の幅）を ResizeObserver で追う。
- * はみ出しているときだけ器を Tab で止まれる名前付きの領域にするため（収まっている表・コードに停止点を増やさない）。
- * JS 前（SSR）は false＝停止点なしのまま
- */
-function useHorizontalOverflow<T extends HTMLElement>(label: string) {
-  const ref = useRef<T>(null);
-  const [overflowing, setOverflowing] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const update = () => setOverflowing(el.scrollWidth - el.clientWidth > 1);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    for (const child of Array.from(el.children)) observer.observe(child);
-    return () => observer.disconnect();
-  }, []);
-
-  const regionProps = overflowing
-    ? { tabIndex: 0, role: "region" as const, "aria-label": label }
-    : {};
-  return { ref, regionProps };
-}
 
 /** 表は横スクロールの器で包む（器の外へはみ出してページごと横に動かないように）。
     器が表の上下の余白（prose-sm の 2em ≒ 24px）を持ち、表自身の余白は外す（器の中で余白が二重にならないように） */

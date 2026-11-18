@@ -34,10 +34,27 @@ function rankMedalClass(rank: number): string {
   return "";
 }
 
-/** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ */
-function StickyHeaderShell({ children }: { children: ReactNode }) {
+/** 表の外枠（角丸で切る枠。横スクロールは ScrollUpStickyHeader の内側の器が持つ） */
+const TABLE_FRAME_CLASS = "relative border rounded-xl overflow-hidden";
+
+/**
+ * 表のクラス。sm 未満は table-fixed で、列幅をヘッダ行の w-* だけで決める
+ * （名前の長さで列が広がらず、ヘッダだけの固定ヘッダの複製と本体の列が一致する）。
+ * プレイヤー列は幅を持たず残りを取る。横に流す表は min-w で、プレイヤー列に 160px 残るようにする。
+ * sm 以上は従来どおり自動レイアウト
+ */
+const PB_TABLE_CLASS = "w-full caption-bottom text-sm table-fixed sm:table-auto";
+// # 48 + プレイヤー 160 + タイム 112 + 日付 96 + リンク 80
+const SPEEDRUNCOM_TABLE_CLASS =
+  "w-full caption-bottom text-sm table-fixed min-w-[496px] sm:table-auto sm:min-w-0";
+// # 48 + プレイヤー 160 + Elo 64 + 勝敗 112 + 勝率 80
+const ELO_TABLE_CLASS =
+  "w-full caption-bottom text-sm table-fixed min-w-[464px] sm:table-auto sm:min-w-0";
+
+/** スクロールアウト → 上スクロール時に表示する sticky ヘッダ用テーブルラッパ（本体と同じ表のクラスを渡す） */
+function StickyHeaderShell({ children, className }: { children: ReactNode; className: string }) {
   return (
-    <table className="w-full caption-bottom text-sm">
+    <table className={className}>
       <TableHeader>{children}</TableHeader>
     </table>
   );
@@ -263,19 +280,20 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
   const locale = useLocale();
   const headerRow = (
     <TableRow>
-      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-12 sm:w-15 text-center border-r border-b-2">#</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">{t("rankings.date")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-center border-b-2">{t("rankings.links")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-28 sm:w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-24 sm:w-25 border-b-2">{t("rankings.date")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-20 sm:w-25 text-center border-b-2">{t("rankings.links")}</TableHead>
     </TableRow>
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-xl overflow-hidden"
-      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+      className={TABLE_FRAME_CLASS}
+      scrollRegionLabel={t("common.tableScrollRegion")}
+      stickyHeader={<StickyHeaderShell className={SPEEDRUNCOM_TABLE_CLASS}>{headerRow}</StickyHeaderShell>}
     >
-      <table className="w-full caption-bottom text-sm">
+      <table className={SPEEDRUNCOM_TABLE_CLASS}>
         <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry, index) => {
@@ -371,17 +389,18 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
   const locale = useLocale();
   const headerRow = (
     <TableRow>
-      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-12 sm:w-15 text-center border-r border-b-2">#</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.bestTime")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-28 sm:w-30 text-right border-b-2">{t("rankings.bestTime")}</TableHead>
     </TableRow>
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-xl overflow-hidden"
-      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+      className={TABLE_FRAME_CLASS}
+      scrollRegionLabel={t("common.tableScrollRegion")}
+      stickyHeader={<StickyHeaderShell className={PB_TABLE_CLASS}>{headerRow}</StickyHeaderShell>}
     >
-      <table className="w-full caption-bottom text-sm">
+      <table className={PB_TABLE_CLASS}>
         <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry) => (
@@ -426,19 +445,20 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
   const locale = useLocale();
   const headerRow = (
     <TableRow>
-      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 text-center border-r border-b-2">#</TableHead>
+      <TableHead className="sticky top-0 left-0 bg-muted z-30 w-12 sm:w-15 text-center border-r border-b-2">#</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">Elo</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-25 text-right border-b-2">{t("rankings.winLoss")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-16 sm:w-25 text-right border-b-2">Elo</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-28 sm:w-25 text-right border-b-2">{t("rankings.winLoss")}</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 w-20 text-right border-b-2">{t("rankings.winRate")}</TableHead>
     </TableRow>
   );
   return (
     <ScrollUpStickyHeader
-      className="relative border rounded-xl overflow-hidden"
-      stickyHeader={<StickyHeaderShell>{headerRow}</StickyHeaderShell>}
+      className={TABLE_FRAME_CLASS}
+      scrollRegionLabel={t("common.tableScrollRegion")}
+      stickyHeader={<StickyHeaderShell className={ELO_TABLE_CLASS}>{headerRow}</StickyHeaderShell>}
     >
-      <table className="w-full caption-bottom text-sm">
+      <table className={ELO_TABLE_CLASS}>
         <TableHeader>{headerRow}</TableHeader>
         <TableBody>
           {rankings.map((entry) => (
