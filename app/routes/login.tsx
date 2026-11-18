@@ -1,4 +1,4 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 import { Link, redirect } from "react-router";
 import type { Route } from "./+types/login";
 import { createDb } from "@/lib/db";
@@ -15,7 +15,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -94,14 +93,26 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
     });
   };
 
+  const returnToPage = returnTo ? returnToPageKey(returnTo) : null;
+
   return (
     <div className="flex-1 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Minefolio</CardTitle>
+          {/* ページの h1。見た目は CardTitle と同じ */}
+          <h1 data-slot="card-title" className="text-2xl font-bold leading-snug">
+            {t("login.heading")}
+          </h1>
           <CardDescription>
             {t("login.cardDescription")}
           </CardDescription>
+          {returnTo && (
+            <CardDescription>
+              {returnToPage
+                ? t("login.returnToNamed", { page: t(returnToPage) })
+                : t("login.returnToGeneric")}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
@@ -118,16 +129,49 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
             {t("login.signInWithDiscord")}
           </Button>
           {loaderData.devAuthEnabled && (
-            <Button asChild variant="outline" className="w-full">
+            <Button asChild variant="outline" className="w-full min-h-11 sm:min-h-9">
               <Link to={returnTo ? `/dev/login?returnTo=${encodeURIComponent(returnTo)}` : "/dev/login"}>
                 {t("devLogin.title")}
               </Link>
             </Button>
           )}
+          {/* Discord から受け取る情報（app/content/privacy.md「1. (1)」と auth.ts の scope: identify・email に合わせる） */}
+          <div className="space-y-2 border-t border-border/60 pt-4 text-xs text-muted-foreground">
+            <p>{t("login.discordDataNote")}</p>
+            <p className="flex flex-wrap items-center justify-center gap-x-3">
+              <Link
+                to="/terms"
+                className="inline-flex min-h-11 items-center text-primary underline-offset-2 hover:underline sm:min-h-6"
+              >
+                {t("nav.terms")}
+              </Link>
+              <Link
+                to="/privacy"
+                className="inline-flex min-h-11 items-center text-primary underline-offset-2 hover:underline sm:min-h-6"
+              >
+                {t("nav.privacy")}
+              </Link>
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+/**
+ * returnTo（sanitize 済みの同一オリジンのパス）から、戻り先のページ名の翻訳キーを返す。
+ * 名前で言える行き先だけ。分からないパスは null（汎用の文を出す）
+ */
+function returnToPageKey(returnTo: string): MessageKey | null {
+  const path = returnTo.split(/[?#]/)[0].replace(/\/+$/, "");
+  const startsWith = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+  if (startsWith("/me")) return "login.returnToSettings";
+  if (startsWith("/my-guides")) return "nav.myGuides";
+  if (startsWith("/feedback")) return "nav.feedback";
+  if (startsWith("/favorites")) return "nav.favorites";
+  if (startsWith("/playground")) return "nav.playground";
+  return null;
 }
 
 function DiscordIcon({ className }: { className?: string }) {

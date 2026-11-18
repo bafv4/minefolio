@@ -25,5 +25,5 @@ export async function loader() {
 
 export default function TermsPage() {
   const t = useT();
-  return <MarkdownDocPage icon={ScrollText} heading={t("terms.heading")} markdown={termsMd} />;
+  return <MarkdownDocPage icon={ScrollText} heading={t("terms.heading")} markdown={termsMd} toc />;
 }

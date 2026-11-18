@@ -55,14 +55,14 @@
 - `light` / `dark`（Slate）/ `ultra-dark`（Zinc、より深い黒）の3つ。`.dark` / `.ultra-dark` のクラスで切り替え、
   `@custom-variant dark` は両方に効く
 - `next-themes`（`themes={["light","dark","ultra-dark"]}`）で管理し、選択は localStorage（key: `theme`）に保存する。`system` のダークは通常ダーク
-- 切替 UI は `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS`（デスクトップのドロップダウンとモバイルのセグメントで共有）
+- 切替 UI は `app/components/layout/theme-toggle.tsx` の `THEME_OPTIONS`（デスクトップのドロップダウンとモバイルのセグメントで共有）。選択肢は システム（OS に従う。既定）／light／dark／ultra-dark の4つ
 - **`dark:` バリアントは使わない。** 3テーマの差はトークン側で吸収する
 
 ### ハイコントラスト
 - テーマとは別のオン・オフ（3テーマ × 2）。`<html data-contrast="more">` が付くと、`app/app.css` の「ハイコントラスト」ブロック
   （`:root[data-contrast="more"]:not(.dark):not(.ultra-dark)` / `.dark[data-contrast="more"]` / `.ultra-dark[data-contrast="more"]`）が各テーマのトークンを上書きする
 - **コンポーネントで `data-contrast` を見て出し分けない**（`dark:` を使わないのと同じ）。差はトークンと、`app.css` の少数の未層ルール
-  （透明度で弱まる `border-border/40`・`/50`・`border-foreground/15` を /60 相当へ揃える等）で吸収する
+  （透明度で弱まる `border-border/40`・`/50` を /60 相当へ、欄の区切り `border-foreground/15` を /85 相当へ揃える等）で吸収する。欄の区切りは、ハイコントラストでもカードの枠（`border-border/70`）より強く保つ
 - 数値の目標は WCAG の強化基準: 通常の文字 **7:1 以上**、大きな文字と UI 部品（枠線・アイコン・フォーカスリング）**4.5:1 以上**。
   値を変えるときは 3テーマすべてで background / card / secondary の各面 × 文字色・意味色・brand・primary、枠線（`/60`・`/70` を掛けた後）を測る。
   色相は変えず、明度・彩度だけを動かす。面の差（card / secondary）は区別が付く範囲で保ち、新しい強調色は足さない

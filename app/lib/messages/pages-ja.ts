@@ -29,6 +29,9 @@ export const PAGES_JA = {
   /** テーマ切替（components/layout/theme-toggle.tsx） */
   theme: {
     toggle: "テーマを切り替え",
+    /** OS の設定に従う */
+    system: "システム",
+    systemShort: "自動",
     light: "ライト",
     dark: "ダーク",
     ultraDark: "ウルトラダーク",
@@ -47,10 +50,11 @@ export const PAGES_JA = {
   },
   /** Cookie 同意バナー */
   cookieConsent: {
-    title: "Cookieの使用について",
-    body1: "お気に入り機能を利用するためにCookieを使用します。",
-    body2: "Cookieにはお気に入りに登録した走者のIDのみが保存されます。",
-    bodyShort: "お気に入り機能のためにCookieを使用し、登録した走者のIDのみを保存します。",
+    /** 見出しとバナー（role="region"）の名前。保存先は localStorage（privacy.md「3. Cookie 等について」の書き方に合わせる） */
+    title: "ブラウザへの保存について",
+    body1: "ログインしていない状態でお気に入りを使うため、お気に入りにした走者の一覧をお使いのブラウザ内（ローカルストレージ）に保存します。",
+    body2: "保存するのは、お気に入りにした走者のIDだけです。",
+    bodyShort: "お気に入りにした走者の一覧を、お使いのブラウザ内（ローカルストレージ）に保存します。保存するのは走者のIDだけです。",
     details: "詳細",
     accept: "同意する",
     decline: "拒否する",
@@ -233,13 +237,14 @@ export const PAGES_JA = {
     changelogDescription: "Minefolio のリリースノート",
     changelogMetaTitle: "更新履歴 - Developers - Minefolio",
     exportTitle: "データエクスポート",
-    exportDescription: "自分のキー配置・リマップ・カスタムアクション・マウス設定をCSVで出力",
+    /** 実際の出力（api/keybindings-csv）は、プロフィールを公開している走者全員か、選んだ走者 */
+    exportDescription: "プロフィールを公開している走者のキー配置・リマップ・カスタムアクション・マウス設定をCSVで出力",
     exportMetaTitle: "データエクスポート - Developers - Minefolio",
-    exportMetaDescription: "全ユーザーまたは指定ユーザーのキー配置・リマップ・カスタムアクション・マウス設定をCSV形式でダウンロード",
+    exportMetaDescription: "プロフィールを公開している走者全員、または選んだ走者のキー配置・リマップ・カスタムアクション・マウス設定をCSV形式でダウンロード",
     relatedLinks: "関連リンク",
     relatedLinksDescription: "外部サービス・お問い合わせ",
     // データエクスポート
-    exportLead: "Minefolio に登録された設定データを CSV 形式でダウンロードできます。デフォルトでは設定登録済みの全ユーザーが対象ですが、特定のユーザーだけを選択することも可能です。",
+    exportLead: "Minefolio に登録された設定データを CSV 形式でダウンロードできます。既定では、プロフィールを公開していて設定を登録している走者全員が対象です。特定の走者だけを選ぶこともできます。",
     exportSections: "出力する項目",
     exportSectionsHint: "複数項目を選択すると、それぞれのテーブルが順に並んだ単一の CSV として出力されます。",
     exportSelectAll: "すべて選択",
@@ -249,7 +254,7 @@ export const PAGES_JA = {
     exportClearSelection: "選択をクリア",
     exportSearchPlaceholder: "ユーザー名・MCID で検索...",
     exportNoUsers: "該当するユーザーが見つかりませんでした",
-    exportNote: "※ 公開プロフィール（profileVisibility = public）のみが対象です。Excel など一部のソフトでは UTF-8 BOM 付き CSV として開く必要がある場合があります。",
+    exportNote: "※ プロフィールの公開範囲を「公開」にしている走者だけが対象です（限定公開・非公開の走者は含みません）。Excel など一部のソフトでは UTF-8 BOM 付き CSV として開く必要がある場合があります。",
     exportPickSections: "項目を選択してください",
     exportSummary: "{sections} 項目 × {users} 人",
     exportAllUsersSuffix: "（全ユーザー）",
@@ -316,10 +321,13 @@ export const PAGES_JA = {
     navigation: "ナビゲーション",
     myProfile: "マイプロフィール",
     settings: "設定",
-    myGuides: "ガイド",
+    /** 自分のガイド（/my-guides）。ナビの「ガイド」（/guides）と区別する */
+    myGuides: "マイガイド",
+    /** モバイルメニューのアカウントの項目の見出し */
+    account: "アカウント",
     favorites: "お気に入り",
     feedback: "フィードバック",
-    developers: "Developers",
+    developers: "開発者向け",
     privacy: "プライバシーポリシー",
     terms: "利用規約",
     playground: "Playground",
@@ -339,6 +347,8 @@ export const PAGES_JA = {
     errorTitle: "エラー",
     genericDetails: "予期しないエラーが発生しました。",
     notFoundDetails: "お探しのページが見つかりませんでした。",
+    /** loader が「〇〇が見つかりません」を載せた 404 の説明（走者・テンプレート・ユーザーなど、どの 404 にも合う文） */
+    notFoundHint: "URL が違うか、公開されていない可能性があります。URL が正しいかを確認してください。",
   },
   common: {
     /** 横スクロール可能領域のヒント（はみ出し時のみ表示） */
@@ -346,6 +356,8 @@ export const PAGES_JA = {
     /** 横にはみ出した表・コードの器（キーボードで横スクロールできる領域）の名前 */
     tableScrollRegion: "表（横にスクロールできます）",
     codeScrollRegion: "コード（横にスクロールできます）",
+    /** 文書ページ（規約・ポリシー）の冒頭の目次の見出し */
+    tableOfContents: "目次",
     /** 数値レンジの区切り（「10:00 〜 12:00」等） */
     rangeSeparator: "〜",
     /** 並列の区切り（「前進・後退」等） */
@@ -379,6 +391,7 @@ export const PAGES_JA = {
     saveChanges: "変更を保存",
     discardChanges: "変更を取り消す",
     discard: "取消",
+    changesDiscarded: "変更を取り消しました",
     saveBar: "保存バー",
     /** カードに出す直近{days}日のページビュー数の説明（ガイド・プロフィールの人気順カードで共用） */
     pageViews7d: "直近{days}日の閲覧数",
@@ -1617,9 +1630,18 @@ export const PAGES_JA = {
   },
   login: {
     title: "ログイン - Minefolio",
-    description: "Discordを使ってサインイン",
-    cardDescription: "プロフィールを管理するにはサインインしてください",
+    description: "Discord アカウントで Minefolio にログインします。はじめての方はそのまま登録できます。",
+    /** ログイン画面の h1 */
+    heading: "Minefolio にログイン",
+    cardDescription: "Discord アカウントでログインします。はじめての方は、そのままプロフィールの登録に進みます。",
     signInWithDiscord: "Discordでログイン",
+    /** returnTo があるときの戻り先（page はページ名） */
+    returnToNamed: "ログインすると「{page}」に戻ります。",
+    returnToGeneric: "ログインすると、元のページに戻ります。",
+    /** /me/* へ戻るときのページ名 */
+    returnToSettings: "プロフィールの設定",
+    /** Discord から受け取る情報（privacy.md「1. (1)」と auth.ts の scope に合わせる） */
+    discordDataNote: "Discord から、Discord ID・ユーザー名・アバター画像・メールアドレスを受け取ります。メールアドレスは画面に表示されず、ログインのためにだけ使います。",
   },
   // ローカル開発専用の簡易ログイン（/dev/login。DEV_AUTH=1 のときのみ表示）
   devLogin: {
@@ -1635,6 +1657,9 @@ export const PAGES_JA = {
   onboarding: {
     /** 初期設定を途中で離れた人に、共通レイアウトで出す案内 */
     resumeNotice: "初期設定がまだ終わっていません。",
+    /** 再開案内に添える残りの一言（step は再開する手順。保存済みの内容からの推定） */
+    resumeNoticeRemaining: "ステップ {step} / {total} から再開します。公開範囲がまだ選ばれていないため、プロフィールは非公開のままです。",
+    resumeNoticeNotStarted: "プロフィールの登録がまだ始まっていません。",
     resumeAction: "初期設定を続ける",
     title: "ようこそ - Minefolio",
     description: "Minefolioプロフィールを設定",
@@ -1657,7 +1682,7 @@ export const PAGES_JA = {
     minecraftDescription: "MinecraftのIDを登録します。どちらも任意です。",
     mcidLabel: "Java版 MCID",
     mcidPlaceholder: "例: Steve",
-    mcidHint: "MCIDはMojang APIで検証されます。登録するとプロフィールのURLがMCIDになります。",
+    mcidHint: "Minecraft のアカウントとして存在するかを確かめます。登録するとプロフィールのURLがMCIDになります。",
     // ステップ3: スキン
     skinTitle: "スキン",
     skinDescription: "プロフィールに表示されるスキンです。Java版MCIDを登録していればそのスキンが使われます。",
@@ -1665,9 +1690,14 @@ export const PAGES_JA = {
     linksTitle: "連携",
     linksDescription: "配信・動画・記録のアカウントをプロフィールに表示します。空欄のままでも進めます。",
     linkFieldError: "{platform}: {message}",
+    linkPlaceholder: "例: couriern3w",
     // ステップ5: 公開設定
     visibilityTitle: "公開設定",
-    visibilityDescription: "最後に、プロフィールを誰に見せるかを選んでください。",
+    visibilityDescription: "最後に、プロフィールを誰に見せるかを選んでください。下の表示設定では、あなたのペース・配信・動画をホームに出すかどうかも選べます（既定はオン）。",
+    /** 畳んだ表示設定の要約（count はオンの数） */
+    displaySummaryAllOn: "すべてオン（あとで変更できます）",
+    displaySummaryAllOff: "すべてオフ（あとで変更できます）",
+    displaySummarySome: "{total} 件中 {count} 件がオン（あとで変更できます）",
     visibilityChoiceLabel: "プロフィールの公開範囲",
     visibilityChoiceHint: "選択すると設定を完了できます",
     finish: "設定を完了",
@@ -1705,6 +1735,8 @@ export const PAGES_JA = {
     metaDescription: "Minefolioへのフィードバックをお寄せください",
     pageTitle: "フィードバック",
     pageDescription: "アプリの改善要望や機能の提案、バグ報告などをお送りください。",
+    /** 送った内容の行き先（privacy.md の利用目的 4. と、外部サービスの表の Resend の行に合わせる） */
+    deliveryNote: "送った内容は、あなたの Discord ID・MCID・表示名とあわせて、運営者にメールで届きます。内容の確認などのため、運営者から Discord でご連絡することがあります。",
     category: "カテゴリ",
     categoryPlaceholder: "カテゴリを選択",
     categoryBug: "バグ報告",

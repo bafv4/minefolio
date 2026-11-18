@@ -19,6 +19,7 @@ import { FavoritesProvider } from "@/hooks/use-favorites";
 import { getFavoritesFromDb } from "@/lib/favorites";
 import { LikesProvider } from "@/hooks/use-likes";
 import { getViewerLikedIds } from "@/lib/likes.server";
+import { estimateOnboardingResumeStep, ONBOARDING_TOTAL_STEPS } from "@/lib/onboarding-progress";
 
 // 検索パラメータ遷移でも再実行する。いいね状態（use-likes の likedKeys）がこのローダー結果
 // （likedGuideIds / likedTemplateIds）に依存し、いいね自体は素の fetch でルーター再検証が起きないため、
@@ -34,6 +35,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       user: null,
       onboardingPending: false,
+      onboardingResumeStep: null,
       initialFavorites: [] as string[],
       likedGuideIds: [] as string[],
       likedTemplateIds: [] as string[],
@@ -50,6 +52,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       displayName: true,
       displayNameAlphabet: true,
       discordAvatar: true,
+      // ヘッダーのアバター（スキンの顔）用
+      uuid: true,
+      customSkinUrl: true,
       onboardingCompleted: true,
     },
   });
@@ -59,6 +64,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       user: null,
       onboardingPending: true,
+      // 行がまだ無い＝「はじめる」を押していない
+      onboardingResumeStep: null,
       initialFavorites: [] as string[],
       likedGuideIds: [] as string[],
       likedTemplateIds: [] as string[],
@@ -68,7 +75,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // アバター更新（必要なら）と initialFavorites / いいね済みid の取得を並列実行
   // （DB ラウンドトリップ削減）
   const needsAvatarUpdate = session.user.image !== user.discordAvatar;
-  const [, initialFavorites, likedIds] = await Promise.all([
+  const [, initialFavorites, likedIds, onboardingResumeStep] = await Promise.all([
     needsAvatarUpdate
       ? db
           .update(users)
@@ -77,6 +84,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       : Promise.resolve(),
     getFavoritesFromDb(db, user.id),
     getViewerLikedIds(db, user.id),
+    // 初期設定が未完了の人だけ、再開案内に添える「どこから再開するか」を保存済みの内容から推定する
+    user.onboardingCompleted ? Promise.resolve(null) : loadOnboardingResumeStep(db, user.id, session.user.name),
   ]);
   if (needsAvatarUpdate) {
     user.discordAvatar = session.user.image ?? null;
@@ -84,8 +93,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     onboardingPending: !user.onboardingCompleted,
+    onboardingResumeStep,
     user: {
       mcid: user.mcid,
+      uuid: user.uuid,
+      customSkinUrl: user.customSkinUrl,
       slug: user.slug,
       displayName: user.displayName,
       displayNameAlphabet: user.displayNameAlphabet,
@@ -97,6 +109,34 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+/** 初期設定の再開位置（/onboarding と同じ推定）。行が消えていたら null */
+async function loadOnboardingResumeStep(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  discordName: string | null | undefined,
+): Promise<number | null> {
+  const row = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
+      displayName: true,
+      shortBio: true,
+      bio: true,
+      location: true,
+      pronouns: true,
+      mcid: true,
+      bedrockMcid: true,
+      customSkinUrl: true,
+      customCapeUrl: true,
+    },
+    with: { socialLinks: { columns: { platform: true } } },
+  });
+  if (!row) return null;
+  return estimateOnboardingResumeStep(
+    { ...row, linkPlatforms: row.socialLinks.map((link) => link.platform) },
+    discordName,
+  );
+}
+
 type LayoutData = Awaited<ReturnType<typeof loader>>;
 
 // 初期設定の再開案内を出さないパス（手順の途中・ログイン画面そのもの）
@@ -105,7 +145,7 @@ const RESUME_NOTICE_HIDDEN_PATHS = ["/onboarding", "/login", "/dev/login"];
 function LayoutShell({ data, children }: { data: LayoutData; children: React.ReactNode }) {
   const t = useT();
   const { pathname } = useLocation();
-  const { user, onboardingPending, initialFavorites, likedGuideIds, likedTemplateIds } = data;
+  const { user, onboardingPending, onboardingResumeStep, initialFavorites, likedGuideIds, likedTemplateIds } = data;
   const showResumeNotice =
     onboardingPending && !RESUME_NOTICE_HIDDEN_PATHS.includes(pathname.replace(/\/+$/, "") || "/");
 
@@ -131,7 +171,15 @@ function LayoutShell({ data, children }: { data: LayoutData; children: React.Rea
           <div className="container mx-auto px-4 pt-4 sm:px-6 lg:px-8">
             <NoticeBanner tone="info" icon={Info} className="items-center">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                <span>{t("onboarding.resumeNotice")}</span>
+                <span>
+                  {t("onboarding.resumeNotice")}{" "}
+                  {onboardingResumeStep
+                    ? t("onboarding.resumeNoticeRemaining", {
+                        step: onboardingResumeStep,
+                        total: ONBOARDING_TOTAL_STEPS,
+                      })
+                    : t("onboarding.resumeNoticeNotStarted")}
+                </span>
                 <Link
                   to="/onboarding"
                   className={cn(buttonVariants({ size: "sm" }), "min-h-11 sm:min-h-8")}

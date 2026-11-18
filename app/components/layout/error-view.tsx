@@ -16,6 +16,19 @@ function ErrorLink({ to, plain, className, children }: { to: string; plain: bool
 }
 
 /**
+ * 404 の Response に loader が載せた文言（例: `throw new Response(t("playerProfile.notFound"), { status: 404 })`）を、
+ * 表示に使ってよい形なら返す。使えないとき（文字列でない・長すぎる・HTML らしい・ルーターの内部の文言
+ * 〔一致するルートが無いときの `Error: No route matches URL ...`〕・既定の "Not Found"）は null
+ */
+function notFoundMessage(error: { data: unknown; statusText: string }): string | null {
+  if (typeof error.data !== "string") return null;
+  const value = error.data.trim();
+  if (!value || value.length > 80 || /[<>\n]/.test(value)) return null;
+  if (/^Error\b/.test(value) || value === error.statusText || /^not found$/i.test(value)) return null;
+  return value;
+}
+
+/**
  * ルートエラーの表示（404・その他）。`<title>` も出す（React 19 が head へ引き上げる）。
  * - 共通レイアウトの ErrorBoundary（ヘッダー・フッター付き）と root の最後の砦で共用する
  * - `plainLinks`: ルーターが壊れている可能性がある root の砦では、`Link` ではなく `<a href>` にする
@@ -30,8 +43,10 @@ export function ErrorView({ error, plainLinks = false }: { error: unknown; plain
 
   if (isRouteErrorResponse(error)) {
     if (isNotFound) {
-      title = t("errorPage.notFoundTitle");
-      details = t("errorPage.notFoundDetails");
+      // loader が「走者が見つかりません」などを載せていれば見出しに使い、説明はガイドの 404 と同じ確認の案内にする
+      const message = notFoundMessage(error);
+      title = message ?? t("errorPage.notFoundTitle");
+      details = message ? t("errorPage.notFoundHint") : t("errorPage.notFoundDetails");
     } else {
       title = t("errorPage.errorTitle");
       details = error.statusText || details;

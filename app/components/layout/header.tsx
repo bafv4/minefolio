@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { Menu, User, LogOut, Settings, Heart, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen, FlaskConical } from "lucide-react";
+import { Menu, User, LogOut, Settings, Heart, Search, Keyboard, Trophy, LogIn, MessageSquare, BookOpen, FlaskConical, NotebookPen } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { useT, useLocale, useSetLocale } from "@/hooks/use-locale";
 import { SUPPORTED_LOCALES, LOCALE_NAMES } from "@/lib/locale";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 
 interface HeaderProps {
   user?: {
@@ -37,7 +38,45 @@ interface HeaderProps {
     displayName: string | null;
     displayNameAlphabet: string | null;
     discordAvatar: string | null;
+    uuid?: string | null;
+    customSkinUrl?: string | null;
   } | null;
+}
+
+/** ナビ・ロゴのキーボードフォーカス（ほかの操作部品と同じ不透明の 2px） */
+const NAV_FOCUS_CLASS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
+/**
+ * ヘッダーのアバター。スキンがある人（MCID かカスタムスキン）はスキンの顔（ホームのおかえりバーと同じ）、
+ * 無い人は従来どおり Discord のアバター／頭文字
+ */
+function HeaderAvatar({
+  user,
+  name,
+  size,
+}: {
+  user: NonNullable<HeaderProps["user"]>;
+  name: string;
+  size: 36 | 40;
+}) {
+  if (user.mcid || user.customSkinUrl) {
+    return (
+      <MinecraftAvatar
+        uuid={user.uuid}
+        skinUrl={user.customSkinUrl}
+        mcid={user.mcid}
+        size={size}
+        alt=""
+        className="shrink-0 rounded-lg"
+      />
+    );
+  }
+  return (
+    <Avatar className={size === 36 ? "h-9 w-9" : "h-10 w-10"} aria-hidden>
+      <AvatarImage src={user.discordAvatar ?? undefined} alt={name} />
+      <AvatarFallback>{name[0]?.toUpperCase()}</AvatarFallback>
+    </Avatar>
+  );
 }
 
 // ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定のため）
@@ -90,7 +129,7 @@ export function Header({ user }: HeaderProps) {
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <div className="flex items-center">
-              <Link to="/" className="flex items-center space-x-2">
+              <Link to="/" className={cn("flex items-center space-x-2 rounded-md", NAV_FOCUS_CLASS)}>
                 <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
                 <span className="text-xl font-bold">Minefolio</span>
               </Link>
@@ -112,6 +151,7 @@ export function Header({ user }: HeaderProps) {
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground",
+                        NAV_FOCUS_CLASS,
                         active
                           ? "text-brand bg-brand/10"
                           : "text-muted-foreground"
@@ -136,19 +176,15 @@ export function Header({ user }: HeaderProps) {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="relative h-9 w-9 rounded-full"
+                      className={cn(
+                        "relative h-9 w-9 p-0",
+                        // スキンの顔は角丸の四角（36px は rounded-lg）、Discord のアバターは丸
+                        user.mcid || user.customSkinUrl ? "rounded-lg" : "rounded-full",
+                      )}
                       aria-label={t("nav.userMenu", { name: userName })}
                     >
                       {/* 名前はボタンの aria-label が担う（頭文字のフォールバックを「H」と読ませない） */}
-                      <Avatar className="h-9 w-9" aria-hidden>
-                        <AvatarImage
-                          src={user.discordAvatar ?? undefined}
-                          alt={userName}
-                        />
-                        <AvatarFallback>
-                          {userName[0]?.toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <HeaderAvatar user={user} name={userName} size={36} />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -179,7 +215,7 @@ export function Header({ user }: HeaderProps) {
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/my-guides">
-                        <BookOpen className="mr-2 h-4 w-4" />
+                        <NotebookPen className="mr-2 h-4 w-4" />
                         {t("nav.myGuides")}
                       </Link>
                     </DropdownMenuItem>
@@ -236,6 +272,8 @@ export function Header({ user }: HeaderProps) {
               <SheetContent
                 side="right"
                 closeLabel={t("common.close")}
+                // 閉じるボタン（見た目 28px）の押せる範囲を 44px に広げる
+                closeClassName="after:absolute after:-inset-2"
                 className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
               >
                 <SheetTitle className="sr-only">{t("nav.navigation")}</SheetTitle>
@@ -243,7 +281,7 @@ export function Header({ user }: HeaderProps) {
                 <div className="flex h-16 items-center px-5 border-b border-border shrink-0">
                   <Link
                     to="/"
-                    className="flex items-center gap-2"
+                    className={cn("flex items-center gap-2 rounded-md", NAV_FOCUS_CLASS)}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <img src="/icon.png" alt="Minefolio" className="h-7 w-7" />
@@ -255,9 +293,9 @@ export function Header({ user }: HeaderProps) {
                   aria-label={t("nav.mobileNav")}
                   className="flex-1 overflow-y-auto px-3 py-4"
                 >
-                  <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("nav.navigation")}
-                  </p>
+                  </h2>
                   <div className="flex flex-col gap-0.5">
                     {navigation.map((item) => {
                       const Icon = item.icon;
@@ -269,7 +307,8 @@ export function Header({ user }: HeaderProps) {
                           onClick={() => setMobileMenuOpen(false)}
                           aria-current={active ? "page" : undefined}
                           className={cn(
-                            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation",
+                            "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors touch-manipulation",
+                            NAV_FOCUS_CLASS,
                             active
                               ? "bg-brand/10 text-brand"
                               : "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
@@ -284,16 +323,12 @@ export function Header({ user }: HeaderProps) {
 
                   {user ? (
                     <>
-                      <div className="mt-5 flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage
-                            src={user.discordAvatar ?? undefined}
-                            alt={userName}
-                          />
-                          <AvatarFallback>
-                            {userName[0]?.toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                      {/* アカウントの項目の群の見出し（見た目は上の「ナビゲーション」と同じ） */}
+                      <h2 className="mt-5 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {t("nav.account")}
+                      </h2>
+                      <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+                        <HeaderAvatar user={user} name={userName} size={40} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">
                             {userName}
@@ -310,7 +345,7 @@ export function Header({ user }: HeaderProps) {
                         {[
                           { href: `/player/${user.slug}`, icon: User, label: t("nav.myProfile") },
                           { href: "/me/edit", icon: Settings, label: t("nav.settings") },
-                          { href: "/my-guides", icon: BookOpen, label: t("nav.myGuides") },
+                          { href: "/my-guides", icon: NotebookPen, label: t("nav.myGuides") },
                           { href: "/playground", icon: FlaskConical, label: t("nav.playground") },
                           { href: "/favorites", icon: Heart, label: t("nav.favorites") },
                           { href: "/feedback", icon: MessageSquare, label: t("nav.feedback") },
@@ -319,15 +354,24 @@ export function Header({ user }: HeaderProps) {
                             key={href}
                             to={href}
                             onClick={() => setMobileMenuOpen(false)}
-                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-accent hover:text-accent-foreground transition-colors touch-manipulation"
+                            className={cn(
+                              "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-accent hover:text-accent-foreground transition-colors touch-manipulation",
+                              NAV_FOCUS_CLASS,
+                            )}
                           >
                             <Icon className="h-5 w-5 shrink-0" />
                             {label}
                           </Link>
                         ))}
+                      </div>
+                      {/* ログアウトはナビの列から区切る */}
+                      <div className="mt-2 border-t border-border/60 pt-2">
                         <button
                           type="button"
-                          className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors touch-manipulation w-full"
+                          className={cn(
+                            "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors touch-manipulation w-full",
+                            NAV_FOCUS_CLASS,
+                          )}
                           onClick={() => {
                             setMobileMenuOpen(false);
                             handleLogout();
@@ -339,7 +383,7 @@ export function Header({ user }: HeaderProps) {
                       </div>
                     </>
                   ) : (
-                    <Button asChild className="mt-5 w-full gap-2">
+                    <Button asChild className="mt-5 w-full gap-2 min-h-11">
                       <Link to={loginHref} onClick={() => setMobileMenuOpen(false)}>
                         <LogIn className="h-4 w-4" />
                         {t("nav.login")}
@@ -359,13 +403,15 @@ export function Header({ user }: HeaderProps) {
                         aria-pressed={theme === value}
                         onClick={() => setTheme(value)}
                         className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                          // 4択（システム・ライト・ダーク・ウルトラ）が幅に収まるよう、アイコンを文字の上に置く。
+                          // 高さは 44px 以上になる（押せる範囲もそのまま）
+                          "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs font-medium transition-colors",
                           theme === value
                             ? "bg-secondary text-foreground"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
                         {t(shortLabelKey)}
                       </button>
                     ))}
@@ -390,7 +436,8 @@ export function Header({ user }: HeaderProps) {
                         aria-pressed={locale === value}
                         onClick={() => setLocale(value)}
                         className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                          // 見た目は 28px のまま、押せる範囲を上下に 8px ずつ広げて 44px にする
+                          "relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2",
                           locale === value
                             ? "bg-secondary text-foreground"
                             : "text-muted-foreground hover:text-foreground",

@@ -40,7 +40,8 @@
 
 - ソース: `app/content/api.md`
 - Vite の `?raw` import でファイル内容を JS バンドルに埋め込み
-- 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`prose prose-sm dark:prose-invert max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）
+- 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`doc-content prose max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）。配色は `app/app.css` の `.doc-content.prose` がテーマトークンへ割り当てる（ガイド本文と同じ割り当て。`prose-invert` / `dark:` は使わない）。本文は `text-base`、1行は 42em まで（表の器とコードブロックは幅を使う）。注記（blockquote）は斜体にしない
+- `/privacy`・`/terms` は冒頭に h2 の目次（ページ内リンク）を出す（`toc`）。h2 の id と目次のリンクは同じ `docHeadingId` から作る
 - 表は横スクロールの器（`overflow-x-auto`）で包み、コードブロック（`pre`）は prose の `overflow-x: auto` のまま使う。狭い画面でもページ全体は横に動かない。はみ出しているときだけ、器に `tabindex="0"`・`role="region"`・`aria-label`（`common.tableScrollRegion` / `common.codeScrollRegion`）を付けてキーボードで横スクロールできるようにする（収まっているときは Tab の停止点を増やさない）
 
 掲載対象は **認証不要の公開 API のみ**。`/api/me/*` や `/api/auth/*` などの認証必須 API、`/api/cron/*` の Cron 専用 API は掲載しない。
@@ -55,6 +56,7 @@
 
 - ソース: `app/content/changelog.md`
 - レンダリング方式は `/developers/api` と同じ（`?raw` + `MarkdownDocPage`）
+- 最新の3版だけを開いて出し、それより古い版は版の見出し（h2）を summary にした `details` に畳む（`app/lib/changelog.ts` の `parseChangelog` で版ごとに分ける。分けられない形式なら全文をそのまま出す）
 - 一般ユーザー向けに、技術用語を抑えた文体で記述する方針
 
 ---

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useT } from "@/hooks/use-locale";
 import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
+import type { MessageKey } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,27 @@ function writeSeenVersion(version: string) {
 // カテゴリバッジと本文h3見出しの突き合わせ用（markdown記法の ` を除いて比較）
 function normalizeHeading(text: string): string {
   return text.replace(/`/g, "").trim();
+}
+
+/**
+ * カテゴリバッジの表示名の読み替え（changelog.md の見出しはリリース時の表記のまま残すので、表示だけナビの呼び名へそろえる）。
+ * 本文の見出しへのスクロールは元の見出しの文字で突き合わせる
+ */
+const CATEGORY_LABEL_KEYS: Record<string, MessageKey> = {
+  キー設定: "nav.keybindings",
+};
+
+/** 読み込み中のスケルトン。開いた後の本文（max-h-[min(55vh,320px)]）と同じ高さを先に確保する */
+function WhatsNewBodySkeleton() {
+  return (
+    <div className="h-[min(55vh,320px)] space-y-2 overflow-hidden px-4 py-3" aria-hidden>
+      {["w-1/3", "w-full", "w-5/6", "w-full", "w-2/3", "w-1/3", "w-full", "w-4/5", "w-full", "w-1/2"].map(
+        (width, index) => (
+          <Skeleton key={index} className={cn("h-3", width, index === 5 && "mt-4")} />
+        ),
+      )}
+    </div>
+  );
 }
 
 export function WhatsNew() {
@@ -202,30 +224,35 @@ export function WhatsNew() {
                   key={category}
                   type="button"
                   onClick={() => scrollToCategory(category)}
-                  className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex min-h-6 items-center rounded-full bg-brand/10 px-2 py-0.5 text-[11px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {category}
+                  {CATEGORY_LABEL_KEYS[category] ? t(CATEGORY_LABEL_KEYS[category]) : category}
                 </button>
               ))}
+            </div>
+          )}
+          {/* 読み込み中は分類の行の高さも先に確保する */}
+          {entries === null && (
+            <div className="mt-2 flex gap-1" aria-hidden>
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-14 rounded-full" />
+              <Skeleton className="h-6 w-12 rounded-full" />
             </div>
           )}
         </div>
 
         {entries === null ? (
           // ./whats-new-data のアイドル読み込みが終わる前にポップオーバーが開かれた場合
-          <div className="space-y-2 px-4 py-3">
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-1/2" />
-          </div>
+          <WhatsNewBodySkeleton />
         ) : displayEntries.length > 0 ? (
           <div ref={bodyRef} className="max-h-[min(55vh,320px)] overflow-y-auto overscroll-contain px-4 py-3">
             <Suspense
               fallback={
-                <div className="space-y-2 py-1">
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-1/2" />
+                // 本文の器（px-4 py-3）の中なので、器の上下の余白（1.5rem）を引いた高さを確保する
+                <div className="h-[calc(min(55vh,320px)-1.5rem)] space-y-2 overflow-hidden" aria-hidden>
+                  {["w-1/3", "w-full", "w-5/6", "w-full", "w-2/3", "w-1/3", "w-full", "w-4/5"].map((width, index) => (
+                    <Skeleton key={index} className={cn("h-3", width, index === 5 && "mt-4")} />
+                  ))}
                 </div>
               }
             >

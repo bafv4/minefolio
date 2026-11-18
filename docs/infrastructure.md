@@ -59,13 +59,14 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 
 ## テーマとハイコントラスト
 
-- テーマ（light / dark / ultra-dark）は next-themes（`providers.tsx`、class 切替、localStorage `theme`）。切替 UI は `layout/theme-toggle.tsx`（デスクトップ）と `layout/header.tsx` のモバイルメニュー
+- テーマ（light / dark / ultra-dark）は next-themes（`providers.tsx`、class 切替、localStorage `theme`。既定は `system`＝OS に従い、ダークは通常ダーク）。切替 UI は `layout/theme-toggle.tsx`（デスクトップ）と `layout/header.tsx` のモバイルメニュー。選択肢（`THEME_OPTIONS`）は「システム・ライト・ダーク・ウルトラダーク」の4つで、一度ほかを選んでも「システム」で OS 追従へ戻せる
 - **ハイコントラスト**はテーマとは別軸のオン・オフ（3テーマ × 2）。`<html data-contrast="more">` を付け、`app/app.css` の「ハイコントラスト」ブロックが3テーマそれぞれのトークンを上書きする（強化基準: 通常の文字 7:1 以上、枠線・フォーカスリング等の UI 部品 4.5:1 以上）
 - 判定: localStorage `contrast`（`"more"` / `"normal"`）が明示の選択で、キーなし（または不正値）は OS の `prefers-contrast: more` に従う。純粋関数は `app/lib/contrast.ts` の `resolveContrast`。サーバー・Cookie へは送らない（プライバシーポリシーの「テーマ設定の保存（ローカルストレージ）」の範囲）
 - 初回描画前に `root.tsx` の head のインラインスクリプト（`CONTRAST_INIT_SCRIPT`）が属性を付ける（ちらつき防止）。以降は `app/hooks/use-contrast.ts`（`useContrast` / `ContrastSync`）が OS の設定の変更・別タブ（storage）に追従する
 - 明示の選択を解除して OS 追従へ戻す UI は無い（オン・オフだけ見せる）
 - フォーカスリング: `app/components/ui/` の部品（button・badge・checkbox・input・radio-group・select・slider・switch・textarea・toggle）は不透明の `--ring` の 2px（`ring-ring ring-2`。半透明に薄めない）。塗りのボタン（既定の brand・destructive）は面とリングが同系色なので `ring-offset-2 ring-offset-background` のすき間を挟む。`aria-invalid` の要素のフォーカスは不透明の `--destructive`。ネイティブのアウトラインの既定色（`app/app.css` の base の `*`）も不透明の `outline-ring`
-- ホバー・ハイライトも HC では面の濃淡に頼らず、前景色のアウトライン・強い枠・下線・反転で示す（`app/app.css` の「ハイコントラストのホバー・ハイライト」。詳細は `.claude/rules/ui.md` 3章）
+- ホバー・ハイライトも HC では面の濃淡に頼らず、前景色のアウトライン・強い枠・下線・反転で示す（`app/app.css` の「ハイコントラストのホバー・ハイライト」。詳細は `.claude/rules/ui.md` 3章）。カードのホバー枠は色に加えて内側 1px の影で 2px 相当の太さにする（キーボードフォーカス中は付けない）
+- HC でも「欄の区切り（`border-foreground/15`）≧ カードの枠（`border-border/70`）」の強弱を保つ。欄の区切りは `--border` の /85（背景比 light 11.6・dark 9.3・ultra-dark 9.4）、カードの枠は /70 のまま（同 6.7・6.5・6.5）
 
 ## レイアウト
 

@@ -74,9 +74,8 @@ export default function DevelopersHubPage() {
               className="group rounded-lg border bg-card p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Icon className="h-5 w-5" />
-                </div>
+                {/* 素のアイコン（丸背景のチップは公開一覧ページのヘッダだけ。ui.md 13 章） */}
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-semibold">{t(section.titleKey)}</h3>

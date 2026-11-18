@@ -240,45 +240,50 @@ export default function ExportPage() {
           {SECTIONS.map((section) => {
             const Icon = section.icon;
             const isChecked = selectedSections.has(section.id);
+            const titleId = `export-section-${section.id}-title`;
+            const descriptionId = `export-section-${section.id}-description`;
+            // 行全体を label にしてチェックボックスと結ぶ（button の中に role="checkbox" を入れ子にしない）。
+            // label の中は記述内容しか置けないので、見出し・説明は span（block）で組む。選択中は brand（ui.md 1 章）
             return (
-              <button
-                type="button"
+              <label
                 key={section.id}
-                onClick={() => toggleSection(section.id)}
                 className={cn(
-                  "w-full text-left rounded-lg border p-4 transition-colors hover:bg-accent/50",
-                  isChecked ? "border-primary bg-primary/5" : "border-border bg-card",
+                  "flex w-full cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent/50",
+                  isChecked ? "border-brand/60 bg-brand/10" : "border-border bg-card",
                 )}
               >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    checked={isChecked}
-                    className="mt-0.5 pointer-events-none"
-                    tabIndex={-1}
-                  />
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
-                      isChecked ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{t(section.labelKey)}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {t(section.descriptionKey)}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {section.columnKeys.map((col) => (
-                        <Badge key={col} variant="secondary" className="text-xs font-mono">
-                          {t(col)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </button>
+                <Checkbox
+                  checked={isChecked}
+                  onCheckedChange={() => toggleSection(section.id)}
+                  className="mt-0.5"
+                  aria-labelledby={titleId}
+                  aria-describedby={descriptionId}
+                />
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+                    isChecked ? "bg-brand/15 text-brand" : "bg-muted text-muted-foreground",
+                  )}
+                  aria-hidden
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="block flex-1 min-w-0">
+                  <span id={titleId} className="block font-semibold">
+                    {t(section.labelKey)}
+                  </span>
+                  <span id={descriptionId} className="block text-sm text-muted-foreground mt-1">
+                    {t(section.descriptionKey)}
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-1">
+                    {section.columnKeys.map((col) => (
+                      <Badge key={col} variant="secondary" className="text-xs font-mono">
+                        {t(col)}
+                      </Badge>
+                    ))}
+                  </span>
+                </span>
+              </label>
             );
           })}
         </CardContent>
@@ -332,30 +337,28 @@ export default function ExportPage() {
                 {filteredUsers.map((user) => {
                   const isChecked = selectedUsers.has(user.slug);
                   const name = getDisplayName(user, locale);
+                  // 行全体を label にしてチェックボックスと結ぶ（入れ子の button をやめる）
                   return (
-                    <button
-                      type="button"
+                    <label
                       key={user.slug}
-                      onClick={() => toggleUser(user.slug)}
                       className={cn(
-                        "w-full text-left px-3 py-2 hover:bg-accent/50 transition-colors flex items-center gap-2",
-                        isChecked && "bg-primary/5",
+                        "w-full cursor-pointer text-left px-3 py-2 min-h-11 hover:bg-accent/50 transition-colors flex items-center gap-2",
+                        isChecked && "bg-brand/10",
                       )}
                     >
                       <Checkbox
                         checked={isChecked}
-                        className="pointer-events-none"
-                        tabIndex={-1}
+                        onCheckedChange={() => toggleUser(user.slug)}
                       />
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
                         <span className="font-medium truncate">{name}</span>
                         {user.mcid && user.displayName && user.mcid !== user.displayName && (
                           <span className="text-xs text-muted-foreground truncate">
                             @{user.mcid}
                           </span>
                         )}
-                      </div>
-                    </button>
+                      </span>
+                    </label>
                   );
                 })}
               </div>

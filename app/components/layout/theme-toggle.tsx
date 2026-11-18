@@ -1,4 +1,4 @@
-import { Moon, Sun, Eclipse, Check } from "lucide-react";
+import { Moon, Sun, Eclipse, Check, Monitor } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 import { useTheme } from "next-themes";
@@ -19,8 +19,10 @@ const MENU_RADIO_ITEM_CLASS =
   "cursor-pointer py-2.5 pl-2 md:py-1.5 [&>span:first-child]:hidden [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 /** テーマの選択肢（デスクトップのドロップダウンとモバイルの切替で共有） */
-// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）
+// ラベルは描画時に t() で解決する（モジュール評価時はロケールが未確定）。
+// system は OS の設定に従う（next-themes の既定値。ダークは通常ダーク）。一度ほかを選んでも、ここで戻せる
 export const THEME_OPTIONS = [
+  { value: "system", labelKey: "theme.system", shortLabelKey: "theme.systemShort", icon: Monitor },
   { value: "light", labelKey: "theme.light", shortLabelKey: "theme.lightShort", icon: Sun },
   { value: "dark", labelKey: "theme.dark", shortLabelKey: "theme.darkShort", icon: Moon },
   { value: "ultra-dark", labelKey: "theme.ultraDark", shortLabelKey: "theme.ultraDarkShort", icon: Eclipse },

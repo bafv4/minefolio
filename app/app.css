@@ -455,13 +455,18 @@ body {
   --sidebar-border: oklch(0.85 0.01 286);
 }
 
-/* 透明度を掛けた枠線のうち、トークンを強くしても 4.5:1 に届かない物（/40・/50 は不透明の黒でも約 2.5〜4:1、
-   前景色の /15 は約 1.4:1）を、/60 相当の枠線に揃える。層の外（unlayered）に置いて、ユーティリティ層より優先させる。
+/* 透明度を掛けた枠線のうち、トークンを強くしても 4.5:1 に届かない物（/40・/50 は不透明の黒でも約 2.5〜4:1）を、
+   /60 相当の枠線に揃える（前景色の /15〈約 1.4:1〉は下で欄の区切りとして別に強める）。層の外（unlayered）に置いて、ユーティリティ層より優先させる。
    コンポーネント側のクラスは書き換えず、ここだけで吸収する */
 :root[data-contrast="more"] .border-border\/40,
-:root[data-contrast="more"] .border-border\/50,
-:root[data-contrast="more"] .border-foreground\/15 {
+:root[data-contrast="more"] .border-border\/50 {
   border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+/* 欄の区切り（border-foreground/15）は、カードの枠（border-border/70）より強く保つ（通常時の「罫線 1.4 ＞ 枠 1.2」の順）。
+   /60 相当だと枠より弱くなり強弱が逆転するので /85 にする。背景に対するコントラスト（sRGB で合成して計算）:
+   罫線 /85 = light 11.6・dark 9.3・ultra-dark 9.4 ／ カードの枠 /70 = light 6.7・dark 6.5・ultra-dark 6.5（どちらも 4.5:1 以上） */
+:root[data-contrast="more"] .border-foreground\/15 {
+  border-color: color-mix(in oklab, var(--border) 85%, transparent);
 }
 /* 仮想キーボードのキーの枠。通常時は「空き（border-border）＜データあり・押せる空き（border-muted-foreground/70）＜
    リマップ済み（border-primary）」の順に強い。ハイコントラストでは --border が強くなって空きキーがデータありより濃くなるので、
@@ -523,10 +528,16 @@ body {
     outline: 2px solid var(--foreground);
     outline-offset: -2px;
   }
-  /* カード等のホバー枠（border-primary/40 など）は強い枠色へ */
+  /* カード等のホバー枠（border-primary/40 など）は強い枠色へ。色だけでなく太さでも示すため、内側に 1px の影を足して
+     2px 相当にする（border の幅は変えないのでレイアウトは動かない）。フォーカスリング（box-shadow）を消さないよう、
+     キーボードフォーカス中は足さない */
   :root[data-contrast="more"] [class*="hover:border-"]:hover,
   :root[data-contrast="more"] :where(.group):hover [class*="group-hover:border-"] {
     border-color: var(--primary);
+  }
+  :root[data-contrast="more"] [class*="hover:border-"]:hover:not(:focus-visible),
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:border-"]:not(:focus-visible) {
+    box-shadow: inset 0 0 0 1px var(--primary);
   }
   /* 文字色だけが変わるホバー（muted → foreground など）は下線を足す。
      面も変わる要素（ghost / outline ボタン・ナビ項目など）は、上のアウトラインが手がかりになるので下線は足さない */
@@ -1225,6 +1236,47 @@ body {
     color: var(--muted-foreground);
   }
 
+}
+
+/* ─────────────────────────────────────────────────────────────
+   文書ページ（規約・ポリシー・API ドキュメント・更新履歴。markdown-doc-page.tsx の .doc-content.prose）
+   UNLAYERED — prose ユーティリティより優先させる。
+   配色はガイド本文（.guide-content.prose）と同じトークンの割り当て（prose-invert / dark: は使わない。
+   3 テーマ・ハイコントラストの差はトークン側で吸収する）。ガイド専用の規則は持ち込まないよう、別のクラスにする
+   ───────────────────────────────────────────────────────────── */
+.doc-content.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
+}
+/* 本文の1行は 42em 前後まで（和文で約 42 字）。表の器（.doc-wide）とコードブロックは幅を使ってよい */
+.doc-content.prose > :not(pre, .doc-wide) {
+  max-width: 42em;
+}
+/* 注記（blockquote）は斜体にしない（和文の斜体は読みにくい）。引用符も付けない */
+.doc-content.prose :where(blockquote) {
+  font-style: normal;
+  font-weight: normal;
+  quotes: none;
+}
+.doc-content.prose :where(blockquote p:first-of-type)::before,
+.doc-content.prose :where(blockquote p:last-of-type)::after {
+  content: none;
 }
 
 /* ─────────────────────────────────────────────────────────────

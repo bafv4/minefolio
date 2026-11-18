@@ -257,7 +257,7 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "このMCIDは既に登録されています" });
+    expect(res).toEqual({ error: "このMCIDは既に登録されています", field: "mcid" });
     expect(mojangMocks.fetchUuidFromMcid).not.toHaveBeenCalled();
     expect(await findUserByDiscordId("discord-runner")).toEqual(before);
   });
@@ -279,14 +279,14 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "このMCIDは既に登録されています" });
+    expect(res).toEqual({ error: "このMCIDは既に登録されています", field: "mcid" });
     expect(mojangMocks.fetchUuidFromMcid).toHaveBeenCalledWith("steve");
     expect(await findUserByDiscordId("discord-runner")).toEqual(before);
     expect((await findUserByDiscordId("discord-owner"))?.uuid).toBe(owner.uuid);
   });
 
   it("MCID_NOT_FOUNDはmcidNotFoundエラーを返す", async () => {
-    await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
+    const before = await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
     signInAs("discord-runner");
     mojangMocks.fetchUuidFromMcid.mockRejectedValue(
       new MojangError("MCID_NOT_FOUND", "Minecraft ID not found"),
@@ -298,11 +298,27 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "MCIDが見つかりません。正しいMCIDを入力してください。" });
+    expect(res).toEqual({ error: "MCIDが見つかりません。正しいMCIDを入力してください。", field: "mcid" });
+    expect(await findUserByDiscordId("discord-runner")).toEqual(before);
+  });
+
+  it("Java版MCIDの長さが範囲外なら、Mojangを呼ばずmcidLengthエラー（field=mcid）で行が変わらない", async () => {
+    const before = await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
+    signInAs("discord-runner");
+
+    const fd = new FormData();
+    fd.set("_action", "save_minecraft");
+    fd.set("mcid", "ab");
+
+    const res = await callAction(fd);
+
+    expect(res).toEqual({ error: "MCIDは3〜16文字である必要があります", field: "mcid" });
+    expect(mojangMocks.fetchUuidFromMcid).not.toHaveBeenCalled();
+    expect(await findUserByDiscordId("discord-runner")).toEqual(before);
   });
 
   it("その他のMojangErrorはmcidVerifyFailedエラーを返す", async () => {
-    await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
+    const before = await seedUser(db, { discordId: "discord-runner", slug: "@discord-runner" });
     signInAs("discord-runner");
     mojangMocks.fetchUuidFromMcid.mockRejectedValue(new MojangError("API_ERROR", "Mojang API error: 500"));
 
@@ -312,7 +328,8 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "MCIDの検証に失敗しました" });
+    expect(res).toEqual({ error: "MCIDの検証に失敗しました", field: "mcid" });
+    expect(await findUserByDiscordId("discord-runner")).toEqual(before);
   });
 
   it("空欄にするとmcid/uuidがnullに戻りslugが@形式に戻る", async () => {
@@ -368,7 +385,8 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "Bedrock版MCIDは3〜24文字である必要があります" });
+    expect(res).toEqual({ error: "Bedrock版MCIDは3〜24文字である必要があります", field: "bedrockMcid" });
+    expect(mojangMocks.fetchUuidFromMcid).not.toHaveBeenCalled();
     const updated = await findUserByDiscordId("discord-runner");
     expect(updated?.bedrockMcid).toBeNull();
   });
