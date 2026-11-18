@@ -33,8 +33,9 @@ export function FavoriteActivity({
   return (
     <PageSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t(noFavorites ? "home.favFindTitle" : "home.favTitle")} viewAllTo={noFavorites ? "/browse" : "/favorites/activity"}>
       {state.status === "loading" ? (
+        // 動きの件数は読み込むまで分からない（0〜10件）。多めに描くと少なかったときに下の欄が大きく上へ動くので2行にする
         <div className="space-y-2" aria-hidden="true">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {Array.from({ length: 2 }).map((_, i) => (
             <Skeleton key={i} className="h-11 rounded-lg" />
           ))}
         </div>

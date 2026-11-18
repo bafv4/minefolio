@@ -42,10 +42,21 @@ export function WelcomeBar({
       aria-label={greeting}
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 sm:gap-x-4 sm:px-5"
     >
+      {/* モバイル: アバターがマイプロフィールの入口（ボタンは出さない）。sm 以上は右の「マイプロフィール」ボタンが
+          同じ行き先なので、アバターはクリックだけ受けて Tab 停止と読み上げはボタンに任せる（停止点を1つにする）。
+          幅で切り替えるので両方を描いて CSS で出し分ける */}
       <Link
         to={`/player/${slug}`}
         aria-label={t("home.welcomeMyProfile")}
-        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+      >
+        <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} className="rounded-xl" />
+      </Link>
+      <Link
+        to={`/player/${slug}`}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl max-sm:hidden"
       >
         <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} className="rounded-xl" />
       </Link>
@@ -62,7 +73,7 @@ export function WelcomeBar({
           </Link>
         )}
       </div>
-      {/* DOM 順（＝フォーカス順）は アバター（マイプロフィール）→ 編集 → マイプロフィール（sm 以上のみ）→ お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
+      {/* DOM 順（＝フォーカス順）は アバター（マイプロフィール。モバイルのみ）→ 編集 → マイプロフィール（sm 以上のみ）→ お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
       <div className="flex w-full items-center gap-x-1 sm:w-auto sm:gap-x-2">
         <Button asChild variant="outline" className="min-h-11 max-sm:has-[>svg]:px-2 sm:min-h-9">
           {/* モバイルは「カスタマイズ」の文字を残すぶん、編集は短い表記にして1行に収める（読み上げは全文） */}

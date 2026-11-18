@@ -204,7 +204,9 @@ export function GuestHero({
               <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
               {current ? t("home.featuredTitle") : t("home.featuredEmptyTitle")}
             </h2>
-            {nextButton}
+            {/* 紹介できる走者がいないときは「別の走者」を出さない（押しても何も起きないため）。
+                走者を探す（/browse）への導線は左列の CTA が担う */}
+            {current && nextButton}
           </div>
 
           {current ? (

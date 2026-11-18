@@ -70,6 +70,7 @@ import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
+import { cn } from "@/lib/utils";
 import { Youtube, Twitch } from "@/components/brand-icons";
 import { UserCheck, BookOpen, Play, Radio } from "lucide-react";
 
@@ -1008,7 +1009,7 @@ export default function HomePage() {
       newGuides.length > 0 ? (
         <PageSection
           id="home-guides"
-            icon={<BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+          icon={<BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
           title={t("home.sectionGuides")}
           viewAllTo="/guides"
         >
@@ -1042,7 +1043,8 @@ export default function HomePage() {
         viewAllTo="/browse"
       >
         {hasProfiles ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          // 人気が0件のときは1列で全幅にする（2列のままだと右半分が空く）
+          <div className={cn("grid grid-cols-1 gap-5", popularUsers.length > 0 && "md:grid-cols-2")}>
             <CompactProfileList title={t("home.sectionRecentlyUpdated")} players={recentlyUpdatedUsers} mode="recent" />
             {popularUsers.length > 0 && (
               <CompactProfileList title={t("home.sectionPopularShort")} players={popularUsers} mode="popular" />

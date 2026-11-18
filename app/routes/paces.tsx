@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
 import { cn } from "@/lib/utils";
@@ -122,7 +123,7 @@ function PacesList({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {visiblePaces.map((run) => (
           <PaceFeedCard
             key={run.pacemanRunId}
@@ -143,18 +144,24 @@ function PacesList({
         {infinite.liveMessage}
       </div>
 
-      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック */}
+      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック。追加の取得に失敗したら、ボタンの代わりに失敗の帯と再試行を出す */}
       {infinite.items.length > 0 && infinite.hasMore && (
         <div className="flex flex-col items-center gap-3 py-6">
           <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
-          <Button
-            variant="outline"
-            onClick={infinite.loadMore}
-            disabled={infinite.isLoadingMore}
-          >
-            {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {t("paces.loadMore")}
-          </Button>
+          {infinite.loadError ? (
+            <div className="w-full">
+              <FeedErrorNotice message={t("paces.loadMoreFailed")} onRetry={infinite.retry} />
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={infinite.loadMore}
+              disabled={infinite.isLoadingMore}
+            >
+              {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("paces.loadMore")}
+            </Button>
+          )}
         </div>
       )}
     </>
@@ -278,14 +285,14 @@ export default function PacesPage() {
 
       <form
         onSubmit={handleSearch}
-        className="rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5"
+        className="rounded-xl border border-border/70 bg-card p-4 sm:p-5"
       >
         <button
           type="button"
           onClick={() => setFiltersOpen((v) => !v)}
           aria-expanded={filtersOpen}
           aria-controls="pace-filter-panel"
-          className="flex w-full items-center gap-2 rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+          className="-my-3 flex min-h-11 w-full items-center gap-2 rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
         >
           <Search className="h-4 w-4" />
           {t("paces.filterToggle")}

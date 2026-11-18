@@ -13,6 +13,11 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 - `/rankings` — スピードランランキング表示
 - **インメモリキャッシュ**（`app/lib/cache.ts`、TTL **60秒**）: `rankings:categories`（カテゴリ一覧）、`rankings:speedruncom:<categoryId|none>`、`rankings:ranked:{pb|elo}`。ランキング自体は12時間毎の cron でしか変わらないが、プロフィール非公開化の反映遅延を `getUserData`（60秒）と同程度に抑えるため TTL は短くしている
 - **表の横スクロール（モバイル）**: 3つの表は角丸の枠の内側の横スクロールの器（`ScrollUpStickyHeader` の `scrollRegionLabel`）に入る。sm 未満は `table-fixed` でヘッダ行の幅だけで列を決め（プレイヤー列は残り幅、長い名前は省略）、MCSR Ranked PB は 375 幅でスクロールなしに収まり、Speedrun.com・Elo は `#`・名前・主な値（タイム／Elo）が最初に見え、残りの列は横スクロールで見る。`#` 列は左に残る。器ははみ出しているときだけ Tab で止まれる region（「表（横にスクロールできます）」）になる。上スクロールで出る固定ヘッダの複製は、器の位置・幅と scrollLeft に追従する
+- **カテゴリの切替**: ボタンは選択中を `aria-pressed` で伝える（見た目は既定の `Button`＝brand）。高さはモバイル 44px・sm 以上 32px。Speedrun.com のカテゴリが0件のときは、見出し「Speedrun.com」ごと出さない
+- **再取得中**: `/rankings` 内の切替（`navigation.location.pathname === "/rankings"`）のときだけ、表示中の表を差し替えずに `opacity-50`＋`aria-busy` で残す（走者のページへ移るときは薄くしない）。表が無い（空状態から切り替えた）ときだけスケルトンを出し、列数は遷移先の表（Speedrun.com 5列・Ranked PB 3列・Elo 5列）に合わせる
+- **順位の色**: 1位 `text-gold`、3位 `text-bronze`。2位（銀）の色トークンは無く、muted にすると4位以下より淡く見えるため、2位と4位以下は前景色
+- **注記**: 「記録の公開設定によっては…」（`rankings.publicityNote`）は見出しの下に1回だけ出す（空状態では繰り返さない）
+- **審査待ち（Speedrun.com の `verificationStatus = "new"`）**: 順位の欄に時計（飾り、`aria-hidden`）、名前の下の行に「審査待ち」（`rankings.pendingVerification`、`text-xs text-warning`）。名前とは別の行なので、名前が省略されても切れずに読め、Tooltip に頼らないのでタッチでも分かる
 
 ### categoryRecordsテーブル
 

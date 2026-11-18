@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
 import { createDb } from "@/lib/db";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react";
@@ -25,13 +24,51 @@ import {
 import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
 import { EmptyState } from "@/components/empty-state";
 
-// 1〜3位のメダル色（3テーブルで共通）。2位は素のグレーだとライトテーマでコントラスト不足のため
-// text-muted-foreground を使う
+// 1・3位のメダル色（3テーブルで共通）。2位（銀）の色トークンは無く、muted だと4位以下（前景色）より
+// 淡く見えて順位が下がったように読めるため、2位は前景色のまま（4位以下と同じ）にする
 function rankMedalClass(rank: number): string {
   if (rank === 1) return "text-gold";
-  if (rank === 2) return "text-muted-foreground";
   if (rank === 3) return "text-bronze";
   return "";
+}
+
+type RankingsTableKind = "speedruncom" | "rankedPb" | "rankedElo";
+
+/** 表の種類ごとの列数（スケルトンを表示中・遷移先の表と同じ列数で描くため） */
+const TABLE_COLUMN_COUNT: Record<RankingsTableKind, number> = {
+  speedruncom: 5,
+  rankedPb: 3,
+  rankedElo: 5,
+};
+
+/** URL の検索条件（tab / rankedType）から表の種類を決める（loader の parseRankingsParams と同じ既定: speedruncom） */
+function tableKindFromSearch(search: string): RankingsTableKind {
+  const params = new URLSearchParams(search);
+  if (params.get("tab") !== "ranked") return "speedruncom";
+  return params.get("rankedType") === "elo" ? "rankedElo" : "rankedPb";
+}
+
+/** カテゴリ切替のボタン（選択中は aria-pressed で伝える。モバイルは 44px） */
+function CategoryButton({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant={selected ? "default" : "outline"}
+      size="sm"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn("min-h-11 transition-all sm:min-h-8", selected && "shadow-sm")}
+    >
+      {children}
+    </Button>
+  );
 }
 
 /** 表の外枠（角丸で切る枠。横スクロールは ScrollUpStickyHeader の内側の器が持つ） */
@@ -144,7 +181,12 @@ export default function RankingsPage() {
   const data = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
-  const isLoading = navigation.state === "loading";
+  // /rankings 内の切替（カテゴリ・タブ）だけを再取得として扱う（走者のページへ移るときは表を薄くしない）
+  const isLoading = navigation.state === "loading" && navigation.location?.pathname === "/rankings";
+  const currentKind: RankingsTableKind =
+    data.tab === "speedruncom" ? "speedruncom" : data.rankedType === "elo" ? "rankedElo" : "rankedPb";
+  // 読み込み中に表が無い（空状態から切り替えた）ときのスケルトンは、遷移先の表の列数で描く
+  const pendingKind = isLoading && navigation.location ? tableKindFromSearch(navigation.location.search) : currentKind;
 
   // /rankings は遅延読み込み無効。loader が全件返す。
   const items = data.rankings;
@@ -189,29 +231,26 @@ export default function RankingsPage() {
 
       {/* カテゴリ選択 */}
       <div className="space-y-3">
-        {/* Speedrun.com カテゴリ */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Timer className="h-4 w-4" />
-            <span>Speedrun.com</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {data.categories.map((cat) => {
-              const isSelected = data.tab === "speedruncom" && data.selectedCategory?.slug === cat.slug;
-              return (
-                <Button
+        {/* Speedrun.com カテゴリ（登録が無ければ見出しごと出さない） */}
+        {data.categories.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Timer className="h-4 w-4" />
+              <span>Speedrun.com</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {data.categories.map((cat) => (
+                <CategoryButton
                   key={cat.id}
-                  variant={isSelected ? "default" : "outline"}
-                  size="sm"
+                  selected={data.tab === "speedruncom" && data.selectedCategory?.slug === cat.slug}
                   onClick={() => handleCategoryClick({ type: "speedruncom", slug: cat.slug })}
-                  className={cn("transition-all", isSelected && "shadow-sm")}
                 >
                   {cat.name}
-                </Button>
-              );
-            })}
+                </CategoryButton>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* MCSR Ranked カテゴリ */}
         <div className="space-y-2">
@@ -220,55 +259,49 @@ export default function RankingsPage() {
             <span>MCSR Ranked</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant={data.tab === "ranked" && data.rankedType === "pb" ? "default" : "outline"}
-              size="sm"
+            <CategoryButton
+              selected={data.tab === "ranked" && data.rankedType === "pb"}
               onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-pb", subType: "pb" })}
-              className={cn("transition-all", data.tab === "ranked" && data.rankedType === "pb" && "shadow-sm")}
             >
               {t("rankings.pbRanking")}
-            </Button>
-            <Button
-              variant={data.tab === "ranked" && data.rankedType === "elo" ? "default" : "outline"}
-              size="sm"
+            </CategoryButton>
+            <CategoryButton
+              selected={data.tab === "ranked" && data.rankedType === "elo"}
               onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-elo", subType: "elo" })}
-              className={cn("transition-all", data.tab === "ranked" && data.rankedType === "elo" && "shadow-sm")}
             >
               {t("rankings.eloRanking")}
-            </Button>
+            </CategoryButton>
           </div>
         </div>
       </div>
 
-      {/* ランキングテーブル */}
-      {isLoading ? (
-        <RankingsTableSkeleton />
-      ) : data.tab === "speedruncom" ? (
-        items.length > 0 ? (
-          <SpeedruncomRankingsTable rankings={items} />
-        ) : (
-          <EmptyState
-            icon={<Trophy className="h-12 w-12" />}
-            title={
-              data.categories.length === 0
-                ? t("rankings.noCategories")
-                : t("rankings.noRankingData")
-            }
-            description={t("rankings.publicityNote")}
-          />
-        )
-      ) : items.length > 0 ? (
-        data.rankedType === "pb" ? (
-          <RankedPbTable rankings={items} />
-        ) : (
-          <RankedEloTable rankings={items} />
-        )
+      {/* ランキングテーブル。再取得中は表を差し替えず薄くして残す（表が無いときだけスケルトン）。
+          記録の公開設定の注記は見出しの下に1回だけ出す（空状態では繰り返さない） */}
+      {isLoading && items.length === 0 ? (
+        <RankingsTableSkeleton columns={TABLE_COLUMN_COUNT[pendingKind]} />
       ) : (
-        <EmptyState
-          icon={<Trophy className="h-12 w-12" />}
-          title={t("rankings.noRankingData")}
-          description={t("rankings.publicityNote")}
-        />
+        <div
+          aria-busy={isLoading || undefined}
+          className={cn("transition-opacity motion-reduce:transition-none", isLoading && "opacity-50")}
+        >
+          {items.length === 0 ? (
+            <EmptyState
+              icon={<Trophy className="h-12 w-12" />}
+              title={
+                data.tab === "speedruncom" && data.categories.length === 0
+                  ? t("rankings.noCategories")
+                  : t("rankings.noRankingData")
+              }
+              description=""
+            />
+          ) : currentKind === "speedruncom" ? (
+            <SpeedruncomRankingsTable rankings={items} />
+          ) : currentKind === "rankedPb" ? (
+            <RankedPbTable rankings={items} />
+          ) : (
+            <RankedEloTable rankings={items} />
+          )}
+        </div>
       )}
     </div>
   );
@@ -305,14 +338,8 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
               >
                 <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
                   {isPending ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-muted-foreground">
-                          <Clock className="h-4 w-4 inline" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{t("rankings.pendingVerification")}</TooltipContent>
-                    </Tooltip>
+                    // 意味は名前の下の「審査待ち」の行が伝える（タッチでも読める）。時計は飾りとして読み上げない
+                    <Clock className="h-4 w-4 inline text-muted-foreground" aria-hidden="true" />
                   ) : entry.rank !== null && entry.rank <= 3 ? (
                     <span className={rankMedalClass(entry.rank)}>
                       {entry.rank}
@@ -333,12 +360,11 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                     <div className="min-w-0">
                       <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
                         {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
-                        {isPending && (
-                          <span className="ml-2 text-xs text-warning">
-                            {t("rankings.pendingVerificationSuffix")}
-                          </span>
-                        )}
                       </p>
+                      {/* 名前と別の行に置き、名前が省略されても切れずに読めるようにする */}
+                      {isPending && (
+                        <p className="text-xs text-warning">{t("rankings.pendingVerification")}</p>
+                      )}
                     </div>
                   </Link>
                 </TableCell>
@@ -503,18 +529,20 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
   );
 }
 
-// スケルトンローダー
-function RankingsTableSkeleton() {
+// スケルトンローダー（列数は表示する表に合わせる。1列目は順位、2列目は走者、残りは数値・リンク）
+function RankingsTableSkeleton({ columns }: { columns: number }) {
   const t = useT();
+  const restColumns = Math.max(0, columns - 2);
   return (
-    <div className="relative border rounded-xl overflow-hidden">
+    <div className="relative border rounded-xl overflow-hidden" aria-hidden="true">
       <table className="w-full caption-bottom text-sm">
         <TableHeader>
           <TableRow>
             <TableHead className="sticky top-0 left-0 bg-muted z-30 w-15 border-r border-b-2">#</TableHead>
             <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
-            <TableHead className="sticky top-0 bg-muted z-20 w-25 border-b-2">{t("rankings.date")}</TableHead>
+            {Array.from({ length: restColumns }).map((_, i) => (
+              <TableHead key={i} className="sticky top-0 bg-muted z-20 w-25 border-b-2" />
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -522,8 +550,9 @@ function RankingsTableSkeleton() {
             <TableRow key={i}>
               <TableCell className="sticky left-0 bg-background z-10"><Skeleton className="h-4 w-8" /></TableCell>
               <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-              <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              {Array.from({ length: restColumns }).map((_, j) => (
+                <TableCell key={j}><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+              ))}
             </TableRow>
           ))}
         </TableBody>

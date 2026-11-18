@@ -89,7 +89,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             className="block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {thumbnailUrl ? (
-              <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" onError={() => setThumbFailed(true)} />
+              <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" onError={() => setThumbFailed(true)} />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <Twitch className="h-10 w-10 text-muted-foreground/50" />

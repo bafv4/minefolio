@@ -27,7 +27,7 @@ import {
 import { getLatestSplit, getSplitTimeline } from "@/lib/pace-splits";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import type { CachedPace } from "@/lib/paceman-cache";
-import { ChevronDown, ChevronUp, ExternalLink, History, Swords } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, ExternalLink, History, Swords } from "lucide-react";
 import { FavoriteMark } from "@/components/favorite-mark";
 import { Twitch } from "@/components/brand-icons";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
@@ -700,11 +700,27 @@ export function LiveRail({
   return (
     <div className="space-y-3">
       {notice}
-      {!error && <p className="text-sm text-muted-foreground">{t("home.liveEmpty")}</p>}
+      {/* 0件の1文の隣に次の行き先（最近のペース /paces）を置く。見出し右の「ペース一覧」と同じ行き先だが、
+          ライブも注目の走者も空のときに上半分が空振りで終わらないよう、目に入る位置にも出す */}
+      {!error && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>{t("home.liveEmpty")}</span>
+          <Link
+            to="/paces"
+            prefetch="intent"
+            className="-my-3 inline-flex items-center gap-0.5 rounded-sm py-3 font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {t("home.liveEmptyPacesLink")}
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+          </Link>
+        </p>
+      )}
       {recentLoading ? (
+        // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
+        // 多めに描くと、少なかったときに下の欄が大きく上へ動く
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3" aria-hidden="true">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-36 rounded-xl" />
+            <Skeleton key={i} className={cn("h-36 rounded-xl", i > 0 && "max-md:hidden")} />
           ))}
         </div>
       ) : recentError ? (
@@ -712,7 +728,7 @@ export function LiveRail({
         bothFailed ? null : <FeedErrorNotice message={t("home.pacesFetchFailed")} onRetry={onRetryRecent} />
       ) : recent.length > 0 ? (
         <div className="space-y-2">
-          {/* /paces への導線は欄見出しの「最近のペース →」に一本化 */}
+          {/* /paces への導線は欄見出しの「ペース一覧」と、上の0件の1文の隣のリンク */}
           <h3 className="text-sm font-medium text-muted-foreground">{t("home.recentPacesTitle")}</h3>
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {recent.map((run) => (
