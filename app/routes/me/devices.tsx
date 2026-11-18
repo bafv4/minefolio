@@ -586,6 +586,35 @@ export default function DevicesPage() {
     });
   }, []);
 
+  // 欄から離れたとき（blur）に、その欄だけ保存時と同じ検証を走らせる。
+  // - 触っていない欄（保存済みの値のまま）は検証しない（古い範囲外の値を開いただけで出さない）
+  // - 他の欄を検証対象に含めない（null 扱い）ので、blur した欄のエラーだけが出る
+  // - 保存時と同じく最初の1件だけを持つ。別の欄の blur で既存のエラーは消さない
+  const handleBlurValidate = useCallback(
+    (field: MouseSettingsField) => {
+      const keys =
+        field === "gameSensitivity"
+          ? (["gameSensitivity", "gameSensitivityPercent"] as const)
+          : ([field] as const);
+      if (keys.every((k) => formValues[k] === initialFormValues[k])) return;
+      const parsed = parseMouseSettingsInput({
+        mouseDpi: "",
+        gameSensitivity: "",
+        windowsSpeed: "",
+        windowsSpeedMultiplier: "",
+        [field]: formValues[field],
+      });
+      const error = validateMouseSettings(parsed);
+      setFieldError((prev) => {
+        if (error) {
+          return prev && prev.field !== field ? prev : { field, message: t(error.messageKey) };
+        }
+        return prev?.field === field ? null : prev;
+      });
+    },
+    [formValues, initialFormValues, t],
+  );
+
   // フォームリセット
   const handleReset = useCallback(() => {
     setFormValues(initialFormValues);
@@ -895,6 +924,7 @@ export default function DevicesPage() {
                   step="1"
                   value={formValues.mouseDpi}
                   onChange={(e) => handleChange("mouseDpi", e.target.value)}
+                  onBlur={() => handleBlurValidate("mouseDpi")}
                   placeholder={t("meDevices.dpiExample")}
                   aria-invalid={errorFor("mouseDpi") != null || undefined}
                   aria-describedby={errorFor("mouseDpi") ? "mouseDpi-error" : undefined}
@@ -918,6 +948,7 @@ export default function DevicesPage() {
                       max="1"
                       value={formValues.gameSensitivity}
                       onChange={(e) => handleChange("gameSensitivity", e.target.value)}
+                      onBlur={() => handleBlurValidate("gameSensitivity")}
                       placeholder={t("meDevices.exampleValue", { value: "0.50" })}
                       aria-invalid={errorFor("gameSensitivity") != null || undefined}
                       aria-describedby={
@@ -941,6 +972,7 @@ export default function DevicesPage() {
                         max="200"
                         value={formValues.gameSensitivityPercent}
                         onChange={(e) => handleChange("gameSensitivityPercent", e.target.value)}
+                        onBlur={() => handleBlurValidate("gameSensitivity")}
                         placeholder={t("meDevices.exampleValue", { value: "100" })}
                         className="pr-8"
                         aria-invalid={errorFor("gameSensitivity") != null || undefined}
@@ -1005,6 +1037,7 @@ export default function DevicesPage() {
                   min="0"
                   value={formValues.windowsSpeedMultiplier}
                   onChange={(e) => handleChange("windowsSpeedMultiplier", e.target.value)}
+                  onBlur={() => handleBlurValidate("windowsSpeedMultiplier")}
                   placeholder={t("meDevices.customMultiplierPlaceholder")}
                   aria-invalid={errorFor("windowsSpeedMultiplier") != null || undefined}
                   aria-describedby={

@@ -292,6 +292,7 @@ Raw Input の状態に関わらず、DPI に Windows ポインター速度の乗
 マウス設定フォームの妥当性検証（パース・検証条件）は `app/lib/mouse-settings.ts` の `parseMouseSettingsInput()` / `validateMouseSettings()` に一本化されており、サーバー側 action・クライアント側の保存前チェックの両方がこれを呼ぶ（値は該当 Input の `id` と揃えた `MouseSettingsField` = `gameSensitivity` / `mouseDpi` / `windowsSpeed` / `windowsSpeedMultiplier` で返す）。
 
 - **`/me/devices` の保存（サーバー側 action）**: フォーム外からの直接 POST でも異常値が DB に入らないよう、保存時に範囲外の値を拒否してエラートーストを表示する。`NaN`（数値変換に失敗した入力）はいずれの条件にも該当せず拒否される。エラーは `{ error, field }` の形で返す
+- **`/me/devices` の欄を離れたときの検証（クライアント）**: DPI・ゲーム内感度（0-1 / % の両方）・Win Sens 乗数は、フォーカスが外れた（blur）時点でその欄だけ保存時と同じ `validateMouseSettings` を走らせ、誤りを欄の下に出す（入力の途中では出さない）。保存済みの値のまま触っていない欄は検証しない。エラーは保存時と同じく最初の1件だけを保持し、別の欄の blur では消えず、その欄を直して blur（または編集）すると消える。感度の組は `gameSensitivity` に出す。保存時の検証・案内は変わらない
 
   | 項目 | 条件 | 違反時のエラーキー | `field` |
   |---|---|---|---|
