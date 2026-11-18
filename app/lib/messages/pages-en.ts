@@ -844,6 +844,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     showMore: "Show {count} more",
     shownCount: "Showing {shown} of {total} runners",
     expandKeyboard: "Enlarge {name}'s key layout",
+    assignmentsSummary: "Key assignments ({count})",
     columnWinSens: "Win Sens",
     columnCursorSpeed: "Cursor speed",
     columnRawInput: "Raw input",

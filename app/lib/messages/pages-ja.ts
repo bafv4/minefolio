@@ -814,6 +814,8 @@ export const PAGES_JA = {
     showMore: "さらに {count} 人を表示",
     shownCount: "{shown} / {total} 人を表示中",
     expandKeyboard: "{name} のキー配置を拡大",
+    /** ビジュアル表示（md 未満）: 割り当ての一覧の折りたたみ */
+    assignmentsSummary: "キーの割り当て（{count}件）",
     /** 表の見出し（マウスタブ。短縮表示はモバイル用） */
     columnWinSens: "Win Sens",
     columnCursorSpeed: "カーソル速度",

@@ -13,6 +13,23 @@ interface KeyboardScaledPreviewProps {
   /** 縮小表示を覆うボタンの aria-label。省略時は keyboardView.expandPreview */
   expandLabel?: string;
   className?: string;
+  /**
+   * 切り出し表示。`media` に一致する間だけ、中身の左端から `width`（実寸 px）までをラッパー幅に合わせて
+   * 縮小し、右側は切り落とす（スクロールさせない）。切り落とした側には「続きがある」ことを示すフェードを重ねる。
+   * 省略時（既定）は従来どおり中身の全幅を収める。拡大 Dialog の中身はどちらでも全体のまま
+   */
+  crop?: {
+    width: number;
+    /** matchMedia に渡すクエリ（例: "(width < 48rem)"） */
+    media: string;
+    /** フェードの色を置き場所の面に合わせる（HorizontalScrollArea の surface と同じ考え方。既定は card） */
+    surface?: "card" | "background";
+  };
+  /**
+   * 計測前（SSR・ハイドレーション直後）だけラッパーに付けるクラス。高さの見込み（`aspect-*` 等）を
+   * 置き場所ごとに確保して、計測後に高さが跳ねないようにする。省略時は従来の仮の高さ
+   */
+  unmeasuredClassName?: string;
 }
 
 /** 計測前（SSR・ハイドレーション直後）に確保する高さの縦横比の仮値（キーボード約 928x300） */
@@ -29,26 +46,39 @@ export function KeyboardScaledPreview({
   dialogTitle,
   expandLabel,
   className,
+  crop,
+  unmeasuredClassName,
 }: KeyboardScaledPreviewProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [measured, setMeasured] = useState<{ scale: number; height: number } | null>(null);
+  const [measured, setMeasured] = useState<{ scale: number; height: number; cropped: boolean } | null>(
+    null,
+  );
   const [wrapperWidth, setWrapperWidth] = useState(0);
+  const cropWidth = crop?.width;
+  const cropMedia = crop?.media;
 
   useIsomorphicLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     const content = contentRef.current;
     if (!wrapper || !content) return;
+    // 切り出しの有無は計測（クライアントのみ）の中で決める。描画の分岐に使うのは計測後の状態だけなので SSR とずれない
+    const mql =
+      cropWidth != null && cropMedia && typeof window.matchMedia === "function"
+        ? window.matchMedia(cropMedia)
+        : null;
     const measure = () => {
       const w = wrapper.clientWidth;
       const cw = content.offsetWidth;
       const ch = content.offsetHeight;
       if (w <= 0 || cw <= 0) return;
-      const scale = Math.min(1, w / cw);
+      const cropped = mql != null && mql.matches && cropWidth != null && cropWidth < cw;
+      const fitWidth = cropped ? cropWidth : cw;
+      const scale = Math.min(1, w / fitWidth);
       setWrapperWidth(w);
-      setMeasured({ scale, height: ch * scale });
+      setMeasured({ scale, height: ch * scale, cropped });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -60,15 +90,18 @@ export function KeyboardScaledPreview({
     const io = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(measure);
     io?.observe(wrapper);
     window.addEventListener("resize", measure);
+    mql?.addEventListener("change", measure);
     return () => {
       ro.disconnect();
       io?.disconnect();
       window.removeEventListener("resize", measure);
+      mql?.removeEventListener("change", measure);
     };
-  }, []);
+  }, [cropWidth, cropMedia]);
 
-  // 縮小しているときだけ、拡大の操作（ボタン・印）を出して中身を inert にする
-  const scaled = measured == null || measured.scale < 1;
+  // 縮小しているとき・切り出しているときだけ、拡大の操作（ボタン・印）を出して中身を inert にする
+  // （切り出し中は scale が 1 でも右側が見えないので、拡大で全体を見られるようにし、見えないキーに Tab を止めない）
+  const scaled = measured == null || measured.scale < 1 || measured.cropped;
 
   // Dialog で全体を包み、重ねたボタンを DialogTrigger にする（Radix は閉じたときに trigger へフォーカスを戻すため、
   // trigger が無いとフォーカスが body に落ちる）
@@ -76,7 +109,7 @@ export function KeyboardScaledPreview({
     <Dialog open={open} onOpenChange={setOpen}>
       <div
         ref={wrapperRef}
-        className={cn("relative w-full overflow-hidden", className)}
+        className={cn("relative w-full overflow-hidden", className, !measured && unmeasuredClassName)}
         style={{ height: measured ? measured.height : wrapperWidth * FALLBACK_ASPECT || undefined, minHeight: measured ? undefined : 96 }}
       >
         <div
@@ -90,6 +123,16 @@ export function KeyboardScaledPreview({
         >
           {children}
         </div>
+        {/* 切り出したときだけ、切り落とした右端に「続きがある」ことを示すフェード（面の色に合わせる） */}
+        {measured?.cropped && (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l to-transparent",
+              crop?.surface === "background" ? "from-background" : "from-card",
+            )}
+          />
+        )}
         {scaled && (
           <>
             <DialogTrigger asChild>

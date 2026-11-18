@@ -6,6 +6,8 @@
 // KeyboardScaledPreview を使い、タップ/クリックで実寸の全画面 Dialog が開く（縮小中はツールチップ等の
 // 操作は inert。細部は Dialog で見る）。マウスは、キーボードと横に並べても収まる幅があるときだけ横に置き、
 // そうでなければキーボードの下に置く。
+// md 未満は、キーボードの左手側（左から約 7.5 ユニット）だけを幅いっぱいに切り出して大きく見せ、
+// 映らない割り当ては、カードの下の折りたたみ（AssignmentAccordion）に「操作名 + キー」の文字で並べる。
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ArrowRight, Info, WandSparkles } from "lucide-react";
@@ -29,6 +31,7 @@ import {
   Cm360Cell,
 } from "./keybindings-cells";
 import { KeybindingsEmptyState } from "./keybindings-empty-state";
+import { AssignmentAccordion, countAssignments } from "./assignment-accordion";
 import type { KeybindingsRow } from "./keybindings-columns";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -104,6 +107,16 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
 // キーボード/マウス描画をマウントする（画面外カード数分の VirtualKeyboard 生成コストを回避）。
 const INITIAL_VISIBLE_COUNT = 3;
 
+/**
+ * md 未満の切り出し表示（左手側）。仮想キーボードの 1 ユニットは 60px ＋ 間隔 2px で、
+ * 左から 7.75 ユニット（Z 段の B の右端＝7.25 ユニット〔447.5px〕に、右端のフェード〔画面 16px ≒ 中身 25px〕が
+ * B に掛からない分を足す）を幅いっぱいに見せる
+ */
+const LEFT_HAND_CROP_UNITS = 7.75;
+const KEY_PITCH_PX = 62;
+const LEFT_HAND_CROP_WIDTH = LEFT_HAND_CROP_UNITS * KEY_PITCH_PX - 2; // 478.5px
+const LEFT_HAND_CROP = { width: LEFT_HAND_CROP_WIDTH, media: "(width < 48rem)" } as const;
+
 // メモ化 + content-visibility:auto で、多人数時に画面外カードの描画コストを抑える。
 const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   player,
@@ -149,12 +162,20 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
     | "JIS_TKL";
 
   // 非仮想化リストのため、フィルタ変更による再レンダーで全カードが再計算されないようメモ化。
+  // 一覧カードのキーボードと割り当ての一覧は、選択中の表示文脈（Trigger/Chat）のリマップに絞る
+  const contextRemaps = useMemo(
+    () => filterRemapsForContext(player.keyRemaps, remapView),
+    [player.keyRemaps, remapView],
+  );
+  const assignmentCount = useMemo(
+    () => countAssignments(player),
+    [player],
+  );
   const { fingerAssignments, remaps, keybindingsMap, customKeyboardKeys, customButtons } =
     useMemo(
       () => ({
         fingerAssignments: parseFingerAssignments(player.playerConfig?.fingerAssignments),
-        // 一覧カードのキーボードは選択中の表示文脈（Trigger/Chat）のリマップに絞る
-        remaps: toUiRemaps(filterRemapsForContext(player.keyRemaps, remapView)),
+        remaps: toUiRemaps(contextRemaps),
         keybindingsMap: keybindingsToMap(player.keybindings),
         customKeyboardKeys: (player.customKeys ?? [])
           .filter((ck) => ck.category === "keyboard")
@@ -165,7 +186,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
           category: ck.category as "mouse" | "keyboard",
         })),
       }),
-      [player.playerConfig?.fingerAssignments, player.keyRemaps, player.keybindings, player.customKeys, remapView],
+      [player.playerConfig?.fingerAssignments, contextRemaps, player.keybindings, player.customKeys],
     );
 
   const remapCount = player.keyRemaps.length;
@@ -175,7 +196,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
   return (
     <Card
       ref={cardRef}
-      className="flex flex-col gap-3 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_400px] md:[contain-intrinsic-size:auto_700px]"
+      className="flex flex-col gap-3 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_560px] md:[contain-intrinsic-size:auto_700px]"
     >
       <CardHeader className="px-5">
         <div className="flex items-center gap-2 min-w-0">
@@ -206,9 +227,13 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
             @container: 縮小せずにキーボードとマウスが横に並ぶ幅（約 1360px）があるときだけ横並び */}
         {visible ? (
           <div className="@container">
+            {/* md 未満は左手側（LEFT_HAND_CROP）だけを幅いっぱいに見せ、右側は切り落とす。全体は拡大で見る。
+                計測前の高さは、切り出したときの縦横比（キーボード約 370px ＋ 間隔 16px ＋ マウス 122px）で確保する */}
             <KeyboardScaledPreview
               dialogTitle={name}
               expandLabel={t("keybindings.expandKeyboard", { name })}
+              crop={LEFT_HAND_CROP}
+              unmeasuredClassName="max-md:aspect-[479/508]"
             >
               <div className="flex flex-col items-start gap-4 @min-[1360px]:flex-row">
                 <VirtualKeyboard
@@ -238,7 +263,22 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
           </div>
         ) : (
           // 高さは実寸（カード約 400px〜700px のうちプレビュー部分）に近づけ、描画されたときに跳ねないようにする
-          <div aria-hidden className="h-[250px] rounded-lg bg-muted/30 animate-pulse md:h-[550px]" />
+          // md 未満は切り出し表示と同じ縦横比
+          <div
+            aria-hidden
+            className="aspect-[479/508] rounded-lg bg-muted/30 animate-pulse md:aspect-auto md:h-[550px]"
+          />
+        )}
+
+        {/* md 未満: 縮小図（inert）を補う、割り当ての文字の一覧。既定は閉じる。件数は中に並べる物
+            （操作の割り当て＋カスタムアクション＋表示中の文脈のリマップ）の数で、0 なら出さない */}
+        {assignmentCount + contextRemaps.length > 0 && (
+          <AssignmentAccordion
+            player={player}
+            remaps={contextRemaps}
+            count={assignmentCount + contextRemaps.length}
+            className="md:hidden"
+          />
         )}
 
         {/* マウス要約 + リマップ/カスタムアクション件数 */}
