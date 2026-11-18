@@ -590,6 +590,10 @@ export const PAGES_JA = {
     favoritesFirstNote: "お気に入りの走者にはハートマークが付き、一覧の先頭に表示されます",
     totalCountViewer: "登録されている視聴者（{count}人）",
     totalCountAll: "登録されているプロフィール（{count}人）",
+    /** 検索語・フィルタ（ロール以外）で絞り込んでいるときの件数。ロールの出し分けは totalCount* と同じ */
+    matchedCountRunner: "該当する走者（{count}人）",
+    matchedCountViewer: "該当する視聴者（{count}人）",
+    matchedCountAll: "該当するプロフィール（{count}人）",
     filterDescription: "走者を条件で絞り込みます",
     roleRunner: "走者",
     roleViewer: "視聴者",

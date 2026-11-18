@@ -222,6 +222,18 @@ export default function BrowsePage() {
 
   // アクティブなフィルタ数（適用済み）
   const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
+  // 検索語かロール以外の絞り込みがあるときは、件数を「該当する〜」の文言にする（ロールは文言の出し分けに使う）
+  const isNarrowed =
+    searchQuery !== "" || filters.editions.length + filters.inputMethods.length + filters.platforms.length > 0;
+  const countRole =
+    filters.roles.length === 0 || (filters.roles.length === 1 && filters.roles[0] === "runner")
+      ? "runner"
+      : filters.roles.length === 1
+        ? "viewer"
+        : "all";
+  const countKey = isNarrowed
+    ? ({ runner: "browse.matchedCountRunner", viewer: "browse.matchedCountViewer", all: "browse.matchedCountAll" } as const)[countRole]
+    : ({ runner: "browse.totalCountRunner", viewer: "browse.totalCountViewer", all: "browse.totalCountAll" } as const)[countRole];
 
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -335,14 +347,7 @@ export default function BrowsePage() {
           {t("browse.title")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {t(
-            filters.roles.length === 0 || (filters.roles.length === 1 && filters.roles[0] === "runner")
-              ? "browse.totalCountRunner"
-              : filters.roles.length === 1
-                ? "browse.totalCountViewer"
-                : "browse.totalCountAll",
-            { count: totalCount },
-          )}
+          {t(countKey, { count: totalCount })}
         </p>
         {/* 並びの優先はログイン中だけに効く。お気に入りが1人以上いるときだけ理由を示す */}
         {isLoggedIn && favorites.length > 0 && (
