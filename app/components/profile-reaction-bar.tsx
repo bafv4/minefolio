@@ -101,7 +101,8 @@ export function ProfileReactionBar({
                 : t("profileReactions.reactAria", { emoji: emojiName, count: pill.count })
             }
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums transition-colors",
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums",
+              "transition-[color,background-color,border-color,scale] duration-150 active:scale-95 motion-reduce:active:scale-100",
               "border-border bg-muted/50 hover:border-muted-foreground/40",
               pill.reacted && "border-brand/40 bg-brand/10 text-brand",
               "disabled:pointer-events-none",

@@ -66,7 +66,7 @@ export function FavoriteButton({
         aria-label={ariaLabel}
         aria-pressed={favorite}
         className={cn(
-          "transition-colors",
+          "transition-[color,background-color,border-color,scale] duration-150 active:scale-95 motion-reduce:active:scale-100",
           favorite && "text-favorite hover:text-favorite/80",
           className,
         )}

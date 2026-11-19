@@ -118,8 +118,12 @@ export function FloatingSaveBar({
         // 不透明の面（半透明だと「未保存」バッジの warning 文字が背景次第で 4.5:1 を割る）。枠は中立（primary はリンクの色）
         "bg-card",
         "p-3 sm:p-4 rounded-xl border-2 border-border/70 shadow-xl",
-        "transition-all duration-200",
+        // Tailwind 4 の translate-* は `translate` プロパティなので、transform ではなく translate を遷移させる。
+        // 出るときは 200ms、隠すときはそれより速く。reduced-motion では移動を打ち消し opacity だけ残す
+        "transition-[opacity,translate] ease-[cubic-bezier(0.16,1,0.3,1)]",
+        hasChanges ? "duration-200" : "duration-[120ms]",
         hasChanges ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
+        "motion-reduce:translate-y-0",
         className
       )}
     >
