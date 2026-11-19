@@ -35,6 +35,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 上表の2〜7行目（ゲストでは「注目の走者」はヒーロー内）のうち、ログイン済みの6欄（お気に入り走者の動き `favoriteActivity` / ライブ `live` / 注目の走者 `featured` / 最新動画 `videos` / 新着ガイド `guides` / プロフィール `profiles`）の並びと表示は、おかえりバーの設定ボタン（`Settings2` アイコン）のモーダル（`app/components/home/home-settings-dialog.tsx`）で変更できる。おかえりバーは先頭固定で対象外。ログイン時の「注目の走者」（`FeaturedRunnerCard`）の見出しは他の欄と同じアイコン（丸背景チップ無し）＋h2 `text-xl font-bold`（「別の走者」は見出し行の右）、ゲストのヒーロー内は小見出し。ゲストは常に既定順・全欄表示。
 
 - **ライブの帯**（`app/components/home/live-teaser.tsx`、ゲストのみ）: ヒーロー左列（モバイルは縦積みのヒーロー内）の CTA の注記の下（注目の走者より上。ヒーローの直下だとライブ欄のすぐ手前になり1画面目に入らないため。`GuestHero` の `liveTeaser` スロット）に「● ライブ N人 →」（`home.liveTeaser`、高さ44px以上）を出し、タップで `#home-live`（ライブ欄を非表示にしているときは `/paces`）へ送る。人数はおかえりバーと同じ `liveSettled ? liveCount : 0`（新しい取得は増やさない）。0人・取得前・取得失敗は描かない（出ると以降の欄が帯の高さ分下がる）。lg 以上も同じ位置に内容幅（`lg:w-fit`）で出し、左列の下の空きを埋める。
+- **ホーム設定ダイアログのフォーカス戻し**: `welcome-bar.tsx` は制御型で `DialogTrigger` を使わないので、`HomeSettingsDialog` の `returnFocusRef`（「カスタマイズ」ボタン）経由の `onCloseAutoFocus` で、キャンセル・Esc・保存のどれで閉じてもそのボタンへフォーカスを戻す。
 - **おかえりバー**（`welcome-bar.tsx`）: DOM 順（＝フォーカス順）はアバター（モバイルのみ）・挨拶 → 「プロフィールを編集」（outline。塗りの主ボタンではない）→「マイプロフィール」（sm 以上のみ。モバイルは `max-sm:hidden`）→「お気に入り」→ 設定。アバターは幅で2つを描き分ける: sm 未満は `aria-label`＝「マイプロフィール」・フォーカスリング付きの正規のリンク（44px 以上、モバイルのマイプロフィールの入口）、sm 以上は同じ行き先の「マイプロフィール」ボタンがあるので、クリックだけ受けるリンク（`tabIndex=-1`・`aria-hidden`）にして Tab 停止点を1つにする。`order-*` による並べ替えは使わない。設定ボタンは sm 以上は「カスタマイズ」の文字付きで右端、モバイルは2段目（2段目＝編集・お気に入り・カスタマイズがすべて文字付き）の末尾にアイコン＋「カスタマイズ」の文字（アイコンだけでは並べ替えと分からないため）。いずれも44px。挨拶の下に、ライブ中の走者がいるときだけ丸ピル（高さ44px以上）の「● {n}人が走行中」（`home.welcomeLiveChip`）＋いちばん先の区間の区間アイコンのリンクを出す。リンク先は `#home-live`（ライブ欄を非表示にしているときは `/paces`）。`aria-live` は付けない（件数の読み上げはライブ欄の見出し側）。`aria-label` は付けず、見える文言（WCAG 2.5.3 label in name）がそのままアクセシブルネーム（ライブの帯 `live-teaser.tsx` も同様）。`#home-live` 等の見出しが sticky ヘッダー（65px）の下に来るのは、`:root` の `scroll-padding-top`（既定 4.5rem。`app/app.css`）による（`PageSection` 自身は scroll-mt を持たない）。「お気に入り走者の動き」欄はお気に入り0人（取得完了後）のときだけ見出しを `home.favFindTitle`「お気に入りにする走者を探す」に切り替え、見出し右のリンクを `/browse` にする（1人以上は `/favorites/activity`）。ライブのカードの「Twitch で見る」は sr-only で走者名を後ろに足し（`home.liveWatchOf`）、同名リンクを区別する。
 - **ID・正規化**: `app/lib/home-sections.ts`（非 `.server`）。既定順は上記の並び。`normalizeHomeLayout` は JSON 文字列 / 配列 / オブジェクトを受けて `{ order, hidden }` を返す。旧形式（並びのみの配列）も読める（hidden は空）。解釈不能なら既定、未知 ID と重複を除き、order の欠けは既定順で末尾に補う（欄を増やしても既存の保存値が壊れない）。hidden が全欄を覆う値は hidden 空として扱う（全部消えたホームにしない）。`serializeHomeLayout` が保存用文字列を作り、`isDefaultHomeLayout`（既定順かつ全欄表示）なら `null`。
 - **保存先**: `users.home_section_order`（nullable、JSON 文字列 `{"order":[...],"hidden":[...]}`）。既定（既定順かつ全欄表示）を保存するときは `null` にして既定へ戻す。**`users.updatedAt` は更新しない**（お気に入り走者の動きに「プロフィールを更新」と誤って出るため）。
@@ -328,6 +329,10 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 - 一覧のグリッドは `sm:grid-cols-2 xl:grid-cols-4`（4件のグリッドの規約）
 - 並び順はセレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す
 - タイム上限は `m:ss`（`^\d{1,3}:[0-5]?\d$`、サーバーの `parseTimeParamToMs` と同じ）をクライアントで検証し、不正なら送信せず入力欄の下にエラーを表示する（`aria-invalid` / `aria-describedby` でエラー文・ヒント文を関連付け）
+- 開始日が終了日より後なら送信せず、期間の欄の下にエラー（`paces.filterPeriodError`、`role="alert"`、/videos と同じ）を出す。日付入力には `min`（保持期間の開始日＝過去2か月）と `max`（今日・JST）を付ける。値は loader が `toJstDateString`（`paces-feed.server.ts`）で作って返す（SSR とクライアントで「今日」がずれない）
+- 折りたたみバッジ「N件適用中」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件、並び順もチップに出るので数える）
+- 絞り込み・並び替えの再取得中（`useNavigation` が `/paces` 内の `loading`）は、一覧（または空状態）を差し替えず `opacity-50` ＋ `aria-busy` で残す（`/rankings` と同じ。`navigation-progress.tsx` は同一パス内の遷移では何も出さないため）
+- 絞り込みの無い空状態は「どうすれば載るか」を説明する（`paces.emptyHint`: MCID を登録して公開プロフィールにした走者の、PaceMan に記録された過去2か月のペース。`getUserData` の条件に対応）。ログイン中の人には `/me/edit` への `action`（loader の `signedIn`）。未ログインは説明だけ
 
 区間名（セレクトの選択肢・カード・バッジ）は日本語ロケールでも **PaceMan の英語正規名**（Bastion / Fortress / Enter Stronghold 等）のまま表示する（ユーザー判断。`app/lib/paceman.ts` の `getSplitTimeline` / `PaceManSplitMark` が語彙の基準）。
 
@@ -373,6 +378,8 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 | `q` | プレイヤー | MCID・表示名・slug・チャンネル名の部分一致（大文字小文字無視） |
 | `platform` | プラットフォーム | `youtube` / `twitch` |
 | `from` / `to` | 時期 | `YYYY-MM-DD`（JSTとして解釈、`to` はその日の終わりまで） |
+
+空状態の説明（`videos.emptyHint`: YouTube か Twitch のリンクを登録して公開プロフィールにした走者の、直近90日の動画・配信アーカイブ）と `/me/edit` への `action`（ログイン中のみ）、再取得中の `opacity-50` ＋ `aria-busy`、日付入力の `min`（直近90日の開始日）/ `max`（今日・JST）、バッジ件数＝チップ数は `/paces` と同じ。`FeedVideoCard` の全面リンクは `tabIndex={-1}` ＋ `aria-hidden`（Tab 停止点・読み上げはタイトルのリンクに一本化。外部リンクアイコンも同様）。
 
 検索 UI は `/paces` と同じ作り（`app/routes/videos.tsx`）: モバイルでは既定で畳み、畳んだ間も適用中の条件をチップと件数（`videos.filterActiveCount`）で示す。走者の欄のラベルは「走者」、期間は見出し「時期」の下に「開始日」「終了日」の2欄。開始日が終了日より後なら送信せず、欄の下にエラー（`videos.filterPeriodError`、`aria-invalid` / `role="alert"`）を出す。解除の文言は「条件をリセット」（`common.resetFilters`）。0件は `EmptyState`（絞り込み中なら「条件をリセット」の操作つき）。動画カードのサムネイルは `alt=""`（タイトルはカードの見出しと再生ボタンの名前で読まれるので二重にしない）。
 

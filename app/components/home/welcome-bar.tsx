@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 import type { HomeLayout } from "@/lib/home-sections";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ export function WelcomeBar({
 }) {
   const t = useT();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const customizeRef = useRef<HTMLButtonElement>(null);
   const greeting = t(isNewAccount ? "home.welcomeNew" : "home.welcomeBack", { name });
   // ライブ欄が非表示のときはページ内リンク先が無いので /paces へ
   const liveHref = layout.hidden.includes("live") ? "/paces" : "#home-live";
@@ -98,6 +99,7 @@ export function WelcomeBar({
           </Link>
         </Button>
         <Button
+          ref={customizeRef}
           type="button"
           variant="ghost"
           className="ml-auto min-h-11 max-sm:has-[>svg]:px-2 sm:ml-0 sm:min-h-9"
@@ -107,7 +109,13 @@ export function WelcomeBar({
           {t("home.welcomeCustomize")}
         </Button>
       </div>
-      <HomeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} layout={layout} />
+      <HomeSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        layout={layout}
+        // 制御型で DialogTrigger を使わないので、閉じたとき（キャンセル・Esc・保存）に開いたボタンへフォーカスを戻す
+        returnFocusRef={customizeRef}
+      />
     </section>
   );
 }

@@ -50,6 +50,11 @@ export function parseDateParam(value: string | null, endOfDay: boolean): Date | 
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+/** 日時を JST の日付文字列（YYYY-MM-DD）にする。日付入力の min / max に使う（parseDateParam と同じ JST 解釈） */
+export function toJstDateString(date: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(date);
+}
+
 // "m:ss" 形式のタイムをミリ秒に変換（例: "10:00" → 600000）
 function parseTimeParamToMs(value: string | null): number | undefined {
   if (!value) return undefined;

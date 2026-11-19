@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useFetcher } from "react-router";
 import { toast } from "sonner";
 import {
@@ -30,9 +30,12 @@ export function HomeSettingsDialog({
   open,
   onOpenChange,
   layout,
+  returnFocusRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** 閉じたあとにフォーカスを戻す要素（制御型で DialogTrigger を使わない呼び出し側が、開いたボタンを渡す） */
+  returnFocusRef?: RefObject<HTMLElement | null>;
   /** 現在の並び・表示（開くたびにこれを編集の初期値にする） */
   layout: HomeLayout;
 }) {
@@ -119,6 +122,12 @@ export function HomeSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="sm:max-w-md"
+        onCloseAutoFocus={(e) => {
+          const target = returnFocusRef?.current;
+          if (!target) return;
+          e.preventDefault();
+          target.focus();
+        }}
         onOpenAutoFocus={(e) => {
           // 既定では「初期設定に戻す」に当たるので、一覧の先頭の行の操作要素へ移す
           e.preventDefault();

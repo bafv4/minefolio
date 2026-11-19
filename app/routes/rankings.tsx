@@ -41,10 +41,14 @@ const TABLE_COLUMN_COUNT: Record<RankingsTableKind, number> = {
   rankedElo: 5,
 };
 
-/** URL の検索条件（tab / rankedType）から表の種類を決める（loader の parseRankingsParams と同じ既定: speedruncom） */
-function tableKindFromSearch(search: string): RankingsTableKind {
+/**
+ * URL の検索条件（tab / rankedType）から表の種類を決める（loader の parseRankingsParams と同じ既定: speedruncom。
+ * ただし tab 無しでカテゴリが0件のときは loader が Ranked へ落とすので、hasCategories=false なら Ranked 扱い）
+ */
+function tableKindFromSearch(search: string, hasCategories: boolean): RankingsTableKind {
   const params = new URLSearchParams(search);
-  if (params.get("tab") !== "ranked") return "speedruncom";
+  const tab = params.get("tab");
+  if (tab === "speedruncom" || (tab === null && hasCategories)) return "speedruncom";
   return params.get("rankedType") === "elo" ? "rankedElo" : "rankedPb";
 }
 
@@ -127,7 +131,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
   const url = new URL(request.url);
-  const args = parseRankingsParams(url.searchParams);
+  let args = parseRankingsParams(url.searchParams);
   // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
   const loadCategories = async () => {
     const cached = await getCached<Categories>(CATEGORIES_CACHE_KEY);
@@ -141,9 +145,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   let rankings: LoadedRankings["rankings"];
   let selectedCategory: LoadedRankings["selectedCategory"];
 
+  let loadedCategories: Categories | undefined;
   if (args.tab === "speedruncom") {
     // 選択カテゴリの id が要るのでカテゴリ一覧が先（キャッシュ済みなら往復なし）
-    speedruncomCategories = await loadCategories();
+    loadedCategories = await loadCategories();
+    // Speedrun.com のカテゴリが1件も無く、タブの指定も無い（既定）ときは、データのある Ranked PB を既定にする
+    if (loadedCategories.length === 0 && !url.searchParams.has("tab")) {
+      args = { ...args, tab: "ranked", rankedType: "pb" };
+    }
+  }
+
+  if (args.tab === "speedruncom") {
+    speedruncomCategories = loadedCategories ?? (await loadCategories());
     const target = args.categorySlug
       ? speedruncomCategories.find((c) => c.slug === args.categorySlug)
       : speedruncomCategories[0];
@@ -158,7 +171,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const key = `rankings:ranked:${args.rankedType === "pb" ? "pb" : "elo"}`;
     const cached = await getCached<LoadedRankings>(key);
     const [cats, loaded] = await Promise.all([
-      loadCategories(),
+      loadedCategories ?? loadCategories(),
       cached ?? loadRankings(db, args, []),
     ]);
     if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
@@ -186,7 +199,10 @@ export default function RankingsPage() {
   const currentKind: RankingsTableKind =
     data.tab === "speedruncom" ? "speedruncom" : data.rankedType === "elo" ? "rankedElo" : "rankedPb";
   // 読み込み中に表が無い（空状態から切り替えた）ときのスケルトンは、遷移先の表の列数で描く
-  const pendingKind = isLoading && navigation.location ? tableKindFromSearch(navigation.location.search) : currentKind;
+  const pendingKind =
+    isLoading && navigation.location
+      ? tableKindFromSearch(navigation.location.search, data.categories.length > 0)
+      : currentKind;
 
   // /rankings は遅延読み込み無効。loader が全件返す。
   const items = data.rankings;
@@ -235,10 +251,10 @@ export default function RankingsPage() {
         {data.categories.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Timer className="h-4 w-4" />
-              <span>Speedrun.com</span>
+              <Timer className="h-4 w-4" aria-hidden />
+              <span id="rankings-group-speedruncom">Speedrun.com</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div role="group" aria-labelledby="rankings-group-speedruncom" className="flex flex-wrap gap-2">
               {data.categories.map((cat) => (
                 <CategoryButton
                   key={cat.id}
@@ -255,10 +271,10 @@ export default function RankingsPage() {
         {/* MCSR Ranked カテゴリ */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Swords className="h-4 w-4" />
-            <span>MCSR Ranked</span>
+            <Swords className="h-4 w-4" aria-hidden />
+            <span id="rankings-group-ranked">MCSR Ranked</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div role="group" aria-labelledby="rankings-group-ranked" className="flex flex-wrap gap-2">
             <CategoryButton
               selected={data.tab === "ranked" && data.rankedType === "pb"}
               onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-pb", subType: "pb" })}
@@ -285,15 +301,30 @@ export default function RankingsPage() {
           className={cn("transition-opacity motion-reduce:transition-none", isLoading && "opacity-50")}
         >
           {items.length === 0 ? (
-            <EmptyState
-              icon={<Trophy className="h-12 w-12" />}
-              title={
-                data.tab === "speedruncom" && data.categories.length === 0
-                  ? t("rankings.noCategories")
-                  : t("rankings.noRankingData")
-              }
-              description=""
-            />
+            data.tab === "speedruncom" && data.categories.length === 0 ? (
+              <EmptyState
+                icon={<Trophy className="h-12 w-12" />}
+                title={t("rankings.noCategories")}
+                description={t("rankings.noCategoriesHint")}
+                action={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCategoryClick({ type: "ranked", slug: "ranked-pb", subType: "pb" })}
+                  >
+                    {t("rankings.openPbRanking")}
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<Trophy className="h-12 w-12" />}
+                title={t("rankings.noRankingData")}
+                description={
+                  data.tab === "ranked" ? t("rankings.noRankingDataRankedHint") : t("rankings.noRankingDataHint")
+                }
+              />
+            )
           ) : currentKind === "speedruncom" ? (
             <SpeedruncomRankingsTable rankings={items} />
           ) : currentKind === "rankedPb" ? (

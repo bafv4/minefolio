@@ -53,7 +53,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
 
   const isYouTube = video.platform === "youtube";
   const watchUrl = getFeedVideoUrl(video);
-  const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
+  const showName = pickDisplayName(video, locale) || video.channelTitle || t("rankings.unknownPlayer");
   const platformName = isYouTube ? "YouTube" : "Twitch";
   const rawThumbnailUrl = getFeedVideoThumbnailUrl(video);
   // 処理中の Twitch VOD は `_404/404_processing_*.png` のプレースホルダURLになる（現状 403 だが、
@@ -63,12 +63,14 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
       {/* カード全体のクリックで動画の視聴ページへ（外部リンク）。
-          サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる */}
+          サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる。
+          同じ URL への Tab 停止点と読み上げはタイトルのリンクに任せる（ペースカードと同じ。全面リンクはポインター専用） */}
       <a
         href={watchUrl}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label={video.title}
+        tabIndex={-1}
+        aria-hidden="true"
         className="absolute inset-0 z-0 rounded-xl"
       />
       {/* サムネイル / 埋め込みプレイヤー */}
@@ -144,7 +146,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
               {video.uuid ? (
                 <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
               ) : video.discordAvatar ? (
-                <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
+                <img src={video.discordAvatar} alt="" className="h-5 w-5 rounded-md" />
               ) : (
                 <div className="h-5 w-5 rounded-md bg-muted" />
               )}
@@ -154,12 +156,14 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="min-w-0 truncate">{showName}</span>
           )}
           <span className="ml-auto flex shrink-0 items-center gap-2">
-            {formatRelativeTimeInHours(t, video.publishedAt)}
+            <span suppressHydrationWarning>{formatRelativeTimeInHours(t, video.publishedAt)}</span>
+            {/* タイトルのリンクと同じ URL なので Tab 停止点・読み上げからは外す（クリックだけ受ける） */}
             <a
               href={watchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={t("home.openOnPlatform", { platform: platformName })}
+              tabIndex={-1}
+              aria-hidden="true"
               className="relative z-10 transition-colors hover:text-primary"
             >
               <ExternalLink className="h-3.5 w-3.5" />

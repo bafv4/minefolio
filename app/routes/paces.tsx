@@ -1,17 +1,20 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData, useNavigation, useSearchParams } from "react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { getOptionalSession } from "@/lib/session";
+import { getPaceRetentionStart } from "@/lib/paceman-cache";
 import { PACE_FEED_SPLITS } from "@/lib/pace-splits";
 import { filterOwnPaces, type OwnPacePrefs } from "@/lib/pace-visibility";
 import {
   getPublicPaceFeed,
   getViewerPacePrefs,
   parsePaceSearchParams,
+  toJstDateString,
   withPaceProfiles,
   type PaceFeedItemWithProfile,
 } from "@/lib/paces-feed.server";
@@ -69,10 +72,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parsePaceSearchParams(url.searchParams);
-  const [{ items, userData }, viewerPrefs] =
+  const [{ items, userData }, viewerPrefs, session] =
     await Promise.all([
       getPublicPaceFeed(filters),
       getViewerPacePrefs(db, auth, request),
+      getOptionalSession(request, auth),
     ]);
 
   // 見出しの件数バッジは実際に表示されるカード数と一致させる。
@@ -88,6 +92,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     total: items.length,
     visibleTotal,
     viewerPrefs,
+    // 空状態の案内（ログイン中の人にだけ設定画面への導線を出す）
+    signedIn: Boolean(session),
+    // 日付入力の範囲: 取得できる期間（保持期間の開始日）〜今日（JST）
+    dateRange: {
+      min: toJstDateString(getPaceRetentionStart()),
+      max: toJstDateString(new Date()),
+    },
   };
 }
 
@@ -170,9 +181,12 @@ function PacesList({
 
 export default function PacesPage() {
   const t = useT();
-  const { paces, total, visibleTotal, viewerPrefs } =
+  const { paces, total, visibleTotal, viewerPrefs, signedIn, dateRange } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  // /paces 内の絞り込み・並び替えの再取得中だけ、中身を薄くして残す（別ページへ移るときは薄くしない）
+  const isLoading = navigation.state === "loading" && navigation.location?.pathname === "/paces";
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
@@ -203,11 +217,10 @@ export default function PacesPage() {
   }, [searchParams]);
 
   const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
-  // 折りたたみバッジの件数は絞り込み条件のみ（並び順 sort は絞り込みではないので数えない）
-  const activeFilterCount = FILTER_PARAM_KEYS.filter((key) => key !== "sort" && searchParams.get(key)).length;
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
+  const [periodInvalid, setPeriodInvalid] = useState(false);
 
   // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
   const appliedChips: { key: string; label: string }[] = [];
@@ -231,6 +244,9 @@ export default function PacesPage() {
     appliedChips.push({ key: "sort", label: `${t("paces.filterSort")}: ${t("paces.sortTime")}` });
   }
 
+  // 折りたたみバッジの件数は下のチップの数と同じ（開始日・終了日は「時期」の1件。並び順もチップに出るので数える）
+  const activeFilterCount = appliedChips.length;
+
   // 並び順は選んだ時点で反映（/browse と同じ即時反映）。他の入力中の下書きは送らず、URL上の適用済み条件に sort だけ足す
   const handleSortChange = (value: string) => {
     setSort(value);
@@ -247,6 +263,12 @@ export default function PacesPage() {
       setFiltersOpen(true);
       return;
     }
+    // 開始日が終了日より後なら送らずに知らせる（YYYY-MM-DD なので文字列の比較で前後が分かる。/videos と同じ）
+    if (from && to && from > to) {
+      setPeriodInvalid(true);
+      setFiltersOpen(true);
+      return;
+    }
     const params = new URLSearchParams();
     if (player.trim()) params.set("q", player.trim());
     if (split !== "all") params.set("split", split);
@@ -258,6 +280,7 @@ export default function PacesPage() {
   };
 
   const handleClear = () => {
+    setPeriodInvalid(false);
     setSearchParams(new URLSearchParams(), { preventScrollReset: true });
   };
 
@@ -354,7 +377,14 @@ export default function PacesPage() {
                   type="date"
                   className="min-w-40"
                   value={from}
-                  onChange={(e) => setFrom(e.target.value)}
+                  min={dateRange.min}
+                  max={dateRange.max}
+                  onChange={(e) => {
+                    setFrom(e.target.value);
+                    setPeriodInvalid(false);
+                  }}
+                  aria-invalid={periodInvalid || undefined}
+                  aria-describedby={periodInvalid ? "pace-filter-period-error" : undefined}
                 />
               </div>
               <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
@@ -367,10 +397,22 @@ export default function PacesPage() {
                   type="date"
                   className="min-w-40"
                   value={to}
-                  onChange={(e) => setTo(e.target.value)}
+                  min={dateRange.min}
+                  max={dateRange.max}
+                  onChange={(e) => {
+                    setTo(e.target.value);
+                    setPeriodInvalid(false);
+                  }}
+                  aria-invalid={periodInvalid || undefined}
+                  aria-describedby={periodInvalid ? "pace-filter-period-error" : undefined}
                 />
               </div>
             </div>
+            {periodInvalid && (
+              <p id="pace-filter-period-error" role="alert" className="text-xs text-destructive">
+                {t("paces.filterPeriodError")}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pace-filter-max-time">{t("paces.filterMaxTime")}</Label>
@@ -409,12 +451,12 @@ export default function PacesPage() {
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2">
-          <Button type="submit" size="sm">
+          <Button type="submit" size="sm" className="min-h-11 sm:min-h-8">
             <Search className="mr-1 h-4 w-4" />
             {t("common.search")}
           </Button>
           {hasActiveFilters && (
-            <Button type="button" variant="ghost" size="sm" onClick={handleClear}>
+            <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={handleClear}>
               <X className="mr-1 h-4 w-4" />
               {t("common.resetFilters")}
             </Button>
@@ -423,27 +465,37 @@ export default function PacesPage() {
         </div>
       </form>
 
-      {visibleTotal > 0 ? (
-        <PacesList
-          initialPaces={paces}
-          initialTotal={total}
-          filterKey={filterKey}
-          viewerPrefs={viewerPrefs}
-        />
-      ) : (
-        <EmptyState
-          icon={<History className="h-12 w-12" />}
-          title={hasActiveFilters ? t("paces.emptyFiltered") : t("paces.empty")}
-          description={hasActiveFilters ? t("paces.emptyFilteredHint") : t("paces.emptyHint")}
-          action={
-            hasActiveFilters ? (
-              <Button asChild variant="outline" size="sm">
-                <Link to="/paces">{t("common.resetFilters")}</Link>
-              </Button>
-            ) : undefined
-          }
-        />
-      )}
+      {/* 絞り込み・並び替えの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
+      <div
+        aria-busy={isLoading || undefined}
+        className={cn("transition-opacity motion-reduce:transition-none", isLoading && "opacity-50")}
+      >
+        {visibleTotal > 0 ? (
+          <PacesList
+            initialPaces={paces}
+            initialTotal={total}
+            filterKey={filterKey}
+            viewerPrefs={viewerPrefs}
+          />
+        ) : (
+          <EmptyState
+            icon={<History className="h-12 w-12" />}
+            title={hasActiveFilters ? t("paces.emptyFiltered") : t("paces.empty")}
+            description={hasActiveFilters ? t("paces.emptyFilteredHint") : t("paces.emptyHint")}
+            action={
+              hasActiveFilters ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/paces">{t("common.resetFilters")}</Link>
+                </Button>
+              ) : signedIn ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/me/edit">{t("paces.emptyAction")}</Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

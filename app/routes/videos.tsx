@@ -1,11 +1,13 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData, useNavigation, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/videos";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { getOptionalSession } from "@/lib/session";
+import { toJstDateString } from "@/lib/paces-feed.server";
 import {
   getPublicVideoFeed,
   getViewerVideoPrefs,
@@ -25,7 +27,13 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { FeedVideoCard } from "@/components/feed-video-card";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
-import { feedVideoKey, filterOwnVideos, type FeedVideo, type OwnVideoPrefs } from "@/lib/feed-video";
+import {
+  feedVideoKey,
+  filterOwnVideos,
+  videoRetentionCutoff,
+  type FeedVideo,
+  type OwnVideoPrefs,
+} from "@/lib/feed-video";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { VIDEOS_PAGE_SIZE } from "./api/videos";
 import { cn } from "@/lib/utils";
@@ -62,9 +70,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parseVideoSearchParams(url.searchParams);
-  const [items, viewerPrefs] = await Promise.all([
+  const [items, viewerPrefs, session] = await Promise.all([
     getPublicVideoFeed(db, filters),
     getViewerVideoPrefs(db, auth, request),
+    getOptionalSession(request, auth),
   ]);
 
   // 見出しの件数バッジは実際に表示されるカード数と一致させる。
@@ -78,6 +87,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     total: items.length,
     visibleTotal,
     viewerPrefs,
+    // 空状態の案内（ログイン中の人にだけ設定画面への導線を出す）
+    signedIn: Boolean(session),
+    // 日付入力の範囲: 取得できる期間（保持期間の開始日）〜今日（JST）
+    dateRange: {
+      min: toJstDateString(videoRetentionCutoff()),
+      max: toJstDateString(new Date()),
+    },
   };
 }
 
@@ -148,8 +164,11 @@ function VideosList({
 
 export default function VideosPage() {
   const t = useT();
-  const { videos, total, visibleTotal, viewerPrefs } = useLoaderData<typeof loader>();
+  const { videos, total, visibleTotal, viewerPrefs, signedIn, dateRange } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  // /videos 内の絞り込みの再取得中だけ、中身を薄くして残す（別ページへ移るときは薄くしない）
+  const isLoading = navigation.state === "loading" && navigation.location?.pathname === "/videos";
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
@@ -165,8 +184,6 @@ export default function VideosPage() {
   }, [searchParams]);
 
   const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
-  // 折りたたみバッジの件数（/paces と同じ。期間は開始日・終了日を別々に数える）
-  const activeFilterCount = FILTER_PARAM_KEYS.filter((key) => searchParams.get(key)).length;
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジとチップで状態を示す（/paces と同じ）
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [periodInvalid, setPeriodInvalid] = useState(false);
@@ -190,6 +207,9 @@ export default function VideosPage() {
       label: `${t("videos.filterPeriod")}: ${appliedFrom ?? ""}${t("common.rangeSeparator")}${appliedTo ?? ""}`,
     });
   }
+
+  // 折りたたみバッジの件数は上のチップの数と同じ（/paces と同じ。開始日・終了日は「時期」の1件）
+  const activeFilterCount = appliedChips.length;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,6 +323,8 @@ export default function VideosPage() {
                     type="date"
                     className="min-w-40"
                     value={from}
+                    min={dateRange.min}
+                    max={dateRange.max}
                     onChange={(e) => {
                       setFrom(e.target.value);
                       setPeriodInvalid(false);
@@ -321,6 +343,8 @@ export default function VideosPage() {
                     type="date"
                     className="min-w-40"
                     value={to}
+                    min={dateRange.min}
+                    max={dateRange.max}
                     onChange={(e) => {
                       setTo(e.target.value);
                       setPeriodInvalid(false);
@@ -338,12 +362,12 @@ export default function VideosPage() {
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <Button type="submit" size="sm">
+            <Button type="submit" size="sm" className="min-h-11 sm:min-h-8">
               <Search className="mr-1 h-4 w-4" />
               {t("common.search")}
             </Button>
             {hasActiveFilters && (
-              <Button type="button" variant="ghost" size="sm" onClick={handleClear}>
+              <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={handleClear}>
                 <X className="mr-1 h-4 w-4" />
                 {t("common.resetFilters")}
               </Button>
@@ -352,27 +376,37 @@ export default function VideosPage() {
         </div>
       </form>
 
-      {visibleTotal > 0 ? (
-        <VideosList
-          initialVideos={videos}
-          initialTotal={total}
-          filterKey={filterKey}
-          viewerPrefs={viewerPrefs}
-        />
-      ) : (
-        <EmptyState
-          icon={<Film className="h-12 w-12" />}
-          title={hasActiveFilters ? t("videos.emptyFiltered") : t("videos.empty")}
-          description={hasActiveFilters ? t("videos.emptyFilteredHint") : t("videos.emptyHint")}
-          action={
-            hasActiveFilters ? (
-              <Button asChild variant="outline" size="sm">
-                <Link to="/videos">{t("common.resetFilters")}</Link>
-              </Button>
-            ) : undefined
-          }
-        />
-      )}
+      {/* 絞り込みの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
+      <div
+        aria-busy={isLoading || undefined}
+        className={cn("transition-opacity motion-reduce:transition-none", isLoading && "opacity-50")}
+      >
+        {visibleTotal > 0 ? (
+          <VideosList
+            initialVideos={videos}
+            initialTotal={total}
+            filterKey={filterKey}
+            viewerPrefs={viewerPrefs}
+          />
+        ) : (
+          <EmptyState
+            icon={<Film className="h-12 w-12" />}
+            title={hasActiveFilters ? t("videos.emptyFiltered") : t("videos.empty")}
+            description={hasActiveFilters ? t("videos.emptyFilteredHint") : t("videos.emptyHint")}
+            action={
+              hasActiveFilters ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/videos">{t("common.resetFilters")}</Link>
+                </Button>
+              ) : signedIn ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/me/edit">{t("videos.emptyAction")}</Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

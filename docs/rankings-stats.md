@@ -16,6 +16,7 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 - **カテゴリの切替**: ボタンは選択中を `aria-pressed` で伝える（見た目は既定の `Button`＝brand）。高さはモバイル 44px・sm 以上 32px。Speedrun.com のカテゴリが0件のときは、見出し「Speedrun.com」ごと出さない
 - **再取得中**: `/rankings` 内の切替（`navigation.location.pathname === "/rankings"`）のときだけ、表示中の表を差し替えずに `opacity-50`＋`aria-busy` で残す（走者のページへ移るときは薄くしない）。表が無い（空状態から切り替えた）ときだけスケルトンを出し、列数は遷移先の表（Speedrun.com 5列・Ranked PB 3列・Elo 5列）に合わせる
 - **順位の色**: 1位 `text-gold`、3位 `text-bronze`。2位（銀）の色トークンは無く、muted にすると4位以下より淡く見えるため、2位と4位以下は前景色
+- **既定のタブ**: `tab` の指定が無く Speedrun.com のカテゴリが0件のときは、loader が Ranked PB を既定にする（`tab=speedruncom` を明示したときは Speedrun.com のまま）。カテゴリ0件の Speedrun.com の空状態は「Speedrun.com のランキングはまだありません」＋ PB ランキングへ切り替えるボタン。それ以外の空状態は、タブごとの説明文（description は空にしない）。カテゴリ切替のボタン群は `role="group"` ＋ `aria-labelledby`（Speedrun.com / MCSR Ranked の見出し）で結ぶ
 - **注記**: 「記録の公開設定によっては…」（`rankings.publicityNote`）は見出しの下に1回だけ出す（空状態では繰り返さない）
 - **審査待ち（Speedrun.com の `verificationStatus = "new"`）**: 順位の欄に時計（飾り、`aria-hidden`）、名前の下の行に「審査待ち」（`rankings.pendingVerification`、`text-xs text-warning`）。名前とは別の行なので、名前が省略されても切れずに読め、Tooltip に頼らないのでタッチでも分かる
 
