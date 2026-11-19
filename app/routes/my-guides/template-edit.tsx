@@ -59,22 +59,39 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("meTemplates.templateNotFound"), { status: 404 });
   }
 
-  const templateCrafts = toEditorCrafts(parseTemplateCrafts(template.craftsData));
+  // 下書きの有無は draftUpdatedAt だけで判定する。NULL 可の列（説明・言語・リマップ・Loop）は
+  // 下書きで「空にした」ことを表すので、?? で公開版へ落とさない（ガイドの edit.tsx と同じ）
+  const hasDraft = template.draftUpdatedAt !== null;
+  const src = hasDraft
+    ? {
+        title: template.draftTitle ?? template.title,
+        description: template.draftDescription,
+        gameLanguage: template.draftGameLanguage,
+        craftsData: template.draftCraftsData ?? template.craftsData,
+        remapsData: template.draftRemapsData,
+        loopsData: template.draftLoopsData,
+      }
+    : template;
+
+  const templateCrafts = toEditorCrafts(parseTemplateCrafts(src.craftsData));
   // loopsData（craftIndex 参照）を、上で振った crafts の draft id へ解決する
   const templateLoops = toEditorLoops(
-    parseTemplateLoops(template.loopsData, templateCrafts.length),
+    parseTemplateLoops(src.loopsData, templateCrafts.length),
     templateCrafts,
   );
 
   return {
     template: {
       id: template.id,
-      title: template.title,
-      description: template.description ?? "",
-      gameLanguage: template.gameLanguage ?? "",
+      title: src.title,
+      description: src.description ?? "",
+      gameLanguage: src.gameLanguage ?? "",
       crafts: templateCrafts,
-      remaps: toEditorRemaps(parseTemplateRemaps(template.remapsData)),
+      remaps: toEditorRemaps(parseTemplateRemaps(src.remapsData)),
       loops: templateLoops,
+      isPublished: template.isPublished,
+      hasDraft,
+      draftUpdatedAt: template.draftUpdatedAt?.toISOString() ?? null,
     },
     currentSettings: loadEditorSettingsFromUser(user),
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
@@ -107,11 +124,61 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
+  // _action は allowlist で判定する（未知の値は拒否）
+  const actionType = formData.get("_action");
+  if (actionType !== "draft" && actionType !== "publish" && actionType !== "discard") {
+    return { error: t("meTemplates.unknownAction") };
+  }
+
+  // 下書きを破棄する（公開版は変えない）
+  if (actionType === "discard") {
+    await db
+      .update(searchCraftTemplates)
+      .set({
+        draftTitle: null,
+        draftDescription: null,
+        draftGameLanguage: null,
+        draftCraftsData: null,
+        draftRemapsData: null,
+        draftLoopsData: null,
+        draftUpdatedAt: null,
+      })
+      .where(eq(searchCraftTemplates.id, template.id));
+    return { success: true, action: "discard" };
+  }
+
+  // 下書き・公開のどちらにも同じ検証（タイトル・件数・大きさの上限）を掛ける
   const submission = parseEditorSubmission(t, formData);
   if ("error" in submission) {
     return { error: submission.error };
   }
 
+  const now = new Date();
+
+  if (actionType === "draft") {
+    // 下書き保存は、読者に見える公開版がある（公開中の）テンプレートだけ。公開版の列・isPublished・
+    // updatedAt・publishedAt は変えない
+    if (!template.isPublished) {
+      return { error: t("meTemplates.draftNeedsPublished") };
+    }
+    await db
+      .update(searchCraftTemplates)
+      .set({
+        draftTitle: submission.title,
+        draftDescription: submission.description,
+        draftGameLanguage: submission.gameLanguage,
+        draftCraftsData: submission.craftsData,
+        draftRemapsData: submission.remapsData,
+        draftLoopsData: submission.loopsData,
+        draftUpdatedAt: now,
+      })
+      .where(eq(searchCraftTemplates.id, template.id));
+    return { success: true, action: "draft" };
+  }
+
+  // publish: フォームの値を公開版へ書き、下書きを消す。isPublished はフォームの公開スイッチの値
+  // （未公開のままの保存もこの経路）。publishedAt は初めて公開したときにだけ入れる
+  const isPublished = formData.get("isPublished") === "true";
   await db
     .update(searchCraftTemplates)
     .set({
@@ -121,11 +188,20 @@ export async function action({ request, params }: Route.ActionArgs) {
       craftsData: submission.craftsData,
       remapsData: submission.remapsData,
       loopsData: submission.loopsData,
-      updatedAt: new Date(),
+      isPublished,
+      publishedAt: template.publishedAt ?? (isPublished ? now : null),
+      updatedAt: now,
+      draftTitle: null,
+      draftDescription: null,
+      draftGameLanguage: null,
+      draftCraftsData: null,
+      draftRemapsData: null,
+      draftLoopsData: null,
+      draftUpdatedAt: null,
     })
     .where(eq(searchCraftTemplates.id, template.id));
 
-  return { success: true };
+  return { success: true, action: "publish" };
 }
 
 export default function TemplateEditPage() {
@@ -141,7 +217,13 @@ export default function TemplateEditPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      toast.success(t("meTemplates.updateSuccess"));
+      toast.success(
+        data.action === "draft"
+          ? t("meTemplates.draftSaved")
+          : data.action === "discard"
+            ? t("meTemplates.revertSuccess")
+            : t("meTemplates.updateSuccess"),
+      );
     } else if ("error" in data && data.error) {
       toast.error(data.error);
     }
@@ -165,7 +247,7 @@ export default function TemplateEditPage() {
       </div>
 
       <TemplateEditorForm
-        key={template.id}
+        key={`${template.id}:${template.draftUpdatedAt ?? ""}`}
         initial={{
           title: template.title,
           description: template.description,
@@ -174,14 +256,33 @@ export default function TemplateEditPage() {
           remaps: template.remaps,
           loops: template.loops,
         }}
+        initialPublished={template.isPublished}
+        publishState={{
+          livePublished: template.isPublished,
+          hasDraft: template.hasDraft,
+          isDiscarding: fetcher.state !== "idle" && fetcher.formData?.get("_action") === "discard",
+          onDiscard: () => {
+            const formData = new FormData();
+            formData.set("_action", "discard");
+            fetcher.submit(formData, { method: "post" });
+          },
+        }}
         currentSettings={currentSettings}
         keyboardLayout={keyboardLayout}
         isSubmitting={fetcher.state === "submitting"}
         saveResult={fetcher.data}
-        saveSucceeded={!!fetcher.data && "success" in fetcher.data && !!fetcher.data.success}
+        // 破棄はフォームの保存ではない（中身は key の変更で入れ替わる）ので、保存成功として扱わない
+        saveSucceeded={
+          !!fetcher.data &&
+          "success" in fetcher.data &&
+          !!fetcher.data.success &&
+          fetcher.data.action !== "discard"
+        }
         onSaved={handleSaved}
-        onSubmit={(data) => {
+        onSubmit={(data, mode, isPublished) => {
           const formData = new FormData();
+          formData.set("_action", mode);
+          formData.set("isPublished", String(isPublished));
           formData.set("title", data.title);
           formData.set("description", data.description);
           formData.set("gameLanguage", data.gameLanguage);

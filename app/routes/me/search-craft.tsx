@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import {
   Search,
   AlertCircle,
-  Share2,
+  FilePlus,
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftTimingBoard } from "@/components/search-craft-editor";
@@ -657,7 +657,7 @@ export default function SearchCraftPage() {
         {initialCrafts.length > 0 && (
           <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
             <Link to="/my-guides/templates">
-              <Share2 className="mr-2 h-4 w-4" />
+              <FilePlus className="mr-2 h-4 w-4" />
               {t("meSearchCraft.publishAsTemplate")}
             </Link>
           </Button>

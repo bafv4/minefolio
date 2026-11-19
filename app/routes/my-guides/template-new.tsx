@@ -80,7 +80,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const now = new Date();
-  await db.insert(searchCraftTemplates).values({
+  // 作成すると非公開（公開は編集画面の保存で行う。ガイドの新規作成と同じ）
+  const [created] = await db.insert(searchCraftTemplates).values({
     userId: user.id,
     title: submission.title,
     description: submission.description,
@@ -88,12 +89,13 @@ export async function action({ request }: Route.ActionArgs) {
     craftsData: submission.craftsData,
     remapsData: submission.remapsData,
     loopsData: submission.loopsData,
-    isPublished: true,
+    isPublished: false,
+    publishedAt: null,
     createdAt: now,
     updatedAt: now,
-  });
+  }).returning({ id: searchCraftTemplates.id });
 
-  return { success: true };
+  return { success: true, templateId: created.id };
 }
 
 export default function TemplateNewPage() {
@@ -115,7 +117,12 @@ export default function TemplateNewPage() {
     }
   }, [fetcher.data]);
 
-  const handleSaved = useCallback(() => navigate("/my-guides/templates"), [navigate]);
+  // 作成後は編集画面へ（ガイドの新規作成と同じ。公開はそこで行う）
+  const createdId = fetcher.data && "templateId" in fetcher.data ? fetcher.data.templateId : null;
+  const handleSaved = useCallback(
+    () => navigate(createdId ? `/my-guides/templates/${createdId}/edit` : "/my-guides/templates"),
+    [navigate, createdId],
+  );
 
   return (
     <div className="space-y-6">
@@ -147,7 +154,7 @@ export default function TemplateNewPage() {
         saveResult={fetcher.data}
         saveSucceeded={!!fetcher.data && "success" in fetcher.data && !!fetcher.data.success}
         onSaved={handleSaved}
-        submitLabel={t("meTemplates.createAndPublish")}
+        submitLabel={t("meTemplates.createSubmit")}
         onSubmit={(data) => {
           const formData = new FormData();
           formData.set("title", data.title);

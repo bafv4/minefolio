@@ -83,6 +83,54 @@ describe("並び替え", () => {
     expect(templates.map((t) => t.title)).toEqual(["new", "old"]);
   });
 
+  it("新着順は publishedAt の降順（作成が古くても、後から公開したテンプレートが上に来る）", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "created-new-published-early",
+      createdAt: new Date("2026-06-01"),
+      publishedAt: new Date("2026-06-02"),
+    });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "created-old-published-late",
+      createdAt: new Date("2026-01-01"),
+      publishedAt: new Date("2026-09-01"),
+    });
+
+    const { templates } = await callLoader();
+
+    expect(templates.map((t) => t.title)).toEqual([
+      "created-old-published-late",
+      "created-new-published-early",
+    ]);
+  });
+
+  it("publishedAt が null の公開行（バックフィル前）は createdAt で並ぶ", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "null-created-mid",
+      createdAt: new Date("2026-05-01"),
+      publishedAt: null,
+    });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "published-early",
+      createdAt: new Date("2026-01-01"),
+      publishedAt: new Date("2026-03-01"),
+    });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "null-created-new",
+      createdAt: new Date("2026-07-01"),
+      publishedAt: null,
+    });
+
+    const { templates } = await callLoader();
+
+    expect(templates.map((t) => t.title)).toEqual([
+      "null-created-new",
+      "null-created-mid",
+      "published-early",
+    ]);
+  });
+
   it("いいね数順はいいね数の降順（いいね数を各行に含める）", async () => {
     const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
     const [liker1, liker2] = await Promise.all([

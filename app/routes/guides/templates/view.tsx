@@ -149,6 +149,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const templatePromise = db.query.searchCraftTemplates.findFirst({
     where: eq(searchCraftTemplates.id, params.templateId),
+    // 下書き列は公開側へ読み込まない
+    columns: {
+      draftTitle: false,
+      draftDescription: false,
+      draftGameLanguage: false,
+      draftCraftsData: false,
+      draftRemapsData: false,
+      draftLoopsData: false,
+      draftUpdatedAt: false,
+    },
     with: {
       user: {
         columns: {
@@ -243,6 +253,16 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const template = await db.query.searchCraftTemplates.findFirst({
     where: eq(searchCraftTemplates.id, params.templateId),
+    // 下書き列は公開側へ読み込まない
+    columns: {
+      draftTitle: false,
+      draftDescription: false,
+      draftGameLanguage: false,
+      draftCraftsData: false,
+      draftRemapsData: false,
+      draftLoopsData: false,
+      draftUpdatedAt: false,
+    },
   });
 
   if (!template || (!template.isPublished && template.userId !== user.id)) {
@@ -710,7 +730,7 @@ export default function TemplateViewPage() {
           url={`${appUrl}/guides/templates/${template.id}`}
           compactOnMobile
           compactBelow="sm"
-          className="h-11 max-sm:min-w-11 sm:h-8"
+          className="h-11 max-sm:min-w-11 sm:h-9"
         />
         <LikeButton
           variant="detail"
@@ -719,10 +739,10 @@ export default function TemplateViewPage() {
           likeCount={template.likeCount}
           isOwn={isOwner}
           compactLabel
-          className="h-11 max-sm:min-w-11 sm:h-8"
+          className="h-11 max-sm:min-w-11 sm:h-9"
         />
         {isOwner && (
-          <Button asChild variant="ghost" size="sm" className="ml-auto size-11 sm:size-auto sm:h-8">
+          <Button asChild variant="ghost" size="sm" className="ml-auto size-11 sm:size-auto sm:h-9">
             <Link to="/my-guides/templates">
               <Settings className="h-4 w-4 sm:mr-2" aria-hidden />
               <span className="sr-only sm:not-sr-only">{t("templates.manage")}</span>

@@ -35,8 +35,7 @@ import {
   Plus,
   Trash2,
   Pencil,
-  Eye,
-  EyeOff,
+  PencilLine,
   Globe,
   Lock,
   LayoutTemplate,
@@ -81,6 +80,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       description: template.description,
       gameLanguage: template.gameLanguage,
       isPublished: template.isPublished,
+      // 下書き本体は返さない（有無だけ）
+      hasDraft: template.draftUpdatedAt !== null,
       applyCount: template.applyCount,
       craftCount: parseTemplateCrafts(template.craftsData).length,
       hasRemaps: !!template.remapsData,
@@ -107,7 +108,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const actionType = formData.get("_action") as string;
-  const now = new Date();
 
   // 対象テンプレートの所有権を検証する
   const templateId = formData.get("templateId") as string | null;
@@ -122,19 +122,6 @@ export async function action({ request }: Route.ActionArgs) {
   });
   if (!template) {
     return { error: t("meTemplates.templateNotFound") };
-  }
-
-  if (actionType === "toggle-publish") {
-    await db
-      .update(searchCraftTemplates)
-      .set({ isPublished: !template.isPublished, updatedAt: now })
-      .where(eq(searchCraftTemplates.id, template.id));
-
-    return {
-      success: true,
-      action: "toggle-publish",
-      published: !template.isPublished,
-    };
   }
 
   if (actionType === "delete") {
@@ -154,21 +141,13 @@ export default function MyTemplatesPage() {
   // タブ切替（→ /my-guides）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
 
-  const isSubmitting = fetcher.state === "submitting";
-
   useEffect(() => {
     const data = fetcher.data;
     if (!data || data === prevDataRef.current) return;
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      if (data.action === "toggle-publish") {
-        toast.success(
-          "published" in data && data.published
-            ? t("meTemplates.publishSuccess")
-            : t("meTemplates.unpublishSuccess"),
-        );
-      } else if (data.action === "delete") {
+      if (data.action === "delete") {
         toast.success(t("meTemplates.deleteSuccess"));
       }
     } else if ("error" in data && data.error) {
@@ -238,10 +217,22 @@ export default function MyTemplatesPage() {
                       <StatusPill icon={template.isPublished ? Globe : Lock} className="shrink-0">
                         {template.isPublished ? t("meTemplates.published") : t("meTemplates.unpublished")}
                       </StatusPill>
+                      {/* 公開中のテンプレートに下書き保存した未公開の変更があるときだけ（ガイド一覧と同じ見た目・文言） */}
+                      {template.isPublished && template.hasDraft && (
+                        <StatusPill icon={PencilLine} tone="warning" className="shrink-0">
+                          {t("meGuides.statusUnpublishedChanges")}
+                        </StatusPill>
+                      )}
                     </div>
                     {template.description && (
                       <p className="text-xs text-muted-foreground line-clamp-2">
                         {template.description}
+                      </p>
+                    )}
+                    {/* 非公開のテンプレートは、編集画面の保存（公開スイッチ）で公開できることを示す */}
+                    {!template.isPublished && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("meTemplates.unpublishedHint")}
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -276,25 +267,6 @@ export default function MyTemplatesPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={isSubmitting}
-                      onClick={() =>
-                        submitAction({ _action: "toggle-publish", templateId: template.id })
-                      }
-                    >
-                      {template.isPublished ? (
-                        <EyeOff className="h-4 w-4" aria-hidden />
-                      ) : (
-                        <Eye className="h-4 w-4" aria-hidden />
-                      )}
-                      <span className="sr-only sm:not-sr-only">
-                        {template.isPublished
-                          ? t("meTemplates.unpublish")
-                          : t("meTemplates.publish")}
-                      </span>
-                    </Button>
                     <Button variant="ghost" size="sm" asChild>
                       <Link
                         to={`/my-guides/templates/${template.id}/edit`}

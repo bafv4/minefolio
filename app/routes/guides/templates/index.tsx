@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/empty-state";
-import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages } from "lucide-react";
+import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages, X } from "lucide-react";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
@@ -128,10 +128,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // いいね数順は必ず SQL の ORDER BY で行う。limit(100) が先に効くため、メモリ上で並べ替えると
   // 「新しい100件をいいね数順に並べた」結果になり、古くて人気のテンプレートが永久に出てこない。
   // 同数（初日は全件0）で順序が不定にならないよう id まで含めて全順序にする。
+  // 新着順は「初めて公開した日時」（publishedAt。公開済みの行では必ず入っているが、防御として createdAt へ落とす）
+  const publishedOrder = sql`coalesce(${searchCraftTemplates.publishedAt}, ${searchCraftTemplates.createdAt})`;
   const orderBy =
     sort === "likes"
-      ? [desc(likeCount), desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)]
-      : [desc(searchCraftTemplates.createdAt), asc(searchCraftTemplates.id)];
+      ? [desc(likeCount), desc(publishedOrder), asc(searchCraftTemplates.id)]
+      : [desc(publishedOrder), asc(searchCraftTemplates.id)];
 
   const rowsPromise = db
     .select({
@@ -145,6 +147,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       likeCount,
       ownerId: searchCraftTemplates.userId,
       createdAt: searchCraftTemplates.createdAt,
+      publishedAt: searchCraftTemplates.publishedAt,
       authorSlug: users.slug,
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
@@ -180,7 +183,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     applyCount: row.applyCount,
     likeCount: Number(row.likeCount),
     isOwn: !!viewer && row.ownerId === viewer.id,
-    createdAt: row.createdAt.toISOString(),
+    // 一覧の時刻は並び順（新着順）と同じ基準＝初めて公開した日時
+    publishedAt: (row.publishedAt ?? row.createdAt).toISOString(),
     authorSlug: row.authorSlug,
     authorUuid: row.authorUuid,
     authorSkinUrl: row.authorCustomSkinUrl,
@@ -296,6 +300,14 @@ export default function TemplatesIndexPage() {
         })
       : t("templates.resultCount", { count: templates.length });
 
+  // 作成者（?author=）の絞り込みだけを外す。言語・検索語・並び順は保つ（言語・検索語は件数の文言と入力欄で外せる）
+  const clearAuthorHref = (() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("author");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  })();
+
   // 絞り込み（検索語・言語・作成者）だけを外す。並び順は保つ
   const clearFiltersHref = (() => {
     const params = new URLSearchParams(searchParams);
@@ -320,7 +332,7 @@ export default function TemplatesIndexPage() {
           モバイルはアイコンだけ（名前は sr-only で残す）にして、一覧の1件目を押し下げない */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{t("templates.pageTitle")}</h1>
+          <h1 className="text-balance text-2xl font-bold">{t("templates.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("templates.pageDesc")}</p>
         </div>
         <Button asChild variant="ghost" size="sm" className="-mr-2 size-11 shrink-0 sm:size-auto sm:min-h-8">
@@ -381,6 +393,18 @@ export default function TemplatesIndexPage() {
             <p aria-live="polite" className="min-w-0 text-sm text-muted-foreground">
               {resultCountText}
             </p>
+            {/* 作成者の絞り込みは入力欄が無いので、件数の隣の丸ピルから外す（押せる範囲は ::after で広げる） */}
+            {author && (
+              <Link
+                to={clearAuthorHref}
+                preventScrollReset
+                className="relative inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] sm:after:inset-y-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <span className="truncate">{t("templates.resultFilterAuthor", { name: authorFilterName })}</span>
+                <X className="h-3 w-3 shrink-0" aria-hidden />
+                <span className="sr-only">{t("templates.removeAuthorFilter")}</span>
+              </Link>
+            )}
             {hasFilters && (
               <Button asChild variant="link" size="sm" className="h-11 px-0 sm:h-8">
                 <Link to={clearFiltersHref} preventScrollReset>
@@ -396,7 +420,7 @@ export default function TemplatesIndexPage() {
               onChange={handleSortChange}
               options={TEMPLATE_SORTS}
               newestLabel={t("contentSort.newest")}
-              descriptions={{ new: t("contentSort.newestCreatedDesc"), likes: t("contentSort.likesDesc") }}
+              descriptions={{ new: t("contentSort.newestPublishedDesc"), likes: t("contentSort.likesDesc") }}
             />
           </div>
         </div>
@@ -498,7 +522,7 @@ export default function TemplatesIndexPage() {
                   {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制。ガイド系一覧と
                       同様に右端固定（ml-auto shrink-0）にする */}
                   <span className="ml-auto shrink-0" suppressHydrationWarning>
-                    {formatDistanceToNow(new Date(template.createdAt), {
+                    {formatDistanceToNow(new Date(template.publishedAt), {
                       addSuffix: true,
                       locale: dateFnsLocale(locale),
                     })}

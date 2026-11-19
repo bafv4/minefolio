@@ -774,7 +774,7 @@ export const PAGES_JA = {
     /** ガイド一覧の新着順の説明 */
     newestUpdatedDesc: "更新日時が新しい順",
     /** テンプレート一覧の新着順の説明 */
-    newestCreatedDesc: "作成日時が新しい順",
+    newestPublishedDesc: "公開日時が新しい順",
     /** ガイド一覧のみ。直近7日のページビューが多い順（page_view_stats） */
     popular: "人気順",
     /** ガイド一覧・テンプレート一覧。総いいね数が多い順 */
@@ -2087,7 +2087,7 @@ export const PAGES_JA = {
     saveFailed: "データの保存に失敗しました",
     invalidCraftData: "サーチクラフトのデータ形式が不正です",
     unknownAction: "不明なアクション",
-    publishAsTemplate: "テンプレートとして公開",
+    publishAsTemplate: "テンプレートを作成",
     selectItems: "アイテムを選択",
     selectItemsDescription: "クラフト文字列で検索するアイテムを選択してください（複数選択可）",
     searchItems: "アイテムを検索...",
@@ -2160,7 +2160,7 @@ export const PAGES_JA = {
     deleteEntryAria: "このエントリを削除",
     deleteLoopAria: "Loop {index} を削除",
     emptyBoardTitle: "サーチクラフトはまだありません",
-    emptyBoardDescription: "最初のアイテムを追加すると、区間ごとに並べて編集できます。1件以上あるとテンプレートとして公開できます。",
+    emptyBoardDescription: "最初のアイテムを追加すると、区間ごとに並べて編集できます。1件以上あるとテンプレートを作成できます。",
     addFirstEntry: "最初のアイテムを追加",
     listTitle: "区間ごとのサーチクラフト",
   },
@@ -2890,8 +2890,21 @@ export const PAGES_JA = {
     hintText: "ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮",
   },
   meTemplates: {
-    /** 新規作成の確定ボタン（作成と同時に公開される） */
-    createAndPublish: "作成して公開",
+    /** 新規作成の確定ボタン。作成したテンプレートは非公開で、公開は編集画面の保存（公開スイッチ）で行う */
+    createSubmit: "作成",
+    /** 編集画面: 公開スイッチ・下書き保存・未公開の変更の帯（ガイドの guideEditor.ui と同じ作り。文言は「テンプレート」） */
+    publishSwitch: "公開する",
+    publishUpdate: "更新を公開",
+    saveDraft: "下書き保存",
+    draftSaved: "下書きを保存しました（公開版はそのままです）",
+    draftNeedsPublished: "下書き保存は公開中のテンプレートだけです。公開するか、保存してください",
+    draftBanner: "未公開の変更があります（読者にはまだ見えません）。「{action}」で公開版に反映するか、公開版に戻せます。",
+    revertToPublished: "公開版に戻す",
+    revertConfirmTitle: "公開版に戻しますか？",
+    revertConfirmDescription: "下書き保存した内容は破棄されます。この操作は取り消せません。",
+    revertSuccess: "下書きを破棄して公開版に戻しました",
+    /** 一覧: 非公開のテンプレートの行の補足 */
+    unpublishedHint: "編集画面で「公開する」をオンにして保存すると公開されます。",
     title: "サーチクラフトテンプレート - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     unknownAction: "不明な操作です",
@@ -2900,10 +2913,8 @@ export const PAGES_JA = {
     textTooLong: "入力が長すぎます",
     templateLimitReached: "テンプレートは最大{max}件まで作成できます",
     tooManyCrafts: "サーチクラフトが多すぎます（最大{max}件）",
-    createSuccess: "テンプレートを公開しました",
+    createSuccess: "テンプレートを作成しました（非公開）。編集画面で公開できます",
     updateSuccess: "テンプレートを更新しました",
-    publishSuccess: "テンプレートを公開しました",
-    unpublishSuccess: "テンプレートを非公開にしました",
     deleteSuccess: "テンプレートを削除しました",
     pageTitle: "サーチクラフトテンプレート",
     pageDescription: "サーチクラフト設定をテンプレートとして公開・管理できます。",
@@ -2924,13 +2935,13 @@ export const PAGES_JA = {
     deleteTitle: "テンプレートを削除",
     deleteDescription: "「{name}」を削除しますか？この操作は取り消せません。",
     emptyTitle: "テンプレートがありません",
-    emptyDescription: "最初のテンプレートを作成して公開しましょう",
+    emptyDescription: "最初のテンプレートを作成しましょう。作成後は非公開で、編集画面で公開できます",
     cancel: "キャンセル",
     delete: "削除",
     save: "保存",
     // エディタ（作成・編集ページ）
     editorNewTitle: "テンプレートを作成",
-    editorNewDescription: "サーチクラフトとリマップを自由に編集してテンプレートを作成・公開します",
+    editorNewDescription: "サーチクラフトとリマップを自由に編集してテンプレートを作成します。作成すると非公開で、編集画面で公開できます",
     editorEditTitle: "テンプレートを編集",
     /** 作成・編集ページの「戻る」リンク（/my-guides/templates へ。戻り先の見出し pageTitle の名前で呼ぶ） */
     backToManagement: "サーチクラフトテンプレートに戻る",
@@ -2968,13 +2979,15 @@ export const PAGES_JA = {
     resultFilterLanguage: "言語: {language}",
     /** 作成者（?author=）で絞り込んでいるとき */
     resultFilterAuthor: "作成者: {name}",
+    /** 作成者の絞り込みピル（resultFilterAuthor の文）に続けて読み上げる操作 */
+    removeAuthorFilter: "（この絞り込みを外す）",
     resultFilterSeparator: "、",
     /** 言語の絞り込みの選択肢（公開一覧にある件数つき） */
     languageOptionWithCount: "{language}（{count}）",
     noResultsTitle: "条件に一致するテンプレートがありません",
     /** 検索語で絞り込んで 0 件のときの空状態の見出し */
     noResultsForQueryTitle: "「{q}」に一致するテンプレートがありません",
-    noResultsDescription: "条件を変えて再度検索してみてください",
+    noResultsDescription: "語句を短くするか、言語などの条件を外して探してみてください",
     /** ガイド一覧（guides.clearFilters）と同じ語 */
     resetFilters: "絞り込みを解除",
     notFound: "テンプレートが見つかりません",

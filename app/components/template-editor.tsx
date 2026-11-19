@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { NoticeBanner } from "@/components/notice-banner";
+import { getPublishAction, hasDraftSave, type PublishAction } from "@/components/guide-editor/hooks/use-guide-save";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -34,7 +37,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { toast } from "sonner";
-import { Download, Loader2, Save, X } from "lucide-react";
+import { Download, Loader2, Save, Send, Undo2, X } from "lucide-react";
 
 /**
  * サーチクラフトテンプレートの編集フォーム（作成・編集ページで共通）。
@@ -56,12 +59,28 @@ export type TemplateEditorData = {
   loops: SearchCraftLoopDraft[];
 };
 
+/** 保存の種類。draft＝下書き保存（公開版を変えない）、publish＝フォームの値を公開版へ書く（公開スイッチの値も送る） */
+export type TemplateSaveMode = "draft" | "publish";
+
+/** 編集画面だけが渡す、公開・下書きの状態。省略（新規作成）なら公開スイッチも下書き保存も出さない */
+export type TemplatePublishState = {
+  /** 保存済みの isPublished（いま読者に公開されているか） */
+  livePublished: boolean;
+  /** 未公開の下書きがあるか */
+  hasDraft: boolean;
+  /** 「公開版に戻す」（下書きを破棄する） */
+  onDiscard: () => void;
+  isDiscarding: boolean;
+};
+
 export function TemplateEditorForm({
   initial,
   currentSettings,
   keyboardLayout,
   isSubmitting,
   onSubmit,
+  publishState,
+  initialPublished = false,
   submitLabel,
   saveResult,
   saveSucceeded,
@@ -76,14 +95,18 @@ export function TemplateEditorForm({
   } | null;
   keyboardLayout: string | null;
   isSubmitting: boolean;
-  onSubmit: (data: TemplateEditorData) => void;
+  onSubmit: (data: TemplateEditorData, mode: TemplateSaveMode, isPublished: boolean) => void;
+  publishState?: TemplatePublishState;
+  /** 公開スイッチの初期値（保存済みの isPublished） */
+  initialPublished?: boolean;
   /** 確定ボタンの文言（省略時は「保存」） */
   submitLabel?: string;
   /** 直近の保存結果（fetcher.data をそのまま渡す。送信のたびに新しい参照になる） */
   saveResult?: unknown;
   /** saveResult が成功を表すか */
   saveSucceeded?: boolean;
-  /** 保存成功後、未保存の表示を消してから呼ぶ（遷移などはここで行う。離脱確認に止められない） */
+  /** 保存成功後、未保存の表示を消してから呼ぶ（遷移などはここで行う。離脱確認に止められない）。
+   *  下書き保存では呼ばない（編集を続けるため） */
   onSaved?: () => void;
 }) {
   const t = useT();
@@ -94,6 +117,7 @@ export function TemplateEditorForm({
   const [crafts, setCrafts] = useState<SearchCraftDraft[]>(initial.crafts);
   const [remaps, setRemaps] = useState<TemplateRemapDraft[]>(initial.remaps);
   const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(initial.loops);
+  const [publishSetting, setPublishSetting] = useState(initialPublished);
   // バーチャルキーボードの表示レイアウト（初期値はユーザーの設定）
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() =>
     normalizeLayout(keyboardLayout),
@@ -101,8 +125,9 @@ export function TemplateEditorForm({
 
   // 未保存判定: 現在値が基準（開いたときの値。保存に成功したらその送信内容）と違うか。表示レイアウトは含めない
   const currentKey = useMemo(
-    () => JSON.stringify({ title, description, gameLanguage, crafts, remaps, loops }),
-    [title, description, gameLanguage, crafts, remaps, loops],
+    () =>
+      JSON.stringify({ title, description, gameLanguage, crafts, remaps, loops, publishSetting }),
+    [title, description, gameLanguage, crafts, remaps, loops, publishSetting],
   );
   const [baselineKey, setBaselineKey] = useState(() =>
     JSON.stringify({
@@ -112,11 +137,13 @@ export function TemplateEditorForm({
       crafts: initial.crafts,
       remaps: initial.remaps,
       loops: initial.loops,
+      publishSetting: initialPublished,
     }),
   );
   const dirty = currentKey !== baselineKey;
   const blocker = useUnsavedWarning(dirty);
   const submittedKeyRef = useRef<string | null>(null);
+  const submittedModeRef = useRef<TemplateSaveMode>("publish");
   const handledResultRef = useRef<unknown>(saveResult);
   const [savedPending, setSavedPending] = useState(false);
 
@@ -126,7 +153,8 @@ export function TemplateEditorForm({
     handledResultRef.current = saveResult;
     if (saveSucceeded && submittedKeyRef.current !== null) {
       setBaselineKey(submittedKeyRef.current);
-      setSavedPending(true);
+      // 下書き保存は編集を続ける。公開版への保存だけ、保存後の遷移（onSaved）へ進む
+      if (submittedModeRef.current === "publish") setSavedPending(true);
     }
   }, [saveResult, saveSucceeded]);
 
@@ -177,7 +205,7 @@ export function TemplateEditorForm({
     setContentError(null);
   }, [crafts, loops]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback((mode: TemplateSaveMode) => {
     const nextTitleError = title.trim() ? null : t("meTemplates.titleRequired");
     let nextContentError: string | null = null;
     if (crafts.length === 0) {
@@ -203,30 +231,93 @@ export function TemplateEditorForm({
       return;
     }
     submittedKeyRef.current = currentKey;
-    onSubmit({
-      title: title.trim(),
-      description: description.trim(),
-      gameLanguage,
-      crafts,
-      remaps,
-      loops,
-    });
-  }, [crafts, currentKey, description, gameLanguage, loops, onSubmit, remaps, title]);
+    submittedModeRef.current = mode;
+    onSubmit(
+      {
+        title: title.trim(),
+        description: description.trim(),
+        gameLanguage,
+        crafts,
+        remaps,
+        loops,
+      },
+      mode,
+      publishSetting,
+    );
+  }, [crafts, currentKey, description, gameLanguage, loops, onSubmit, publishSetting, remaps, title]);
 
   // 送信ボタン（上端の操作バーと文書の末尾に同じものを置く。文書が長く、上へ戻らずに送れるように）
+  // 公開中は「下書き保存」（公開版を変えない）＋主ボタン。主ボタンの名前は公開スイッチと保存済みの公開状態で決まる（ガイドと同じ）
+  const publishAction: PublishAction | null = publishState
+    ? getPublishAction(publishState.livePublished, publishSetting)
+    : null;
+  const publishLabels: Record<PublishAction, string> = {
+    publish: t("meTemplates.publish"),
+    publishUpdate: t("meTemplates.publishUpdate"),
+    unpublish: t("meTemplates.unpublish"),
+    saveUnpublished: t("meTemplates.save"),
+  };
+  const showDraftSave = !!publishState && hasDraftSave(publishState.livePublished);
+  const busy = isSubmitting || !!publishState?.isDiscarding;
   const submitButton = (
-    <Button onClick={handleSave} disabled={isSubmitting} className="h-11 sm:h-9">
-      {isSubmitting ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <Save className="mr-2 h-4 w-4" />
+    <div className="flex flex-wrap items-center gap-2">
+      {showDraftSave && (
+        <Button
+          variant="outline"
+          onClick={() => handleSave("draft")}
+          disabled={busy}
+          className="h-11 sm:h-9"
+        >
+          <Save className="mr-2 h-4 w-4" aria-hidden />
+          {t("meTemplates.saveDraft")}
+        </Button>
       )}
-      {submitLabel ?? t("meTemplates.save")}
-    </Button>
+      <Button onClick={() => handleSave("publish")} disabled={busy} className="h-11 sm:h-9">
+        {isSubmitting ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : publishAction && publishAction !== "saveUnpublished" ? (
+          <Send className="mr-2 h-4 w-4" aria-hidden />
+        ) : (
+          <Save className="mr-2 h-4 w-4" aria-hidden />
+        )}
+        {publishAction ? publishLabels[publishAction] : (submitLabel ?? t("meTemplates.save"))}
+      </Button>
+    </div>
   );
 
   return (
     <div className="space-y-6">
+      {/* 下書きがあるとき: 公開版との差があることを知らせ、公開版へ戻せる（破棄は取り消せないので確認する） */}
+      {publishState?.hasDraft && (
+        <NoticeBanner tone="warning">
+         <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>{t("meTemplates.draftBanner", { action: publishAction ? publishLabels[publishAction] : t("meTemplates.save") })}</span>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={busy}>
+                <Undo2 className="mr-2 h-4 w-4" aria-hidden />
+                {t("meTemplates.revertToPublished")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("meTemplates.revertConfirmTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("meTemplates.revertConfirmDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={publishState.onDiscard}>
+                  {t("meTemplates.revertToPublished")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+         </div>
+        </NoticeBanner>
+      )}
+
       {/* 操作バー */}
       <div className="flex flex-wrap items-center gap-2">
         {hasCurrentSettings && (
@@ -252,6 +343,12 @@ export function TemplateEditorForm({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        )}
+        {publishState && (
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm sm:min-h-9">
+            <Switch checked={publishSetting} onCheckedChange={setPublishSetting} />
+            {t("meTemplates.publishSwitch")}
+          </label>
         )}
         <div className="ml-auto">{submitButton}</div>
       </div>
