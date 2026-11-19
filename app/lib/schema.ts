@@ -1140,6 +1140,18 @@ export const searchCraftTemplates = sqliteTable("search_craft_templates", {
   // JSON: config_presets.search_craft_loops_data と同一形式（craftsData と同様のスナップショット。craftSeq = craftIndex + 1 が恒等）
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   loopsData: text("loops_data"),
+  // 下書き用（ガイドの draft* と同じ形）。公開版とは独立して編集中の内容を保持する。
+  // 下書きの有無は draftUpdatedAt が NULL かどうかだけで判定する。下書き保存では公開版の列・isPublished・updatedAt を変えない。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  draftTitle: text("draft_title"),
+  draftDescription: text("draft_description"),
+  draftGameLanguage: text("draft_game_language"),
+  draftCraftsData: text("draft_crafts_data"), // JSON: PresetSearchCraftData[]
+  draftRemapsData: text("draft_remaps_data"), // JSON: PresetRemapData[]
+  draftLoopsData: text("draft_loops_data"), // JSON
+  draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
+  // 初めて公開した日時（公開一覧の新着順）。初回の公開で入れ、以後は変えない。未公開は NULL
+  publishedAt: integer("published_at", { mode: "timestamp" }),
 }, (table) => [
   index("idx_search_craft_templates_user_id").on(table.userId),
   index("idx_search_craft_templates_published_created").on(table.isPublished, table.createdAt),

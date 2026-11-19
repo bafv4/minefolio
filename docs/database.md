@@ -134,7 +134,7 @@ erDiagram
 | 23 | [`paceman_paces`](#paceman_paces) | 11 | PaceMan ペース履歴 | 1 : N（set null） |
 | 24 | [`guides`](#guides) | 19 | ガイド記事 | 1 : N |
 | 25 | [`guide_likes`](#guide_likes) | 4 | ガイドのいいね | 1 : N |
-| 26 | [`search_craft_templates`](#search_craft_templates) | 12 | 公開サーチクラフトテンプレート | 1 : N |
+| 26 | [`search_craft_templates`](#search_craft_templates) | 20 | 公開サーチクラフトテンプレート | 1 : N |
 | 27 | [`search_craft_template_likes`](#search_craft_template_likes) | 4 | テンプレートのいいね | 1 : N |
 | 28 | [`profile_reactions`](#profile_reactions) | 5 | プロフィールの絵文字リアクション | 1 : N ×2 |
 | 29 | [`auth_users`](#auth_users) | 7 | better-auth ユーザー | なし |
@@ -794,8 +794,21 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `updated_at` | ts | |
 | `game_language` | text? | 想定するゲーム内言語（例: `ja_jp`） |
 | `loops_data` | json? | 繋ぎ方（Loop）のスナップショット。`config_presets.search_craft_loops_data` と同一形式（`craftSeq = craftIndex + 1` が恒等） |
+| `draft_title` | text? | 下書き。公開版の `title` に対応 |
+| `draft_description` | text? | 下書き。`description` に対応 |
+| `draft_game_language` | text? | 下書き。`game_language` に対応 |
+| `draft_crafts_data` | json? | 下書き。`crafts_data` に対応 |
+| `draft_remaps_data` | json? | 下書き。`remaps_data` に対応 |
+| `draft_loops_data` | json? | 下書き。`loops_data` に対応 |
+| `draft_updated_at` | ts? | 下書きを最後に保存した日時。**下書きの有無はこの列が NULL かどうかだけで判定する** |
+| `published_at` | ts? | 初めて公開した日時（公開一覧の新着順）。未公開は NULL |
 
 索引: `(user_id)` / `(is_published, created_at)`
+
+下書きの不変条件（ガイドの `draft_*` と同じ形）:
+- 下書き保存では公開版の列・`is_published`・`updated_at` を変えず、`draft_*` 列だけを書く。公開・破棄で `draft_*` を NULL に戻す
+- `published_at` は初回の公開で入れ、以後は変えない（公開を取り下げて再公開しても維持）
+- 下書き列はすべて NULL 可（`ALTER ADD` のため。`is_published` の既定 true は変えない）
 
 #### `search_craft_template_likes`
 
@@ -1080,6 +1093,7 @@ drizzle-kit v1 の RC ではパーサが書き直されており、この経路�
 | スクリプト | 目的 |
 |---|---|
 | `add-search-craft-loops.ts` | `search_craft_loops` テーブル＋ `config_presets.search_craft_loops_data` / `search_craft_templates.loops_data` 列を追加（本機能の DDL） |
+| `add-search-craft-template-draft-columns.ts` | `search_craft_templates` に `draft_*` 7列と `published_at` を追加し、公開中の行の `published_at` を `created_at` でバックフィル |
 | `fix-unique-index-names.ts` | inline `.unique()` 列の named unique index（14件）を補完（SQLite の自動 index のみで named index が無いテーブルが push を中断させる） |
 | `fix-missing-indexes.ts` | schema.ts が定義する index 全件（98件）を対象に、欠けているものだけ補完する汎用版（`fix-unique-index-names.ts` の対象を包含） |
 | `add-player-rankings-table.ts` | `local.db` に存在しなかった `player_rankings` テーブル＋ index を追加（drift の是正） |

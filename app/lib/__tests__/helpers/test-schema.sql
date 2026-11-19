@@ -527,6 +527,14 @@ CREATE TABLE `search_craft_templates` (
 	`updated_at` integer NOT NULL,
 	`game_language` text,
 	`loops_data` text,
+	`draft_title` text,
+	`draft_description` text,
+	`draft_game_language` text,
+	`draft_crafts_data` text,
+	`draft_remaps_data` text,
+	`draft_loops_data` text,
+	`draft_updated_at` integer,
+	`published_at` integer,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
