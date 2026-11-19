@@ -405,7 +405,12 @@ export function SearchCraftWorkbench({
               <CardDescription>{t("playground.keyboardSectionDescription")}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setTypingTestOpen(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="max-md:min-h-11"
+                onClick={() => setTypingTestOpen(true)}
+              >
                 <Keyboard className="mr-2 h-4 w-4" />
                 {t("playground.typingTestSection")}
               </Button>
@@ -475,7 +480,7 @@ export function SearchCraftWorkbench({
             ref={addRemapButtonRef}
             variant="outline"
             size="sm"
-            className="mt-4"
+            className="mt-4 max-md:min-h-11"
             onClick={addRemapRow}
           >
             <Plus className="mr-2 h-4 w-4" />

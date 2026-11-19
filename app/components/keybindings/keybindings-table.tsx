@@ -59,7 +59,7 @@ interface KeybindingsTableProps {
  * - fill: リマップ / カスタムアクション列。md 未満は下限なし（残りの幅に収めてチップを折り返す）
  */
 const COLUMN_WIDTHS =
-  "[--kb-runner-col:96px] md:[--kb-runner-col:224px] [--kb-action-col:56px] md:[--kb-action-col:104px] [--kb-hotbar-col:240px] md:[--kb-hotbar-col:360px] [--kb-fill-col:0px] md:[--kb-fill-col:600px]";
+  "[--kb-runner-col:128px] md:[--kb-runner-col:224px] [--kb-action-col:56px] md:[--kb-action-col:104px] [--kb-hotbar-col:240px] md:[--kb-hotbar-col:360px] [--kb-fill-col:0px] md:[--kb-fill-col:600px]";
 
 type ColumnMeta = {
   align?: string;

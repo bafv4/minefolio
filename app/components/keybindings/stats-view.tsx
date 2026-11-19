@@ -95,19 +95,7 @@ export function StatsView({ data }: StatsViewProps) {
     setDialogOpen(true);
   };
 
-  // この一覧の走者を表で見るリンク。users にスラッグを載せるのは MAX_USERS_IN_LINK 人まで
-  // （それ以上は URL が長くなりすぎるため）。超えたときは操作＝キーの条件があればそれで代える
-  const tableHref =
-    dialogTarget && dialogPlayers.length > 0
-      ? dialogPlayers.length <= MAX_USERS_IN_LINK
-        ? buildKeybindingsTableHref({
-            tab: dialogTarget.tab,
-            users: dialogPlayers.map((p) => p.slug),
-          })
-        : dialogTarget.bind
-          ? buildKeybindingsTableHref({ tab: dialogTarget.tab, bind: [dialogTarget.bind] })
-          : null
-      : null;
+  const tableHref = tableHrefFor(dialogPlayers, dialogTarget);
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
@@ -357,6 +345,43 @@ export function StatsView({ data }: StatsViewProps) {
   );
 }
 
+/**
+ * この走者群を表で見るリンク。users にスラッグを載せるのは MAX_USERS_IN_LINK 人まで
+ * （それ以上は URL が長くなりすぎるため）。超えたときは操作＝キーの条件があればそれで代える
+ */
+function tableHrefFor(players: PlayerInfo[], target?: TableTarget): string | null {
+  if (!target || players.length === 0) return null;
+  if (players.length <= MAX_USERS_IN_LINK) {
+    return buildKeybindingsTableHref({ tab: target.tab, users: players.map((p) => p.slug) });
+  }
+  return target.bind ? buildKeybindingsTableHref({ tab: target.tab, bind: [target.bind] }) : null;
+}
+
+/** 統計の 1 行の右に置く「表で見る」リンク（行そのものは走者一覧ダイアログのボタンなので、入れ子にせず並べる） */
+function RowTableLink({ href, label }: { href: string | null; label: string }) {
+  const t = useT();
+  if (!href) return null;
+  return (
+    <Link
+      to={href}
+      aria-label={t("keybindingsStats.rowOpenInTable", { label })}
+      className="flex shrink-0 items-center justify-center self-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:size-11 size-8"
+    >
+      <Table2 className="h-4 w-4" aria-hidden />
+    </Link>
+  );
+}
+
+/** 統計 1 行のレイアウト（本体のボタン + 表へのリンク） */
+function StatRowShell({ children, href, label }: { children: ReactNode; href: string | null; label: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="min-w-0 flex-1">{children}</div>
+      <RowTableLink href={href} label={label} />
+    </div>
+  );
+}
+
 /** 概要の 1 件（箱にしないタイル。人数と、その母集団の説明） */
 function OverviewTile({
   icon,
@@ -440,8 +465,12 @@ function RangeDistribution({
     >
       <div className="space-y-3">
         {ranges.map((range) => (
-          <button
+          <StatRowShell
             key={range.label}
+            href={tableHrefFor(range.players, { tab: "mouse" })}
+            label={range.label}
+          >
+          <button
             type="button"
             className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
             disabled={range.count === 0}
@@ -473,6 +502,7 @@ function RangeDistribution({
               className="h-2"
             />
           </button>
+          </StatRowShell>
         ))}
       </div>
     </StatBlock>
@@ -513,8 +543,8 @@ function BooleanDistribution({
           const percentage = stats.totalCount > 0 ? (count / stats.totalCount) * 100 : 0;
           const label = `${name} ${on ? "ON" : "OFF"}`;
           return (
+            <StatRowShell key={on ? "on" : "off"} href={tableHrefFor(players, target)} label={label}>
             <button
-              key={on ? "on" : "off"}
               type="button"
               className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
               disabled={count === 0}
@@ -547,6 +577,7 @@ function BooleanDistribution({
                 className="h-2"
               />
             </button>
+            </StatRowShell>
           );
         })}
       </div>
@@ -581,6 +612,7 @@ function KeyActionStatCard({
               isMouse={false}
               count={entry.count}
               percentage={entry.percentage}
+              href={tableHrefFor(entry.players, keyTarget(entry.action, stat.keyCode))}
               onClick={() =>
                 onPlayerClick(`${title}: ${label}`, entry.players, keyTarget(entry.action, stat.keyCode))
               }
@@ -592,7 +624,7 @@ function KeyActionStatCard({
   );
 }
 
-/** キーの統計 1 行から、その操作/** キーの統計 1 行から、その操作が載っている表のタブと、操作＝キーの条件を作る */
+/** キーの統計 1 行から、その操作が載っている表のタブと、操作＝キーの条件を作る */
 function keyTarget(action: string, keyCode: string): TableTarget | undefined {
   const tab = tabForAction(action);
   if (!tab) return undefined;
@@ -639,6 +671,7 @@ function KeybindingStatCard({
               isMouse={isMouseKey(key.keyCode)}
               count={key.count}
               percentage={key.percentage}
+              href={tableHrefFor(key.players, keyTarget(stat.action, key.keyCode))}
               onClick={() =>
                 onPlayerClick(`${title}: ${label}`, key.players, keyTarget(stat.action, key.keyCode))
               }
@@ -693,6 +726,10 @@ function F3RemapStatCard({
               isMouse={isMouseKey(target.targetKey)}
               count={target.count}
               percentage={target.percentage}
+              href={tableHrefFor(
+                target.players,
+                target.targetKey === "F3" ? undefined : { tab: "remaps" },
+              )}
               onClick={() =>
                 onPlayerClick(
                   dialogTitle,
@@ -720,6 +757,7 @@ function StatRow({
   isMouse,
   count,
   percentage,
+  href,
   onClick,
 }: {
   index: number;
@@ -727,10 +765,13 @@ function StatRow({
   isMouse: boolean;
   count: number;
   percentage: number;
+  /** 表で見るリンク（行き先が無いときは null） */
+  href: string | null;
   onClick: () => void;
 }) {
   const t = useT();
   return (
+    <StatRowShell href={href} label={label}>
     <button
       type="button"
       className="w-full text-left space-y-1 hover:bg-muted/50 rounded-md p-1 -m-1 max-md:min-h-11 transition-colors cursor-pointer"
@@ -780,5 +821,6 @@ function StatRow({
         className="h-1.5"
       />
     </button>
+    </StatRowShell>
   );
 }

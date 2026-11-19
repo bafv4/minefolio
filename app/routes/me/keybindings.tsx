@@ -1045,12 +1045,15 @@ function KeybindingRow({
   isControllerMode,
   updateKeybindingKey,
   getKeyLabelWithCustom,
+  getSharedActionLabels,
   onAnnounce,
 }: {
   kb: { id: string; action: string; keyCode: string };
   isControllerMode: boolean;
   updateKeybindingKey: (keybindingId: string, newKeyCode: string) => void;
   getKeyLabelWithCustom: (keyCode: string) => string;
+  /** 指定キーを、この行以外で使っている操作の名前（キー編集ダイアログの共有判定と同じ「同じキー」） */
+  getSharedActionLabels: (keybindingId: string, keyCode: string) => string[];
   /** 確定結果をページ共通のライブ領域へ伝える（行ごとに領域を持たない） */
   onAnnounce: (message: string) => void;
 }) {
@@ -1067,13 +1070,34 @@ function KeybindingRow({
   const commitKey = (keyCode: string) => {
     updateKeybindingKey(kb.id, keyCode);
     setIsCapturing(false);
+    const key = getKeyLabelWithCustom(keyCode);
+    const shared = getSharedActionLabels(kb.id, keyCode);
     onAnnounce(
-      t("meKeybindings.keyAssignedAnnounce", { action: actionLabel, key: getKeyLabelWithCustom(keyCode) })
+      shared.length > 0
+        ? t("meKeybindings.keyAssignedSharedAnnounce", {
+            action: actionLabel,
+            key,
+            actions: shared.join(t("common.listSeparatorComma")),
+          })
+        : t("meKeybindings.keyAssignedAnnounce", { action: actionLabel, key })
     );
   };
+  const sharedLabels = kb.keyCode ? getSharedActionLabels(kb.id, kb.keyCode) : [];
   return (
     <div className="flex items-center justify-between gap-2 py-2.5">
-      <span className="text-sm">{actionLabel}</span>
+      <div className="min-w-0">
+        <span className="text-sm">{actionLabel}</span>
+        {sharedLabels.length > 0 && (
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-warning">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              {t("meKeybindings.sharedKeyConflictWith", {
+                actions: sharedLabels.join(t("common.listSeparatorComma")),
+              })}
+            </span>
+          </p>
+        )}
+      </div>
       <div className="flex items-center gap-1">
         {isControllerMode ? (
           /* コントローラーモード: ドロップダウンでボタン選択 */
@@ -1529,6 +1553,27 @@ export default function KeybindingsPage() {
   const displayGroups = useMemo(
     () => groupKeybindingsForDisplay(t, keybindingsWithLocalChanges, isControllerMode),
     [t, keybindingsWithLocalChanges, isControllerMode],
+  );
+
+  // 操作割り当てタブの行で「同じキーを他の操作も使っている」を出すための、キー → 操作名の対応（未割り当ては除く）
+  const actionLabelsByKey = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }[]>();
+    for (const kb of keybindingsWithLocalChanges) {
+      if (!kb.keyCode || isUnbound(kb.keyCode)) continue;
+      const list = map.get(kb.keyCode) ?? [];
+      list.push({ id: kb.id, label: getActionLabel(t, kb.action) });
+      map.set(kb.keyCode, list);
+    }
+    return map;
+  }, [keybindingsWithLocalChanges, t]);
+  const getSharedActionLabels = useCallback(
+    (keybindingId: string, keyCode: string) => {
+      if (isUnbound(keyCode)) return [];
+      return (actionLabelsByKey.get(keyCode) ?? [])
+        .filter((e) => e.id !== keybindingId)
+        .map((e) => e.label);
+    },
+    [actionLabelsByKey],
   );
 
   // キーボードレイアウト
@@ -2482,6 +2527,7 @@ export default function KeybindingsPage() {
                           isControllerMode={isControllerMode}
                           updateKeybindingKey={updateKeybindingKey}
                           getKeyLabelWithCustom={getKeyLabelWithCustom}
+                          getSharedActionLabels={getSharedActionLabels}
                           onAnnounce={setKeyAnnouncement}
                         />
                       ))}

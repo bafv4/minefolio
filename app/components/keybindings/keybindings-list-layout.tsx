@@ -1,7 +1,8 @@
 // /keybindings（表）と /keybindings/visual（ビジュアル）で共有するレイアウト。
 // タイトル・ツールバー（ビュー切替 / 件数 / フィルター）・フィルタ適用を一元化し、
 // mode によって本体を「表（Tabs）」か「ビジュアル（カード）」に切り替える。
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
+import { Link } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Keyboard,
@@ -12,6 +13,7 @@ import {
   Swords,
   ArrowLeftRight,
 } from "lucide-react";
+import { FingerLegend } from "@/components/virtual-keyboard";
 import { ViewSwitcher } from "./view-switcher";
 import { FilterDialog } from "./filter-dialog";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
@@ -40,9 +42,12 @@ const INVENTORY_TAB_ACTIONS: readonly string[] = [...INVENTORY_ACTIONS, ...HOTBA
 export function KeybindingsPageTitle({
   title,
   description,
+  children,
 }: {
   title?: string;
   description?: string;
+  /** 説明文の下に置くもの（凡例など） */
+  children?: ReactNode;
 }) {
   const t = useT();
   return (
@@ -54,6 +59,34 @@ export function KeybindingsPageTitle({
       <p className="text-sm text-muted-foreground mt-1">
         {description ?? t("keybindings.description")}
       </p>
+      {children}
+    </div>
+  );
+}
+
+/** ビジュアルの凡例（1行）。指色・リマップ済みの枠・空きキー。キーボードのキーと同じ面・枠のトークンで描く */
+function VisualLegend() {
+  const t = useT();
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <FingerLegend />
+      <span className="flex items-center gap-1">
+        <span
+          aria-hidden
+          className="h-3 w-4 rounded-[3px] border-2 border-primary bg-secondary"
+        />
+        <span className="text-[11px] text-muted-foreground">{t("keybindings.legendRemapped")}</span>
+      </span>
+      <span className="flex items-center gap-1">
+        <span aria-hidden className="h-3 w-4 rounded-[3px] border border-border bg-secondary/50" />
+        <span className="text-[11px] text-muted-foreground">{t("keybindings.legendEmpty")}</span>
+      </span>
+      <Link
+        to="/compare"
+        className="text-xs text-primary underline-offset-4 hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
+      >
+        {t("keybindings.visualCompareLink")}
+      </Link>
     </div>
   );
 }
@@ -158,7 +191,9 @@ export function KeybindingsListLayout({
       <KeybindingsPageTitle
         title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
         description={mode === "visual" ? t("keybindings.visualDescription") : undefined}
-      />
+      >
+        {mode === "visual" && <VisualLegend />}
+      </KeybindingsPageTitle>
 
       {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
       <div className="flex flex-col gap-3">

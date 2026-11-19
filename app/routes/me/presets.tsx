@@ -264,6 +264,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         changeDescription: true,
         createdAt: true,
       },
+      // どのプリセットの変更か（削除済みなら null で名前なし）
+      with: { preset: { columns: { name: true } } },
     }),
   ]);
 
@@ -1133,6 +1135,21 @@ export default function PresetsPage() {
   };
 
   // 種別がすべて同じ（例: 全行「プリセット」）なら、ラベルは情報にならないので出さない
+  // 同じ内容（種別・文言・プリセット）の連続は 1 行にまとめ、回数と最新の時刻を出す
+  const groupedHistory = history.reduce<((typeof history)[number] & { count: number })[]>((acc, entry) => {
+    const last = acc[acc.length - 1];
+    if (
+      last &&
+      last.changeType === entry.changeType &&
+      last.changeDescription === entry.changeDescription &&
+      (last.preset?.name ?? null) === (entry.preset?.name ?? null)
+    ) {
+      last.count += 1;
+    } else {
+      acc.push({ ...entry, count: 1 });
+    }
+    return acc;
+  }, []);
   const showHistoryTypeLabel = new Set(history.map((h) => h.changeType)).size > 1;
 
   return (
@@ -1463,15 +1480,27 @@ export default function PresetsPage() {
           <p className="text-sm text-muted-foreground">{t("mePresets.historyDescription")}</p>
           {history.length > 0 ? (
             <div className="space-y-2">
-              {history.map((entry) => (
+              {groupedHistory.map((entry) => (
                 <div
                   key={entry.id}
                   className="flex items-start gap-3 py-2 border-b last:border-0"
                 >
                   <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm">{entry.changeDescription}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm">
+                      {entry.changeDescription}
+                      {entry.count > 1 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                          {t("mePresets.historyRepeat", { count: entry.count })}
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                      {entry.preset?.name && !entry.changeDescription.includes(entry.preset.name) && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("mePresets.historyPreset", { name: entry.preset.name })}
+                        </span>
+                      )}
                       {showHistoryTypeLabel && (
                         <Badge variant="outline" className="text-xs">
                           {changeTypeLabels[entry.changeType] ?? entry.changeType}

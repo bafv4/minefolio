@@ -445,7 +445,7 @@ type ControllerSettings = {
 | ルート | ファイル | 内容 |
 |---|---|---|
 | `/keybindings`（既定） | `routes/keybindings.tsx` | テーブルビュー。サブタブ（`tab`）で表示内容を変更 |
-| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け。h1 / `<title>` は「操作設定ビジュアル」 |
+| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。ページ上端に1行の凡例（指色・リマップ済みの枠・空きキー）と、2人を並べる `/compare` へのリンクを置く。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け。h1 / `<title>` は「操作設定ビジュアル」 |
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
 - 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる
@@ -476,7 +476,7 @@ type ControllerSettings = {
 - **縦スクロールは全幅でページに任せる**（本体に内側の縦スクロール枠〔旧 `md:max-h-[70vh]`〕は持たない）。**見出し行は本体の横スクロール枠の外**に置き、本体の `scrollLeft` に CSS 変数 `--kb-scroll-left` で追従させる（走者列だけ打ち消して固定）。見出しは md 未満・以上とも `top-[64px]` でページに貼り付く。貼り付きのため、表の `Tabs` ルートは `overflow-clip`（既定の `overflow-hidden` はスクロールコンテナになり sticky を止める）
 - **横スクロールバー**: 長い表では本体の下端が画面外になるため、md 以上は本体のネイティブバーを隠し、下端（`--bottom-fixed-inset` の上）に貼り付く同期スクロールバー（`StickyScrollbar`、`keybindings-table.tsx`）を出す。横にあふれていないときは出さない。md 未満はネイティブのまま
 - **列幅**: 各列は grid の `minmax(下限, 基準幅fr)` で、表の合計が枠より狭いときは余りを全列で基準幅に比例して分け合う（右に空き帯を作らない）。行は `w-max` にせず、下限の合計を `min-width`（`calc()`）に渡す（`w-max` だと fr が中身の max-content まで広がり、チップが折り返さない）。md 未満 / 以上で下限が違う列は CSS 変数で持つ（列の `meta.widthVar`。リサイズした列だけ px で固定。リサイズ開始時に描画中の幅へ固定してから始める）。末尾の見出しの右には区切りを出さない
-  - `--kb-runner-col`: 走者列（md 未満 96px / md 以上 224px。固定幅）。走者セルは両方の頭を描いて CSS で出し分ける（`useMediaQuery` は使わない）
+  - `--kb-runner-col`: 走者列（md 未満 128px / md 以上 224px。固定幅）。走者セルはどの幅でも横並び（頭 32px ＋ 名前 truncate）にして、モバイルの行を低く保つ
   - `--kb-action-col`: 1 キーのアクション列（md 未満 56px / md 以上 104px）。md 未満は見出しの並べ替え矢印を文字の下に置く
   - `--kb-hotbar-col`: ホットバー列（md 未満 240px / md 以上 360px。md 未満は 9 枠が 2 行に折り返す）
   - `--kb-fill-col`: リマップ・カスタムアクション列（md 未満は下限 0 で残りの幅に収めてチップを折り返す / md 以上は 600px 下限）
@@ -526,6 +526,7 @@ type ControllerSettings = {
 - **キーの統計の「未割り当て」**: 集計は不使用（`UNBOUND_KEY`）の割り当ても 1 つのキーとして数える。その行は「-」というキーではなく「未割り当て」と表示する（F3 欄の未設定〔`UNASSIGNED_INPUT_KEY`〕と同じ `keybindingsStats.unassigned`）。Minus キーは「-」のまま。「未割り当て」の走者群から表へのリンクは `users` のみ（`bind` では絞れない）
 - 統計の見出しにアイコンは付けない（全欄そろえる）。統計のサブタブは md 未満で高さ 44px（`max-md:min-h-11`）
 - 統計の行ボタンのアクセシブルネームは「5位、2キー、1人、1%、走者を見る」のようなまとまった文（`keybindingsStats.rowAria` / `rangeRowAria`）。割合のバー（`Progress`）にも名前（行のラベル）と値（`aria-valuetext`＝見えている「N人 (P%)」）を付ける（旧 `/stats` の `StatBar` の書き方を引き継いだもの）。割合の表記は整数の %（`formatPercent`、四捨五入）にそろえる。走者一覧ダイアログには `DialogDescription`（人数と案内）を付ける
+- **行から表へ直接**: 統計の各行（キー・F3・マウスの区分・Raw Input など）は、走者一覧ダイアログを開くボタンの右に「表で見る」アイコンリンク（`RowTableLink`、`keybindingsStats.rowOpenInTable`、md 未満で 44px）を並べる。行き先は下の `tableHrefFor`（ダイアログの「この N 人を表で見る」と同じ。行き先が無い区分は出さない）。表は URL の `tab` / `users` / `bind` を受ける（nuqs）
 - **走者一覧ダイアログから表へ**: キー・F3・マウスの各区分の走者一覧ダイアログに「この N 人を表で見る」リンクを出す。行き先は `/keybindings?users=<slug,…>&tab=<その操作が載っているタブ>`（キーの操作は `tabForAction`、F3 は `remaps`、マウス系・Raw Input は `mouse`。`buildKeybindingsTableHref`）。`users` に載せるのは **100 人まで**（`MAX_USERS_IN_LINK`。URL が長くなりすぎるため）。超えたときは、キーの統計なら `users` の代わりに `bind=<操作>:<キー>` で同じ走者群を表で絞り込む。それ以外（マウスの区分）はリンクを出さない。F3 の区分は、リマップした走者（元のキーごとの区分）は `remaps` タブへリンクし、「F3 のまま」の区分（リマップ行を持たず表のリマップタブに出ない）はリンクを出さない。表の行数は、統計（ライブのテーブル）と一覧（メインプリセットのスナップショット・公開走者）の母集団の違いで、ダイアログの人数と一致しないことがある（マウスタブは DPI・感度・Windows 速度のある走者のみ。統計の「マウス設定の登録者」と Raw Input・マウス加速の ON/OFF 分布も同じ条件〔`hasMouseSettings`〕の走者だけを数える。Raw Input〔既定 ON〕とマウス加速〔既定 OFF〕は設定行ができた時点で値が入るため、これを根拠にすると何も入力していない走者まで分布に入り、「表で見る」の人数が表と合わなくなる。表のマウスタブをこの 2 項目まで広げると、設定行のある走者全員が載ってしまうので、統計側を表に揃えた）
 - Raw Input の ON / OFF（統計・表）はどちらも同じ見た目（`Badge variant="secondary"`）で、文字だけで区別する。走者の設定値に優劣・多数派/少数派を思わせる装飾をしない
 - **キー → 操作タブ**（旧 `/stats` から移した）: キーを起点に、そのキーへ何の操作が割り当てられているかを見る。対象は `KEY_ACTION_STATS_KEYS`（`keybindings-stats-shared.ts`、E/Q/R/F/C/X/Z/G/V・Shift/Ctrl/Tab/CapsLock/Space・Mouse0〜4・数字 1〜9 の28個）で、元データは追跡対象外の操作も含む全操作（集計クエリは操作 → キーと共通の1本で、JS 側で分ける）。未割り当て（不使用）の行はキーとして数えない。`totalCount` はそのキーに何かを割り当てている走者数、各操作の割合の分母もそれ。1人が同じキーに複数の操作を置けるので割合の合計は100%を超えうる（タブ冒頭にその旨と、対象が上の28キーに限られること〔W/A/S/D などの移動キーは含まない。`keybindingsStats.keyActionScope`〕を添える）。上位5件、データの無いキーの欄は出さない（全部空なら `EmptyState`）。行を押すと走者ダイアログ（題は「キー名: 操作名」）、表リンクは `tabForAction`（表に無い操作はリンクなし）。キーコードの正規化はしない（DB の `key_code` はこの形式に統一されている）

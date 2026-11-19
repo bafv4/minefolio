@@ -83,28 +83,20 @@ export function RunnerCell({ player }: { player: PlayerSummary }) {
   const locale = useLocale();
   const name = getLocalizedDisplayName(player, locale);
 
-  // md 未満は縦並び（頭を大きめ＋名前を下に小さく）、md 以上は横並び。幅で描き分けずに
-  // 両方の頭を描いて CSS で出し分ける（SSR とずれない）。名前が隣にあるので alt は空
+  // どの幅でも横並び（頭 32px ＋ 名前 truncate）にして、モバイルの行を低く保つ。名前が隣にあるので alt は空
   return (
     <Link
       to={`/player/${player.slug}`}
-      className="flex w-full min-w-0 flex-col items-center gap-1 text-center transition-opacity hover:opacity-80 md:flex-row md:gap-2 md:text-left"
+      className="flex w-full min-w-0 items-center gap-2 text-left transition-opacity hover:opacity-80"
     >
-      <MinecraftAvatar
-        uuid={player.uuid}
-        skinUrl={player.customSkinUrl}
-        size={40}
-        alt=""
-        className="shrink-0 rounded-xl md:hidden"
-      />
       <MinecraftAvatar
         uuid={player.uuid}
         skinUrl={player.customSkinUrl}
         size={32}
         alt=""
-        className="hidden shrink-0 rounded-lg md:block"
+        className="shrink-0 rounded-lg"
       />
-      <span className="w-full min-w-0 truncate text-xs font-medium leading-snug md:text-sm">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-snug md:text-sm">
         {name}
       </span>
     </Link>
