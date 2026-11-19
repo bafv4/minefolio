@@ -32,9 +32,24 @@ export type TocSegment =
     }
   | { kind: "other" };
 
-const HEADING_ID_RE = /<h[1-6]\b[^>]*\sid="(heading-\d+)"/g;
-const HEADING_OPEN_RE = /<h[1-6]\b/g;
-const GUIDE_LEVEL_RE = /<h[1-6]\b[^>]*\sdata-guide-level="([1-6])"/g;
+// 見出しの開始タグ（h1〜h6）。level（data-guide-level）と id（heading-N）は同じタグの属性から取る
+const HEADING_TAG_RE = /<h[1-6]\b[^>]*>/g;
+const GUIDE_LEVEL_ATTR_RE = /\sdata-guide-level="([1-6])"/;
+const HEADING_ID_ATTR_RE = /\sid="(heading-\d+)"/;
+
+/** 文書順の見出し。level は元のレベル（data-guide-level が無い見出しは null）、id は本文の目次の id（無ければ null） */
+type HeadingMark = { level: number | null; id: string | null };
+
+function scanHeadings(html: string): HeadingMark[] {
+  const marks: HeadingMark[] = [];
+  for (const m of html.matchAll(HEADING_TAG_RE)) {
+    marks.push({
+      level: Number(GUIDE_LEVEL_ATTR_RE.exec(m[0])?.[1]) || null,
+      id: HEADING_ID_ATTR_RE.exec(m[0])?.[1] ?? null,
+    });
+  }
+  return marks;
+}
 
 /**
  * 本文の目次に、埋め込みのグループ見出しを文書順で差し込んだ目次を返す。
@@ -52,11 +67,15 @@ export function mergeEmbedGroupsIntoToc(segments: TocSegment[], toc: TocItem[]):
 
   const tocById = new Map(toc.map((item) => [item.id, item]));
 
+  // html 断片ごとの見出しを1回だけ走査する
+  const marksBySegment = new Map<TocSegment, HeadingMark[]>();
   // 本文の最小の元のレベル（前に見出しが無い埋め込みの基準）
   let minOriginal = 7;
   for (const seg of segments) {
     if (seg.kind !== "html") continue;
-    for (const m of seg.content.matchAll(GUIDE_LEVEL_RE)) minOriginal = Math.min(minOriginal, Number(m[1]));
+    const marks = scanHeadings(seg.content);
+    marksBySegment.set(seg, marks);
+    for (const mark of marks) if (mark.level !== null) minOriginal = Math.min(minOriginal, mark.level);
   }
   const defaultPrecedingLevel = minOriginal === 7 ? 1 : minOriginal;
 
@@ -65,7 +84,7 @@ export function mergeEmbedGroupsIntoToc(segments: TocSegment[], toc: TocItem[]):
   {
     let section = 0;
     for (const seg of segments) {
-      if (seg.kind === "html") section += [...seg.content.matchAll(HEADING_OPEN_RE)].length;
+      if (seg.kind === "html") section += marksBySegment.get(seg)?.length ?? 0;
       else if (seg.kind === "embed" && seg.groups.length > 0) {
         embedsPerSection.set(section, (embedsPerSection.get(section) ?? 0) + 1);
       }
@@ -79,17 +98,10 @@ export function mergeEmbedGroupsIntoToc(segments: TocSegment[], toc: TocItem[]):
   for (const seg of segments) {
     if (seg.kind === "html") {
       // 見出しを文書順にたどる（目次に載る id は本文の項目、載らない見出し〔空・h4 以下〕は段だけ持ち越す）
-      const marks: { pos: number; level: number; id: string | null }[] = [];
-      for (const m of seg.content.matchAll(GUIDE_LEVEL_RE)) {
-        marks.push({ pos: m.index ?? 0, level: Number(m[1]), id: null });
-      }
-      for (const m of seg.content.matchAll(HEADING_ID_RE)) {
-        const pos = m.index ?? 0;
-        const mark = marks.find((x) => x.pos === pos);
-        if (mark) mark.id = m[1];
-      }
-      section += [...seg.content.matchAll(HEADING_OPEN_RE)].length;
+      const marks = marksBySegment.get(seg) ?? [];
+      section += marks.length;
       for (const mark of marks) {
+        if (mark.level === null) continue;
         precedingLevel = mark.level;
         const item = mark.id ? tocById.get(mark.id) : undefined;
         if (item) {

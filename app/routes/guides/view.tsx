@@ -37,7 +37,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { GUIDE_TAG_HIT_AREA, GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { format } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
 import { mergeEmbedGroupsIntoToc } from "@/lib/guide-embed-toc";
@@ -181,6 +181,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   };
 
   const url = new URL(request.url);
+  const locale = resolveLocale(request);
 
   // セッション解決（→ isOwner 判定用の currentUser 取得へ連鎖）と著者取得は互いに独立なので並行する
   const [currentUser, author] = await Promise.all([
@@ -267,7 +268,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     // 著者は実在し本人以外にも見える（private はここへ来ない）ので、404 の画面から著者のガイド一覧へ案内できるよう slug を載せる
     // 表示名も載せ、補助リンクを「{名前}のガイド」にできるようにする（選び方は他の著者表示と同じ getLocalizedDisplayName）
     throw data(
-      { authorSlug: author.slug, authorName: getLocalizedDisplayName(author, resolveLocale(request)) },
+      { authorSlug: author.slug, authorName: getLocalizedDisplayName(author, locale) },
       { status: 404 },
     );
   }
@@ -288,37 +289,38 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 切替リンクを出すため、original 指定でも訳文の有無は引く
   // いいね数（guide.id にのみ依存）は翻訳取得と独立なので並行する
   // 末尾の「ほかのガイド」用に、同じ著者の公開済みガイドを最大3件（このガイドは除く。下書き・非公開は含めない）
-  const [translation, likeCount, otherGuidesRaw] = await Promise.all([
-    draftPreview ? null : getGuideTranslation(db, guide, resolveLocale(request)),
+  const [translation, likeCount, otherGuides] = await Promise.all([
+    draftPreview ? null : getGuideTranslation(db, guide, locale),
     getGuideLikeCount(db, guide.id),
-    db.query.guides.findMany({
-      where: and(
-        eq(guides.authorId, author.id),
-        eq(guides.isPublished, true),
-        ne(guides.id, guide.id)
-      ),
-      columns: {
-        id: true,
-        slug: true,
-        title: true,
-        summary: true,
-        tags: true,
-        coverImageUrl: true,
-        viewCount: true,
-        updatedAt: true,
-      },
-      extras: { likeCount: guideLikeCountSql().as("like_count") },
-      orderBy: [desc(guides.updatedAt)],
-      limit: 3,
-    }),
+    db.query.guides
+      .findMany({
+        where: and(
+          eq(guides.authorId, author.id),
+          eq(guides.isPublished, true),
+          ne(guides.id, guide.id)
+        ),
+        columns: {
+          id: true,
+          slug: true,
+          title: true,
+          summary: true,
+          tags: true,
+          coverImageUrl: true,
+          viewCount: true,
+          updatedAt: true,
+        },
+        extras: { likeCount: guideLikeCountSql().as("like_count") },
+        orderBy: [desc(guides.updatedAt)],
+        limit: 3,
+      })
+      // 「ほかのガイド」のカードも一覧と同じく、自動翻訳の訳文があれば title / summary を差し替える
+      // （0 件なら訳文を引かない。上の取得と並行して進む）
+      .then(async (rows) => {
+        if (rows.length === 0) return rows;
+        const translations = await getGuideTranslations(db, rows.map((g) => g.id), locale);
+        return rows.map((g) => applyGuideTranslation(g, translations));
+      }),
   ]);
-  // 「ほかのガイド」のカードも一覧と同じく、自動翻訳の訳文があれば title / summary を差し替える
-  const otherGuideTranslations = await getGuideTranslations(
-    db,
-    otherGuidesRaw.map((g) => g.id),
-    resolveLocale(request),
-  );
-  const otherGuides = otherGuidesRaw.map((g) => applyGuideTranslation(g, otherGuideTranslations));
   const showOriginal = url.searchParams.get("original") === "1";
   const translated = translation !== null && !showOriginal ? translation : null;
   const displayTitle = translated?.title ?? viewTitle;
@@ -355,7 +357,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const { html: tocHtml, toc } = buildTableOfContents(wrappedContent);
   // コールアウトに role="note" と種類名の aria-label を付け（アイコンは装飾なので種類を読み上げで伝える）、
   // YouTube の iframe に番号付きの title を付ける（どちらもサニタイズで落ちる属性なので後段で足す。guide-view-html.ts）
-  const tView = createTranslator(resolveLocale(request));
+  const tView = createTranslator(locale);
   const calloutLabels: Record<string, string> = {
     tip: tView("guideEditor.callout.tip"),
     info: tView("guideEditor.callout.info"),
@@ -383,20 +385,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const presetNames = collectPresetNames(contentWithIds);
   const [embedUsers, embedTemplates] = await Promise.all([
     resolveEmbedUsers(db, embedSlugs, presetNames),
-    resolveEmbedTemplates(db, extractTemplateEmbedIds(contentWithIds), resolveLocale(request)),
+    resolveEmbedTemplates(db, extractTemplateEmbedIds(contentWithIds), locale),
   ]);
   // 目次に、サーチクラフト埋め込み（ユーザー参照・テンプレート）のグループ見出し（OW・Bastion 等）を文書順で差し込む。
   // 埋め込みの中身は HTML に無く、解決したデータから描くので、ここ（埋め込みの解決後）で合流させる（lib/guide-embed-toc.ts）
-  const tocWithEmbeds = mergeEmbedGroupsIntoToc(
-    embedTocSegments(
-      splitContentAtEmbeds(contentWithIds),
-      embedUsers,
-      embedTemplates,
-      tView,
-      resolveLocale(request),
-    ),
-    toc,
-  );
+  // 解決できた埋め込みが無ければ（見出しが増えないので）本文の分割も目次の合流も省く
+  const hasResolvedEmbeds = Object.keys(embedUsers).length > 0 || Object.keys(embedTemplates).length > 0;
+  const tocWithEmbeds = hasResolvedEmbeds
+    ? mergeEmbedGroupsIntoToc(
+        embedTocSegments(splitContentAtEmbeds(contentWithIds), embedUsers, embedTemplates, tView, locale),
+        toc,
+      )
+    : toc;
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
@@ -730,12 +730,17 @@ function GuideContent({
 }) {
   const t = useT();
   const statusRef = useRef<HTMLSpanElement>(null);
-  const segments = splitContentAtEmbeds(html);
-  // 埋め込みのグループ見出しの段（直前の本文の見出しの1つ下。html は降格済みなので SSR とハイドレーションで一致する）
-  const headingLevels = embedGroupHeadingLevels(segments);
-  // 埋め込みの通し番号（グループ見出しの id＝目次のアンカー。loader の目次と同じ番号）
-  const ordinals = embedOrdinals(segments);
-  const hasEmbeds = segments.some((s) => s.type !== "html");
+  const { segments, headingLevels, ordinals, hasEmbeds } = useMemo(() => {
+    const segments = splitContentAtEmbeds(html);
+    return {
+      segments,
+      // 埋め込みのグループ見出しの段（直前の本文の見出しの1つ下。html は降格済みなので SSR とハイドレーションで一致する）
+      headingLevels: embedGroupHeadingLevels(segments),
+      // 埋め込みの通し番号（グループ見出しの id＝目次のアンカー。loader の目次と同じ番号）
+      ordinals: embedOrdinals(segments),
+      hasEmbeds: segments.some((s) => s.type !== "html"),
+    };
+  }, [html]);
 
   useCodeCopyButtons(contentRef, statusRef, html, t);
   useGuideTableScroll(contentRef, html, t);
@@ -783,7 +788,7 @@ function GuideContent({
                 template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
                 groupHeadingLevel={headingLevels[i] ?? undefined}
                 embedIndex={ordinals[i] ?? undefined}
-                showKeys={!seg.hideKeys}
+                showInputKeys={!seg.hideKeys}
               />
             );
           }
@@ -805,7 +810,7 @@ function GuideContent({
               presetName={seg.presetName}
               groupHeadingLevel={headingLevels[i] ?? undefined}
               embedIndex={ordinals[i] ?? undefined}
-              showKeys={!seg.hideKeys}
+              showInputKeys={!seg.hideKeys}
             />
           );
         })}

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { itemLangForLocale } from "@/components/item-icon";
@@ -279,18 +279,13 @@ export function embedTocSegments(
     if (seg.type === "searchcraft-embed") {
       const userData = embedUsers[seg.userSlug];
       if (userData) {
-        const source = selectSearchCraftEmbedSource(userData, seg.presetName);
-        crafts = normalizeEmbedCrafts(source.rawCrafts);
-        if (!seg.hideKeys) {
-          loops = buildEmbedLoops(source.presetMode, source.rawLoopsData, userData.searchCraftLoops);
-        }
+        ({ crafts, loops } = userEmbedCraftsAndLoops(userData, seg.presetName, !seg.hideKeys));
         name = getLocalizedDisplayName(userData, locale);
       }
     } else if (seg.type === "sctemplate-embed") {
       const template = seg.templateId ? embedTemplates[seg.templateId] : undefined;
       if (template) {
-        crafts = normalizeEmbedCrafts(safeParseArray<unknown>(template.craftsData) ?? []);
-        if (!seg.hideKeys) loops = buildEmbedLoops(true, template.loopsData, []);
+        ({ crafts, loops } = templateEmbedCraftsAndLoops(template, !seg.hideKeys));
         name = template.title;
       }
     }
@@ -512,6 +507,44 @@ function buildEmbedLoops(
 }
 
 /**
+ * 埋め込みの「クラフト＋Loop」を整える共通関数（描画と目次 embedTocSegments が同じ集合を見るため）。
+ * 押すキーを隠すとき（showInputKeys=false）は Loop を数えない（中身がほぼ押すキーの列のため）
+ */
+function embedCraftsAndLoops(input: {
+  rawCrafts: unknown[];
+  presetMode: boolean;
+  rawLoopsData: string | null;
+  liveLoops: EmbedUserData["searchCraftLoops"];
+  showInputKeys: boolean;
+}): { crafts: NormalizedEmbedCraft[]; loops: SearchCraftLoopRowData[] } {
+  return {
+    crafts: normalizeEmbedCrafts(input.rawCrafts),
+    loops: input.showInputKeys ? buildEmbedLoops(input.presetMode, input.rawLoopsData, input.liveLoops) : [],
+  };
+}
+
+function userEmbedCraftsAndLoops(userData: EmbedUserData, presetName: string | null, showInputKeys: boolean) {
+  const source = selectSearchCraftEmbedSource(userData, presetName);
+  return embedCraftsAndLoops({
+    rawCrafts: source.rawCrafts,
+    presetMode: source.presetMode,
+    rawLoopsData: source.rawLoopsData,
+    liveLoops: userData.searchCraftLoops,
+    showInputKeys,
+  });
+}
+
+function templateEmbedCraftsAndLoops(template: EmbedTemplateData, showInputKeys: boolean) {
+  return embedCraftsAndLoops({
+    rawCrafts: safeParseArray<unknown>(template.craftsData) ?? [],
+    presetMode: true,
+    rawLoopsData: template.loopsData,
+    liveLoops: [],
+    showInputKeys,
+  });
+}
+
+/**
  * サーチクラフト一覧 + Loop の描画本体（埋め込みの外枠の中）。
  * ユーザー埋め込み（SearchCraftEmbedView）とテンプレート埋め込み（SearchCraftTemplateEmbedView）が共用する。
  * presetMode=true は「スナップショット由来」（Loop の craft 参照は sequence で突合し、Loop は rawLoopsData の生JSON）、
@@ -527,8 +560,7 @@ function SearchCraftEmbedBody({
   crafts,
   remaps,
   presetMode,
-  rawLoopsData,
-  liveLoops,
+  loops,
   keyboardLayout,
   groupHeadingLevel,
   embedIndex,
@@ -541,8 +573,8 @@ function SearchCraftEmbedBody({
   crafts: NormalizedEmbedCraft[];
   remaps: UiRemapInfo[];
   presetMode: boolean;
-  rawLoopsData: string | null;
-  liveLoops: EmbedUserData["searchCraftLoops"];
+  /** 表示用の Loop（embedCraftsAndLoops。押すキーを隠すときは空） */
+  loops: SearchCraftLoopRowData[];
   /** キー入力順ダイアログの鍵盤のレイアウト（未指定なら US） */
   keyboardLayout?: KeyboardLayout;
   /** グループ見出しの段（embedGroupHeadingLevels。未指定なら h3＝本文の最上位の見出しの下） */
@@ -570,10 +602,6 @@ function SearchCraftEmbedBody({
     items: coerceStringArray(c.items),
     variations: c.variations,
   }));
-
-  // 押すキーを隠すときは Loop（繋ぎ方）も出さない（中身がほぼ押すキーの列のため）。
-  // 見出し（グループ）の集合も Loop を含めずに数える（目次と一致させる。buildEmbedLoops）
-  const loops = showInputKeys ? buildEmbedLoops(presetMode, rawLoopsData, liveLoops) : [];
 
   const loopTimings = Array.from(groupLoopsByTiming(loops).keys());
   const renderLoopExtra = makeLoopGroupExtra({
@@ -621,7 +649,7 @@ export function SearchCraftEmbedView({
   presetName,
   groupHeadingLevel,
   embedIndex,
-  showKeys = true,
+  showInputKeys = true,
 }: {
   userData: EmbedUserData;
   presetName: string | null;
@@ -630,7 +658,7 @@ export function SearchCraftEmbedView({
   /** 本文中の埋め込みの通し番号（グループ見出しの id。embedOrdinals） */
   embedIndex?: number;
   /** 押すキーを出すか（`data-hide-keys` が無ければ true） */
-  showKeys?: boolean;
+  showInputKeys?: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -638,11 +666,13 @@ export function SearchCraftEmbedView({
 
   // presetName 指定時のみプリセットの生 JSON を読む（選び方は lib/guide-embed-data.ts。エディタの要約と同じ）
   const source = selectSearchCraftEmbedSource(userData, presetName);
-  const rawLoopsData = source.rawLoopsData;
   const keyboardLayout = source.layout as KeyboardLayout;
 
   const remaps = toUiRemaps(source.remapsRaw as Parameters<typeof toUiRemaps>[0]);
-  const crafts = normalizeEmbedCrafts(source.rawCrafts);
+  const { crafts, loops } = useMemo(
+    () => userEmbedCraftsAndLoops(userData, presetName, showInputKeys),
+    [userData, presetName, showInputKeys],
+  );
 
   if (crafts.length === 0) {
     return (
@@ -665,12 +695,11 @@ export function SearchCraftEmbedView({
           crafts={crafts}
           remaps={remaps}
           presetMode={source.presetMode}
-          rawLoopsData={rawLoopsData}
-          liveLoops={userData.searchCraftLoops}
+          loops={loops}
           keyboardLayout={keyboardLayout}
           groupHeadingLevel={groupHeadingLevel}
           embedIndex={embedIndex}
-          showInputKeys={showKeys}
+          showInputKeys={showInputKeys}
         />
       </div>
     </div>
@@ -707,7 +736,7 @@ export function SearchCraftTemplateEmbedView({
   template,
   groupHeadingLevel,
   embedIndex,
-  showKeys = true,
+  showInputKeys = true,
 }: {
   /** null = 表示できない（ID 不正・未公開・削除済み・非公開プロフィール） */
   template: EmbedTemplateData | null;
@@ -716,14 +745,17 @@ export function SearchCraftTemplateEmbedView({
   /** 本文中の埋め込みの通し番号（グループ見出しの id。embedOrdinals） */
   embedIndex?: number;
   /** 押すキーを出すか（`data-hide-keys` が無ければ true） */
-  showKeys?: boolean;
+  showInputKeys?: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
-  if (!template) return <TemplateEmbedUnavailable />;
-
   // crafts は生JSONを直接パースする（スナップショットと同形式）。必ず normalizeEmbedCrafts を通す
-  const crafts = normalizeEmbedCrafts(safeParseArray<unknown>(template.craftsData) ?? []);
+  const resolved = useMemo(
+    () => (template ? templateEmbedCraftsAndLoops(template, showInputKeys) : null),
+    [template, showInputKeys],
+  );
+  if (!template || !resolved) return <TemplateEmbedUnavailable />;
+  const { crafts, loops } = resolved;
   if (crafts.length === 0) return <TemplateEmbedUnavailable />;
 
   // リマップは入力キー表示（実際に押すキー）にだけ反映し、鍵盤は出さない（詳細ページで見られる）
@@ -771,13 +803,12 @@ export function SearchCraftTemplateEmbedView({
           crafts={crafts}
           remaps={remaps}
           presetMode
-          rawLoopsData={template.loopsData}
-          liveLoops={[]}
+          loops={loops}
           groupHeadingLevel={groupHeadingLevel}
           embedIndex={embedIndex}
-          showInputKeys={showKeys}
+          showInputKeys={showInputKeys}
         />
-        {showKeys && remaps.length > 0 && (
+        {showInputKeys && remaps.length > 0 && (
           <p className="px-4 pb-4 text-xs text-muted-foreground">
             {t("guideView.embedTemplateHasRemaps")}
           </p>

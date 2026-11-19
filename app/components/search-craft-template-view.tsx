@@ -389,7 +389,7 @@ export function SearchCraftGroupedList({
   // ソート: 指定なし(null) → OW → Bastion → Bastion→Fort → Fortress → Blinded → その他
   // （目次が同じグループ集合を見るため、順と集合は searchCraftGroupTimings が単一情報源。
   //   タイミングが1件も無い1枚表示は下の !hasAnyTiming で別に描くので、ここは空でよい）
-  const sortedKeys = searchCraftGroupTimings(crafts, extraTimings ?? []);
+  const sortedKeys = searchCraftGroupTimings(crafts, extraTimings);
 
   // crafts が0件で、renderGroupExtra の中身（Loop）も無いグループは描かない
   // （extraTimings 由来の空グループは Loop を出すためのものなので、Loop があれば残る）
