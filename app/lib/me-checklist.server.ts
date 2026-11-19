@@ -9,7 +9,7 @@ type UserRow = typeof users.$inferSelect;
 /** 閉じ済み、または全手順が済んでいれば null（欄を出さない）。 */
 export async function loadMeChecklist(
   db: Database,
-  user: Pick<UserRow, "id" | "mcid" | "bedrockMcid" | "meChecklistDismissedAt">,
+  user: Pick<UserRow, "id" | "mcid" | "bedrockMcid" | "bio" | "speedruncomUsername" | "speedruncomId" | "meChecklistDismissedAt">,
 ): Promise<MeChecklistData | null> {
   if (user.meChecklistDismissedAt) return null;
   const [keybindingRows, config, recordRows, playstyle] = await Promise.all([
@@ -21,6 +21,9 @@ export async function loadMeChecklist(
   const checklist = computeMeChecklist({
     mcid: user.mcid,
     bedrockMcid: user.bedrockMcid,
+    bio: user.bio,
+    speedruncomUsername: user.speedruncomUsername,
+    speedruncomId: user.speedruncomId,
     keybindingCount: keybindingRows[0]?.n ?? 0,
     config: config ?? null,
     recordCount: recordRows[0]?.n ?? 0,

@@ -20,6 +20,7 @@ export function parseMeGuideKind(value: unknown): MeGuideKind | null {
 
 export const ME_CHECKLIST_STEPS = [
   { key: "mcid", to: "/me/edit" },
+  { key: "bio", to: "/me/edit#bio" },
   { key: "keybindings", to: "/me/keybindings" },
   { key: "devices", to: "/me/devices" },
   { key: "records", to: "/me/records" },
@@ -43,6 +44,11 @@ export interface MeChecklistData {
 export interface MeChecklistInput {
   mcid: string | null | undefined;
   bedrockMcid?: string | null;
+  /** 自己紹介（users.bio。空白のみは未入力扱い） */
+  bio?: string | null;
+  /** Speedrun.com のユーザー名・ID（どちらかが入っていれば登録済み） */
+  speedruncomUsername?: string | null;
+  speedruncomId?: string | null;
   keybindingCount: number;
   /** player_configs の行（無ければ null） */
   config: {
@@ -75,6 +81,7 @@ export function computeMeChecklist(input: MeChecklistInput): MeChecklistData {
   const { config, playstyle } = input;
   const done: Record<MeChecklistStepKey, boolean> = {
     mcid: filled(input.mcid) || filled(input.bedrockMcid),
+    bio: filled(input.bio),
     keybindings: input.keybindingCount > 0,
     devices:
       config != null &&
@@ -87,7 +94,7 @@ export function computeMeChecklist(input: MeChecklistInput): MeChecklistData {
         config.cm360,
         config.controllerSettings,
       ].some(filled),
-    records: input.recordCount > 0,
+    records: input.recordCount > 0 || filled(input.speedruncomUsername) || filled(input.speedruncomId),
     playstyle:
       playstyle != null &&
       [playstyle.versions, playstyle.categories, playstyle.hotbarSwitching].some(filled),

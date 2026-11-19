@@ -99,8 +99,10 @@
 
 - `/me/edit` の h1 の下に `<MeChecklist />` を置く。データは `_layout` の loader が `checklist` として返す
   （閉じ済み・全手順完了なら `null`＝出さない）。判定は純粋関数 `computeMeChecklist`（`lib/me-guide.ts`）、集計は `me-checklist.server.ts`。
-- 手順と済みの判定: MCID（Java/Bedrock いずれか）／キー配置（`keybindings` が 1 件以上）／デバイス（`player_configs` の
-  キーボード・マウス・感度・コントローラー設定のいずれか）／記録（`category_records` が 1 件以上）／プレイスタイル（バージョン・カテゴリ・ホットバー切替のいずれか）。
+- 手順と済みの判定（6手順。各手順の下に達成条件を muted の1行で表示する。文言は `meLayout.checklist.criteria`）:
+  MCID（Java 版 `mcid` か Bedrock 版 `bedrock_mcid` のどちらか）／自己紹介（`users.bio`。空白のみは未入力。リンクは `/me/edit#bio`）／
+  キー配置（`keybindings` が 1 件以上）／デバイス（`player_configs` のキーボード・マウス・感度・コントローラー設定のいずれか）／
+  記録（`category_records` が 1 件以上、または Speedrun.com のユーザー名・ID が登録済み）／プレイスタイル（バージョン・カテゴリ・ホットバー切替のいずれか）。
 - 記録の送信（ツアー完了・チェックリストを閉じる）は `recordMeGuide`（`lib/me-guide.ts`）の素の `fetch` POST。`useFetcher().submit` は
   表示中の子ルート（records・keybindings 等）の loader まで再検証させるため使わない。表示の消去はローカル状態で行う。
 - ツアーの吹き出しは手順が変わるたびに見出しへフォーカスを移して読み上げさせる（`aria-live` は付けない）。

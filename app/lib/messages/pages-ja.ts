@@ -1645,7 +1645,7 @@ export const PAGES_JA = {
         body: "各設定は編集中のプリセットに保存されます。走者画面に出るのはメインのプリセットです。プリセット画面で切り替えられます。",
       },
       save: {
-        title: "変更は保存ボタンで確定",
+        title: "変更は保存バーで確定",
         body: "キー配置・デバイスなどの変更は、画面下の保存バーで確定します。",
       },
       player: {
@@ -1655,18 +1655,28 @@ export const PAGES_JA = {
     },
     checklist: {
       title: "はじめに",
-      description: "走者画面を充実させる5つの手順です。済んだものには印が付きます。",
+      description: "走者画面を充実させる{total}つの手順です。済んだものには印が付きます。",
       progress: "{done} / {total} 完了",
       progressLabel: "完了した手順",
       close: "閉じる",
       done: "完了",
       todo: "未完了",
       steps: {
-        mcid: "MCID を登録する",
+        mcid: "MCID を登録する（Java 版か Bedrock 版）",
+        bio: "自己紹介を入力する",
         keybindings: "キー配置を登録する",
         devices: "デバイスを登録する",
-        records: "記録を追加する",
+        records: "記録か Speedrun.com を登録する",
         playstyle: "プレイスタイルを入力する",
+      },
+      /** 各手順の達成条件（手順名の下に出す） */
+      criteria: {
+        mcid: "Java 版 MCID か Bedrock 版 MCID（ゲーマータグ）のどちらかが登録されていれば完了",
+        bio: "自己紹介が入力されていれば完了",
+        keybindings: "キー配置が1件以上登録されていれば完了",
+        devices: "キーボード・マウス・感度・コントローラー設定のどれかが登録されていれば完了",
+        records: "記録が1件以上あるか、Speedrun.com のユーザー名が登録されていれば完了",
+        playstyle: "バージョン・カテゴリ・ホットバー切替のどれかが入力されていれば完了",
       },
     },
   },

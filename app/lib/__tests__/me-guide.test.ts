@@ -19,13 +19,32 @@ describe("computeMeChecklist", () => {
   it("何も無ければ全て未完了", () => {
     const r = computeMeChecklist(empty);
     expect(r.doneCount).toBe(0);
-    expect(r.total).toBe(5);
+    expect(r.total).toBe(6);
   });
 
   it("MCID は Java・Bedrock どちらかがあれば済み（空白だけは未完了）", () => {
     expect(doneKeys({ ...empty, mcid: "Steve" })).toEqual(["mcid"]);
     expect(doneKeys({ ...empty, bedrockMcid: "Alex" })).toEqual(["mcid"]);
     expect(doneKeys({ ...empty, mcid: "  " })).toEqual([]);
+  });
+
+  it("MCID は Java だけ・Bedrock だけ・両方なしで判定する", () => {
+    expect(doneKeys({ ...empty, mcid: "Steve", bedrockMcid: null })).toContain("mcid");
+    expect(doneKeys({ ...empty, mcid: null, bedrockMcid: "Alex" })).toContain("mcid");
+    expect(doneKeys({ ...empty, mcid: null, bedrockMcid: "" })).not.toContain("mcid");
+  });
+
+  it("自己紹介は空白だけなら未入力扱い", () => {
+    expect(doneKeys({ ...empty, bio: " \t " })).toEqual([]);
+    expect(doneKeys({ ...empty, bio: null })).toEqual([]);
+    expect(doneKeys({ ...empty, bio: "よろしく" })).toEqual(["bio"]);
+  });
+
+  it("記録は記録だけ・Speedrun.com だけでも済み、どちらも無ければ未完了", () => {
+    expect(doneKeys({ ...empty, recordCount: 1 })).toEqual(["records"]);
+    expect(doneKeys({ ...empty, speedruncomUsername: "runner" })).toEqual(["records"]);
+    expect(doneKeys({ ...empty, speedruncomId: "abc123" })).toEqual(["records"]);
+    expect(doneKeys({ ...empty, speedruncomUsername: " ", speedruncomId: "" })).toEqual([]);
   });
 
   it("デバイスは意味のある項目が1つでも入っていれば済み（行があるだけでは未完了）", () => {
@@ -52,6 +71,7 @@ describe("computeMeChecklist", () => {
   it("全て済めば doneCount が total に並ぶ", () => {
     const r = computeMeChecklist({
       mcid: "Steve",
+      bio: "hi",
       keybindingCount: 3,
       config: { cm360: 30 },
       recordCount: 1,
