@@ -14,6 +14,7 @@ import { FavoritesNav } from "@/components/favorites-nav";
 import { FavoritesCookieAlert, FavoritesEmptyState } from "@/components/favorites-shared";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
+import { StatusPill } from "@/components/status-pill";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -97,9 +98,7 @@ export default function FavoritesActivityPage() {
             {t("favorites.activityTitle")}
           </h1>
           {count != null && count > 0 && (
-            <span className="inline-flex items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
-              {t("favorites.activityCount", { count })}
-            </span>
+            <StatusPill>{t("favorites.activityCount", { count })}</StatusPill>
           )}
         </div>
         <p className="text-sm text-muted-foreground">

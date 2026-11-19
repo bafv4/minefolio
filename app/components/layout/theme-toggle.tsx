@@ -75,12 +75,12 @@ export function ThemeToggle() {
             aria-hidden="true"
             data-slot="switch"
             data-state={highContrast ? "checked" : "unchecked"}
-            className="inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-colors data-[state=checked]:bg-primary data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80"
+            className="inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-colors data-[state=checked]:bg-primary data-[state=unchecked]:bg-switch-track-off"
           >
             <span
               data-slot="switch-thumb"
               data-state={highContrast ? "checked" : "unchecked"}
-              className="block size-4 rounded-full bg-background transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0 dark:data-[state=checked]:bg-primary-foreground dark:data-[state=unchecked]:bg-foreground"
+              className="block size-4 rounded-full transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0 data-[state=unchecked]:bg-switch-thumb-off data-[state=checked]:bg-switch-thumb-on"
             />
           </span>
         </DropdownMenuCheckboxItem>

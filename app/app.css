@@ -63,6 +63,16 @@ body {
   --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-control-fill: var(--control-fill);
+  --color-outline-fill: var(--outline-fill);
+  --color-outline-fill-hover: var(--outline-fill-hover);
+  --color-outline-border: var(--outline-border);
+  --color-ghost-hover: var(--ghost-hover);
+  --color-destructive-fill: var(--destructive-fill);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-switch-track-off: var(--switch-track-off);
+  --color-switch-thumb-off: var(--switch-thumb-off);
+  --color-switch-thumb-on: var(--switch-thumb-on);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -120,6 +130,17 @@ body {
   --border: oklch(0.9 0.017 254);
   --page-grid-line: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
+  /* 操作部品（ui/*）の面。dark: 変種を使わず、テーマ側でここを切り替える（ライトは従来の見た目） */
+  --control-fill: transparent; /* チェックボックス・ラジオの面 */
+  --outline-fill: var(--background); /* outline ボタンの面 */
+  --outline-fill-hover: var(--accent);
+  --outline-border: var(--border);
+  --ghost-hover: var(--accent); /* ghost ボタンのホバー面 */
+  --destructive-fill: var(--destructive); /* destructive の塗り（ボタン・バッジ） */
+  --destructive-tint: color-mix(in oklab, var(--destructive) 10%, transparent); /* destructive メニュー項目のフォーカス面 */
+  --switch-track-off: var(--input);
+  --switch-thumb-off: var(--background);
+  --switch-thumb-on: var(--background);
   --ring: oklch(0.53 0.13 162);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -238,6 +259,16 @@ body {
   --border: oklch(1 0 0 / 14%);
   --page-grid-line: oklch(1 0 0 / 10%);
   --input: oklch(0.279 0.041 260.031);
+  --control-fill: color-mix(in oklab, var(--input) 30%, transparent);
+  --outline-fill: color-mix(in oklab, var(--input) 30%, transparent);
+  --outline-fill-hover: color-mix(in oklab, var(--input) 50%, transparent);
+  --outline-border: var(--input);
+  --ghost-hover: color-mix(in oklab, var(--accent) 50%, transparent);
+  --destructive-fill: color-mix(in oklab, var(--destructive) 60%, transparent);
+  --destructive-tint: color-mix(in oklab, var(--destructive) 20%, transparent);
+  --switch-track-off: color-mix(in oklab, var(--input) 80%, transparent);
+  --switch-thumb-off: var(--foreground);
+  --switch-thumb-on: var(--primary-foreground);
   --ring: oklch(0.58 0.14 162);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -444,6 +475,8 @@ body {
 
 .dark[data-contrast="more"],
 .ultra-dark[data-contrast="more"] {
+  /* outline ボタンの枠は --input（塗り色）ではなく枠線の色にする */
+  --outline-border: var(--border);
   --foreground: oklch(1 0 0);
   --card-foreground: oklch(1 0 0);
   --popover-foreground: oklch(1 0 0);
@@ -538,15 +571,10 @@ body {
 :root[data-contrast="more"] [data-slot="virtual-keyboard"] .border-muted-foreground\/70 {
   border-color: var(--muted-foreground);
 }
-/* ダークの outline ボタンは枠に --input（塗り色）を使う。ハイコントラストでは枠線の色にする */
-.dark[data-contrast="more"] .dark\:border-input,
-.ultra-dark[data-contrast="more"] .dark\:border-input {
-  border-color: var(--border);
-}
 /* destructive ボタン: 文字色（--destructive）がダークでは明るい値になるため、白文字を載せると読めない。
    塗りの上は背景色（暗色）の文字にする */
-.dark[data-contrast="more"] .dark\:bg-destructive\/60,
-.ultra-dark[data-contrast="more"] .dark\:bg-destructive\/60 {
+.dark[data-contrast="more"] .bg-destructive-fill,
+.ultra-dark[data-contrast="more"] .bg-destructive-fill {
   background-color: var(--destructive);
   color: var(--background);
 }
@@ -1353,6 +1381,28 @@ body {
 .doc-content.prose :where(blockquote p:first-of-type)::before,
 .doc-content.prose :where(blockquote p:last-of-type)::after {
   content: none;
+}
+
+/* 短い本文（自己紹介・リリースノート）の prose。配色だけをトークンへ割り当てる（prose-invert / dark: は使わない） */
+.prose-tokens.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
 }
 
 /* ─────────────────────────────────────────────────────────────

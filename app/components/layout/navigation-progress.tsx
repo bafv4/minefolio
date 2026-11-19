@@ -65,7 +65,7 @@ export function NavigationProgress() {
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-lg font-medium">{t("loading.page")}</p>
         <div className="flex items-start gap-2 text-sm text-muted-foreground bg-secondary/50 rounded-lg p-3">
-          <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-yellow-500" />
+          <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
           <p className="text-left">{tip}</p>
         </div>
       </div>

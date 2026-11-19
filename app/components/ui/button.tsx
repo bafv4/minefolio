@@ -12,13 +12,13 @@ const buttonVariants = cva(
         // 塗りの面と --ring が同系色でリングが面に溶けるため、背景色のすき間（offset）を挟んで背景に対して見せる
         default: "bg-brand text-brand-foreground shadow-sm hover:bg-brand/90 hover:shadow-md focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         destructive:
-          "bg-destructive text-white shadow-sm hover:bg-destructive/80 hover:shadow-md focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:bg-destructive/60",
+          "bg-destructive-fill text-white shadow-sm hover:bg-destructive/80 hover:shadow-md focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-accent-foreground/20 dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border border-outline-border bg-outline-fill shadow-xs hover:bg-outline-fill-hover hover:text-accent-foreground hover:border-accent-foreground/20",
         secondary:
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/70 hover:shadow-sm",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+          "hover:bg-ghost-hover hover:text-accent-foreground",
         link: "text-brand-link underline-offset-4 hover:underline",
       },
       size: {

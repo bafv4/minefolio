@@ -6,7 +6,7 @@ import rehypeSanitize from "rehype-sanitize";
 // profile.tsx から React.lazy で読み込む（whats-new-markdown.tsx と同じパターン）。
 export function BioMarkdown({ bio }: { bio: string }) {
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
+    <div className="prose prose-sm prose-tokens max-w-none prose-headings:text-foreground prose-headings:font-bold prose-h1:text-xl prose-h1:mt-0 prose-h2:text-lg prose-p:text-muted-foreground prose-p:my-2">
       <Markdown rehypePlugins={[rehypeSanitize]}>{bio}</Markdown>
     </div>
   );

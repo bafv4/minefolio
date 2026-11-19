@@ -1,4 +1,5 @@
 import { Link, type To } from "react-router";
+import { NoticeBanner } from "@/components/notice-banner";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Languages } from "lucide-react";
@@ -22,13 +23,8 @@ export function AutoTranslateNotice({ showOriginal, onToggle, to, className }: A
     "rounded-sm underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const actionLabel = showOriginal ? t("playerProfile.showTranslation") : t("playerProfile.showOriginal");
   return (
-    <div
-      className={cn(
-        "flex w-fit max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border border-info/40 bg-info/10 px-3 py-1.5 text-xs text-foreground",
-        className,
-      )}
-    >
-      <Languages className="h-3 w-3 shrink-0 text-info" aria-hidden />
+    <NoticeBanner tone="info" icon={Languages} className={cn("w-fit max-w-full px-3 py-1.5 text-xs", className)}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span>{showOriginal ? t("playerProfile.viewingOriginal") : t("playerProfile.autoTranslated")}</span>
       <span aria-hidden className="text-muted-foreground">·</span>
       {to !== undefined ? (
@@ -40,6 +36,7 @@ export function AutoTranslateNotice({ showOriginal, onToggle, to, className }: A
           {actionLabel}
         </button>
       )}
-    </div>
+      </div>
+    </NoticeBanner>
   );
 }

@@ -2,6 +2,7 @@ import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { NoticeBanner } from "@/components/notice-banner";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/account";
 import { createDb } from "@/lib/db";
@@ -448,7 +449,7 @@ export default function AccountPage() {
       >
         <p className="text-sm text-muted-foreground">{t("meEdit.dangerZoneDesc")}</p>
         {/* 静的な内容なので通知（role）にはしない。見た目は NoticeBanner の error と同じ */}
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+        <NoticeBanner tone="error" role="status">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1 basis-56">
               <p className="font-medium">{t("meEdit.deleteAccount")}</p>
@@ -527,7 +528,7 @@ export default function AccountPage() {
               </DialogContent>
             </Dialog>
           </div>
-        </div>
+        </NoticeBanner>
       </PageSection>
     </div>
   );

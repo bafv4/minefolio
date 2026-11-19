@@ -331,11 +331,10 @@ export default function PacesPage() {
         {!filtersOpen && appliedChips.length > 0 && (
           <ul className="mt-2 flex flex-wrap gap-1.5 sm:hidden" aria-label={t("paces.filterToggle")}>
             {appliedChips.map((chip) => (
-              <li
-                key={chip.key}
-                className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
-              >
-                <span className="truncate">{chip.label}</span>
+              <li key={chip.key} className="max-w-full">
+                <StatusPill className="max-w-full">
+                  <span className="truncate">{chip.label}</span>
+                </StatusPill>
               </li>
             ))}
           </ul>
