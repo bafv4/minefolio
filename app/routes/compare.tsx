@@ -226,7 +226,6 @@ function similarCandidatesQuery(db: ReturnType<typeof createDb>, p1: string) {
  * 2人のキー配置の一致・不一致を数える（比較画面の要約と「似たキー配置の走者」の一致率で共有）。
  * 両方に設定がある操作だけを分母にする（total = same + different）。片方だけ設定・両方未設定は数えない。
  * oneSided は片方だけ設定の操作の数（要約の注記用。比較表の行としては「違う」に出る）。
- * shared は total と同じ（候補を「比べられる」かの判定用）
  */
 export function compareKeyMaps(map1: Record<string, string>, map2: Record<string, string>) {
   let same = 0;
@@ -243,7 +242,7 @@ export function compareKeyMaps(map1: Record<string, string>, map2: Record<string
     }
   }
   const total = same + different;
-  return { same, different, total, shared: total, oneSided };
+  return { same, different, total, oneSided };
 }
 
 /** p1 のキー配置に近い順に最大10人（比較画面と同じ数え方の一致率。両方に設定のある操作が無い人は除く） */
@@ -258,7 +257,7 @@ export function rankSimilarPlayers(p1KeyMap: Record<string, string>, candidates:
       for (const kb of userKeybindings) {
         userKeyMap[kb.action] = kb.keyCode;
       }
-      const { same, total, shared } = compareKeyMaps(p1KeyMap, userKeyMap);
+      const { same, total } = compareKeyMaps(p1KeyMap, userKeyMap);
       const similarity = total > 0 ? same / total : 0;
       return {
         mcid: user.mcid,
@@ -269,11 +268,10 @@ export function rankSimilarPlayers(p1KeyMap: Record<string, string>, candidates:
         customSkinUrl: user.customSkinUrl,
         matches: same,
         total,
-        shared,
         similarity,
       };
     })
-    .filter((p) => p.shared > 0 && p.similarity > 0)
+    .filter((p) => p.total > 0 && p.similarity > 0)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, 10);
 }
@@ -802,10 +800,8 @@ export default function ComparePage() {
 
   // 一致・不一致の統計。両方に設定がある操作だけを数える（片方だけ設定の行は表には出るが、件数には含めない）
   const stats = useMemo(() => {
-    if (!player1 || !player2) return { same: 0, different: 0, total: 0, oneSided: 0 };
-
-    const { same, different, total, oneSided } = compareKeyMaps(p1Keybindings, p2Keybindings);
-    return { same, different, total, oneSided };
+    if (!player1 || !player2) return compareKeyMaps({}, {});
+    return compareKeyMaps(p1Keybindings, p2Keybindings);
   }, [player1, player2, p1Keybindings, p2Keybindings]);
 
   // 2人が選ばれて結果が出ているとき（md 未満）は、選択欄を1行に詰めて最初の1画面に表が入るようにする。

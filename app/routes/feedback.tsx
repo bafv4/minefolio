@@ -10,7 +10,7 @@ import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { sendFeedbackEmail, categoryLabels } from "@/lib/email.server";
-import { createFeedbackSchema } from "@/lib/feedback-schema";
+import { createFeedbackSchema, FEEDBACK_BODY_MIN, FEEDBACK_SUBJECT_MIN } from "@/lib/feedback-schema";
 import { createFeedbackIssue } from "@/lib/github.server";
 import { cn } from "@/lib/utils";
 import { createId } from "@paralleldrive/cuid2";
@@ -354,7 +354,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                 }}
                 onBlur={() => {
                   // 入力があるのに短いときだけ、送信時と同じ基準（feedback-schema の min）で知らせる
-                  if (subject.length > 0 && subject.length < 5) {
+                  if (subject.length > 0 && subject.length < FEEDBACK_SUBJECT_MIN) {
                     setFieldErrors((prev) => ({ ...prev, subject: t("feedback.subjectTooShort") }));
                   }
                 }}
@@ -383,7 +383,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                   if (fieldErrors.message) setFieldErrors((prev) => ({ ...prev, message: null }));
                 }}
                 onBlur={() => {
-                  if (message.length > 0 && message.length < 10) {
+                  if (message.length > 0 && message.length < FEEDBACK_BODY_MIN) {
                     setFieldErrors((prev) => ({ ...prev, message: t("feedback.bodyTooShort") }));
                   }
                 }}

@@ -254,6 +254,7 @@ import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
 import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
 import { ProfileHighlights } from "@/components/profile-highlights";
 import { pickRepresentativePb, rankedBestTimeMs } from "@/lib/profile-highlights";
+import { statsServiceDisplay } from "@/lib/stats-service-display";
 import { orderStatsSections, type StatsSectionKey } from "@/lib/profile-stats-order";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
@@ -1025,13 +1026,9 @@ export default function PlayerProfilePage() {
       value: playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft),
     });
   }
-  if (showPlaystyleGameLanguage) {
-    playstyleTechniqueRows.push({
-      label: t("playerProfile.gameLanguage"),
-      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
-      plain: true,
-    });
-  }
+  // ゲーム言語は、ほかの行があるときだけ入れる（言語だけではテクニックの欄を作らない。言語はデバイスタブに出る）。
+  // 位置は searchCraft の次なので、入れる場所を覚えておき、最後に差し込む
+  const languageRowIndex = playstyleTechniqueRows.length;
   if (showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle) {
     playstyleTechniqueRows.push({
       label: t("playerProfile.playstyleZeroCycle"),
@@ -1057,8 +1054,13 @@ export default function PlayerProfilePage() {
     });
   }
 
-  // ゲーム言語だけではテクニックの欄を作らない（言語はデバイスタブに出る。プレイスタイルの項目が無いのに「テクニック」見出しだけが立つのを避ける）
-  if (showPlaystyleGameLanguage && playstyleTechniqueRows.length === 1) playstyleTechniqueRows.length = 0;
+  if (showPlaystyleGameLanguage && playstyleTechniqueRows.length > 0) {
+    playstyleTechniqueRows.splice(languageRowIndex, 0, {
+      label: t("playerProfile.gameLanguage"),
+      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
+      plain: true,
+    });
+  }
 
   const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
   const hasPlaystyleControls = playstyleControlsRows.length > 0;
@@ -3093,12 +3095,15 @@ function StatsContent({
   // 取得前に「記録がある見込み」が loader で分からないサービス（Ranked は Minefolio 内順位なし、PaceMan は週間統計なし）は、
   // 読み込み中の欄（約140px）を出さない。取得後に空で消えると下の内容が押し上がるため、1行の確認中表示だけを末尾に出す。失敗時は再試行のため欄で出す
   const rankedExpected = !!minefolioEloRank;
-  const rankedCardShown =
-    player.showRankedStats !== false && loadState.ranked !== "done" && (loadState.ranked === "error" || rankedExpected);
-  const pacemanCardShown = !hasWeeklyStats && loadState.paceman === "error";
-  const checkingExternal =
-    (player.showRankedStats !== false && loadState.ranked === "loading" && !rankedExpected) ||
-    (!hasWeeklyStats && loadState.paceman === "loading");
+  const rankedDisplay = statsServiceDisplay({
+    enabled: player.showRankedStats !== false,
+    state: loadState.ranked,
+    expected: rankedExpected,
+  });
+  const pacemanDisplay = statsServiceDisplay({ enabled: !hasWeeklyStats, state: loadState.paceman, expected: false });
+  const rankedCardShown = rankedDisplay === "card";
+  const pacemanCardShown = pacemanDisplay === "card";
+  const checkingExternal = rankedDisplay === "checking" || pacemanDisplay === "checking";
 
   const sections: Record<StatsSectionKey, ReactNode> = {
     ranked: (
@@ -3114,7 +3119,7 @@ function StatsContent({
             loadingClassName={minefolioEloRank ? STATS_RANKED_LOADING_CLASS : undefined}
           />
         )}
-        {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
+        {externalStats.ranked?.isRegistered && rankedShown && loadState.ranked !== "loading" && (
           <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
         )}
       </>

@@ -604,6 +604,7 @@ function KeyActionStatCard({
       <div className="space-y-2">
         {stat.topActions.map((entry, index) => {
           const label = getActionLabel(t, entry.action);
+          const target = keyTarget(entry.action, stat.keyCode);
           return (
             <StatRow
               key={entry.action}
@@ -612,10 +613,8 @@ function KeyActionStatCard({
               isMouse={false}
               count={entry.count}
               percentage={entry.percentage}
-              href={tableHrefFor(entry.players, keyTarget(entry.action, stat.keyCode))}
-              onClick={() =>
-                onPlayerClick(`${title}: ${label}`, entry.players, keyTarget(entry.action, stat.keyCode))
-              }
+              href={tableHrefFor(entry.players, target)}
+              onClick={() => onPlayerClick(`${title}: ${label}`, entry.players, target)}
             />
           );
         })}
@@ -663,6 +662,7 @@ function KeybindingStatCard({
           const label = isUnbound(key.keyCode)
             ? t("keybindingsStats.unassigned")
             : getKeyLabel(t, key.keyCode);
+          const target = keyTarget(stat.action, key.keyCode);
           return (
             <StatRow
               key={key.keyCode}
@@ -671,10 +671,8 @@ function KeybindingStatCard({
               isMouse={isMouseKey(key.keyCode)}
               count={key.count}
               percentage={key.percentage}
-              href={tableHrefFor(key.players, keyTarget(stat.action, key.keyCode))}
-              onClick={() =>
-                onPlayerClick(`${title}: ${label}`, key.players, keyTarget(stat.action, key.keyCode))
-              }
+              href={tableHrefFor(key.players, target)}
+              onClick={() => onPlayerClick(`${title}: ${label}`, key.players, target)}
             />
           );
         })}

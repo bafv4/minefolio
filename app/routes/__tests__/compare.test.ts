@@ -54,7 +54,7 @@ describe("compareKeyMaps / rankSimilarPlayers（一致率の数え方）", () =>
 
   it("両方に設定がある操作だけを数える（片方だけ設定・両方未設定は数えない）", () => {
     const r = compareKeyMaps(p1, { forward: "KeyW", back: "KeyX" });
-    expect(r).toEqual({ same: 1, different: 1, total: 2, shared: 2, oneSided: 3 });
+    expect(r).toEqual({ same: 1, different: 1, total: 2, oneSided: 3 });
   });
 
   it("一覧の一致率・件数は compareKeyMaps と一致する", () => {

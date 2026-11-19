@@ -364,7 +364,7 @@ export function getFingerKeyStyle(
  * - empty: 情報が無く、押せない（読み取り専用）。後ろへ引かせる
  * - emptyEditable: 情報が無いが、押せる（編集）。操作部品なのでフォーム部品と同じ枠（3:1 以上）
  */
-const KEY_STATE_CLASS = {
+export const KEY_STATE_CLASS = {
   data: "bg-secondary border-muted-foreground/70 text-foreground",
   empty: "bg-secondary/50 border-border text-muted-foreground",
   emptyEditable: "bg-secondary/50 border-muted-foreground/70 text-muted-foreground",

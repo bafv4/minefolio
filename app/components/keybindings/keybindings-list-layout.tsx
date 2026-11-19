@@ -3,6 +3,7 @@
 // mode によって本体を「表（Tabs）」か「ビジュアル（カード）」に切り替える。
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Keyboard,
@@ -13,7 +14,7 @@ import {
   Swords,
   ArrowLeftRight,
 } from "lucide-react";
-import { FingerLegend } from "@/components/virtual-keyboard";
+import { FingerLegend, KEY_STATE_CLASS } from "@/components/virtual-keyboard";
 import { ViewSwitcher } from "./view-switcher";
 import { FilterDialog } from "./filter-dialog";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
@@ -73,12 +74,12 @@ function VisualLegend() {
       <span className="flex items-center gap-1">
         <span
           aria-hidden
-          className="h-3 w-4 rounded-[3px] border-2 border-primary bg-secondary"
+          className={cn("h-3 w-4 rounded-[3px] border-2", KEY_STATE_CLASS.data, "border-primary")}
         />
         <span className="text-[11px] text-muted-foreground">{t("keybindings.legendRemapped")}</span>
       </span>
       <span className="flex items-center gap-1">
-        <span aria-hidden className="h-3 w-4 rounded-[3px] border border-border bg-secondary/50" />
+        <span aria-hidden className={cn("h-3 w-4 rounded-[3px] border", KEY_STATE_CLASS.empty)} />
         <span className="text-[11px] text-muted-foreground">{t("keybindings.legendEmpty")}</span>
       </span>
       <Link
