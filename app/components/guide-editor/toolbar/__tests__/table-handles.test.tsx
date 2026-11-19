@@ -11,6 +11,9 @@ import { CellSelection } from "@tiptap/pm/tables";
 import { buildExtensions } from "../../editor-config";
 import { TableHandles } from "../table-handles";
 import { isTableHandleMenuOpen } from "../../lib/table-ui-state";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -204,10 +207,10 @@ describe("TableHandles", () => {
     ).toBe(true);
   });
 
-  it("「テーブルを削除」でテーブルが消えハンドルも消える", async () => {
+  it("「表を削除」でテーブルが消えハンドルも消える", async () => {
     await hoverCell(2);
     await clickPill(rowPill()!);
-    await clickMenuItem("テーブルを削除");
+    await clickMenuItem(t("guideEditor.toolbar.deleteTable"));
     expect(editor.view.dom.querySelector("table")).toBeNull();
     expect(rowPill()).toBeNull();
     expect(colPill()).toBeNull();
@@ -283,12 +286,12 @@ describe("TableHandles", () => {
     expect(rowPill()).toBeNull();
   });
 
-  it("「テーブルをコピー」で TSV がクリップボードへ書かれ、メニューが閉じる", async () => {
+  it("「表をコピー」で TSV がクリップボードへ書かれ、メニューが閉じる", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     await hoverCell(2);
     await clickPill(rowPill()!);
-    await clickMenuItem("テーブルをコピー");
+    await clickMenuItem(t("guideEditor.ui.copyTable"));
     expect(writeText).toHaveBeenCalledWith("h1\th2\na1\ta2\nb1\tb2");
     expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
   });

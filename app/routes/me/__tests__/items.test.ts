@@ -31,11 +31,13 @@ vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../items";
 import { SAVE_LIMITS } from "@/lib/save-limits";
+import { createTranslator } from "@/lib/messages";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
-const INVALID_LAYOUT_ERROR = "アイテム配置のデータ形式が不正です";
+const t = createTranslator("ja");
+const INVALID_LAYOUT_ERROR = t("meItems.invalidLayoutData");
 const PRESET_REQUIRED_ERROR = "アイテム配置を保存するには、先にプリセットを作成してください";
 const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください";
 
@@ -289,7 +291,7 @@ describe("action - 未知のアクション", () => {
       formDataOf({ _action: "bogus", presetId: preset.id }),
     );
 
-    expect(res).toEqual({ error: "不明なアクション" });
+    expect(res).toEqual({ error: t("meItems.unknownAction") });
     expect(await findLayouts(user.id)).toHaveLength(1);
   });
 });

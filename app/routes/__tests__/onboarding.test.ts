@@ -71,6 +71,7 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
 });
 
 import { MojangError } from "@/lib/mojang";
+import { createTranslator } from "@/lib/messages";
 import { action, loader } from "../onboarding";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
@@ -328,7 +329,7 @@ describe("action - save_minecraft（なりすまし防止）", () => {
 
     const res = await callAction(fd);
 
-    expect(res).toEqual({ error: "MCIDの検証に失敗しました", field: "mcid" });
+    expect(res).toEqual({ error: createTranslator("ja")("meEdit.mcidVerifyFailed"), field: "mcid" });
     expect(await findUserByDiscordId("discord-runner")).toEqual(before);
   });
 
