@@ -662,6 +662,15 @@ export default function GuideViewPage() {
             )}
           </span>
         </Link>
+        {otherGuides.length === 0 && (
+          // ほかのガイドが無くても、筆者のガイドページ（作者のテンプレートへの導線もそこにある）へ行けるようにする
+          <Link
+            to={`/guides/${author.slug}`}
+            className="flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+          >
+            {t("guideView.authorGuidesPage")}
+          </Link>
+        )}
         {otherGuides.length > 0 && (
           <ul className="divide-y divide-border/60">
             {otherGuides.map((g) => (

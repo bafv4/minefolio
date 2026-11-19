@@ -266,10 +266,8 @@ export function BlockHandle({
                   <TooltipTrigger asChild>
                     <button
                       type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        applyCellColor(c.value || null);
-                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyCellColor(c.value || null)}
                       aria-label={t(c.nameKey)}
                       className="h-5 w-5 rounded border border-border hover:ring-2 hover:ring-ring transition-all flex items-center justify-center"
                       style={{ backgroundColor: c.value || "transparent" }}

@@ -21,11 +21,14 @@ export function GuidePagedList({
   linkFn,
   viewMode,
   titleLevel,
+  tagHref,
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   viewMode: "card" | "list";
   titleLevel?: "h2" | "h3" | "h4";
+  /** タグの行き先（GuideCardGrid / GuideListView へそのまま渡す） */
+  tagHref?: (tag: string) => string;
 }) {
   const t = useT();
   const [visibleCount, setVisibleCount] = useState(GUIDE_PAGE_SIZE);
@@ -46,9 +49,9 @@ export function GuidePagedList({
   return (
     <div ref={rootRef} className="space-y-6">
       {viewMode === "card" ? (
-        <GuideCardGrid guides={shown} linkFn={linkFn} titleLevel={titleLevel} />
+        <GuideCardGrid guides={shown} linkFn={linkFn} titleLevel={titleLevel} tagHref={tagHref} />
       ) : (
-        <GuideListView guides={shown} linkFn={linkFn} titleLevel={titleLevel} />
+        <GuideListView guides={shown} linkFn={linkFn} titleLevel={titleLevel} tagHref={tagHref} />
       )}
       {remaining > 0 && (
         <div className="flex justify-center">

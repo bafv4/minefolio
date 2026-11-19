@@ -111,6 +111,8 @@ interface DesktopToolbarProps {
   onSaveDraft: () => void;
   onSavePublish: () => void;
   onOpenSettings: () => void;
+  /** ガイド設定を開いて「公開する」スイッチへフォーカスする（公開版の無いガイドだけに出す近道） */
+  onOpenPublishSettings: () => void;
   previewUrl: string;
   onImagePicker: () => void;
   onYoutube: () => void;
@@ -297,6 +299,7 @@ export function DesktopToolbar({
   onSaveDraft,
   onSavePublish,
   onOpenSettings,
+  onOpenPublishSettings,
   previewUrl,
   onImagePicker,
   onYoutube,
@@ -495,6 +498,20 @@ export function DesktopToolbar({
                     </Button>
                   </TooltipTrigger>
                   <HintTooltipContent hint={t("guideEditor.toolbar.saveDraftHint")} shortcut={SAVE_SHORTCUT} />
+                </Tooltip>
+              )}
+              {/* 公開版が無い（まだ読者に見えない）ガイドだけ。設定ダイアログの「公開する」へ近道を作る
+                  （確認ダイアログではない。保存ボタンの文言・Ctrl+S の挙動は変えない） */}
+              {!livePublished && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" onClick={onOpenPublishSettings}>
+                      <Globe className="h-4 w-4" aria-hidden />
+                      <span className="hidden md:inline">{t("guideEditor.toolbar.publishOpen")}</span>
+                      <span className="sr-only md:hidden">{t("guideEditor.toolbar.publishOpen")}</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <HintTooltipContent hint={t("guideEditor.toolbar.publishOpenHint")} />
                 </Tooltip>
               )}
               <Tooltip>

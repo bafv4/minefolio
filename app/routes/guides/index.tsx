@@ -294,7 +294,7 @@ export default function GuidesIndexPage() {
   };
 
   // タグの絞り込みリンク。ほかのクエリ（検索語・並び順）は保ち、tag だけ入れ替える／外す
-  const tagHref = (value: string | null) => {
+  const tagHref = (value: string | null): string => {
     const params = new URLSearchParams(searchParams);
     if (value) params.set("tag", value);
     else params.delete("tag");
@@ -489,6 +489,8 @@ export default function GuidesIndexPage() {
           linkFn={linkFn}
           viewMode={viewMode}
           titleLevel="h2"
+          // カードのタグも絞り込みチップと同じ行き先（検索語・並び順・表示形式を引き継ぐ）
+          tagHref={tagHref}
         />
       )}
       </>

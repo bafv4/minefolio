@@ -92,6 +92,8 @@ export function GuideEditor({
 
   // ── ダイアログ状態 ──────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 設定ダイアログを「公開する」スイッチへフォーカスして開くか（ツールバーの「公開…」から開いたときだけ）
+  const [settingsFocusPublish, setSettingsFocusPublish] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [templateEmbedOpen, setTemplateEmbedOpen] = useState(false);
   // 埋め込み NodeView の「変更」から開いたときの初期値と書き戻し先（null なら挿入として開く）
@@ -424,7 +426,14 @@ export function GuideEditor({
             hasSavedDraft={draftActive}
             onSaveDraft={() => save("draft")}
             onSavePublish={() => save("publish")}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => {
+              setSettingsFocusPublish(false);
+              setSettingsOpen(true);
+            }}
+            onOpenPublishSettings={() => {
+              setSettingsFocusPublish(true);
+              setSettingsOpen(true);
+            }}
             previewUrl={previewUrl}
             onImagePicker={() => imageInputRef.current?.click()}
             onYoutube={slashContext.insertYoutube}
@@ -532,6 +541,7 @@ export function GuideEditor({
         <SettingsDialog
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
+          focusPublishOnOpen={settingsFocusPublish}
           initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
           authorSlug={authorSlug}
           translationEnabled={translationEnabled}

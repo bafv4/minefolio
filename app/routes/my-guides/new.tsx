@@ -67,17 +67,17 @@ export async function action({ request }: ActionFunctionArgs) {
   const title = (formData.get("title") as string)?.trim();
 
   if (!title) {
-    return { error: t("meGuides.errorTitleRequired") };
+    return { error: t("meGuides.errorTitleRequired"), field: "title" as const };
   }
   if (title.length > 200) {
-    return { error: t("meGuides.errorTitleTooLong") };
+    return { error: t("meGuides.errorTitleTooLong"), field: "title" as const };
   }
 
   // スラッグは作成時の必須入力。自動生成にすると日本語タイトルでは空になり、
   // `guide-<ランダム6文字>` のような意味のないURLで公開されてしまうため、ここで必ず受け取る。
   const slug = normalizeSlug((formData.get("slug") as string) ?? "");
   if (!slug) {
-    return { error: t("meGuides.errorSlugRequired") };
+    return { error: t("meGuides.errorSlugRequired"), field: "slug" as const };
   }
 
   // Count check
@@ -95,7 +95,7 @@ export async function action({ request }: ActionFunctionArgs) {
     columns: { id: true },
   });
   if (existing) {
-    return { error: t("meGuides.errorSlugTaken") };
+    return { error: t("meGuides.errorSlugTaken"), field: "slug" as const };
   }
 
   const [newGuide] = await db
@@ -130,6 +130,11 @@ export default function NewGuidePage() {
   // 入力中はゆるい正規化にとどめ、確定形（保存される値）だけをプレビューに出す
   const resolvedSlug = normalizeSlug(slug);
 
+  // 失敗はどの欄の問題かを action が返す（URL の重複など）。その欄へ aria-invalid と説明（role=alert）を結ぶ。
+  // 欄を特定できない失敗（上限など）は、メッセージだけを欄の外に出す
+  const errorMessage = actionData && "error" in actionData ? actionData.error : null;
+  const errorField = actionData && "field" in actionData ? actionData.field : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -157,6 +162,8 @@ export default function NewGuidePage() {
             required
             autoFocus
             maxLength={200}
+            aria-invalid={errorField === "title" || undefined}
+            aria-describedby={errorField === "title" ? "new-guide-error" : undefined}
           />
         </div>
         <div className="space-y-2">
@@ -169,6 +176,8 @@ export default function NewGuidePage() {
             placeholder={t("guideEditor.slugPlaceholder")}
             required
             maxLength={MAX_GUIDE_SLUG_LENGTH}
+            aria-invalid={errorField === "slug" || undefined}
+            aria-describedby={errorField === "slug" ? "new-guide-error" : undefined}
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
@@ -181,11 +190,13 @@ export default function NewGuidePage() {
           </p>
           <p className="text-xs text-muted-foreground">{t("meGuides.slugHint")}</p>
         </div>
-        {actionData && "error" in actionData && (
-          <p className="text-sm text-destructive">{actionData.error}</p>
+        {errorMessage && (
+          <p id="new-guide-error" role="alert" className="text-sm text-destructive">
+            {errorMessage}
+          </p>
         )}
-        <Button type="submit" className="w-full">
-          {t("meGuides.createAndEdit")}
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? t("meGuides.creating") : t("meGuides.createAndEdit")}
         </Button>
       </Form>
       <UnsavedChangesDialog blocker={blocker} />

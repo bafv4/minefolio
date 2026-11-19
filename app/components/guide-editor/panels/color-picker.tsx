@@ -5,11 +5,12 @@ import { useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/core";
 import { Palette, Paintbrush, AlignLeft, AlignCenter, AlignRight, X, type LucideIcon } from "lucide-react";
 import type { MessageKey } from "@/lib/messages";
-import { guideBgColorVar } from "@/lib/guide-colors";
+import { guideBgColorVar, guideTextColorVar, isSameGuideColor } from "@/lib/guide-colors";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TEXT_COLORS, BG_COLORS, CELL_COLORS } from "../constants";
 import { setTableCellsStyle, type TableStyleScope } from "../lib/block-commands";
+import { useRovingItems, focusPanelOnKeyboardOpen } from "../hooks/use-roving-items";
 import { cn } from "@/lib/utils";
 
 type SwatchKind = "text" | "bg";
@@ -45,7 +46,7 @@ export function PickerTrigger({
             disabled={disabled}
             onMouseDown={(e) => e.preventDefault()}
             className={cn(
-              "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors disabled:pointer-events-none disabled:opacity-50",
+              "inline-flex items-center rounded-md text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
               labelable
                 ? "h-8 justify-start px-2"
                 : size === "default"
@@ -85,30 +86,46 @@ export function ColorSwatchGrid({
   colors,
   kind,
   onPick,
+  value,
 }: {
   label: string;
   colors: readonly ColorOption[];
   kind: SwatchKind;
   onPick: (value: string | null) => void;
+  /** 今の選択に付いている色（空文字・null＝色なし）。渡すと一致する見本に選択中の印（aria-pressed と枠）を付ける。
+   * 省略（undefined）なら印を付けない（セルへの一括適用など、現在値が一つに決まらない文脈） */
+  value?: string | null;
 }) {
   const t = useT();
+  // 橙と黄の背景は同じ色値なので、先頭の一致だけを選択中にする。パレット外の色（旧ハイライト色など）は印を付けない
+  const selectedIndex =
+    value === undefined
+      ? -1
+      : colors.findIndex((c) => (value ? !!c.value && isSameGuideColor(value, c.value) : !c.value));
+  const { itemProps } = useRovingItems(colors.length, selectedIndex);
   return (
-    <div>
-      <p className="text-xs font-medium text-muted-foreground px-1 mb-1">{label}</p>
+    <div role="group" aria-label={label}>
+      <p className="text-xs font-medium text-muted-foreground px-1 mb-1" aria-hidden="true">
+        {label}
+      </p>
       <div className="flex flex-wrap gap-1">
-        {colors.map((c) => (
+        {colors.map((c, i) => (
           <Tooltip key={c.nameKey}>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onPick(c.value || null);
-                }}
+                {...itemProps(i)}
+                // 適用は click で行う（Enter / Space でも動く）。mousedown ではエディタの選択を奪わないことだけをする
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onPick(c.value || null)}
                 aria-label={t(c.nameKey)}
-                className="h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all"
-                // 背景色の見本はテーマ別の表示色（暗いテーマでは暗い背景に置き換わる。guide-colors.ts）で描き、適用後の見た目と揃える
-                style={kind === "text" ? { color: c.value || "var(--foreground)" } : { backgroundColor: c.value ? (guideBgColorVar(c.value) ?? c.value) : "transparent" }}
+                aria-pressed={value === undefined ? undefined : i === selectedIndex}
+                className={cn(
+                  "h-6 w-6 rounded border border-border flex items-center justify-center text-xs font-bold hover:ring-2 hover:ring-ring transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  i === selectedIndex && "border-brand ring-2 ring-brand ring-offset-1 ring-offset-popover",
+                )}
+                // 見本はテーマ別の表示色（文字色は読める明るさ、暗いテーマの背景色は暗い色に置き換わる。guide-colors.ts）で描き、適用後の見た目と揃える
+                style={kind === "text" ? { color: c.value ? (guideTextColorVar(c.value) ?? c.value) : "var(--foreground)" } : { backgroundColor: c.value ? (guideBgColorVar(c.value) ?? c.value) : "transparent" }}
               >
                 {kind === "text" ? "A" : c.value ? "" : "✕"}
               </button>
@@ -141,15 +158,17 @@ export function InlineColorPicker({
       <PopoverContent
         className="w-52 p-2 space-y-2"
         onMouseDown={(e) => e.preventDefault()}
-        // 開いてもフォーカスをエディタから奪わない（選択範囲を保持し、
-        // バブルメニュー内で開いてもバブルが閉じてクラッシュしないようにする）
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        // マウスで開いたときはフォーカスをエディタから奪わない（選択範囲を保持し、
+        // バブルメニュー内で開いてもバブルが閉じてクラッシュしないようにする）。
+        // キーボードで開いたときだけパネルの中へフォーカスを移す
+        onOpenAutoFocus={focusPanelOnKeyboardOpen}
         align="start"
       >
         <ColorSwatchGrid
           label={t("guideEditor.ui.textColor")}
           colors={TEXT_COLORS}
           kind="text"
+          value={(editor.getAttributes("textStyle").color as string | undefined) ?? ""}
           onPick={(v) =>
             v
               ? editor.chain().focus().setColor(v).run()
@@ -160,6 +179,7 @@ export function InlineColorPicker({
           label={t("guideEditor.ui.bgColor")}
           colors={BG_COLORS}
           kind="bg"
+          value={(editor.getAttributes("highlight").color as string | undefined) ?? ""}
           onPick={(v) =>
             v
               ? editor.chain().focus().toggleHighlight({ color: v }).run()
@@ -196,11 +216,9 @@ export function TableAlignRow({ onPick }: { onPick: (value: string | null) => vo
               <button
                 type="button"
                 aria-label={t(labelKey)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onPick(value);
-                }}
-                className="h-7 w-7 rounded border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onPick(value)}
+                className="h-7 w-7 rounded border border-border flex items-center justify-center hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Icon className="h-4 w-4" />
               </button>
@@ -213,11 +231,9 @@ export function TableAlignRow({ onPick }: { onPick: (value: string | null) => vo
             <button
               type="button"
               aria-label={t("guideEditor.ui.clearAlign")}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onPick(null);
-              }}
-              className="h-7 w-7 rounded border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(null)}
+              className="h-7 w-7 rounded border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="h-4 w-4" />
             </button>
@@ -245,8 +261,8 @@ export function TableStylePicker({ editor }: { editor: Editor }) {
       <PopoverContent
         className="w-56 p-2 space-y-2"
         onMouseDown={(e) => e.preventDefault()}
-        // 開いてもフォーカスをエディタから奪わない（選択範囲を保持する）
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        // マウスで開いたときはフォーカスをエディタから奪わない（選択範囲を保持する）。キーボードで開いたときは中へ移す
+        onOpenAutoFocus={focusPanelOnKeyboardOpen}
         align="start"
       >
         {/* 適用範囲 */}
@@ -257,14 +273,13 @@ export function TableStylePicker({ editor }: { editor: Editor }) {
               <button
                 key={s.key}
                 type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setScope(s.key);
-                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setScope(s.key)}
+                aria-pressed={scope === s.key}
                 className={cn(
-                  "flex-1 h-7 rounded text-xs transition-colors",
+                  "flex-1 h-7 rounded text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   scope === s.key
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-brand text-brand-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/70",
                 )}
               >

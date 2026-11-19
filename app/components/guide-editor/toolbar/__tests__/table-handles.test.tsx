@@ -92,14 +92,14 @@ async function clickPill(pill: HTMLButtonElement): Promise<void> {
   });
 }
 
-/** 開いているメニューから label 一致の項目を探して押す（MenuItem は mousedown 発火） */
+/** 開いているメニューから label 一致の項目を探して押す（MenuItem は click 発火） */
 async function clickMenuItem(label: string): Promise<void> {
   const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
     (el) => el.textContent?.trim() === label,
   );
   expect(item, `メニュー項目「${label}」が見つからない`).toBeTruthy();
   await act(async () => {
-    item!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    item!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -188,7 +188,7 @@ describe("TableHandles", () => {
     );
     expect(swatch, "背景色スウォッチが見つからない").toBeTruthy();
     await act(async () => {
-      swatch!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      swatch!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     // 2 行目の 2 セルに適用され、他の行には付かない
     const colored: string[] = [];

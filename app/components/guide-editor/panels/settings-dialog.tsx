@@ -33,6 +33,8 @@ export interface GuideSettingsValues {
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** 開いたとき「公開する」スイッチへフォーカスする（ツールバーの「公開…」から開いたとき。既定は先頭の入力） */
+  focusPublishOnOpen?: boolean;
   /** モーダルを開いたときの初期値（親 State のスナップショット） */
   initialValues: GuideSettingsValues;
   /** URLプレビュー用の著者スラッグ（/guides/{authorSlug}/{slug}） */
@@ -52,6 +54,7 @@ interface SettingsDialogProps {
 export function SettingsDialog({
   open,
   onOpenChange,
+  focusPublishOnOpen = false,
   initialValues,
   authorSlug,
   translationEnabled,
@@ -115,7 +118,17 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" {...returnFocus}>
+      <DialogContent
+        className="sm:max-w-lg"
+        {...returnFocus}
+        onOpenAutoFocus={(e) => {
+          if (!focusPublishOnOpen) return;
+          const toggle = document.getElementById("guide-publish-toggle");
+          if (!toggle) return;
+          e.preventDefault();
+          toggle.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>

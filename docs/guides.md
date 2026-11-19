@@ -68,6 +68,7 @@
     | 非公開 | オフ | 保存 | 非公開のまま保存します | 非公開 |
 
     「下書き保存」（公開中のガイドだけ。上記「保存モデル」）のツールチップは「公開版は変えずに、下書きとして保存します」と `Ctrl S`。公開版が無いガイドは保存ボタンが1つで、`Ctrl S` はそのボタンのツールチップと `aria-keyshortcuts` に付く。ピルは ui.md 6 章の丸ピルで、スイッチが保存済みと違うときは警告色。下書きの通知（`guideEditor.ui.draftBanner`）はそのときのボタン名を差し込む
+  - **「公開…」**: 公開版が無いガイド（`!livePublished`）だけ、ツールバー1段目の保存ボタンの隣に出る近道（`desktop-toolbar.tsx` の `onOpenPublishSettings`）。確認ダイアログではなく、設定モーダルを開いて「公開する」スイッチへフォーカスする（`SettingsDialog` の `focusPublishOnOpen` で `onOpenAutoFocus` を差し替える）。保存ボタンの文言・ピル・Ctrl+S の挙動は変えない
   - **Ctrl/⌘+S**: 公開中のガイドは下書き保存、公開版が無いガイドは唯一の保存ボタンと同じ保存（publish。`getShortcutSaveMode`）。ただし**初めて公開することになる保存（非公開→公開）はショートカットでは行わず**、トーストで「公開」ボタンを案内する（習慣の Ctrl+S で公開されないように。このときボタンのツールチップに Ctrl S も出さない）。`index.tsx` の window の keydown。ブラウザの「ページを保存」は `preventDefault` で止める。Ctrl+Shift+S は打ち消し線なので対象外。保存中・未保存の変更が無いとき・設定モーダルが開いている間は保存しない（設定モーダルは「適用」前の値を持つため）
   - **プレビュー**は `?draft=1` で下書き保存した内容（無ければ公開版）を新しいタブで開く。未保存の変更があるときはツールチップで「未保存の変更は含まれません」と伝える
   - **ダイアログを閉じたあとのフォーカス**（`lib/dialog-return-focus.ts` の `useDialogReturnFocus(open)`）: エディタのダイアログ（設定・リンク・YouTube・ガイドリンク・動画→GIF・画像の切り抜き・埋め込み〔リマップ／サーチクラフト〕・テンプレート埋め込み。挿入も変更も）はすべてトリガー（`DialogTrigger`）を持たず state で開くので、Radix の既定では閉じたあとフォーカスが body に落ちる。これを1つのフックで扱う
@@ -140,6 +141,16 @@
 #### 公開表示での見出しレベル
 
 ページタイトルが `h1` を占有するため、公開閲覧（`/guides/:author/:slug`、自動翻訳・ドラフトプレビュー含む）では本文見出しを、**本文中の最小レベルが h2 になるようシフトして表示する**（h1 始まりは +1、h2 始まりは 0、h3 始まりは -1。相対的な階層は保ち h6 を超えない。見出しが無ければ何もしない）。保存データ・エディタの見出しレベルは変えない。変換は `app/lib/guide-heading-demote.ts` の `demoteGuideHeadings`（サニタイズ・目次生成の後に適用。目次は元のレベル 1〜3 のまま扱い、id は保持される）。降格後の開きタグには元のレベルを `data-guide-level` として付与し、`.guide-content-demoted`（`app/app.css`）がその属性で、エディタで選んだレベルの見た目（サイズ）を保つ。エディタ内は変換しない（`.guide-content` のみ）。
+
+#### 色・文字サイズのパネルのキーボード操作
+
+`panels/color-picker.tsx`（文字色・背景色・表のスタイル）と `panels/font-size-picker.tsx` のパネル（Popover）は、キーボードだけで「選択 → 色／サイズを付ける → 続けて書く」ができる。
+
+- **適用は `onClick`**（Enter / Space でも動く）。`onMouseDown` は `preventDefault` だけを行い、エディタの選択範囲を奪わない。ブロックハンドルのメニュー（`toolbar/menu-item.tsx`・`block-handle.tsx` のセル色）・表の文字揃え（`TableAlignRow`）も同じ作り
+- **開き方でフォーカスを分ける**（`hooks/use-roving-items.ts` の `focusPanelOnKeyboardOpen`）: トリガーにフォーカスがある（キーボードで開いた）ときだけパネルの中へフォーカスを移す（選択中の見本、無ければ先頭）。マウスで開いたときは従来どおりエディタにフォーカスを残す（選択範囲の保持、バブルメニューが閉じないようにするため）
+- **Tab の停止点は1グループにつき1つ**、グループ内は矢印キー・Home / End で移動（roving tabindex。`useRovingItems`）。Esc で閉じると Radix の既定でトリガーへフォーカスが戻る。適用すると `editor.chain().focus()` でエディタへ戻りパネルは閉じる（選択範囲は保たれる）
+- **選択中の印**: 見本・サイズの選択肢・表の適用範囲に `aria-pressed`。見た目は brand（色見本は `ring-brand` の枠。選択中＝brand、`ui.md` 1章）。現在の色は `getAttributes("textStyle").color` / `getAttributes("highlight").color` を `isSameGuideColor`（`lib/guide-colors.ts`。hex の大小文字・`rgb()` 形式の違いを吸収）でパレットと照合する。橙と黄の背景は同じ色値なので先頭の一致だけを選択中にする。パレット外の色（旧ハイライト色など）は印なし。表のセルへの一括適用は現在値が一つに決まらないので印を付けない
+- 見本のアクセシブルネームは色の名前（`guideEditor.colors.*`）、グループは `role="group"` ＋ラベル
 
 #### 文字サイズと見出しの関係
 
@@ -310,7 +321,9 @@ GIF を canvas に描くと 1 フレーム目の静止画に潰れるため、�
 - **コールアウト**: 面は意味色 `/10`、枠 `/40`（tip→success / info→info / warning→warning / danger→destructive）。アイコンは挿入メニュー（`desktop-toolbar.tsx`）と同じ lucide の Lightbulb / Info / TriangleAlert / Siren を CSS の mask で意味色に塗る（公開表示は `.callout::before`、エディタは NodeView の `.callout-icon`。同じ規則）。アイコンは装飾で、種類は公開表示の `role="note"` ＋種類名の `aria-label`（`guideEditor.callout.*`）で読み上げる。種類はクリックで切り替えない（従来どおり）
 - **トグル**: 印は目次の節の開閉と同じ右向きシェブロン（muted 色、開くと 90° 回す。`prefers-reduced-motion` では回転のトランジションなし）。`summary` は枠の左右いっぱい・高さ 44px で押せる
 - **ガイドリンクカード**: 本文の中の埋め込み（キー配置・サーチクラフト・テンプレート）と同じ `bg-card`・枠 `/70`。ホバーは枠 `primary/40`＋影で、浮かせない
-- **背景色（ハイライト・表のセル色）の暗いテーマ**: 保存データはライトの淡い色（`GUIDE_BG_COLORS` ＋旧 `#FEF08A`）のままで、dark / ultra-dark では前景色の文字が約 1.1:1 になる。`app/app.css` の「Guide background palette」が `.guide-content` 配下の inline style を色の部分一致（hex〔大文字小文字を問わない〕・`rgb(r, g, b)`・`rgb(r,g,b)`）で捕まえ、テーマ別のトークン `--guide-bg-*` へ `!important` で置き換える。ライトのトークンは保存色と同じ hex（見た目は変わらない）、dark は同じ色相の oklch L 0.30、ultra-dark は L 0.27（前景色に対して 12.8〜14.7:1）。単一情報源は `app/lib/guide-colors.ts` の `GUIDE_BG_COLOR_TOKENS`（オレンジと黄は同じ色なので 1 つ）。エディタのカラーピッカーの見本も `guideBgColorVar()` でトークンを使い、適用後の見た目と揃える。`lib/__tests__/guide-colors.test.ts` が CSS のセレクタとトークン定義の漏れを検出する。文字色パレットは置き換えない
+- **文字色のコントラスト**: 保存される文字色は生の hex（`GUIDE_TEXT_COLORS`）で、ライトの白地でもオレンジ（3.28:1）・黄（3.49:1）・赤（4.26:1）は 4.5:1 に届かず、dark / ultra-dark ではほぼ全色が約 3.3:1 になる。背景色と同じ仕組みで、`app/app.css` の「Guide text palette」が `.guide-content` 配下の inline style を色の部分一致（hex・`rgb(r, g, b)`・`rgb(r,g,b)`）で捕まえ、テーマ別のトークン `--guide-fg-*`（gray / red / orange / yellow / green / blue / purple / pink）へ `!important` で置き換える。**保存データ（hex）とサニタイズの許可リスト（`isPaletteTextColor`）は変えない**（既存の記事はそのまま読める）。各トークンは同じ色相のまま明度（と必要なら彩度）を動かし、本文の面（background / card / secondary）に対して通常 4.5:1 以上、ハイコントラスト（`data-contrast="more"`）で 7:1 以上（ライトの通常は白地に対して 4.5:1 以上。淡い灰の secondary 面は対象外）。ライトの通常は hex、それ以外は oklch で持つ。単一情報源は `guide-colors.ts` の `GUIDE_TEXT_COLOR_TOKENS`。カラーピッカーの文字色の見本も `guideTextColorVar()` でトークンを使う。`lib/__tests__/guide-colors.test.ts` が CSS のセレクタ・トークン定義と、6 通り（light / dark / ultra-dark × 通常 / ハイコントラスト）の面に対するコントラスト比を検証する。**保証するのは本文の面に対する比だけ**で、色付きの背景（ハイライト・表のセル色）の上に色付きの文字を載せた組み合わせは保証しない
+- **背景色のオレンジと黄**: 保存値が同じ `#FBF3DB` なので、表示上も区別できない（トークンは `--guide-bg-yellow` の 1 つ）。見本から片方を外さず現状維持（保存値を変えると既存の記事の色が変わる）
+- **背景色（ハイライト・表のセル色）の暗いテーマ**: 保存データはライトの淡い色（`GUIDE_BG_COLORS` ＋旧 `#FEF08A`）のままで、dark / ultra-dark では前景色の文字が約 1.1:1 になる。`app/app.css` の「Guide background palette」が `.guide-content` 配下の inline style を色の部分一致（hex〔大文字小文字を問わない〕・`rgb(r, g, b)`・`rgb(r,g,b)`）で捕まえ、テーマ別のトークン `--guide-bg-*` へ `!important` で置き換える。ライトのトークンは保存色と同じ hex（見た目は変わらない）、dark は同じ色相の oklch L 0.30、ultra-dark は L 0.27（前景色に対して 12.8〜14.7:1）。単一情報源は `app/lib/guide-colors.ts` の `GUIDE_BG_COLOR_TOKENS`（オレンジと黄は同じ色なので 1 つ）。エディタのカラーピッカーの見本も `guideBgColorVar()` でトークンを使い、適用後の見た目と揃える。`lib/__tests__/guide-colors.test.ts` が CSS のセレクタとトークン定義の漏れを検出する。文字色は前の項（「文字色のコントラスト」）
 
 ### 公開表示の本文（`/guides/:author/:slug`）
 
@@ -362,6 +375,7 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 - **いいね**: 各カードにいいね数を表示し、ログイン中はカード内のグッドボタンで直接いいねできる（自分のガイドは件数のみ）。詳細は [`docs/likes.md`](./likes.md)
   - カード全体のクリックは**オーバーレイのリンク**が担う。`<a>` の子孫にインタラクティブ要素を置くのは不正なHTMLのため、カード全体を `<Link>` で包む構造は使えない。リンクは**タイトル見出しの中のリンクの `::after`** をカード外枠（`group relative`）いっぱいに広げて敷く（読み上げがタイトル1回になる。サムネイルの `alt=""`・Pin は `aria-hidden`）。`line-clamp` は flex の見出しではなく内側の span に付ける
   - カードのタイトルの見出しレベルは `titleLevel`（既定 h3）。`/guides`・`/guides/:authorSlug` は h1 の直下なので h2 を渡す
+- **カードのタグ**: 一覧のカード・リスト行のタグ（最大3個）も、記事内のタグと同じ `Link`（`GuideCardTags`、`guide-list-views.tsx`）。行き先は既定で `/guides?tag=`、`/guides` の一覧は `tagHref` を渡して検索語・並び順・表示形式を引き継ぐ（`GuideCardGrid` / `GuideListView` / `GuidePagedList` の `tagHref`）。カード全面のオーバーレイリンクより手前（`relative z-10`）に出し、押せる範囲は `GUIDE_TAG_HIT_AREA.sm`
 - **タグの絞り込み**: タグのピルは `Badge asChild` の `Link`（`?tag=`。検索語・並び順は保ち、tag だけ入れ替える／外す）。選択中は `aria-current="true"` で、色は brand（`bg-brand text-brand-foreground`）。押せる範囲は見た目（22px のピル）を変えず `::after` で広げる（`GUIDE_TAG_HIT_AREA`、`guide-list-views.tsx`。記事のタグも共用）。狭い画面は高さ 44px・幅は文字幅か 44px の大きいほう、md（記事は sm）以上は 24px 以上。`::after` は padding box 基準なので inset ではなく `h-11` / `w-full min-w-11` で寸法を指定する。md 未満は1行の横スクロールのレール（各タグを高さ 44px の枠に入れる。選択中のタグが外にあれば初回にレール内だけをスクロールして見える位置へ寄せる）。タグの並びは並び替えに依存せず、「件数の多い順 → 同数は名前順（`localeCompare`、表示言語）」で上位 20 個（`rankGuideTags`、`app/lib/guide-tags.ts`）、md 以上は折り返し表示。モバイルの検索ボタンは入力欄右端のアイコンボタン（`sr-only` のラベル、44px）で、sm 以上は従来のボタン。検索欄・並び替え・表示切替（`ViewToggle`）はモバイルで 44px、sm 以上で縮む。検索語・タグで0件のときは EmptyState の action から絞り込み（検索語＋タグ。並び順は保つ）を解除できる
 
 ### /guides/:authorSlug — 著者別ガイド一覧

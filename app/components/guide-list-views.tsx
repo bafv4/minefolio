@@ -112,6 +112,37 @@ export const GUIDE_TAG_HIT_AREA = {
   md: "relative overflow-visible after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-full after:min-w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] md:after:h-6 md:after:min-w-6",
 } as const;
 
+/**
+ * カードの絞り込みタグ（最大3個）。記事内のタグ・一覧のタグチップと同じ `/guides?tag=` へのリンク。
+ * カード全面のオーバーレイリンクより手前（z-10）に出す（いいねボタンと同じ扱い。ui.md 9 章）。
+ * 押せる範囲は GUIDE_TAG_HIT_AREA で見た目（22px のピル）を変えずに広げる。
+ * `tagHref` は /guides の一覧が検索語・並び順を引き継ぐために渡す（既定は tag だけの `/guides?tag=`）
+ */
+function GuideCardTags({
+  tags,
+  tagHref,
+  className,
+}: {
+  tags: string[];
+  tagHref?: (tag: string) => string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-1", className)}>
+      {tags.slice(0, 3).map((tag) => (
+        <Badge
+          key={tag}
+          asChild
+          variant="secondary"
+          className={cn(GUIDE_TAG_HIT_AREA.sm, "z-10 rounded-full px-2 py-0.5 text-[11px]")}
+        >
+          <Link to={tagHref ? tagHref(tag) : `/guides?tag=${encodeURIComponent(tag)}`}>{tag}</Link>
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 /** guides/index・home が内部リンク生成に使う拡張（著者スラッグ付き） */
 export type GuideItemWithAuthorSlug = GuideItem & { _authorSlug: string };
 
@@ -123,9 +154,12 @@ export function GuideCardGrid({
   pageViewsMode = "additional",
   surface = "default",
   titleLevel: TitleHeading = "h3",
+  tagHref,
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
+  /** タグの行き先。省略時は `/guides?tag=`。/guides の一覧は検索語・並び順を引き継ぐものを渡す */
+  tagHref?: (tag: string) => string;
   gridCols?: string;
   /** カードタイトルの見出しレベル。既定 h3。h1 直下の一覧ページ（/guides）は h2、欄見出し（h3）の下に置く面（走者画面のガイドタブ）は h4 */
   titleLevel?: "h2" | "h3" | "h4";
@@ -201,13 +235,7 @@ export function GuideCardGrid({
                   </p>
                 )}
                 {tags.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
+                  <GuideCardTags tags={tags} tagHref={tagHref} className="mt-3" />
                 )}
                 {/* 伸縮スペーサー: タイトル行数等の差を吸収し、フッターの水平線位置を兄弟カード間で下端に揃える */}
                 <div className="flex-1" />
@@ -254,9 +282,12 @@ export function GuideListView({
   guides,
   linkFn,
   titleLevel: TitleHeading = "h3",
+  tagHref,
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
+  /** タグの行き先（GuideCardGrid と同じ） */
+  tagHref?: (tag: string) => string;
   /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
   titleLevel?: "h2" | "h3" | "h4";
 }) {
@@ -299,13 +330,7 @@ export function GuideListView({
                 </p>
               )}
               {tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {tags.slice(0, 3).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
+                <GuideCardTags tags={tags} tagHref={tagHref} className="mt-1.5" />
               )}
               <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                 <GuideAuthorMeta guide={guide} />

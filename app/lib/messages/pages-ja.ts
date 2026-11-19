@@ -25,10 +25,12 @@ export const PAGES_JA = {
     /** 末尾の欄で、ほかの公開ガイドが無く筆者へのリンクだけのときの見出し */
     aboutAuthor: "筆者",
     allGuidesByAuthor: "すべてのガイド",
+    /** ほかの公開ガイドが無いときの、筆者のガイドページへのリンク（テンプレートがあればそこから辿れる） */
+    authorGuidesPage: "この走者のガイドページを見る",
   },
   /** テーマ切替（components/layout/theme-toggle.tsx） */
   theme: {
-    toggle: "テーマを切り替え",
+    toggle: "表示設定（テーマ・ハイコントラスト）",
     /** OS の設定に従う */
     system: "システム",
     systemShort: "自動",
@@ -2488,6 +2490,7 @@ export const PAGES_JA = {
     slugHint: "ガイドの公開URLになります。半角英小文字・数字・「-」「_」が使えます。",
     slugEmptyPreview: "（未入力）",
     createAndEdit: "作成して編集する",
+    creating: "作成中...",
     editTitle: "ガイドを編集",
     errorTitleRequired: "タイトルを入力してください",
     errorTitleTooLong: "タイトルは200文字以内で入力してください",
@@ -2575,6 +2578,9 @@ export const PAGES_JA = {
       settings: "ガイド設定",
       /** ツールバーの設定ボタンの見える文字（名前は settings） */
       settingsShort: "設定",
+      /** 公開版の無いガイドで、保存ボタンの隣に出す近道（押すとガイド設定の「公開する」へ） */
+      publishOpen: "公開…",
+      publishOpenHint: "ガイド設定を開いて、公開するかどうかを選びます",
       saveDraft: "下書き保存",
       /** 下書き保存ボタンのツールチップ（押した結果） */
       saveDraftHint: "公開版は変えずに、下書きとして保存します",
@@ -2854,7 +2860,7 @@ export const PAGES_JA = {
     searchPlaceholder: "タイトルや概要で検索...",
     tagAll: "すべて",
     tagFilterLabel: "タグで絞り込み",
-    noMatchDesc: "条件に合うガイドが見つかりません",
+    noMatchDesc: "語句を短くするか、タグなどの条件を外して探してみてください",
     clearFilters: "絞り込みを解除",
     notFoundGuide: "ガイドが見つかりません",
     notFoundHint: "URL が正しいか、公開が取り下げられていないかを確認してください。",

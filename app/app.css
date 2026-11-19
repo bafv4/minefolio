@@ -205,6 +205,17 @@ body {
   --guide-bg-purple: #F6F3F9;
   --guide-bg-pink: #F9F0F5;
   --guide-bg-legacy-yellow: #FEF08A;
+
+  /* ガイド本文の文字色パレット（GUIDE_TEXT_COLOR_TOKENS）。保存色（生の hex）は白地で 4.5:1 に届かない色があるため、
+     同じ色相のまま明度を下げ、白地で 4.5:1 以上にする（下の「Guide text palette」で置き換える） */
+  --guide-fg-gray: #767572;
+  --guide-fg-red: #CD4642;
+  --guide-fg-orange: #AF6201;
+  --guide-fg-yellow: #85750A;
+  --guide-fg-green: #42815F;
+  --guide-fg-blue: #317CA7;
+  --guide-fg-purple: #8E63AE;
+  --guide-fg-pink: #BF4A88;
 }
 
 .dark,
@@ -301,6 +312,17 @@ body {
   --guide-bg-purple: oklch(0.3 0.05 308);
   --guide-bg-pink: oklch(0.3 0.05 343);
   --guide-bg-legacy-yellow: oklch(0.3 0.06 102);
+
+  /* ガイド本文の文字色パレット（dark）。保存色は暗い面で約 3.3:1 なので、明度を上げて background / card / secondary の
+     すべてで 4.5:1 以上にする */
+  --guide-fg-gray: oklch(0.654 0.005 91.5);
+  --guide-fg-red: oklch(0.675 0.172 25.8);
+  --guide-fg-orange: oklch(0.664 0.134 60.7);
+  --guide-fg-yellow: oklch(0.652 0.114 100.1);
+  --guide-fg-green: oklch(0.644 0.085 158.4);
+  --guide-fg-blue: oklch(0.65 0.099 237.4);
+  --guide-fg-purple: oklch(0.667 0.12 309.5);
+  --guide-fg-pink: oklch(0.676 0.164 350.4);
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -344,6 +366,16 @@ body {
   --guide-bg-purple: oklch(0.27 0.05 308);
   --guide-bg-pink: oklch(0.27 0.05 343);
   --guide-bg-legacy-yellow: oklch(0.27 0.06 102);
+
+  /* ガイド本文の文字色パレット（ultra-dark）。面がより深いぶん dark より少し暗くてよい */
+  --guide-fg-gray: oklch(0.606 0.005 91.5);
+  --guide-fg-red: oklch(0.627 0.172 25.8);
+  --guide-fg-orange: oklch(0.656 0.134 60.7);
+  --guide-fg-yellow: oklch(0.629 0.114 100.1);
+  --guide-fg-green: oklch(0.596 0.085 158.4);
+  --guide-fg-blue: oklch(0.603 0.099 237.4);
+  --guide-fg-purple: oklch(0.619 0.12 309.5);
+  --guide-fg-pink: oklch(0.628 0.164 350.4);
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -399,6 +431,15 @@ body {
   --key-hotbar: oklch(0.45 0.19 27.3);
   --key-ui: oklch(0.43 0.2 303.9);
   --finger-chip-fg: oklch(0.15 0.02 260);
+  /* ガイド本文の文字色（ハイコントラスト）。白地・secondary に対して 7:1 以上 */
+  --guide-fg-gray: oklch(0.427 0.005 91.5);
+  --guide-fg-red: oklch(0.448 0.172 25.8);
+  --guide-fg-orange: oklch(0.434 0.101 60.7);
+  --guide-fg-yellow: oklch(0.425 0.088 100.1);
+  --guide-fg-green: oklch(0.417 0.085 158.4);
+  --guide-fg-blue: oklch(0.424 0.093 237.4);
+  --guide-fg-purple: oklch(0.44 0.12 309.5);
+  --guide-fg-pink: oklch(0.449 0.164 350.4);
 }
 
 .dark[data-contrast="more"],
@@ -444,6 +485,15 @@ body {
   --finger-index: oklch(0.42 0.15 175);
   --finger-thumb: oklch(0.42 0.15 145);
   --finger-palm: oklch(0.42 0.13 70);
+  /* ガイド本文の文字色（ハイコントラスト）。background / card / secondary に対して 7:1 以上 */
+  --guide-fg-gray: oklch(0.775 0.005 91.5);
+  --guide-fg-red: oklch(0.79 0.12 25.8);
+  --guide-fg-orange: oklch(0.785 0.134 60.7);
+  --guide-fg-yellow: oklch(0.773 0.114 100.1);
+  --guide-fg-green: oklch(0.766 0.085 158.4);
+  --guide-fg-blue: oklch(0.772 0.099 237.4);
+  --guide-fg-purple: oklch(0.788 0.12 309.5);
+  --guide-fg-pink: oklch(0.794 0.141 350.4);
 }
 
 
@@ -453,6 +503,15 @@ body {
   --primary: oklch(0.98 0.003 286);
   --border: oklch(0.85 0.01 286);
   --sidebar-border: oklch(0.85 0.01 286);
+  /* ガイド本文の文字色（ハイコントラスト、ultra-dark の面に対して 7:1 以上） */
+  --guide-fg-gray: oklch(0.722 0.005 91.5);
+  --guide-fg-red: oklch(0.741 0.157 25.8);
+  --guide-fg-orange: oklch(0.732 0.134 60.7);
+  --guide-fg-yellow: oklch(0.72 0.114 100.1);
+  --guide-fg-green: oklch(0.712 0.085 158.4);
+  --guide-fg-blue: oklch(0.718 0.099 237.4);
+  --guide-fg-purple: oklch(0.735 0.12 309.5);
+  --guide-fg-pink: oklch(0.744 0.164 350.4);
 }
 
 /* 透明度を掛けた枠線のうち、トークンを強くしても 4.5:1 に届かない物（/40・/50 は不透明の黒でも約 2.5〜4:1）を、
@@ -2106,6 +2165,58 @@ body {
    inline style が無いので !important は要らない */
 .guide-content mark:not([style*="background"]) {
   background-color: var(--guide-bg-legacy-yellow);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Guide text palette — 保存データの文字色を、テーマ別の表示色へ置き換える
+   文字色は生の hex（ライトの白地向け）で保存される。オレンジ・黄・赤は白地でも 4.5:1 に届かず、
+   暗いテーマではほぼ全色が約 3.3:1 になる。上の背景パレットと同じ仕組みで、保存色の部分一致を
+   --guide-fg-*（:root / .dark / .ultra-dark と、各テーマのハイコントラストで定義）に差し替える。
+   - 保存データとサニタイズの許可リスト（hex）は変えない。形は背景パレットと同じ 3 つ（hex / rgb 2 種）
+   - 背景パレットの hex とは重ならないので、1 つの selector が背景を巻き込むことはない
+   - パレットの単一情報源は app/lib/guide-colors.ts（GUIDE_TEXT_COLOR_TOKENS）。色を足したらここにも足す
+   - 保証するのは本文の面（background / card / secondary）に対する比だけ。色付きの背景（ハイライト・セル色）の上の
+     色付き文字の組み合わせは保証しない
+   ───────────────────────────────────────────────────────────── */
+.guide-content [style*="#787774" i],
+.guide-content [style*="rgb(120, 119, 116)"],
+.guide-content [style*="rgb(120,119,116)"] {
+  color: var(--guide-fg-gray) !important;
+}
+.guide-content [style*="#d44c47" i],
+.guide-content [style*="rgb(212, 76, 71)"],
+.guide-content [style*="rgb(212,76,71)"] {
+  color: var(--guide-fg-red) !important;
+}
+.guide-content [style*="#cb7b2c" i],
+.guide-content [style*="rgb(203, 123, 44)"],
+.guide-content [style*="rgb(203,123,44)"] {
+  color: var(--guide-fg-orange) !important;
+}
+.guide-content [style*="#998a2b" i],
+.guide-content [style*="rgb(153, 138, 43)"],
+.guide-content [style*="rgb(153,138,43)"] {
+  color: var(--guide-fg-yellow) !important;
+}
+.guide-content [style*="#448361" i],
+.guide-content [style*="rgb(68, 131, 97)"],
+.guide-content [style*="rgb(68,131,97)"] {
+  color: var(--guide-fg-green) !important;
+}
+.guide-content [style*="#337ea9" i],
+.guide-content [style*="rgb(51, 126, 169)"],
+.guide-content [style*="rgb(51,126,169)"] {
+  color: var(--guide-fg-blue) !important;
+}
+.guide-content [style*="#9065b0" i],
+.guide-content [style*="rgb(144, 101, 176)"],
+.guide-content [style*="rgb(144,101,176)"] {
+  color: var(--guide-fg-purple) !important;
+}
+.guide-content [style*="#c14c8a" i],
+.guide-content [style*="rgb(193, 76, 138)"],
+.guide-content [style*="rgb(193,76,138)"] {
+  color: var(--guide-fg-pink) !important;
 }
 
 /* /me の初回ツアーが指している要素の強調（components/me/me-tour.tsx。brand＝現在地） */

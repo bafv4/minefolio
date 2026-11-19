@@ -65,6 +65,26 @@ export const GUIDE_BG_COLOR_TOKENS: Readonly<Record<string, string>> = {
   "#fef08a": "--guide-bg-legacy-yellow",
 };
 
+/**
+ * 文字色パレット → テーマ別の表示色トークン（CSS 変数名）。背景色と同じ仕組み。
+ * 保存データの文字色は生の hex（ライトの白地向け）で、オレンジ・黄・赤は白地でも 4.5:1 に届かず、
+ * 暗いテーマではほぼ全色が 3.3:1 前後になる。app/app.css の `.guide-content [style*="…"]` が
+ * inline style を `!important` でこのトークンへ置き換える（保存データとサニタイズの許可リストは hex のまま）。
+ * 各トークンは本文の面（background / card / secondary）に対して通常 4.5:1 以上、
+ * ハイコントラストで 7:1 以上（lib/__tests__/guide-colors.test.ts が検証）。
+ * 色付きの背景（ハイライト・表のセル色）の上に載せた文字色の組み合わせは保証しない。
+ */
+export const GUIDE_TEXT_COLOR_TOKENS: Readonly<Record<string, string>> = {
+  "#787774": "--guide-fg-gray",
+  "#d44c47": "--guide-fg-red",
+  "#cb7b2c": "--guide-fg-orange",
+  "#998a2b": "--guide-fg-yellow",
+  "#448361": "--guide-fg-green",
+  "#337ea9": "--guide-fg-blue",
+  "#9065b0": "--guide-fg-purple",
+  "#c14c8a": "--guide-fg-pink",
+};
+
 function parseHex(hex: string): { r: number; g: number; b: number } {
   const value = hex.replace("#", "");
   return {
@@ -77,6 +97,20 @@ function parseHex(hex: string): { r: number; g: number; b: number } {
 /** 比較用に色値を正規化する（小文字化・空白除去。"rgb(1, 2, 3)" → "rgb(1,2,3)"） */
 function normalizeColorValue(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+/** 色値を比較用の正規形にする（rgb 形式は hex へ、hex は小文字へ） */
+function canonicalColor(value: string): string {
+  const n = normalizeColorValue(value);
+  const m = /^rgb\((\d+),(\d+),(\d+)\)$/.exec(n);
+  if (!m) return n;
+  const hex = [m[1], m[2], m[3]].map((x) => Number(x).toString(16).padStart(2, "0")).join("");
+  return `#${hex}`;
+}
+
+/** 2つの色値が同じ色か（hex の大小文字・rgb 形式の違いを無視。エディタが返す属性値とパレット値の照合用） */
+export function isSameGuideColor(a: string, b: string): boolean {
+  return canonicalColor(a) === canonicalColor(b);
 }
 
 /** パレットの hex + 対応する rgb 形式を正規化して集合にする */
@@ -112,6 +146,13 @@ const bgRgbToHex = new Map<string, string>(
   }),
 );
 
+const textRgbToHex = new Map<string, string>(
+  Object.keys(GUIDE_TEXT_COLOR_TOKENS).map((hex) => {
+    const { r, g, b } = parseHex(hex);
+    return [`rgb(${r},${g},${b})`, hex];
+  }),
+);
+
 /**
  * 背景パレット色（hex / rgb 形式）を、テーマ別の表示色トークンの `var(--guide-bg-*)` にする。
  * パレット外は null。トークンが未定義の文脈でも元の色で描けるよう、フォールバックに元の hex を入れる。
@@ -120,6 +161,14 @@ export function guideBgColorVar(value: string): string | null {
   const normalized = normalizeColorValue(value);
   const hex = bgRgbToHex.get(normalized) ?? normalized;
   const token = GUIDE_BG_COLOR_TOKENS[hex];
+  return token ? `var(${token}, ${hex.toUpperCase()})` : null;
+}
+
+/** 文字パレット色（hex / rgb 形式）を、テーマ別の表示色トークンの `var(--guide-fg-*)` にする。パレット外は null */
+export function guideTextColorVar(value: string): string | null {
+  const normalized = normalizeColorValue(value);
+  const hex = textRgbToHex.get(normalized) ?? normalized;
+  const token = GUIDE_TEXT_COLOR_TOKENS[hex];
   return token ? `var(${token}, ${hex.toUpperCase()})` : null;
 }
 
