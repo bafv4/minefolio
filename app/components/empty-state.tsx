@@ -21,7 +21,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
           <Title className="text-sm font-medium text-foreground">{title}</Title>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="shrink-0 max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11">{action}</div>}
       </div>
     );
   }
@@ -32,7 +32,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
         <Title className="text-lg font-medium text-foreground">{title}</Title>
         <p className="text-sm">{description}</p>
       </div>
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-4 max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11">{action}</div>}
     </div>
   );
 }

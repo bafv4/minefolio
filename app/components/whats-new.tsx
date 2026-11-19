@@ -199,7 +199,7 @@ export function WhatsNew() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-[min(92vw,380px)] p-0">
+      <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand shrink-0" aria-hidden />
@@ -224,7 +224,7 @@ export function WhatsNew() {
                   key={category}
                   type="button"
                   onClick={() => scrollToCategory(category)}
-                  className="inline-flex min-h-6 items-center rounded-full bg-brand/10 px-2 py-0.5 text-[11px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex min-h-6 items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {CATEGORY_LABEL_KEYS[category] ? t(CATEGORY_LABEL_KEYS[category]) : category}
                 </button>

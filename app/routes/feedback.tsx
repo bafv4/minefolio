@@ -352,6 +352,12 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                   setSubject(e.target.value);
                   if (fieldErrors.subject) setFieldErrors((prev) => ({ ...prev, subject: null }));
                 }}
+                onBlur={() => {
+                  // 入力があるのに短いときだけ、送信時と同じ基準（feedback-schema の min）で知らせる
+                  if (subject.length > 0 && subject.length < 5) {
+                    setFieldErrors((prev) => ({ ...prev, subject: t("feedback.subjectTooShort") }));
+                  }
+                }}
                 placeholder={t("feedback.subjectPlaceholder")}
                 maxLength={100}
                 required
@@ -375,6 +381,11 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                 onChange={(e) => {
                   setMessage(e.target.value);
                   if (fieldErrors.message) setFieldErrors((prev) => ({ ...prev, message: null }));
+                }}
+                onBlur={() => {
+                  if (message.length > 0 && message.length < 10) {
+                    setFieldErrors((prev) => ({ ...prev, message: t("feedback.bodyTooShort") }));
+                  }
                 }}
                 placeholder={t("feedback.messagePlaceholder")}
                 rows={8}

@@ -1579,6 +1579,7 @@ export default function EditProfilePage() {
                 <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
                 <Combobox
                   id="pronouns"
+                  className="h-11 sm:h-9"
                   options={pronounOptions}
                   value={formValues.pronouns}
                   onValueChange={(value) => handleInputChange("pronouns", value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}

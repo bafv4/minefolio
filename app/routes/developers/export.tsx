@@ -231,7 +231,7 @@ export default function ExportPage() {
                 {t("developers.exportSectionsHint")}
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={toggleAllSections}>
+            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={toggleAllSections}>
               {allSectionsSelected ? t("developers.exportDeselectAll") : t("developers.exportSelectAll")}
             </Button>
           </div>
@@ -305,6 +305,7 @@ export default function ExportPage() {
             <Button
               variant="outline"
               size="sm"
+              className="min-h-11 sm:min-h-8"
               onClick={() => setSelectedUsers(new Set())}
               disabled={selectedUsers.size === 0}
             >
@@ -391,6 +392,7 @@ export default function ExportPage() {
           )}
         </div>
         <Button
+          className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
           disabled={selectedSections.size === 0 || availableUsers.length === 0}
         >
