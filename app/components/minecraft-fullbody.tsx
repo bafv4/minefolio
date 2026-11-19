@@ -245,6 +245,9 @@ const MinecraftFullBodyComponent = ({
   const [hintVisible, setHintVisible] = useState(false);
   // 静止画が透明（描画失敗）だったリクエストのキー。一致している間は 2D アバターを表示する
   const [failedRequestKey, setFailedRequestKey] = useState<string | null>(null);
+  // fluid の 2D アバター代替は、箱の実寸（短辺）に合わせて描く。解像度用の width/height（320 等）で描くと箱より大きくなり切れる
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxSide, setBoxSide] = useState<number | null>(null);
 
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
@@ -470,6 +473,20 @@ const MinecraftFullBodyComponent = ({
     viewer.render();
   }, []);
 
+  const fluidFallback = failedRequestKey === requestKey && effectiveAsImage && fluid;
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!fluidFallback || !el || typeof ResizeObserver === "undefined") return;
+    const update = () => {
+      const side = Math.floor(Math.min(el.clientWidth, el.clientHeight));
+      if (side > 0) setBoxSide(side);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fluidFallback]);
+
   // fluid（静止画のみ）は表示サイズを親に任せる。それ以外は従来どおり width/height の実寸
   const fluidSize = effectiveAsImage && fluid;
   const boxWidth = fluidSize ? "100%" : width;
@@ -491,8 +508,9 @@ const MinecraftFullBodyComponent = ({
     >
       <div
         style={{
-          width: fluidSize ? "30%" : width * 0.3,
-          height: fluidSize ? "70%" : height * 0.7,
+          // fluid は本物（箱いっぱいの静止画）と同じ寸法で描く。細い縦長だと、読み込み後に形が変わって見える
+          width: fluidSize ? "100%" : width * 0.3,
+          height: fluidSize ? "100%" : height * 0.7,
           backgroundColor: "var(--muted)",
           borderRadius: 8,
           animation: "pulse 1.5s ease-in-out infinite",
@@ -515,7 +533,7 @@ const MinecraftFullBodyComponent = ({
     return (
       // overflow: hidden … 描画用の隠しキャンバスは描画解像度（width/height）の実寸で置かれるため、
       // fluid で箱を小さくしたとき箱の外へはみ出してページ幅を広げないよう切る
-      <div style={{ position: "relative", width: boxWidth, height: boxHeight, overflow: "hidden" }}>
+      <div ref={boxRef} style={{ position: "relative", width: boxWidth, height: boxHeight, overflow: "hidden" }}>
         {failedRequestKey === requestKey ? (
           <div
             className="flex items-center justify-center"
@@ -525,7 +543,7 @@ const MinecraftFullBodyComponent = ({
               uuid={uuid}
               skinUrl={skinUrl}
               mcid={mcid}
-              size={Math.min(width, height)}
+              size={fluidFallback && boxSide ? boxSide : Math.min(width, height)}
               className={className}
             />
           </div>

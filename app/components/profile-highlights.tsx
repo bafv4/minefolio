@@ -190,6 +190,11 @@ export interface ProfileHighlightsProps {
   gameLanguage: string | null | undefined;
   hiddenSpeedrunRecords: readonly string[];
   pinnedSpeedrunRecords: readonly string[];
+  /**
+   * MCSR Ranked に登録済みだと loader の時点で分かる（Minefolio 内順位がある）か。
+   * 読み込み中の Elo タイルは、登録が分かっているときだけ出す（未登録だと取得後に消えて、4 枚が 3 枚になるため）
+   */
+  rankedRegisteredKnown?: boolean;
   /** 該当タブへ切り替える（プロフィールページの handleTabChange） */
   onSelectTab: (tab: string) => void;
 }
@@ -207,6 +212,7 @@ export function ProfileHighlights({
   gameLanguage,
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
+  rankedRegisteredKnown = false,
   onSelectTab,
 }: ProfileHighlightsProps) {
   const t = useT();
@@ -258,7 +264,8 @@ export function ProfileHighlights({
   const rankedPbFailed = categoryKey === "ranked" && showRankedStats && !!ranked?.failed;
   const pbFailed = !pbLoading && !representative && (!!src?.failed || rankedPbFailed);
   const eloFailed = !!ranked?.failed && elo == null;
-  const eloLoading = elo === undefined;
+  // 登録の分からない読み込み中は未登録と同じ扱い（タイルを出さない）。値が届いたら最後のタイルとして加わる
+  const eloLoading = elo === undefined && rankedRegisteredKnown;
   const hidden =
     !representative &&
     !pbLoading &&

@@ -372,6 +372,21 @@ type DraftRecord = {
   deleted: boolean;
 };
 
+/** ダイアログの入力欄（id と name が同じ）。この順で検証し、最初の不正な欄へフォーカスする */
+const RECORD_FIELD_ORDER = ["categoryDisplayName", "personalBest", "pbVideoUrl"] as const;
+type RecordField = (typeof RECORD_FIELD_ORDER)[number];
+type RecordFieldErrors = Partial<Record<RecordField, string>>;
+
+/** 入力欄の直下に出すインラインエラー（aria-describedby から参照する。/me/devices と同じ作り） */
+function FieldErrorText({ id, message }: { id: string; message: string | undefined }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {message}
+    </p>
+  );
+}
+
 /** 下書きの内容の比較用キー（key は画面内の識別子なので含めない） */
 function draftComparable(d: DraftRecord): string {
   return JSON.stringify([d.id, d.category, d.categoryDisplayName, d.personalBest, d.pbVideoUrl, d.isVisible, d.isPinned, d.deleted]);
@@ -414,6 +429,32 @@ export default function RecordsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  // 欄ごとのエラー（欄の下に出す。/me/devices と同じ作り）。dialogError はカテゴリの重複・上限など、欄に結び付かないエラー用
+  const [fieldErrors, setFieldErrors] = useState<RecordFieldErrors>({});
+
+  /** 欄を離れたときの検証（送信時と同じ規則。直せば消える） */
+  const handleBlurValidate = (field: RecordField, value: string) => {
+    const message = validateRecordField(field, value);
+    setFieldErrors((prev) => {
+      if (message) return { ...prev, [field]: message };
+      if (prev[field] == null) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+  // 欄ごとの検証（翻訳済みの文言を返す。問題なければ null）。action の検証と同じ規則
+  const validateRecordField = (field: RecordField, value: string): string | null => {
+    const v = value.trim();
+    if (field === "categoryDisplayName") {
+      if (!v) return t("meRecords.displayNameRequired");
+      return v.length > 100 ? t("meRecords.categoryTooLong") : null;
+    }
+    if (field === "personalBest") return v && parseTimeToMs(v) === null ? t("meRecords.invalidTime") : null;
+    if (!v) return null;
+    if (!isHttpUrl(v)) return t("meRecords.invalidVideoUrl");
+    return v.length > PROFILE_FIELD_LIMITS.recordVideoUrl ? t("meRecords.videoUrlTooLong") : null;
+  };
   const [categoryKey, setCategoryKey] = useState<CategoryKey>("rsg");
   const [categorySuffix, setCategorySuffix] = useState("");
   // Speedrun.com 記録の非表示・ピン留めと、カスタム記録の追加・編集・削除は、すべて下書きで持ち、FloatingSaveBar でまとめて保存する
@@ -494,6 +535,7 @@ export default function RecordsPage() {
     setCategoryKey("rsg");
     setCategorySuffix("");
     setDialogError(null);
+    setFieldErrors({});
     setIsDialogOpen(true);
   };
 
@@ -503,6 +545,7 @@ export default function RecordsPage() {
     setCategoryKey(key);
     setCategorySuffix(suffix);
     setDialogError(null);
+    setFieldErrors({});
     setIsDialogOpen(true);
   };
 
@@ -515,12 +558,23 @@ export default function RecordsPage() {
     const personalBestStr = String(fd.get("personalBest") ?? "").trim();
     const pbVideoUrl = String(fd.get("pbVideoUrl") ?? "").trim() || null;
 
-    if (!category || !categoryDisplayName) return setDialogError(t("meRecords.categoryRequired"));
-    if (category.length > 100 || categoryDisplayName.length > 100) return setDialogError(t("meRecords.categoryTooLong"));
+    // 欄ごとの検証（欄を離れたときと同じ規則）。最初の不正な欄へフォーカスして止める
+    const errors: RecordFieldErrors = {};
+    for (const field of RECORD_FIELD_ORDER) {
+      const message = validateRecordField(field, String(fd.get(field) ?? ""));
+      if (message) errors[field] = message;
+    }
+    setFieldErrors(errors);
+    const firstInvalid = RECORD_FIELD_ORDER.find((field) => errors[field]);
+    if (firstInvalid) {
+      setDialogError(null);
+      document.getElementById(firstInvalid)?.focus();
+      return;
+    }
+
+    if (!category) return setDialogError(t("meRecords.categoryRequired"));
+    if (category.length > 100) return setDialogError(t("meRecords.categoryTooLong"));
     const personalBest = personalBestStr ? parseTimeToMs(personalBestStr) : null;
-    if (personalBestStr && personalBest === null) return setDialogError(t("meRecords.invalidTime"));
-    if (pbVideoUrl && !isHttpUrl(pbVideoUrl)) return setDialogError(t("meRecords.invalidVideoUrl"));
-    if (pbVideoUrl && pbVideoUrl.length > PROFILE_FIELD_LIMITS.recordVideoUrl) return setDialogError(t("meRecords.videoUrlTooLong"));
     const alive = draftRecords.filter((d) => !d.deleted && d.key !== editingKey);
     if (alive.some((d) => d.category === category)) return setDialogError(t("meRecords.categoryDuplicate"));
     if (!editing && alive.length >= MAX_CUSTOM_RECORDS) return setDialogError(t("meRecords.errorLimitReached"));
@@ -579,7 +633,8 @@ export default function RecordsPage() {
           )}
           <DialogContent>
             {/* 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする */}
-            <form key={`${isDialogOpen}-${editingKey ?? "new"}`} onSubmit={handleApply}>
+            {/* 検証は欄ごと（欄の下のエラー）に自前でやるので、ブラウザ標準の検証は切る */}
+            <form key={`${isDialogOpen}-${editingKey ?? "new"}`} onSubmit={handleApply} noValidate>
               <DialogHeader>
                 <DialogTitle>{editing ? t("meRecords.editRecord") : t("meRecords.addRecordTitle")}</DialogTitle>
                 <DialogDescription>
@@ -630,8 +685,12 @@ export default function RecordsPage() {
                     defaultValue={editing?.categoryDisplayName ?? ""}
                     placeholder={t("meRecords.displayNamePlaceholder")}
                     maxLength={100}
-                    required
+                    aria-required
+                    onBlur={(e) => handleBlurValidate("categoryDisplayName", e.currentTarget.value)}
+                    aria-invalid={fieldErrors.categoryDisplayName != null || undefined}
+                    aria-describedby={fieldErrors.categoryDisplayName ? "categoryDisplayName-error" : undefined}
                   />
+                  <FieldErrorText id="categoryDisplayName-error" message={fieldErrors.categoryDisplayName} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="personalBest">{t("meRecords.personalBest")}</Label>
@@ -640,7 +699,11 @@ export default function RecordsPage() {
                     name="personalBest"
                     defaultValue={editing?.personalBest ? formatTime(editing.personalBest) : ""}
                     placeholder={t("meRecords.personalBestPlaceholder")}
+                    onBlur={(e) => handleBlurValidate("personalBest", e.currentTarget.value)}
+                    aria-invalid={fieldErrors.personalBest != null || undefined}
+                    aria-describedby={fieldErrors.personalBest ? "personalBest-error" : undefined}
                   />
+                  <FieldErrorText id="personalBest-error" message={fieldErrors.personalBest} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pbVideoUrl">{t("meRecords.videoUrl")}</Label>
@@ -651,7 +714,11 @@ export default function RecordsPage() {
                     defaultValue={editing?.pbVideoUrl ?? ""}
                     placeholder="https://youtube.com/..."
                     maxLength={PROFILE_FIELD_LIMITS.recordVideoUrl}
+                    onBlur={(e) => handleBlurValidate("pbVideoUrl", e.currentTarget.value)}
+                    aria-invalid={fieldErrors.pbVideoUrl != null || undefined}
+                    aria-describedby={fieldErrors.pbVideoUrl ? "pbVideoUrl-error" : undefined}
                   />
+                  <FieldErrorText id="pbVideoUrl-error" message={fieldErrors.pbVideoUrl} />
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
@@ -720,13 +787,11 @@ export default function RecordsPage() {
                 return (
                   <div
                     key={pb.run.id}
-                    className={cn(
-                      "rounded-xl bg-secondary/50 p-3 space-y-1",
-                      isHidden && "opacity-50"
-                    )}
+                    className="rounded-xl bg-secondary/50 p-3 space-y-1"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                      {/* 非表示の記録は本文とサムネイルだけを薄くする。ピン留め・表示切替のボタンは薄くしない（押せる状態が読めなくなる） */}
+                      <div className={cn("flex min-w-0 flex-1 items-center gap-2", isHidden && "opacity-50")}>
                         <h3 className="min-w-0 break-words font-medium text-sm line-clamp-2">
                           {pb.category?.data?.name ?? "Unknown"}
                           {/* 同じカテゴリでバージョン違いの記録が並ぶと見出しが同名になるので、見出しにバージョンを含める
@@ -778,22 +843,24 @@ export default function RecordsPage() {
                         </Tooltip>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {pb.game?.data?.names?.international ?? "Unknown Game"}
-                    </p>
-                    {(pb.platformName || pb.versionName) && (
-                      <p className="text-xs text-muted-foreground">
-                        {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                    <div className={cn("space-y-1", isHidden && "opacity-50")}>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {pb.game?.data?.names?.international ?? "Unknown Game"}
                       </p>
-                    )}
-                    <p className="text-lg font-mono font-bold">{timeText}</p>
-                    {videoEmbedUrl && (
-                      <YouTubeClickEmbed
-                        embedUrl={videoEmbedUrl}
-                        title={t("playerStatsCards.videoTitle", { label: videoLabel })}
-                        playLabel={t("playerStatsCards.playVideo", { label: `${videoLabel} ${timeText}` })}
-                      />
-                    )}
+                      {(pb.platformName || pb.versionName) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
+                        </p>
+                      )}
+                      <p className="text-lg font-mono font-bold">{timeText}</p>
+                      {videoEmbedUrl && (
+                        <YouTubeClickEmbed
+                          embedUrl={videoEmbedUrl}
+                          title={t("playerStatsCards.videoTitle", { label: videoLabel })}
+                          playLabel={t("playerStatsCards.playVideo", { label: `${videoLabel} ${timeText}` })}
+                        />
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {isPinned && <PinnedBadge />}
                       {isHidden && (
@@ -806,8 +873,9 @@ export default function RecordsPage() {
                           rel="noopener noreferrer"
                           className="-mx-2 -my-3.5 flex items-center gap-1 px-2 py-3.5 text-xs text-primary hover:underline sm:-my-2 sm:py-2"
                         >
-                          <ExternalLink className="h-3 w-3" />
+                          <ExternalLink className="h-3 w-3" aria-hidden />
                           {t("meRecords.viewRecord")}
+                          <span className="sr-only"> {pb.category?.data?.name ?? baseName}{pb.versionName ? ` (${pb.versionName})` : ""}</span>
                         </a>
                       )}
                     </div>

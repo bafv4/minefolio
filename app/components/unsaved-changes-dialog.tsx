@@ -65,6 +65,18 @@ export function UnsavedChangesDialog({
 
   const blocked = blocker.state === "blocked";
 
+  // 直前にフォーカスのあった要素（押したリンクか、編集していた欄）。このダイアログには開くボタンが無く、
+  // 閉じるときにフォーカスの戻り先が無いため BODY に落ちる。「編集を続ける」で戻れるよう覚えておく
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const el = e.target;
+      if (el instanceof HTMLElement && !el.closest('[role="alertdialog"]')) lastFocusedRef.current = el;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+
   // ダイアログが閉じたら（保存せず離れる・編集を続ける等）状態を戻す
   useEffect(() => {
     if (!blocked) setPhase("idle");
@@ -120,7 +132,16 @@ export function UnsavedChangesDialog({
         if (!open && !busy) blocker.reset?.();
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={(e) => {
+          // 画面に残る（編集を続ける）ときだけ戻す。移動した後は元の要素が無いので何もしない
+          const el = lastFocusedRef.current;
+          if (el?.isConnected) {
+            e.preventDefault();
+            el.focus();
+          }
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{t("common.unsavedChanges")}</AlertDialogTitle>
           <AlertDialogDescription>{t("common.unsavedLeaveDesc")}</AlertDialogDescription>

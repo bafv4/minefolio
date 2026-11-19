@@ -22,6 +22,16 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
+const externalMocks = vi.hoisted(() => ({
+  fetchAllExternalStats: vi.fn(),
+  fetchSpeedrunComStats: vi.fn(),
+}));
+vi.mock("@/lib/external-stats", () => externalMocks);
+vi.mock("@/lib/paceman-cache", () => ({
+  getNetherEnterCount: vi.fn().mockResolvedValue(0),
+  getMainPaces: vi.fn().mockResolvedValue([]),
+}));
+
 import { loader } from "../stats";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
@@ -30,6 +40,7 @@ const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>
 let db: TestDb;
 
 type LoaderData = {
+  externalStats: { speedruncom?: unknown; ranked?: unknown };
   isOwner: boolean;
   categoryRecords: { id: string; category: string; isPinned: boolean }[];
 };
@@ -77,6 +88,40 @@ describe("カスタム記録（categoryRecords）", () => {
     const result = await callLoader("runner");
 
     expect(result.categoryRecords).toEqual([]);
+  });
+});
+
+describe("外部統計の取得条件（記録タブと同じ）", () => {
+  const SRC = { personalBests: [{ run: { id: "r1" } }] };
+
+  it("MCID が無くても speedrun.com ユーザー名があれば speedrun.com だけ取る", async () => {
+    await seedUser(db, { slug: "runner", profileVisibility: "public", mcid: null, speedruncomUsername: "srcname" });
+    externalMocks.fetchSpeedrunComStats.mockResolvedValue(SRC);
+
+    const result = await callLoader("runner");
+
+    expect(externalMocks.fetchSpeedrunComStats).toHaveBeenCalledWith("srcname");
+    expect(externalMocks.fetchAllExternalStats).not.toHaveBeenCalled();
+    expect(result.externalStats.speedruncom).toEqual(SRC);
+  });
+
+  it("MCID があれば speedrun.com ユーザー名も渡して3サービスを取る", async () => {
+    await seedUser(db, { slug: "runner", profileVisibility: "public", mcid: "Steve", speedruncomUsername: "srcname" });
+    externalMocks.fetchAllExternalStats.mockResolvedValue({ speedruncom: SRC });
+
+    await callLoader("runner");
+
+    expect(externalMocks.fetchAllExternalStats).toHaveBeenCalledWith("Steve", "srcname");
+  });
+
+  it("MCID も speedrun.com ユーザー名も無ければ外部 API を呼ばない", async () => {
+    await seedUser(db, { slug: "runner", profileVisibility: "public", mcid: null, speedruncomUsername: null });
+
+    const result = await callLoader("runner");
+
+    expect(externalMocks.fetchAllExternalStats).not.toHaveBeenCalled();
+    expect(externalMocks.fetchSpeedrunComStats).not.toHaveBeenCalled();
+    expect(result.externalStats).toEqual({});
   });
 });
 

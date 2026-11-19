@@ -80,7 +80,8 @@ import { LinkifiedText } from "@/components/profile/linkified-text";
 // モバイルは縦を使いすぎない（スキンの下の最初の情報が下端ドックより上に入る）高さに抑える。
 // 描画解像度は 320×380 に固定し、表示は MinecraftFullBody の fluid で箱に収める（縮小表示）
 const SKIN_VIEW_RENDER_SIZE = { width: 320, height: 380 } as const;
-const SKIN_VIEW_BOX_CLASS = "h-[240px] w-[206px] sm:h-[280px] sm:w-[240px]";
+// md 未満は身元帯の顔と重なり最初の画面を占めるので 128px に抑える（縦横比は 206:240 のまま）
+const SKIN_VIEW_BOX_CLASS = "h-32 w-[110px] md:h-[280px] md:w-[240px]";
 
 // 記録タブの外部統計は到着が遅いので、読み込み中の欄に、届いたあとの中身に近い最小の高さを確保する
 // （初期表示のフッターが到着で押し下げられる CLS を抑える。確保は読み込み中だけで、到着後は外れる）。
@@ -228,6 +229,7 @@ import type { loader as layoutLoader } from "../_layout";
 import { PageSection } from "@/components/page-section";
 import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
 import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
+import { NoticeBanner } from "@/components/notice-banner";
 import { RecordCard, type RecordCardRecord } from "@/components/record-card";
 import {
   Dialog,
@@ -666,6 +668,8 @@ export default function PlayerProfilePage() {
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  // 初期設定（/onboarding）が終わっていない本人。ページはまだ公開されていない
+  const setupIncomplete = isOwner && !player.onboardingCompleted;
   // 自己紹介（bio / shortBio）の自動翻訳。訳文があれば既定で訳文を出し、原文へ切り替えられる。
   // 切替はクライアント状態のみ（ローダーは訳文と原文の両方を返す）
   const [showBioOriginal, setShowBioOriginal] = useState(false);
@@ -1327,6 +1331,16 @@ export default function PlayerProfilePage() {
         身元帯・ホットバー・パネルの縦並び。フォルダ型ではないので間隔は gap で取る */}
     <Tabs value={activeTab} onValueChange={handleTabChange} activationMode="manual" className="flex flex-col gap-4 md:gap-6 overflow-visible rounded-none border-0 bg-transparent [&_[id]]:scroll-mt-0">
 
+      {/* 初期設定が未完了の本人だけに出す。このページはまだ公開されていない */}
+      {setupIncomplete && (
+        <NoticeBanner tone="warning" icon={Info}>
+          <p>{t("playerProfile.setupIncompleteNotice")}</p>
+          <Link to="/onboarding" className="mt-1 inline-block min-h-6 font-medium text-primary underline-offset-4 hover:underline">
+            {t("playerProfile.setupIncompleteLink")}
+          </Link>
+        </NoticeBanner>
+      )}
+
       {/* 身元帯（全タブ共通。h1 はここだけ） */}
       <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
         {/* md 未満は操作ボタン（アイコンのみ）を名前の右に置き、名前に十分な幅（アバター 40px＋gap 12px＋
@@ -1385,13 +1399,16 @@ export default function PlayerProfilePage() {
                 </Link>
               </Button>
             )}
-            <FavoriteButton slug={player.slug} />
-            <ShareButton
-              title={`${playerName} - Minefolio`}
-              description={displayShortBio ?? undefined}
-              includeTab={true}
-              compactOnMobile
-            />
+            {/* 自分自身はお気に入りに入れない。初期設定が未完了のページは未公開なので共有も出さない */}
+            {!isOwner && <FavoriteButton slug={player.slug} />}
+            {!setupIncomplete && (
+              <ShareButton
+                title={`${playerName} - Minefolio`}
+                description={displayShortBio ?? undefined}
+                includeTab={true}
+                compactOnMobile
+              />
+            )}
           </div>
         </div>
 
@@ -1407,6 +1424,7 @@ export default function PlayerProfilePage() {
           gameLanguage={player.playerConfig?.gameLanguage}
           hiddenSpeedrunRecords={hiddenSpeedrunRecords}
           pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+          rankedRegisteredKnown={!!minefolioEloRank}
           onSelectTab={handleTabChange}
         />
       </div>
@@ -1622,29 +1640,7 @@ export default function PlayerProfilePage() {
                       </Dialog>
                     </div>
                   );
-                })() : (
-                  <div className="order-1 flex justify-center sm:order-first sm:justify-start shrink-0">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className={SKIN_VIEW_BOX_CLASS}>
-                        <MinecraftFullBody
-                          pose={(player.profilePose as PoseName) ?? "waving"}
-                          angle={-35}
-                          elevation={5}
-                          zoom={0.9}
-                          width={SKIN_VIEW_RENDER_SIZE.width}
-                          height={SKIN_VIEW_RENDER_SIZE.height}
-                          asImage
-                          fluid
-                        />
-                      </div>
-                      <p
-                        className="w-[206px] max-w-full text-center text-xs text-muted-foreground sm:w-[240px]"
-                      >
-                        {t("playerProfile.noMcidNote")}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                })() : null /* MCID もスキンも無い走者には、「?」の大きな枠を出さない */}
               </div>
           </div>
 
@@ -3087,6 +3083,22 @@ function StatsContent({
       : null;
   const highlightSrcRunId = representativePb?.kind === "speedruncom" ? representativePb.pb.run.id : null;
 
+  // 全体が空のとき（下の EmptyState を出すとき）は、サービスごとの「記録なし」は出さない（二重になる）
+  const noData =
+    !externalStats.ranked?.isRegistered &&
+    !externalStats.paceman?.isRegistered &&
+    !externalStats.speedruncom?.personalBests?.length &&
+    pendingSpeedrunRecords.length === 0 &&
+    player.categoryRecords.length === 0;
+  const showEmptyState = allExternalResolved && !hasExternalError && noData;
+  // 取得を始めた（MCID／ユーザー名がある）のに結果が無かったサービスは、欄ごと消さず「記録なし」の1行で確定させる。
+  // 読み込み中の欄が数秒出てから消えると、下の欄が押し上がって高さが変わるため
+  const noneNote = (id: string, name: string) => (
+    <PageSection headingLevel="h3" id={`stats-${id}-none`} title={name}>
+      <p className="text-sm text-muted-foreground">{t("playerProfile.statsServiceNone", { name })}</p>
+    </PageSection>
+  );
+
   const sections: Record<StatsSectionKey, ReactNode> = {
     ranked: (
       <>
@@ -3097,12 +3109,15 @@ function StatsContent({
             description={t("loading.rankedStats")}
             state={loadState.ranked}
             onRetry={() => onRetry("ranked")}
-            loadingClassName={STATS_RANKED_LOADING_CLASS}
+            // 登録済みが loader の時点で分かる（Minefolio 内順位がある）ときだけ、届く中身に近い高さを確保する
+            loadingClassName={minefolioEloRank ? STATS_RANKED_LOADING_CLASS : undefined}
           />
         )}
         {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
           <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
         )}
+        {!showEmptyState && player.mcid && player.showRankedStats !== false && loadState.ranked === "done" && !externalStats.ranked?.isRegistered &&
+          noneNote("ranked", "MCSR Ranked")}
       </>
     ),
     // PaceMan は欄を 1 つ（「PaceMan」）にまとめる。リンク（クライアント取得）は見出し右、週間統計（loader 取得済み）は中身
@@ -3137,6 +3152,7 @@ function StatsContent({
               />
             )
           ))}
+        {!showEmptyState && player.mcid && !showPacemanSection && loadState.paceman === "done" && noneNote("paceman", "PaceMan")}
       </>
     ),
     speedruncom: (
@@ -3162,6 +3178,8 @@ function StatsContent({
             expandable
           />
         )}
+        {!showEmptyState && player.speedruncomUsername && loadState.speedruncom === "done" && !externalStats.speedruncom?.personalBests?.length &&
+          noneNote("speedruncom", "Speedrun.com")}
 
         {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
         {pendingSpeedrunRecords.length > 0 && (
@@ -3195,7 +3213,7 @@ function StatsContent({
       )}
 
       {/* データがない場合（外部サービスがエラーの場合は各セクションのエラー表示に任せ、ここでは出さない） */}
-      {allExternalResolved && !hasExternalError && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && pendingSpeedrunRecords.length === 0 && player.categoryRecords.length === 0) && (
+      {showEmptyState && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}

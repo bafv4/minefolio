@@ -8,12 +8,13 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { users, categoryRecords } from "@/lib/schema";
 import { asc, desc, eq, sql } from "drizzle-orm";
-import { fetchAllExternalStats } from "@/lib/external-stats";
+import { fetchAllExternalStats, fetchSpeedrunComStats, type ExternalStatsData } from "@/lib/external-stats";
 import { getNetherEnterCount, getMainPaces, type GroupedPaceEntry } from "@/lib/paceman-cache";
 import { getMinefolioEloRank } from "@/lib/rankings-query.server";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { PageSection } from "@/components/page-section";
+import { OwnerEditAction } from "@/components/player-profile-bits";
 import { RecordCard } from "@/components/record-card";
 import { MCSRRankedCard, PaceManStatsCard, SpeedrunComCard } from "@/components/player-stats-cards";
 import { Trophy, ArrowLeft } from "lucide-react";
@@ -72,6 +73,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         profileVisibility: true,
         discordId: true,
         showRankedStats: true,
+        speedruncomUsername: true,
       },
       // 手入力のカスタム記録（走者画面の記録タブと同じ条件・並び。ピン留めを先頭に）
       with: {
@@ -117,9 +119,12 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // Minefolio内順位（cron キャッシュ基準）は公開プロフィール かつ Ranked統計を
   // 非表示にしていない場合のみ取得する（profile.tsx と同じ判定）
   const [externalStatsRaw, netherEnterCount, recentPaces, minefolioEloRank] = await Promise.all([
+    // 記録タブと同じ条件: MCID があれば3サービス、MCID が無くても speedrun.com ユーザー名があればそれだけ取る
     player.mcid
-      ? fetchAllExternalStats(player.mcid)
-      : Promise.resolve({ paceman: null, ranked: null, speedruncom: null }),
+      ? fetchAllExternalStats(player.mcid, player.speedruncomUsername)
+      : player.speedruncomUsername
+        ? fetchSpeedrunComStats(player.speedruncomUsername).then((speedruncom) => ({ speedruncom }) as ExternalStatsData)
+        : Promise.resolve({} as ExternalStatsData),
     player.mcid ? getNetherEnterCount(player.mcid) : Promise.resolve(0),
     player.mcid
       ? getMainPaces(player.mcid, 10)
@@ -192,6 +197,7 @@ export default function PlayerStatsPage() {
             icon={<Trophy className="h-12 w-12" />}
             title={t("playerProfile.noStatsTitle")}
             description={t(isOwner ? "playerProfile.noStatsDescriptionOwner" : "playerProfile.noStatsDescription")}
+            action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : undefined}
           />
         ) : (
           <>

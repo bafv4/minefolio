@@ -707,8 +707,10 @@ export function SpeedrunComCard({
                     rel="noopener noreferrer"
                     className="flex min-h-6 items-center gap-1 text-xs text-primary hover:underline"
                   >
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="h-3 w-3" aria-hidden />
                     {t("playerStatsCards.viewRecord")}
+                    {/* 同じ文言のリンクが並ぶので、どの記録かを読み上げで補う */}
+                    <span className="sr-only"> {displayName}</span>
                   </a>
                 )}
               </div>
@@ -772,8 +774,9 @@ export function PendingSpeedrunRecordsCard({
               rel="noopener noreferrer"
               className="flex min-h-6 items-center gap-1 text-xs text-primary hover:underline"
             >
-              <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="h-3 w-3" aria-hidden />
               {t("playerStatsCards.viewRecord")}
+              <span className="sr-only"> {r.categoryName}</span>
             </a>
           )}
         </div>
