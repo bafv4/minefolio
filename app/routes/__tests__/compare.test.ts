@@ -52,12 +52,9 @@ describe("compareKeyMaps / rankSimilarPlayers（一致率の数え方）", () =>
       configPresets: [],
     }) as unknown as SimilarCandidate;
 
-  it("片方だけ設定の行は不一致、両方未設定は一致に数える（比較画面の要約と同じ）", () => {
-    const r = compareKeyMaps(p1, { forward: "KeyW" });
-    expect(r.shared).toBe(1);
-    expect(r.different).toBe(4);
-    expect(r.same + r.different).toBe(r.total);
-    expect(r.same).toBe(r.total - 4);
+  it("両方に設定がある操作だけを数える（片方だけ設定・両方未設定は数えない）", () => {
+    const r = compareKeyMaps(p1, { forward: "KeyW", back: "KeyX" });
+    expect(r).toEqual({ same: 1, different: 1, total: 2, shared: 2, oneSided: 3 });
   });
 
   it("一覧の一致率・件数は compareKeyMaps と一致する", () => {
@@ -69,10 +66,12 @@ describe("compareKeyMaps / rankSimilarPlayers（一致率の数え方）", () =>
     expect(row.similarity).toBeCloseTo(direct.same / direct.total);
   });
 
-  it("共通の操作が少ない人（2/2 一致）より、広く一致する人を上に置く", () => {
-    const wide = { ...p1, attack: "Mouse0" };
-    const ranked = rankSimilarPlayers(p1, [candidate("narrow", { forward: "KeyW", back: "KeyS" }), candidate("wide", wide)]);
-    expect(ranked.map((r) => r.slug)).toEqual(["wide", "narrow"]);
+  it("一致率の高い順に並べる", () => {
+    const ranked = rankSimilarPlayers(p1, [
+      candidate("half", { forward: "KeyW", back: "KeyX" }),
+      candidate("all", { forward: "KeyW", back: "KeyS" }),
+    ]);
+    expect(ranked.map((r) => r.slug)).toEqual(["all", "half"]);
   });
 
   it("両方に設定のある操作が無い人は除く", () => {

@@ -823,6 +823,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     swapRunners: "Swap runner 1 and runner 2",
     noRunnerMatch: "No matching runners",
     otherCategoriesNoDifferences: "No differences in the other categories",
+    unsetNotCounted: "{count} actions set by only one runner are not counted",
+    notSet: "Not set",
+    emptyTitle: "Choose runners to compare",
+    emptyDescription: "Pick runner 1 and runner 2 to see the differences in controls and device settings.",
   },
   keybindings: {
     remapsHeading: "Remaps",

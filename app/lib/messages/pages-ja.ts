@@ -707,6 +707,13 @@ export const PAGES_JA = {
     swapRunners: "走者 1 と走者 2 を入れ替える",
     noRunnerMatch: "一致する走者が見つかりません",
     otherCategoriesNoDifferences: "ほかのカテゴリに違いはありません",
+    /** 要約の注記。一致・異なるの件数は、両方に設定がある操作だけを数える */
+    unsetNotCounted: "片方が未設定の{count}件は数えません",
+    /** 比較表で値が無いとき（キーに見える「-」をやめる） */
+    notSet: "未設定",
+    /** 走者を選ぶ前の案内 */
+    emptyTitle: "比べる走者を選んでください",
+    emptyDescription: "走者1と走者2を選ぶと、キー配置とデバイス・設定の違いが表示されます。",
   },
   favorites: {
     title: "お気に入り",

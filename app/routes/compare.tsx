@@ -224,21 +224,26 @@ function similarCandidatesQuery(db: ReturnType<typeof createDb>, p1: string) {
 
 /**
  * 2人のキー配置の一致・不一致を数える（比較画面の要約と「似たキー配置の走者」の一致率で共有）。
- * 行ごとの判定は compareValues。両方未設定は一致に数え、片方だけ設定は不一致に数える。
- * shared は両方に設定のある操作の数（候補を「比べられる」かの判定用）
+ * 両方に設定がある操作だけを分母にする（total = same + different）。片方だけ設定・両方未設定は数えない。
+ * oneSided は片方だけ設定の操作の数（要約の注記用。比較表の行としては「違う」に出る）。
+ * shared は total と同じ（候補を「比べられる」かの判定用）
  */
 export function compareKeyMaps(map1: Record<string, string>, map2: Record<string, string>) {
   let same = 0;
   let different = 0;
-  let shared = 0;
+  let oneSided = 0;
   for (const item of COMPARE_ACTIONS) {
     const k1 = map1[item.action];
     const k2 = map2[item.action];
-    if (k1 && k2) shared++;
-    if (compareValues(k1, k2) === "different") different++;
-    else same++;
+    if (k1 && k2) {
+      if (k1 === k2) same++;
+      else different++;
+    } else if (k1 || k2) {
+      oneSided++;
+    }
   }
-  return { same, different, total: same + different, shared };
+  const total = same + different;
+  return { same, different, total, shared: total, oneSided };
 }
 
 /** p1 のキー配置に近い順に最大10人（比較画面と同じ数え方の一致率。両方に設定のある操作が無い人は除く） */
@@ -534,7 +539,7 @@ function RunnerPicker({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-64 max-w-[calc(100vw-2rem)] p-0" align="start">
         <Command>
           <CommandInput placeholder={t("compare.searchPlaceholder")} aria-label={t("compare.searchPlaceholder")} />
           <CommandList>
@@ -652,6 +657,12 @@ function KeyChip({ children, highlight }: { children: ReactNode; highlight?: boo
       {children}
     </kbd>
   );
+}
+
+/** 値が無いとき。チップにせず muted の文字だけで「未設定」と示す（「-」だとキーに見える） */
+function UnsetText() {
+  const t = useT();
+  return <span className="text-sm text-muted-foreground">{t("compare.notSet")}</span>;
 }
 
 /** 違う行の値（キー以外）。KeyChip と同じく枠で注目させる */
@@ -789,12 +800,12 @@ export default function ComparePage() {
     return groups;
   }, []);
 
-  // 一致・不一致の統計（行の印・既定の「違いだけ」と同じ基準 compareValues）。両方未設定（どちらも「-」）は一致に数える
+  // 一致・不一致の統計。両方に設定がある操作だけを数える（片方だけ設定の行は表には出るが、件数には含めない）
   const stats = useMemo(() => {
-    if (!player1 || !player2) return { same: 0, different: 0, total: 0 };
+    if (!player1 || !player2) return { same: 0, different: 0, total: 0, oneSided: 0 };
 
-    const { same, different, total } = compareKeyMaps(p1Keybindings, p2Keybindings);
-    return { same, different, total };
+    const { same, different, total, oneSided } = compareKeyMaps(p1Keybindings, p2Keybindings);
+    return { same, different, total, oneSided };
   }, [player1, player2, p1Keybindings, p2Keybindings]);
 
   // 2人が選ばれて結果が出ているとき（md 未満）は、選択欄を1行に詰めて最初の1画面に表が入るようにする。
@@ -850,8 +861,8 @@ export default function ComparePage() {
         return {
           key: item.action,
           label: getActionLabel(t, item.action),
-          value1: <KeyChip highlight={showAll && different}>{key1 ? getKeyLabel(t, key1) : "-"}</KeyChip>,
-          value2: <KeyChip highlight={showAll && different}>{key2 ? getKeyLabel(t, key2) : "-"}</KeyChip>,
+          value1: key1 ? <KeyChip highlight={showAll && different}>{getKeyLabel(t, key1)}</KeyChip> : <UnsetText />,
+          value2: key2 ? <KeyChip highlight={showAll && different}>{getKeyLabel(t, key2)}</KeyChip> : <UnsetText />,
           different,
         };
       });
@@ -894,13 +905,14 @@ export default function ComparePage() {
       return {
         key: row.label,
         label: row.label,
-        value1: <ValueText highlight={showAll && different}>{row.value1 ?? "-"}</ValueText>,
-        value2: <ValueText highlight={showAll && different}>{row.value2 ?? "-"}</ValueText>,
+        value1: row.value1 != null ? <ValueText highlight={showAll && different}>{row.value1}</ValueText> : <UnsetText />,
+        value2: row.value2 != null ? <ValueText highlight={showAll && different}>{row.value2}</ValueText> : <UnsetText />,
         different,
       };
     });
     const visibleDeviceRows = showAll ? allDeviceRows : allDeviceRows.filter((row) => row.different);
-    const totalDifferences = stats.different + allDeviceRows.filter((row) => row.different).length;
+    // 件数（stats）は両方に設定がある操作だけなので、「違いが無い」の判定は表の行（片方だけ設定も含む）で数える
+    const totalDifferences = categories.reduce((n, c) => n + c.rows.filter((row) => row.different).length, 0) + allDeviceRows.filter((row) => row.different).length;
     return { shownCategories, hiddenCount: categories.length - shownCategories.length, visibleDeviceRows, totalDifferences };
   })();
 
@@ -975,6 +987,9 @@ export default function ComparePage() {
                 <span className="sr-only">、</span>
                 <span className="text-xl font-bold tabular-nums text-foreground">{stats.different}</span> {t("compare.different")}
               </p>
+              {stats.oneSided > 0 && (
+                <p className="text-xs text-muted-foreground">{t("compare.unsetNotCounted", { count: stats.oneSided })}</p>
+              )}
               {/* 表示の切替は集計のそばに置く（ラベルごと押せる） */}
               <label className="mx-auto flex min-h-11 w-fit cursor-pointer items-center gap-2 text-sm sm:min-h-8">
                 <Switch checked={showAll} onCheckedChange={setShowAll} />
@@ -1061,6 +1076,16 @@ export default function ComparePage() {
             </>
           )}
         </>
+      )}
+
+      {/* 走者を1人も選んでいないときの案内 */}
+      {!player1 && !player2 && !selectedP1 && !selectedP2 && (
+        <EmptyState
+          size="compact"
+          icon={<GitCompare className="h-5 w-5" aria-hidden="true" />}
+          title={t("compare.emptyTitle")}
+          description={t("compare.emptyDescription")}
+        />
       )}
 
       {/* 類似設定の走者を探す */}
