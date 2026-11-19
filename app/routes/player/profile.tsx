@@ -218,7 +218,6 @@ import {
   Gamepad2,
   Speech,
   CircleHelp,
-  ChevronRight,
 } from "lucide-react";
 import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { ShareButton } from "@/components/share-button";
@@ -1846,17 +1845,14 @@ export default function PlayerProfilePage() {
                     </div>
                   )}
 
-                  {/* リマップ（登録されている場合のみ。既定は閉じる） */}
-                  {player.keyRemaps.length > 0 && (
-                    <details className="group space-y-2 lg:col-span-2">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
-                        <h4 className="text-base font-semibold">{t("playerProfile.remaps")}</h4>
-                        <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[11px]">
-                          {player.keyRemaps.length}
-                        </Badge>
-                      </summary>
-                      <div className="divide-y">
+                </div>
+              </PageSection>
+
+              {/* リマップ（登録されている場合のみ。割り当て一覧とは別の欄） */}
+              {player.keyRemaps.length > 0 && (
+                <PageSection headingLevel="h3" id="profile-remaps" title={t("playerProfile.remaps")}>
+                      {/* lg 以上は2列（読み順は左から右・上から下。行ごとに高さと区切り線が揃う） */}
+                      <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-2">
                         {player.keyRemaps.map((remap) => {
                           const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
                           const targetChips =
@@ -1894,7 +1890,7 @@ export default function PlayerProfilePage() {
                           return (
                             <div
                               key={remap.id}
-                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5"
+                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t py-2.5 first:border-t-0 lg:nth-2:border-t-0"
                             >
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <RemapTypeBadge remapType={remap.remapType} />
@@ -1906,10 +1902,8 @@ export default function PlayerProfilePage() {
                           );
                         })}
                       </div>
-                    </details>
-                  )}
-                </div>
-              </PageSection>
+                </PageSection>
+              )}
             </>
           ) : (
             <EmptyState
@@ -2425,7 +2419,7 @@ const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
  * 2列グリッドの1行目は PageSection の `className` で個別に外す。
  */
 const PANEL_CLASS =
-  "rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8 [&>[data-tab-title]+section]:border-t-0 [&>[data-tab-title]+section]:pt-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:border-t-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:pt-0";
+  "rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8 [&>[data-tab-title]+section]:border-t-0 [&>[data-tab-title]+section]:pt-0 [&>[data-tab-title]+[role=status]+section]:border-t-0 [&>[data-tab-title]+[role=status]+section]:pt-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:border-t-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:pt-0";
 
 /**
  * 各タブの先頭のタイトル（h2 `text-xl md:text-2xl`。走者名は h1 `text-2xl md:text-3xl`、欄は h3 `text-lg`、欄内の小見出しは h4）。
@@ -3204,7 +3198,12 @@ function StatsContent({
       ))}
 
       {checkingExternal && (
-        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+        // 取得後に何も無くて消えると下の欄とページ末尾の導線が押し上がるので、流れに場所を取らない（absolute）。
+        // 静的な位置（直前の欄の下の余白の終わり）から余白の中へ引き上げて、次の欄に重ならないようにする
+        <p
+          role="status"
+          className="absolute flex h-5 -translate-y-[calc(100%+0.375rem)] items-center gap-2 text-sm text-muted-foreground"
+        >
           <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           {t("playerProfile.statsLoadingExternal")}
         </p>
