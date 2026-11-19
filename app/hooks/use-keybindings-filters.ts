@@ -10,6 +10,7 @@ import {
   upsertBindCondition,
   formatBindCondition,
   type BindCondition,
+  sortKeyBelongsToTab,
   type Tab,
 } from "@/lib/keybindings-search-params";
 import { rowMatchesBind, type BoundKeyRow } from "@/lib/keybindings-filter";
@@ -35,7 +36,14 @@ export function useKeybindingsFilters() {
   // フィルタ（数値範囲・ユーザー絞り込み）・サブタブはクライアント側で完結する。
   const [params, setParams] = useQueryStates(keybindingsParsers);
 
-  const setTab = (tab: Tab) => setParams({ tab });
+  // タブを替えるとき、移った先に無い列の並べ替えは外す（黙って効かない sort を残さない）
+  const setTab = (tab: Tab) => {
+    const current = parseSort(params.sort);
+    setParams({
+      tab,
+      ...(current && !sortKeyBelongsToTab(current.key, tab) ? { sort: null } : {}),
+    });
+  };
   const setRange = (
     range: Partial<{
       dpiMin: number | null;

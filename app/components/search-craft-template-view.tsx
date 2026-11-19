@@ -165,6 +165,7 @@ export function ActualKeyBadges({
       isRemapped={info.isRemapped}
       needsShift={info.needsShift}
       remapDetail={info.remapDetail}
+      unavailable={info.unavailable}
     />
   ));
 

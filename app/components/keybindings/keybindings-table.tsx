@@ -173,6 +173,32 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
     rootRef.current?.style.setProperty("--kb-scroll-left", `${scrollLeft}px`);
   };
 
+  // 見出しセルの描画幅（余りを配分された後の幅）。リサイズハンドルの aria-valuenow に使う
+  // （getSize() は基準サイズで、描画中の実幅と違う）
+  const [renderedWidths, setRenderedWidths] = useState<Record<string, number>>({});
+  const isEmpty = rowModel.rows.length === 0;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const cells = Array.from(root.querySelectorAll<HTMLElement>("[role=columnheader][data-col-id]"));
+    const measure = () => {
+      setRenderedWidths((prev) => {
+        const next: Record<string, number> = {};
+        let changed = cells.length !== Object.keys(prev).length;
+        for (const el of cells) {
+          const id = el.dataset.colId as string;
+          next[id] = Math.round(el.getBoundingClientRect().width);
+          if (prev[id] !== next[id]) changed = true;
+        }
+        return changed ? next : prev;
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    for (const el of cells) ro.observe(el);
+    return () => ro.disconnect();
+  }, [isEmpty, columns, gridTemplateColumns]);
+
   if (rowModel.rows.length === 0) return <KeybindingsEmptyState noTabData={noTabData} />;
 
   const headers = table.getHeaderGroups()[0]?.headers ?? [];
@@ -216,6 +242,7 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
               return (
                 <div
                   role="columnheader"
+                  data-col-id={header.column.id}
                   key={header.id}
                   aria-sort={
                     canSort
@@ -284,7 +311,7 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
                       id={`${idBase}-${header.id}-resize`}
                       aria-label={t("keybindings.resizeColumn")}
                       aria-labelledby={`${idBase}-${header.id} ${idBase}-${header.id}-resize`}
-                      aria-valuenow={header.column.getSize()}
+                      aria-valuenow={renderedWidths[header.column.id] ?? header.column.getSize()}
                       aria-valuemin={header.column.columnDef.minSize ?? 48}
                       aria-valuemax={RESIZE_MAX}
                       title={t("keybindings.resizeColumnReset")}

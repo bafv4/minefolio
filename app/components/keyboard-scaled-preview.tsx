@@ -30,7 +30,25 @@ interface KeyboardScaledPreviewProps {
    * 置き場所ごとに確保して、計測後に高さが跳ねないようにする。省略時は従来の仮の高さ
    */
   unmeasuredClassName?: string;
+  /**
+   * true のとき、縮小・切り出し中も中身を操作できる（inert・拡大ボタン・拡大 Dialog を出さない。
+   * 編集画面のようにキーを押して使う置き場所向け）。全体を見る手段は呼び出し側が別に用意する。
+   * 省略時（既定）は読み取り専用の表示
+   */
+  interactive?: boolean;
 }
+
+/**
+ * md 未満の切り出し表示（キーボードの左手側）。仮想キーボードの 1 ユニットは 60px ＋ 間隔 2px で、
+ * 左から 7.75 ユニット（Z 段の B の右端＝7.25 ユニット〔447.5px〕に、右端のフェード〔画面 16px ≒ 中身 25px〕が
+ * B に掛からない分を足す）を幅いっぱいに見せる。公開の一覧（card-view）と編集画面で共有する
+ */
+const LEFT_HAND_CROP_UNITS = 7.75;
+const KEY_PITCH_PX = 62;
+export const LEFT_HAND_CROP = {
+  width: LEFT_HAND_CROP_UNITS * KEY_PITCH_PX - 2, // 478.5px
+  media: "(width < 48rem)",
+} as const;
 
 /** 計測前（SSR・ハイドレーション直後）に確保する高さの縦横比の仮値（キーボード約 928x300） */
 const FALLBACK_ASPECT = 0.34;
@@ -48,6 +66,7 @@ export function KeyboardScaledPreview({
   className,
   crop,
   unmeasuredClassName,
+  interactive = false,
 }: KeyboardScaledPreviewProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -101,7 +120,7 @@ export function KeyboardScaledPreview({
 
   // 縮小しているとき・切り出しているときだけ、拡大の操作（ボタン・印）を出して中身を inert にする
   // （切り出し中は scale が 1 でも右側が見えないので、拡大で全体を見られるようにし、見えないキーに Tab を止めない）
-  const scaled = measured == null || measured.scale < 1 || measured.cropped;
+  const scaled = !interactive && (measured == null || measured.scale < 1 || measured.cropped);
 
   // Dialog で全体を包み、重ねたボタンを DialogTrigger にする（Radix は閉じたときに trigger へフォーカスを戻すため、
   // trigger が無いとフォーカスが body に落ちる）

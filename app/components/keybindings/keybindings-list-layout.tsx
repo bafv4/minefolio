@@ -124,8 +124,34 @@ export function KeybindingsListLayout({
     () => sortKeybindingsRows(visualBase, sort, t, locale),
     [visualBase, sort, t, locale],
   );
-  // 件数は、いま見えている表の行数（タブごとに母集団が違う）。ビジュアルは絞り込み後の全走者
+  // 件数は、いま見えている表の行数（タブごとに母集団が違う）。表は「このタブ N人 / 全 M人」で出し、
+  // M は絞り込み後の全走者。ビジュアルは絞り込み後の走者数だけ
   const visibleCount = mode === "visual" ? visualBase.length : rowsByTab[tab].length;
+
+  // 統計などから users= で指定された走者のうち、このタブに載らない人がいるときの注記（黙って減らさない）
+  const specifiedUsers = filters.params.users;
+  const tabShownOfSpecified = useMemo(() => {
+    if (mode !== "table" || specifiedUsers.length === 0) return null;
+    const set = new Set(specifiedUsers);
+    const specified = players.filter((p) => set.has(p.slug));
+    const onTab = specified.filter((p) => {
+      switch (tab) {
+        case "movement":
+          return hasKeyBindings(p, MOVEMENT_ACTIONS);
+        case "inventory":
+          return hasKeyBindings(p, INVENTORY_TAB_ACTIONS);
+        case "combat-ui":
+          return hasKeyBindings(p, COMBAT_UI_ACTIONS);
+        case "remaps":
+          return p.keyRemaps.length > 0;
+        case "custom-actions":
+          return p.customActions.length > 0;
+        case "mouse":
+          return hasMouseSettings(p.playerConfig);
+      }
+    });
+    return onTab.length < specifiedUsers.length ? onTab.length : null;
+  }, [mode, specifiedUsers, players, tab]);
 
   return (
     <div className="flex-1 flex flex-col space-y-6">
@@ -141,16 +167,29 @@ export function KeybindingsListLayout({
             <>
               {/* 件数の変化を読み上げる（aria-live は描画済みの領域の変化だけを読むので、初回表示では読まれない） */}
               <span className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
-                {t("keybindings.countText", {
-                  count: visibleCount,
-                  suffix: t("keybindings.countSuffix"),
-                })}
+                {mode === "visual"
+                  ? t("keybindings.countText", {
+                      count: visibleCount,
+                      suffix: t("keybindings.countSuffix"),
+                    })
+                  : t("keybindings.countTabText", {
+                      count: visibleCount,
+                      total: filteredPlayers.length,
+                    })}
               </span>
               <FilterDialog players={players} />
             </>
           }
         />
         <UserFilterChips players={players} />
+        {tabShownOfSpecified != null && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {t("keybindings.usersOnTabNote", {
+              specified: specifiedUsers.length,
+              shown: tabShownOfSpecified,
+            })}
+          </p>
+        )}
       </div>
 
       {/* 本体 */}

@@ -203,9 +203,10 @@ describe("loadKeybindingsStats - ON/OFF 設定（マウス加速・ダッシュ�
     const on = await seedUser(db, { slug: "on" });
     const off = await seedUser(db, { slug: "off" });
     const unset = await seedUser(db, { slug: "unset" });
-    await seedPlayerConfig(db, on.id, { mouseAcceleration: true, toggleSprint: false });
-    await seedPlayerConfig(db, off.id, { mouseAcceleration: false, toggleSprint: true });
-    await seedPlayerConfig(db, unset.id, { mouseAcceleration: null, toggleSprint: null });
+    // マウス加速の分布は、マウス設定（DPI 等）がある走者が母集団。DPI を入れて母集団に含める
+    await seedPlayerConfig(db, on.id, { mouseDpi: 800, mouseAcceleration: true, toggleSprint: false });
+    await seedPlayerConfig(db, off.id, { mouseDpi: 800, mouseAcceleration: false, toggleSprint: true });
+    await seedPlayerConfig(db, unset.id, { mouseDpi: 800, mouseAcceleration: null, toggleSprint: null });
 
     const stats = await loadKeybindingsStats(db);
 
@@ -225,7 +226,7 @@ describe("loadKeybindingsStats - ON/OFF 設定（マウス加速・ダッシュ�
     const priv = await seedUser(db, { slug: "private-runner", profileVisibility: "private" });
     const viewer = await seedUser(db, { slug: "viewer", role: "viewer" });
     for (const u of [pub, priv, viewer]) {
-      await seedPlayerConfig(db, u.id, { mouseAcceleration: true, toggleSprint: true });
+      await seedPlayerConfig(db, u.id, { mouseDpi: 800, mouseAcceleration: true, toggleSprint: true });
     }
 
     const stats = await loadKeybindingsStats(db);
@@ -234,5 +235,35 @@ describe("loadKeybindingsStats - ON/OFF 設定（マウス加速・ダッシュ�
     expect(stats.mouseAccelerationStats.totalCount).toBe(1);
     expect(stats.toggleSprintStats.onPlayers.map((p) => p.slug)).toEqual(["public-runner"]);
     expect(stats.toggleSprintStats.totalCount).toBe(1);
+  });
+});
+
+describe("loadKeybindingsStats - マウスの母集団（表のマウスタブと一致）", () => {
+  it("DPI・感度・Windows 速度が無く Raw Input / マウス加速（既定値）だけの走者は、登録者数にも ON/OFF 分布にも入らない", async () => {
+    const db = await createTestDb();
+    const withDpi = await seedUser(db, { slug: "with-dpi" });
+    const onlyDefaults = await seedUser(db, { slug: "only-defaults" });
+    await seedPlayerConfig(db, withDpi.id, { mouseDpi: 800, rawInput: true, mouseAcceleration: false });
+    await seedPlayerConfig(db, onlyDefaults.id, { rawInput: true, mouseAcceleration: false });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.playersWithMouseSettings).toBe(1);
+    expect(stats.rawInputStats.onPlayers.map((p) => p.slug)).toEqual(["with-dpi"]);
+    expect(stats.rawInputStats.totalCount).toBe(1);
+    expect(stats.mouseAccelerationStats.offPlayers.map((p) => p.slug)).toEqual(["with-dpi"]);
+  });
+
+  it("感度だけ・Windows 速度だけの走者も（表のマウスタブと同じく）母集団に入る", async () => {
+    const db = await createTestDb();
+    const sens = await seedUser(db, { slug: "sens" });
+    const win = await seedUser(db, { slug: "win" });
+    await seedPlayerConfig(db, sens.id, { gameSensitivity: 0.5, rawInput: false });
+    await seedPlayerConfig(db, win.id, { windowsSpeed: 6, rawInput: true });
+
+    const stats = await loadKeybindingsStats(db);
+
+    expect(stats.playersWithMouseSettings).toBe(2);
+    expect(stats.rawInputStats.totalCount).toBe(2);
   });
 });

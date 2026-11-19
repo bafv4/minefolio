@@ -80,6 +80,7 @@ function SequenceStepBadge({
           isRemapped={step.info.isRemapped}
           needsShift={step.info.needsShift}
           remapDetail={step.info.remapDetail}
+          unavailable={step.info.unavailable}
         />
       );
       break;

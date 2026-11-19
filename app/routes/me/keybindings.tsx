@@ -58,6 +58,7 @@ import {
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
 import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
+import { KeyboardScaledPreview, LEFT_HAND_CROP } from "@/components/keyboard-scaled-preview";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { FingerToggleGroup, sortFingers } from "@/components/finger-toggle-group";
 import { createId } from "@paralleldrive/cuid2";
@@ -1444,6 +1445,8 @@ export default function KeybindingsPage() {
 
   // タブの状態
   const [activeTab, setActiveTab] = useState("keybindings");
+  // md 未満のキーボード表示。既定は左手側を大きく見せる（キーを押せる）。true で全体を横スクロールで見る
+  const [mobileFullKeyboard, setMobileFullKeyboard] = useState(false);
 
   // コピー元プリセット選択ダイアログ
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
@@ -2352,8 +2355,35 @@ export default function KeybindingsPage() {
               >
                 {t("meKeybindings.skipToActions")}
               </a>
-              {/* メインキーボード */}
-              <HorizontalScrollArea showHint>
+              {/* メインキーボード。md 未満は左手側だけを大きく見せてキーを押せるようにし、
+                  全体は横スクロール表示へ切り替えられる。2つの表示は CSS で出し分ける（md 以上は常に横スクロール表示） */}
+              {!mobileFullKeyboard && (
+                <div className="w-full min-w-0 space-y-2 md:hidden">
+                  <KeyboardScaledPreview
+                    interactive
+                    dialogTitle={t("meKeybindings.keyboardView")}
+                    // 押せる表示はキーを 44px 以上にする。公開側の 478.5px だと 375 幅（枠 343px）で 43.0px になるので、
+                    // 左手側の最右の B（447.5px）が収まる 466px まで詰める（343/466×60 ≒ 44.2px）
+                    crop={{ ...LEFT_HAND_CROP, width: 466, surface: "background" }}
+                    unmeasuredClassName="max-md:aspect-[479/370]"
+                  >
+                    <VirtualKeyboard
+                      layout={keyboardLayout}
+                      keybindings={keybindingsMap}
+                      fingerAssignments={localFingerAssignments}
+                      remaps={keyboardRemaps}
+                      customKeys={keyboardCustomKeys}
+                      onKeyClick={handleKeyClick}
+                      showActionLabels
+                      showFingerAssignments
+                      showRemaps
+                      hideNumpad
+                    />
+                  </KeyboardScaledPreview>
+                  <p className="text-xs text-muted-foreground">{t("meKeybindings.mobileKeyboardRightNote")}</p>
+                </div>
+              )}
+              <HorizontalScrollArea showHint wrapperClassName={cn(!mobileFullKeyboard && "max-md:hidden")}>
                 <VirtualKeyboard
                   layout={keyboardLayout}
                   keybindings={keybindingsMap}
@@ -2367,6 +2397,16 @@ export default function KeybindingsPage() {
                   hideNumpad
                 />
               </HorizontalScrollArea>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 md:hidden"
+                aria-pressed={mobileFullKeyboard}
+                onClick={() => setMobileFullKeyboard((v) => !v)}
+              >
+                {t(mobileFullKeyboard ? "meKeybindings.mobileKeyboardLeftHand" : "meKeybindings.mobileKeyboardFull")}
+              </Button>
               {/* テンキーとマウスを横並び（狭い画面では折り返して縦積み） */}
               <div className="flex max-w-full flex-wrap items-start gap-x-6 gap-y-4">
                 <VirtualNumpad

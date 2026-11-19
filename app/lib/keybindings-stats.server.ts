@@ -1,7 +1,7 @@
 // 操作設定の統計を集計するサーバー側ロジック。
 // 旧 /keybindings/stats の loader を関数として切り出したもの。
 // /keybindings?view=stats からも呼び出される。
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
@@ -15,6 +15,7 @@ import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
 import { loadKeybindingsListPlayers } from "./keybindings-list.server";
 import { isUnbound } from "./keybindings";
+import { hasMouseSettings } from "./keybindings-filter";
 // 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
 import {
   KEY_ACTION_STATS_KEYS,
@@ -138,6 +139,7 @@ export interface Cm180Stats {
 export interface SensitivityStats {
   ranges: RangeStatWithPlayers[];
   average: number | null;
+  median: number | null;
   totalCount: number;
   /** 感度は登録済みだが有効範囲（0〜200%）外のため母数から外した人数 */
   excludedCount: number;
@@ -201,7 +203,6 @@ export async function loadKeybindingsStats(
   const [
     [totalResult],
     [keybindingCountResult],
-    [mouseCountResult],
     trackedRows,
     f3InputRemaps,
     usersWithKeybindingsData,
@@ -219,12 +220,6 @@ export async function loadKeybindingsStats(
       .from(keybindings)
       .innerJoin(users, eq(keybindings.userId, users.id))
       .where(publicCondition),
-    // マウス設定を持つユーザー数
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(playerConfigs)
-      .innerJoin(users, eq(playerConfigs.userId, users.id))
-      .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi))),
     // キーバインド統計の元データ（全アクションを1クエリで取得し、JS側で「操作→キー」（追跡対象のみ）と「キー→操作」（全操作）に分けて集計する）
     db
       .select({
@@ -296,7 +291,13 @@ export async function loadKeybindingsStats(
   const publicProfiles = totalResult?.count ?? 0;
   const registeredPlayers = listPlayers.length;
   const playersWithKeybindings = keybindingCountResult?.count ?? 0;
-  const playersWithMouseSettings = mouseCountResult?.count ?? 0;
+  // マウス設定の登録者と Raw Input / マウス加速の分布の母集団は、表のマウスタブに載る走者
+  // （DPI・感度・Windows 速度のどれかがある。hasMouseSettings）に揃える。Raw Input（既定 ON）・
+  // マウス加速（既定 OFF）は設定行ができた時点で値が入るため、これだけを根拠にすると
+  // マウス設定を何も入力していない走者まで「ON / OFF の 4 人」に数えてしまい、
+  // 「表で見る」で渡した走者が表のマウスタブに載らなくなる
+  const mouseSettingConfigs = mouseConfigs.filter((c) => hasMouseSettings(c));
+  const playersWithMouseSettings = mouseSettingConfigs.length;
 
   // キーバインド統計（TRACKED_ACTIONS 全アクション分を1クエリでまとめて取得し、JS側で集計する）
   const keybindingStats: KeybindingStats[] = [];
@@ -513,6 +514,9 @@ export async function loadKeybindingsStats(
           sensitivityValues.reduce((a, b) => a + b, 0) / sensitivityValues.length,
         )
       : null,
+    median: sensitivityValues.length > 0
+      ? [...sensitivityValues].sort((a, b) => a - b)[Math.floor(sensitivityValues.length / 2)]
+      : null,
     totalCount: sensitivityValues.length,
     excludedCount: sensitivityExcludedCount,
   };
@@ -528,9 +532,10 @@ export async function loadKeybindingsStats(
   });
   const buildBooleanStats = (
     pick: (c: (typeof mouseConfigs)[number]) => boolean | null,
+    population: typeof mouseConfigs = mouseConfigs,
   ): BooleanSettingStats => {
-    const onConfigs = mouseConfigs.filter((c) => pick(c) === true);
-    const offConfigs = mouseConfigs.filter((c) => pick(c) === false);
+    const onConfigs = population.filter((c) => pick(c) === true);
+    const offConfigs = population.filter((c) => pick(c) === false);
     return {
       onCount: onConfigs.length,
       offCount: offConfigs.length,
@@ -539,8 +544,8 @@ export async function loadKeybindingsStats(
       offPlayers: offConfigs.map(toPlayerInfo),
     };
   };
-  const rawInputStats = buildBooleanStats((c) => c.rawInput);
-  const mouseAccelerationStats = buildBooleanStats((c) => c.mouseAcceleration);
+  const rawInputStats = buildBooleanStats((c) => c.rawInput, mouseSettingConfigs);
+  const mouseAccelerationStats = buildBooleanStats((c) => c.mouseAcceleration, mouseSettingConfigs);
   const toggleSprintStats = buildBooleanStats((c) => c.toggleSprint);
 
   // キー → 操作の統計（全操作が対象。未割り当ての行はキーとして数えない）

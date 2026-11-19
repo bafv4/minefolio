@@ -864,6 +864,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     reasonUnknownWindowsMultiplier:
       "The Windows pointer speed multiplier is unknown",
     sensitivityRangeHint: "Valid range: 0–200%",
+    countTabText: "{count} in this tab / {total} total",
+    usersOnTabNote: "Showing {shown} of the {specified} runners you selected who have settings in this tab",
     countText: "{count} {suffix}",
     hotbarColumn: "Hotbar",
     noPlayers: "No matching runners",
@@ -917,7 +919,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unassigned: "Unassigned",
     notSet: "Not set",
     noneValue: "None",
-    noMouseSettings: "No mouse settings",
+    noMouseSettings: "No DPI or sensitivity set",
     remapViewHint:
       "Switches which remaps are drawn over the keyboard. Trigger is for in-game controls; Chat is for typing in chat and search crafting.",
     hintTurnDistance:
@@ -953,9 +955,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     keybindingsRegistered: "Runners with key assignments",
     keybindingsRegisteredNote: "Public runners with key assignments in their current settings",
     mouseRegistered: "Runners with mouse settings",
-    mouseRegisteredNote: "Public runners with a DPI in their current settings",
-    keyboardTab: "Keyboard",
+    mouseRegisteredNote: "Public runners with a DPI, sensitivity or Windows speed in their current settings (the Raw Input and mouse acceleration splits use the same runners)",
+    keyboardTab: "Action → key",
     keysTab: "Key → actions",
+    keyActionScope: "Covers 28 commonly rebound keys (E, Q, R, F, C, X, Z, G, V; Shift, Ctrl, Tab, Caps Lock, Space; the mouse buttons; the number keys 1-9). Movement keys such as W/A/S/D are not included.",
     keyActionNote: "One runner can assign several actions to the same key, so the percentages can add up to more than 100%",
     keysEmptyDescription: "No data on actions assigned to keys yet",
     mouseAcceleration: "Mouse acceleration",
@@ -1881,6 +1884,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     invalidWindowsSpeed: "Windows pointer speed must be between 1 and 20",
     invalidWindowsSpeedMultiplier:
       "Custom multiplier must be a number greater than 0",
+    rangeHint: "{min}-{max}",
     fovInvalid: "FOV must be an integer between 30 and 110",
     limitExceeded: "The input is too long. Please shorten it and try again.",
     gameLanguageInvalid: "That game language is not available. Please choose one from the list.",
@@ -2327,6 +2331,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     leftStickDesc: "Left stick: movement",
     rightStickDesc: "Right stick: camera",
     keyboardView: "Keyboard view",
+    mobileKeyboardRightNote: "Keys on the right, the navigation keys, and the numpad can be edited from \"Action bindings\" below.",
+    mobileKeyboardFull: "Scroll the whole keyboard sideways",
+    mobileKeyboardLeftHand: "Show the left hand side larger",
     keyboardViewDesc: "Click a key to edit its settings",
     tabActions: "Action bindings",
     tabRemaps: "Remaps",
@@ -2959,6 +2966,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   playground: {
     templateViewNotice: "You are viewing a template. Your saved draft is kept until you start editing.",
     openDraft: "Open draft",
+    entryDeletedToast: "Entry deleted",
+    loopDeletedToast: "Loop deleted",
+    autosaveHintLoggedIn: "Your edits are saved automatically in this browser. To keep them in your account, use Save.",
     clearedToast: "Cleared everything",
     replacedToast: "Replaced what you were editing",
     undo: "Undo",

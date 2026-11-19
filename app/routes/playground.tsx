@@ -209,6 +209,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (templateId) {
     const template = await db.query.searchCraftTemplates.findFirst({
       where: eq(searchCraftTemplates.id, templateId),
+      // 下書き列は公開側へ読み込まない
+      columns: {
+        draftTitle: false,
+        draftDescription: false,
+        draftGameLanguage: false,
+        draftCraftsData: false,
+        draftRemapsData: false,
+        draftLoopsData: false,
+        draftUpdatedAt: false,
+      },
       with: { user: { columns: { discordId: true } } },
     });
     if (
@@ -1040,12 +1050,15 @@ export default function PlaygroundPage() {
         </div>
         {/* テンプレートを未編集で表示中は仮保存しない（上の案内と食い違うので出さない） */}
         {!(templateData && isTemplatePristine) && (
-          <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
+          <p className="text-xs text-muted-foreground">
+            {t(isLoggedIn ? "playground.autosaveHintLoggedIn" : "playground.autosaveHint")}
+          </p>
         )}
       </div>
 
       {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
       <SearchCraftWorkbench
+        deleteWithUndo
         crafts={crafts}
         onCraftsChange={setCrafts}
         loops={loops}

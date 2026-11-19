@@ -998,7 +998,7 @@ export default function DevicesPage() {
                           : "gameSensitivity-range"
                       }
                     />
-                    <p id="gameSensitivity-range" className="text-xs text-muted-foreground mt-1">0.0~1.0</p>
+                    <p id="gameSensitivity-range" className="text-xs text-muted-foreground mt-1">{t("meDevices.rangeHint", { min: "0.0", max: "1.0" })}</p>
                   </div>
                   <div className="flex-1">
                     <div className="relative">
@@ -1025,7 +1025,7 @@ export default function DevicesPage() {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                     </div>
-                    <p id="gameSensitivityPercent-range" className="text-xs text-muted-foreground mt-1">0~200%</p>
+                    <p id="gameSensitivityPercent-range" className="text-xs text-muted-foreground mt-1">{t("meDevices.rangeHint", { min: "0", max: "200%" })}</p>
                   </div>
                 </div>
                 <FieldErrorText
@@ -1185,7 +1185,7 @@ export default function DevicesPage() {
                   aria-describedby={errorFor("fov") ? "fov-error fov-range" : "fov-range"}
                 />
                 {/* 範囲は action の isValidFov と同じ（save-limits.ts） */}
-                <p id="fov-range" className="text-xs text-muted-foreground">30~110</p>
+                <p id="fov-range" className="text-xs text-muted-foreground">{t("meDevices.rangeHint", { min: "30", max: "110" })}</p>
                 <FieldErrorText id="fov-error" message={errorFor("fov")} />
               </div>
               <div
@@ -1211,7 +1211,7 @@ export default function DevicesPage() {
                   }
                 />
                 {/* 範囲は action の isValidGuiScale と同じ（save-limits.ts） */}
-                <p id="guiScale-range" className="text-xs text-muted-foreground">0~10</p>
+                <p id="guiScale-range" className="text-xs text-muted-foreground">{t("meDevices.rangeHint", { min: "0", max: "10" })}</p>
                 <FieldErrorText id="guiScale-error" message={errorFor("guiScale")} />
               </div>
             </div>

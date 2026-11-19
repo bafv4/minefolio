@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { parseAsStringEnum, useQueryState } from "nuqs";
-import { Keyboard, Mouse, Users, TrendingUp, Table2 } from "lucide-react";
+import { Keyboard, Mouse, Users, Table2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -152,15 +152,15 @@ export function StatsView({ data }: StatsViewProps) {
         className="w-full"
       >
         <TabsList>
-          <TabsTrigger value="keyboard" className="gap-1.5">
+          <TabsTrigger value="keyboard" className="gap-1.5 max-md:min-h-11">
             <Keyboard className="h-4 w-4" />
             {t("keybindingsStats.keyboardTab")}
           </TabsTrigger>
-          <TabsTrigger value="keys" className="gap-1.5">
+          <TabsTrigger value="keys" className="gap-1.5 max-md:min-h-11">
             <Keyboard className="h-4 w-4" />
             {t("keybindingsStats.keysTab")}
           </TabsTrigger>
-          <TabsTrigger value="mouse" className="gap-1.5">
+          <TabsTrigger value="mouse" className="gap-1.5 max-md:min-h-11">
             <Mouse className="h-4 w-4" />
             {t("keybindingsStats.mouseTab")}
           </TabsTrigger>
@@ -202,6 +202,7 @@ export function StatsView({ data }: StatsViewProps) {
           ) : (
             <>
               <p className="mb-4 text-sm text-muted-foreground">
+                {t("keybindingsStats.keyActionScope")}{" "}
                 {t("keybindingsStats.keyActionNote")}
               </p>
               <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
@@ -262,6 +263,9 @@ export function StatsView({ data }: StatsViewProps) {
                 t("keybindingsStats.dataCount", { count: sensitivityStats.totalCount }) +
                 (sensitivityStats.average != null
                   ? ` / ${t("keybindingsStats.average", { value: `${sensitivityStats.average}%` })}`
+                  : "") +
+                (sensitivityStats.median != null
+                  ? ` / ${t("keybindingsStats.median", { value: `${sensitivityStats.median}%` })}`
                   : "")
               }
               // 有効範囲外で母数から外した人数（いる場合だけ注記する）
@@ -430,7 +434,6 @@ function RangeDistribution({
   return (
     <StatBlock
       id={id}
-      icon={<TrendingUp className="h-5 w-5 text-primary" />}
       title={title}
       description={description}
       note={note}
@@ -497,7 +500,6 @@ function BooleanDistribution({
   return (
     <StatBlock
       id={id}
-      icon={<TrendingUp className="h-5 w-5 text-primary" />}
       title={title}
       description={t("keybindingsStats.dataCount", { count: stats.totalCount })}
     >

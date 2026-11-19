@@ -289,6 +289,23 @@ export type ActualKeyInfo = {
   displayLabel: string;
   /** リマップされている場合のみ: ツールチップの「リマップ: 物理 → 出力」表示用 */
   remapDetail?: RemapDetail;
+  /**
+   * その文字を打てるキーが無い場合のみ: 基底キーが有効なリマップの変更元で、押しても
+   * その文字が出ない（別の文字・キーへ変わる、または無効化されている）。
+   * keyCode / displayLabel は「通常ならこの文字を出すはずだったキー」を指す。
+   * ツールチップ・読み上げで「Q は P にリマップされているため、q を入力できません」と伝える
+   */
+  unavailable?: UnavailableDetail;
+};
+
+/** 入力できない文字の理由（ActualKeyInfo.unavailable） */
+export type UnavailableDetail = {
+  /** 変更元の物理キー名称（フル表記） */
+  sourceLabel: string;
+  /** 押すと出る物（リマップ先）の名称。無効化されている場合は null */
+  targetLabel: string | null;
+  /** 入力したかった文字 */
+  char: string;
 };
 
 /** 文字出力ターゲットをツールチップ表記用に「」で囲む（key-info-trigger.tsx の RemapRow と同じ表記） */
@@ -445,6 +462,33 @@ export function getActualKeyInfos(
     }
   }
 
+  // 基底キーを押したときにその文字が出ない原因のリマップを探す（出ない＝入力できない）。
+  // simulateRemapOutput() と同じ解決順序: Shift が絡むとき（大文字・shiftHeld）は Shift+X 完全一致が先、
+  // 次に単一キーソース。修飾キー付きだけがリマップ元（素のキーは生きている）の場合は、
+  // Shift が絡まないかぎり対象にしない
+  const findBlockingRemap = (baseKey: string, shiftInvolved: boolean): RemapInfo | undefined => {
+    const base = normalizeKeyCode(baseKey);
+    const shiftCombo = shiftInvolved
+      ? chatRemaps.find(
+          (r) => isShiftOnlyCombo(r.sourceKey) && normalizeKeyCode(parseKeyCombination(r.sourceKey).keyCode) === base,
+        )
+      : undefined;
+    return (
+      shiftCombo ??
+      chatRemaps.find((r) => !r.sourceKey.includes("+") && normalizeKeyCode(r.sourceKey) === base)
+    );
+  };
+
+  const buildUnavailable = (remap: RemapInfo, char: string): UnavailableDetail => {
+    let targetLabel: string | null = null;
+    if (remap.targetKey !== null) {
+      targetLabel = isSpecialRemapTarget(remap.targetKey)
+        ? wrapCharTarget(t, remap.targetKey)
+        : keyCodeToBadgeLabel(t, normalizeKeyCode(remap.targetKey));
+    }
+    return { sourceLabel: getRemapSourceLabel(t, remap.sourceKey), targetLabel, char };
+  };
+
   const result: ActualKeyInfo[] = [];
 
   for (const char of searchStr) {
@@ -479,12 +523,18 @@ export function getActualKeyInfos(
         reverseShiftKey && !shiftOverriddenBases.has(reverseShiftKey)
           ? reverseShiftKey
           : charToKeyCode(char.toLowerCase());
+      // 逆引き先（記号）または基底キー（英字・数字）が Shift 押下中にリマップで奪われていれば入力できない
+      const blockedKey = reverseShiftKey && shiftOverriddenBases.has(reverseShiftKey) ? reverseShiftKey : keyCode;
+      const blocking = shiftOverriddenBases.has(normalizeKeyCode(blockedKey))
+        ? findBlockingRemap(blockedKey, true)
+        : undefined;
       result.push({
         char: char.toLowerCase(),
-        keyCode,
+        keyCode: blocking ? blockedKey : keyCode,
         isRemapped: false,
         needsShift: false,
-        displayLabel: keyCodeToBadgeLabel(t, keyCode),
+        displayLabel: keyCodeToBadgeLabel(t, blocking ? blockedKey : keyCode),
+        ...(blocking ? { unavailable: buildUnavailable(blocking, char.toLowerCase()) } : {}),
       });
       continue;
     }
@@ -497,6 +547,27 @@ export function getActualKeyInfos(
     if (remapInfo) {
       const sourceKey = remapInfo.sourceKey;
       const hasModifiers = sourceKey.includes("+");
+      // 大文字を小文字の逆引きで見つけた場合（Q→p のリマップで "P"）、simulateRemapOutput() では
+      // Shift+Q が基底キー一致で target のシフト後文字（P）を出す。ソースが単一キーで target がキーなら、
+      // Shift を押して打つ（⇧ の表示が要る）。同じ基底キーに Shift+X の完全一致リマップがあるとそちらが
+      // 先に発動して P は出ないので、その場合は入力不可にする
+      const upperViaLower =
+        isUpperCase &&
+        !reverseRemapMap.has(char) &&
+        !hasModifiers &&
+        !isSpecialRemapTarget(chatRemaps.find((r) => r.sourceKey === sourceKey)?.targetKey ?? "");
+      const shiftBlocker = upperViaLower ? findBlockingRemap(sourceKey, true) : undefined;
+      if (upperViaLower && shiftBlocker && isShiftOnlyCombo(shiftBlocker.sourceKey)) {
+        result.push({
+          char: char.toLowerCase(),
+          keyCode: sourceKey,
+          isRemapped: false,
+          needsShift: true,
+          displayLabel: `⇧+${keyCodeToBadgeLabel(t, sourceKey)}`,
+          unavailable: buildUnavailable(shiftBlocker, char),
+        });
+        continue;
+      }
       let displayLabel: string;
 
       if (hasModifiers) {
@@ -508,13 +579,14 @@ export function getActualKeyInfos(
         displayLabel = `${mods}+${keyCodeToBadgeLabel(t, parts[parts.length - 1])}`;
       } else {
         displayLabel = keyCodeToBadgeLabel(t, sourceKey);
+        if (upperViaLower) displayLabel = `⇧+${displayLabel}`;
       }
 
       result.push({
         char: displayLabel.toLowerCase(),
         keyCode: sourceKey,
         isRemapped: true,
-        needsShift: hasModifiers && sourceKey.includes("Shift"),
+        needsShift: upperViaLower || (hasModifiers && sourceKey.includes("Shift")),
         displayLabel,
         remapDetail: {
           sourceLabel: getRemapSourceLabel(t, sourceKey),
@@ -528,12 +600,15 @@ export function getActualKeyInfos(
     // スペースなど不可視文字はバッジが空になるためキーラベル（Space 等）を表示する
     const baseLabel = char.trim().length === 1 ? char.toUpperCase() : getKeyLabel(t, baseKeyCode);
     const displayLabel = isUpperCase ? `⇧+${baseLabel}` : baseLabel;
+    // 基底キーが有効なリマップの変更元なら、押してもこの文字は出ない（逆引きに無い＝他のキーでも出せない）
+    const blocking = findBlockingRemap(baseKeyCode, isUpperCase);
     result.push({
       char: char.toLowerCase(),
       keyCode: isUpperCase ? `Shift+${baseKeyCode}` : baseKeyCode,
       isRemapped: false,
       needsShift: isUpperCase,
       displayLabel,
+      ...(blocking ? { unavailable: buildUnavailable(blocking, char) } : {}),
     });
   }
 

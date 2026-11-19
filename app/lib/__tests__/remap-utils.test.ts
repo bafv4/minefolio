@@ -190,6 +190,34 @@ describe("getActualKeyInfos の逆引き優先順位（修飾キーなしソー�
   });
 });
 
+describe("getActualKeyInfos: リマップ経由で打つ大文字", () => {
+  const remaps: RemapInfo[] = [{ sourceKey: "KeyQ", targetKey: "KeyP" }];
+
+  it("Q→P のリマップで大文字 P は Shift+Q で打てる（⇧ 付き・リマップのリングと両立）", () => {
+    // simulateRemapOutput: Shift+Q は P を出す
+    expect(simulateRemapOutput(t, "Shift+KeyQ", remaps).output).toBe("P");
+    const [info] = getActualKeyInfos(t, "P", remaps);
+    expect(info.keyCode).toBe("KeyQ");
+    expect(info.isRemapped).toBe(true);
+    expect(info.needsShift).toBe(true);
+    expect(info.displayLabel).toBe("⇧+Q");
+    expect(info.unavailable).toBeUndefined();
+  });
+
+  it("小文字 p は Shift なし", () => {
+    const [info] = getActualKeyInfos(t, "p", remaps);
+    expect(info.needsShift).toBe(false);
+    expect(info.displayLabel).toBe("Q");
+  });
+
+  it("Shift+Q の完全一致リマップが別にあると大文字 P は打てない", () => {
+    const withCombo: RemapInfo[] = [...remaps, { sourceKey: "Shift+KeyQ", targetKey: "KeyE" }];
+    const [info] = getActualKeyInfos(t, "P", withCombo);
+    expect(info.unavailable).toBeDefined();
+    expect(info.isRemapped).toBe(false);
+  });
+});
+
 describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらクラフト）", () => {
   it("英字ターゲットのリマップは通常時と同じキーに解決する（大文字小文字は区別しない）", () => {
     const infos = getActualKeyInfos(t, "e", REMAPS, { shiftHeld: true });
@@ -286,7 +314,9 @@ describe("getActualKeyInfos の shiftHeld モード（Shiftを押しながらク
     // Shift+Slash はリマップ（Slash→"-"）により "-" を出すため、"?" を Slash に解決してはいけない
     const remaps: RemapInfo[] = [{ sourceKey: "Slash", targetKey: "-" }];
     const infos = getActualKeyInfos(t, "?", remaps, { shiftHeld: true });
-    expect(infos[0].keyCode).not.toBe("Slash");
+    // Slash を使える物として示さず、入力できない扱いにする（isRemapped でもない）
+    expect(infos[0].isRemapped).toBe(false);
+    expect(infos[0].unavailable).toBeDefined();
   });
 
   it("shiftHeld で逆引きしたキーを Shift 込みで順方向適用すると元の文字に戻る", () => {
@@ -686,5 +716,59 @@ describe("getActualControlKeyInfo（制御キーの逆引き。Loop の ControlK
     const info = getActualControlKeyInfo(t, "Backspace", remaps);
     expect(info.keyCode).toBe("Backspace");
     expect(info.isRemapped).toBe(false);
+  });
+});
+
+describe("getActualKeyInfos: 打てない文字（基底キーがリマップ元で別の文字が出る）", () => {
+  it("素のキーがリマップ元（Q→P）のとき、q は入力できない", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "KeyQ", targetKey: "KeyP" }];
+    const [q, p] = getActualKeyInfos(t, "qp", remaps);
+    expect(q.unavailable).toEqual({ sourceLabel: expect.any(String), targetLabel: "P", char: "q" });
+    expect(q.isRemapped).toBe(false);
+    // p は Q キーで打てる（リマップ済みのバッジ）
+    expect(p.keyCode).toBe("KeyQ");
+    expect(p.isRemapped).toBe(true);
+    expect(p.unavailable).toBeUndefined();
+  });
+
+  it("無効化されたキー（Q→無効）は targetLabel が null", () => {
+    const [q] = getActualKeyInfos(t, "q", [{ sourceKey: "KeyQ", targetKey: null }]);
+    expect(q.unavailable).toEqual({ sourceLabel: expect.any(String), targetLabel: null, char: "q" });
+  });
+
+  it("文字出力ターゲットへのリマップも入力不可として扱う", () => {
+    const [q] = getActualKeyInfos(t, "q", [{ sourceKey: "KeyQ", targetKey: "-" }]);
+    expect(q.unavailable?.targetLabel).toContain("-");
+  });
+
+  it("Shift+Q だけがリマップ元なら、素の q は入力できる（大文字 Q だけが入力不可）", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "Shift+KeyQ", targetKey: "KeyP" }];
+    const [q, upperQ] = getActualKeyInfos(t, "qQ", remaps);
+    expect(q.unavailable).toBeUndefined();
+    expect(upperQ.unavailable).toBeDefined();
+    expect(upperQ.needsShift).toBe(true);
+  });
+
+  it("素の Q→P のとき、大文字 Q（Shift+Q は P を出す）も入力できない", () => {
+    const [upperQ] = getActualKeyInfos(t, "Q", [{ sourceKey: "KeyQ", targetKey: "KeyP" }]);
+    expect(upperQ.unavailable).toBeDefined();
+  });
+
+  it("リマップが無ければ unavailable は付かない", () => {
+    expect(getActualKeyInfos(t, "qQ ", []).every((i) => i.unavailable === undefined)).toBe(true);
+    expect(getActualKeyInfos(t, "q", [{ sourceKey: "KeyA", targetKey: "KeyB" }])[0].unavailable).toBeUndefined();
+  });
+
+  it("trigger 種別のリマップは chat 文脈に影響しない", () => {
+    const remaps: RemapInfo[] = [{ sourceKey: "KeyQ", targetKey: "KeyP", remapType: "trigger" }];
+    expect(getActualKeyInfos(t, "q", remaps)[0].unavailable).toBeUndefined();
+  });
+
+  it("shiftHeld: Shift+Q だけがリマップ元なら Q は打てず、素の Q→P だけでも打てない", () => {
+    const comboOnly: RemapInfo[] = [{ sourceKey: "Shift+KeyQ", targetKey: "KeyP" }];
+    expect(getActualKeyInfos(t, "q", comboOnly, { shiftHeld: true })[0].unavailable).toBeDefined();
+    const plain: RemapInfo[] = [{ sourceKey: "KeyQ", targetKey: "KeyP" }];
+    expect(getActualKeyInfos(t, "q", plain, { shiftHeld: true })[0].unavailable).toBeDefined();
+    expect(getActualKeyInfos(t, "w", plain, { shiftHeld: true })[0].unavailable).toBeUndefined();
   });
 });

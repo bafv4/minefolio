@@ -286,6 +286,7 @@ export function SearchCraftWorkbench({
   layout,
   onLayoutChange,
   sectionHeadingLevel,
+  deleteWithUndo,
 }: {
   crafts: SearchCraftDraft[];
   onCraftsChange: (next: SearchCraftDraft[]) => void;
@@ -301,6 +302,8 @@ export function SearchCraftWorkbench({
    * ページの h1 の直下に置くときは "h2" を渡して段を飛ばさない
    */
   sectionHeadingLevel?: "h2" | "h3";
+  /** エントリの削除を、確認ダイアログではなく「元に戻す」つきのトーストにする（編集が即時に反映される画面向け） */
+  deleteWithUndo?: boolean;
 }) {
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
@@ -568,6 +571,7 @@ export function SearchCraftWorkbench({
             keyboardLayout={layout}
             createCraft={createCraft}
             createLoop={createLoop}
+            deleteWithUndo={deleteWithUndo}
           />
         </CardContent>
       </Card>

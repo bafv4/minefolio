@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
+import { KeyboardScaledPreview, LEFT_HAND_CROP } from "@/components/keyboard-scaled-preview";
 import {
   VirtualKeyboard,
   VirtualMouse,
@@ -107,15 +107,6 @@ export function CardView({ players }: { players: KeybindingsRow[] }) {
 // キーボード/マウス描画をマウントする（画面外カード数分の VirtualKeyboard 生成コストを回避）。
 const INITIAL_VISIBLE_COUNT = 3;
 
-/**
- * md 未満の切り出し表示（左手側）。仮想キーボードの 1 ユニットは 60px ＋ 間隔 2px で、
- * 左から 7.75 ユニット（Z 段の B の右端＝7.25 ユニット〔447.5px〕に、右端のフェード〔画面 16px ≒ 中身 25px〕が
- * B に掛からない分を足す）を幅いっぱいに見せる
- */
-const LEFT_HAND_CROP_UNITS = 7.75;
-const KEY_PITCH_PX = 62;
-const LEFT_HAND_CROP_WIDTH = LEFT_HAND_CROP_UNITS * KEY_PITCH_PX - 2; // 478.5px
-const LEFT_HAND_CROP = { width: LEFT_HAND_CROP_WIDTH, media: "(width < 48rem)" } as const;
 
 // メモ化 + content-visibility:auto で、多人数時に画面外カードの描画コストを抑える。
 const RunnerKeyboardCard = memo(function RunnerKeyboardCard({

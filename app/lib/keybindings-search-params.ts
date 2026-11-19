@@ -68,6 +68,20 @@ export function tabForAction(action: string): Tab | null {
 }
 
 /**
+ * 並べ替えキー（表の列 id・URL の sort）がそのタブの列か。タブを替えたときに、
+ * 移った先に無い列の並べ替えを外すのに使う（"mouse.*" はマウス、"action.*" は操作の分類で決まる。
+ * ホットバーは 1 列 "action.hotbar" に集約されていてインベントリのタブにある）。
+ */
+export function sortKeyBelongsToTab(key: string, tab: Tab): boolean {
+  if (key.startsWith("mouse.")) return tab === "mouse";
+  if (key.startsWith("action.")) {
+    const action = key.slice("action.".length);
+    return (action === "hotbar" ? "inventory" : tabForAction(action)) === tab;
+  }
+  return false;
+}
+
+/**
  * nuqs の useQueryStates にそのまま渡せる parser マップ。
  * - `q` は loader に届ける必要があるため、利用側で `{ shallow: false }` を指定すること。
  * - 他のフィルタはクライアント側で完結する（loader 再走しない）。

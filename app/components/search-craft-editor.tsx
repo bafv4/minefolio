@@ -1,6 +1,8 @@
 import {
+  createContext,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -99,6 +101,7 @@ import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { KeyboardLayout } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { toast } from "sonner";
 
 /**
  * サーチクラフト編集UI（/me/search-craft とワークベンチ〈Playground・テンプレートエディタ〉で共通）。
@@ -115,6 +118,13 @@ import { useT } from "@/hooks/use-locale";
  * 「useSortable を持つ薄いシェル」と「React.memo した重い中身」に分け、行へ渡す
  * コールバックは id を引数に取る安定な関数に統一している。
  */
+
+/**
+ * エントリ削除の作法。既定は確認ダイアログ（保存するまで確定しない画面向け）。true のときは
+ * 確認なしで削除し、「元に戻す」つきのトーストを出す（編集が即時に反映される Playground 向け）。
+ * 行は memo されているので、props を増やさずコンテキストで渡す
+ */
+const DeleteWithUndoContext = createContext(false);
 
 /** SSR では no-op（useLayoutEffect の警告を避ける）。最新値 ref の反映に使う */
 const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
@@ -289,6 +299,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
   // （Loop を後から追加しても「Loopで使用中」が出ない／削除後も残る）
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
+  const deleteWithUndo = useContext(DeleteWithUndoContext);
   const rowId = useId();
 
   const removeItem = (itemIndex: number) => {
@@ -444,6 +455,28 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
       </div>
 
       {/* Delete button */}
+      {deleteWithUndo ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t("meSearchCraft.deleteEntryAria")}
+          data-craft-delete=""
+          className="shrink-0 max-sm:size-11"
+          onClick={(e) => {
+            // 押した行は消えるので、フォーカスは先に次のエントリ（無ければ区間の追加ボタン）へ移す
+            const row = e.currentTarget.closest("[data-craft-row]");
+            const next = row?.nextElementSibling?.matches("[data-craft-row]")
+              ? row.nextElementSibling.querySelector<HTMLElement>("[data-craft-delete]")
+              : null;
+            const add = row?.closest("[data-craft-block]")?.querySelector<HTMLElement>("[data-add-craft]");
+            (next ?? add)?.focus();
+            onDelete(craft.id);
+          }}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+        </Button>
+      ) : (
       <AlertDialog
         open={isDeleteDialogOpen}
         onOpenChange={(open) => {
@@ -476,6 +509,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      )}
 
       {/* アイテム選択ダイアログ（DialogPortal 経由で body へ描画されるため、
           この位置に DOM は生えない） */}
@@ -536,6 +570,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
     <div
       ref={setNodeRef}
       style={style}
+      data-craft-row=""
       className={cn(
         "py-3 flex items-start gap-2",
         isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
@@ -724,6 +759,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   onAddLoop,
 }: TimingBlockProps<T, L>) {
   const t = useT();
+  const deleteWithUndo = useContext(DeleteWithUndoContext);
   const meta = timing ? TIMING_META.find((m) => m.id === timing) : undefined;
   const label = meta ? timingLabel(t, meta) : t("meSearchCraft.timingNone");
 
@@ -737,7 +773,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   const showLoopSection = loops.length > 0 || isLoopDragging;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-background/80">
+    <div data-craft-block="" className="rounded-xl border border-border/70 bg-background/80">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         {meta && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />}
         <h3 className="text-sm font-semibold">{label}</h3>
@@ -783,6 +819,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
           size="sm"
           className="max-sm:min-h-11"
           aria-label={t("meSearchCraft.addCraftAria", { timing: label })}
+          data-add-craft=""
           onClick={() => onAddCraft(timing)}
         >
           <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -810,6 +847,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                         keyboardLayout={keyboardLayout}
                         onUpdate={onUpdateLoop}
                         onDelete={onDeleteLoop}
+                        deleteWithUndo={deleteWithUndo}
                       />
                     ))}
                   </div>
@@ -836,6 +874,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
             size="sm"
             className="max-sm:min-h-11"
             aria-label={t("meSearchCraft.addLoopAria", { timing: label })}
+            data-add-loop=""
             onClick={() => onAddLoop(timing)}
           >
             <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -876,7 +915,10 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   createCraft,
   createLoop,
   emptyState = false,
+  deleteWithUndo = false,
 }: {
+  /** true のとき、エントリの削除は確認ダイアログではなく「元に戻す」つきのトースト（Playground 用） */
+  deleteWithUndo?: boolean;
   /**
    * true のとき、クラフトが0件の間は区間のブロックを出さず、最初の1件を足す入口だけの
    * 空状態を出す（/me/search-craft 用。Playground・テンプレートエディタは既定の false のまま）
@@ -1088,6 +1130,28 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     [],
   );
 
+  // 確認なしの削除。置き換え前の crafts / loops を持っておき、トーストの「元に戻す」で戻す
+  const handleDeleteCraftWithUndo = useCallback(
+    (id: string) => {
+      const prev = latest.current;
+      const prevCrafts = prev.crafts;
+      const prevLoops = prev.loops;
+      handleDeleteCraft(id);
+      toast(t("playground.entryDeletedToast"), {
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => {
+            const { onCraftsChange, onLoopsChange } = latest.current;
+            onCraftsChange(prevCrafts);
+            onLoopsChange(prevLoops);
+          },
+        },
+      });
+    },
+    [handleDeleteCraft, t],
+  );
+
   // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
   const getDeleteWarning = useCallback(
     (craftId: string): string | null => {
@@ -1118,6 +1182,22 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     const { loops, onLoopsChange } = latest.current;
     onLoopsChange(reorderByBlock(loops.filter((l) => l.id !== id)));
   }, []);
+
+  // 確認なしの削除。置き換え前の loops を持っておき、トーストの「元に戻す」で戻す
+  const handleDeleteLoopWithUndo = useCallback(
+    (id: string) => {
+      const prevLoops = latest.current.loops;
+      handleDeleteLoop(id);
+      toast(t("playground.loopDeletedToast"), {
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => latest.current.onLoopsChange(prevLoops),
+        },
+      });
+    },
+    [handleDeleteLoop, t],
+  );
 
   const isLoopDragging = activeDrag?.type === "loop";
   const totalCraftCount = crafts.length;
@@ -1155,6 +1235,7 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   }
 
   return (
+    <DeleteWithUndoContext.Provider value={deleteWithUndo}>
     <DndContext
       id={dndContextId}
       sensors={sensors}
@@ -1183,14 +1264,15 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             totalCraftCount={totalCraftCount}
             isLoopDragging={isLoopDragging}
             onUpdateCraft={handleUpdateCraft}
-            onDeleteCraft={handleDeleteCraft}
+            onDeleteCraft={deleteWithUndo ? handleDeleteCraftWithUndo : handleDeleteCraft}
             onAddCraft={handleAddCraft}
             onUpdateLoop={handleUpdateLoop}
-            onDeleteLoop={handleDeleteLoop}
+            onDeleteLoop={deleteWithUndo ? handleDeleteLoopWithUndo : handleDeleteLoop}
             onAddLoop={handleAddLoop}
           />
         ))}
       </div>
     </DndContext>
+    </DeleteWithUndoContext.Provider>
   );
 }

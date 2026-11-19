@@ -562,6 +562,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   keyboardLayout,
   onUpdate,
   onDelete,
+  deleteWithUndo = false,
 }: {
   loop: T;
   index: number;
@@ -571,6 +572,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
+  /** true なら確認ダイアログを出さず即削除する（呼び出し側が「元に戻す」を用意する。Playground 用） */
+  deleteWithUndo?: boolean;
 }) {
   const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -582,6 +585,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
     <div
       ref={setNodeRef}
       style={style}
+      data-loop-row=""
       className={cn(
         "py-3 space-y-3",
         isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
@@ -602,32 +606,55 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
           {index + 1}
         </span>
 
+        {deleteWithUndo ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
+            data-loop-delete=""
+            className="ml-auto shrink-0 max-sm:size-11"
+            onClick={(e) => {
+              // 押した行は消えるので、フォーカスは先に次の Loop（無ければ区間の Loop 追加ボタン）へ移す
+              const row = e.currentTarget.closest("[data-loop-row]");
+              const next = row?.nextElementSibling?.matches("[data-loop-row]")
+                ? row.nextElementSibling.querySelector<HTMLElement>("[data-loop-delete]")
+                : null;
+              const add = row?.closest("[data-craft-block]")?.querySelector<HTMLElement>("[data-add-loop]");
+              (next ?? add)?.focus();
+              onDelete(loop.id);
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+          </Button>
+        ) : (
         <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
-              className="ml-auto shrink-0 max-sm:size-11"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("meSearchCraft.deleteLoopDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => onDelete(loop.id)}>
-                {t("meSearchCraft.delete")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
+                className="ml-auto shrink-0 max-sm:size-11"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("meSearchCraft.deleteLoopDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(loop.id)}>
+                  {t("meSearchCraft.delete")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       <LoopRowBody

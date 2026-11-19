@@ -10,6 +10,7 @@ import {
   type RemapDetail,
   type RemapInfo,
   type UiRemapInfo,
+  type UnavailableDetail,
 } from "@/lib/remap-utils";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,7 @@ export function KeyBadge({
   isRemapped,
   needsShift,
   remapDetail,
+  unavailable,
 }: {
   keyCode: string;
   label: string;
@@ -77,16 +79,29 @@ export function KeyBadge({
   needsShift?: boolean;
   /** リマップされている場合のツールチップ詳細（「リマップ: 物理 → 出力」表示用） */
   remapDetail?: RemapDetail;
+  /** その文字を打てない場合（基底キーが別のキー・文字へリマップ／無効化されている）。destructive の無効表示にする */
+  unavailable?: UnavailableDetail;
 }) {
   const t = useT();
   const hasFinger = !!fingers && fingers.length > 0;
   const fingerKeyStyle = getFingerKeyStyle(fingers);
   // Shift 同時押しの警告トーンが勝つ場合は、指のバンド背景を載せない
-  const showFingerBands = !(needsShift && !isRemapped);
+  const showFingerBands = !needsShift;
 
   // ツールチップのテキスト。物理キーボードのキー情報ツールチップ（key-info-trigger.tsx）と
   // 同じ「リマップ: 物理 → 出力」形式（フル名称。⇧ 等の短縮記号は使わない）
+  const unavailableText = unavailable
+    ? unavailable.targetLabel === null
+      ? t("playerProfile.unavailableDisabled", { source: unavailable.sourceLabel, char: unavailable.char })
+      : t("playerProfile.unavailableRemapped", {
+          source: unavailable.sourceLabel,
+          target: unavailable.targetLabel,
+          char: unavailable.char,
+        })
+    : null;
+
   const getTooltipContent = (): ReactNode => {
+    if (unavailableText) return unavailableText;
     if (isRemapped && remapDetail) {
       return t("playerProfile.remapped", { source: remapDetail.sourceLabel, target: remapDetail.targetLabel });
     }
@@ -101,15 +116,19 @@ export function KeyBadge({
     <Tooltip>
       <TooltipTrigger asChild>
         <span
+          role={unavailableText ? "img" : undefined}
+          aria-label={unavailableText ?? undefined}
           className={cn(
             "inline-flex items-center justify-center rounded border-2 font-mono font-semibold text-sm min-w-7 h-7 px-1.5",
-            hasFinger
+            unavailable
+              ? "border-destructive/50 bg-destructive/10 text-destructive line-through"
+              : hasFinger
               ? fingerKeyStyle.className
               : "bg-secondary/50 border-border/50 text-muted-foreground",
             isRemapped && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-            needsShift && !isRemapped && "border-warning/50 bg-warning/10"
+            needsShift && !unavailable && "border-warning/50 bg-warning/10"
           )}
-          style={showFingerBands ? fingerKeyStyle.style : undefined}
+          style={showFingerBands && !unavailable ? fingerKeyStyle.style : undefined}
         >
           <KeyLabelText label={label} />
         </span>
