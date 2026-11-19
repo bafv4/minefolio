@@ -692,8 +692,13 @@ export const PAGES_JA = {
     toggleSprint: "ダッシュ切替",
     matched: "{matches}/{total} 一致",
     compareButton: "比較",
-    /** 比較結果を違う行だけに絞るスイッチ（URL の ?diff=1） */
-    diffOnly: "違いだけ表示",
+    /** 既定は違う行だけ。同じ行も出すスイッチ（URL の ?all=1） */
+    showSame: "同じ行も表示",
+    noDifferencesHint: "キー配置もデバイス・設定も、すべて同じです。",
+    /** 2人が選ばれているときの見出し・メタ・要約の読み上げ名 */
+    titleWithPlayers: "{a} と {b} のキー配置比較",
+    /** 類似走者の「比較」ボタンに、見えない文字で相手を補う */
+    compareTarget: "（{name}）",
     noDifferences: "違いはありません",
     /** 比較表の先頭列の見出し */
     actionColumn: "操作",
