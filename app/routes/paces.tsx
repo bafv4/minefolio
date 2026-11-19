@@ -299,10 +299,12 @@ export default function PacesPage() {
           </p>
           <h1 className="text-2xl font-bold">{t("paces.title")}</h1>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
-          <Activity className="h-3.5 w-3.5" />
-          {t("paces.count", { count: visibleTotal })}
-        </span>
+        {visibleTotal > 0 && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
+            <Activity className="h-3.5 w-3.5" />
+            {t("paces.count", { count: visibleTotal })}
+          </span>
+        )}
       </div>
       <p className="text-sm text-muted-foreground">{t("paces.description")}</p>
 
@@ -369,7 +371,7 @@ export default function PacesPage() {
             <span className="flex text-sm font-medium leading-none">{t("paces.filterPeriod")}</span>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
               <div className="space-y-1">
-                <Label htmlFor="pace-filter-from" className="text-xs text-muted-foreground sm:sr-only">
+                <Label htmlFor="pace-filter-from" className="sm:sr-only">
                   {t("paces.filterPeriodFrom")}
                 </Label>
                 <Input
@@ -389,7 +391,7 @@ export default function PacesPage() {
               </div>
               <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
               <div className="space-y-1">
-                <Label htmlFor="pace-filter-to" className="text-xs text-muted-foreground sm:sr-only">
+                <Label htmlFor="pace-filter-to" className="sm:sr-only">
                   {t("paces.filterPeriodTo")}
                 </Label>
                 <Input

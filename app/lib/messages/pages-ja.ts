@@ -1808,6 +1808,7 @@ export const PAGES_JA = {
     noRankingData: "ランキングデータがありません",
     noRankingDataHint: "別のカテゴリに切り替えるか、MCSR Ranked のランキングを見てください。",
     noRankingDataRankedHint: "公開プロフィールで Ranked 統計の公開を許可した走者が載ります。",
+    openRankedSettings: "Ranked 統計の公開設定を開く",
     // Ranked
     pbRanking: "PB ランキング",
     eloRanking: "Elo ランキング",

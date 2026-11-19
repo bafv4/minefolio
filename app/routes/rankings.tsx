@@ -13,6 +13,8 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
+import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/session";
 import { getCached, setCached } from "@/lib/cache";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
@@ -85,9 +87,9 @@ const TABLE_FRAME_CLASS = "relative border rounded-xl overflow-hidden";
  * sm 以上は従来どおり自動レイアウト
  */
 const PB_TABLE_CLASS = "w-full caption-bottom text-sm table-fixed sm:table-auto";
-// # 48 + プレイヤー 160 + タイム 112 + 日付 96 + リンク 80
+// # 48 + プレイヤー 160 + タイム 112 + 日付 96 + リンク 96
 const SPEEDRUNCOM_TABLE_CLASS =
-  "w-full caption-bottom text-sm table-fixed min-w-[496px] sm:table-auto sm:min-w-0";
+  "w-full caption-bottom text-sm table-fixed min-w-[512px] sm:table-auto sm:min-w-0";
 // # 48 + プレイヤー 160 + Elo 64 + 勝敗 112 + 勝率 80
 const ELO_TABLE_CLASS =
   "w-full caption-bottom text-sm table-fixed min-w-[464px] sm:table-auto sm:min-w-0";
@@ -130,6 +132,8 @@ type LoadedRankings = Awaited<ReturnType<typeof loadRankings>>;
 export async function loader({ request }: Route.LoaderArgs) {
   const env = getEnv();
   const db = createDb();
+  // 空状態に「自分の Ranked 統計の公開設定」への導線を出すかどうか（ログイン時のみ）
+  const session = await getOptionalSession(request, createAuth(db, env));
   const url = new URL(request.url);
   let args = parseRankingsParams(url.searchParams);
   // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
@@ -185,6 +189,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     selectedCategory,
     rankings,
     rankedType: args.rankedType,
+    isSignedIn: !!session,
     appUrl: env.APP_URL || "https://minefolio.app",
   };
 }
@@ -235,10 +240,12 @@ export default function RankingsPage() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{t("rankings.pageTitle")}</h1>
           </div>
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
-            <Trophy className="h-3.5 w-3.5" />
-            {t("rankings.count", { count: items.length })}
-          </span>
+          {items.length > 0 && (
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
+              <Trophy className="h-3.5 w-3.5" />
+              {t("rankings.count", { count: items.length })}
+            </span>
+          )}
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
           {t("rankings.publicityNote")}
@@ -323,6 +330,13 @@ export default function RankingsPage() {
                 description={
                   data.tab === "ranked" ? t("rankings.noRankingDataRankedHint") : t("rankings.noRankingDataHint")
                 }
+                action={
+                  data.isSignedIn && data.tab === "ranked" ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/me/account">{t("rankings.openRankedSettings")}</Link>
+                    </Button>
+                  ) : undefined
+                }
               />
             )
           ) : currentKind === "speedruncom" ? (
@@ -348,7 +362,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
       <TableHead className="sticky top-0 bg-muted z-20 border-b-2">{t("rankings.player")}</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 w-28 sm:w-30 text-right border-b-2">{t("rankings.time")}</TableHead>
       <TableHead className="sticky top-0 bg-muted z-20 w-24 sm:w-25 border-b-2">{t("rankings.date")}</TableHead>
-      <TableHead className="sticky top-0 bg-muted z-20 w-20 sm:w-25 text-center border-b-2">{t("rankings.links")}</TableHead>
+      <TableHead className="sticky top-0 bg-muted z-20 w-24 sm:w-25 text-center border-b-2">{t("rankings.links")}</TableHead>
     </TableRow>
   );
   return (
@@ -406,14 +420,14 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                   {entry.recordDate ?? "-"}
                 </TableCell>
                 <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-0 sm:gap-1">
                     {entry.videoUrl && (
                       <a
                         href={entry.videoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={t("rankings.watchVideo")}
-                        className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                        className="-my-2.5 inline-flex h-11 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors sm:my-0 sm:size-8"
                       >
                         <Video className="h-4 w-4" />
                       </a>
@@ -424,7 +438,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={t("rankings.viewExternal")}
-                        className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                        className="-my-2.5 inline-flex h-11 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors sm:my-0 sm:size-8"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>

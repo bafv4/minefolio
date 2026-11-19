@@ -1799,6 +1799,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noRankingData: "No ranking data",
     noRankingDataHint: "Switch to another category, or view the MCSR Ranked rankings.",
     noRankingDataRankedHint: "Runners with a public profile who allow their Ranked stats to be shown appear here.",
+    openRankedSettings: "Open Ranked stats visibility settings",
     pbRanking: "PB ranking",
     eloRanking: "Elo ranking",
     player: "Player",

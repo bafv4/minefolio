@@ -247,10 +247,12 @@ export default function VideosPage() {
           </p>
           <h1 className="text-2xl font-bold">{t("videos.title")}</h1>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-          <Film className="h-3.5 w-3.5" />
-          {t("videos.count", { count: visibleTotal })}
-        </span>
+        {visibleTotal > 0 && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
+            <Film className="h-3.5 w-3.5" />
+            {t("videos.count", { count: visibleTotal })}
+          </span>
+        )}
       </div>
       <p className="text-sm text-muted-foreground">{t("videos.description")}</p>
 
