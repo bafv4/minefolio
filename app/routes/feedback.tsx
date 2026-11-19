@@ -113,17 +113,17 @@ export async function action({ request }: Route.ActionArgs) {
   const rawData = {
     subject: formData.get("subject") as string,
     message: formData.get("message") as string,
-    category: (formData.get("category") as string) || "other",
+    category: formData.get("category") as string,
   };
 
   const result = createFeedbackSchema(t).safeParse(rawData);
   if (!result.success) {
     const issue = result.error.issues[0];
-    // 欄に結ぶため、どの欄のエラーかも返す（件名・本文だけ。カテゴリは選択式なので欄に結ばない）
+    // 欄に結ぶため、どの欄のエラーかも返す（カテゴリ・件名・本文）
     const path = issue.path[0];
     return {
       error: issue.message,
-      field: path === "subject" || path === "message" ? path : null,
+      field: path === "category" || path === "subject" || path === "message" ? path : null,
     };
   }
 
@@ -196,15 +196,21 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [category, setCategory] = useState("other");
+  const [category, setCategory] = useState("");
   const [createIssue, setCreateIssue] = useState(false);
   const [sent, setSent] = useState(false);
   const [issueUrl, setIssueUrl] = useState<string | null>(null);
   // 欄に結ぶエラー（件名・本文）。欄を書き直したら消す
-  const [fieldErrors, setFieldErrors] = useState<{ subject: string | null; message: string | null }>({
+  const [fieldErrors, setFieldErrors] = useState<{
+    category: string | null;
+    subject: string | null;
+    message: string | null;
+  }>({
+    category: null,
     subject: null,
     message: null,
   });
+  const categoryRef = useRef<HTMLButtonElement>(null);
   const subjectRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const prevDataRef = useRef(fetcher.data);
@@ -225,15 +231,15 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
       setIssueUrl(data.issueUrl ?? null);
       setSubject("");
       setMessage("");
-      setCategory("other");
+      setCategory("");
       setCreateIssue(false);
-      setFieldErrors({ subject: null, message: null });
+      setFieldErrors({ category: null, subject: null, message: null });
     } else if ("error" in data) {
       const field = "field" in data ? data.field : null;
       if (field) {
         // 欄のエラーは欄の下に出し、その欄へフォーカスを戻す（トーストは出さない）
         setFieldErrors((prev) => ({ ...prev, [field]: data.error }));
-        (field === "subject" ? subjectRef : messageRef).current?.focus();
+        (field === "category" ? categoryRef : field === "subject" ? subjectRef : messageRef).current?.focus();
       } else {
         toast.error(data.error);
       }
@@ -242,6 +248,12 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // カテゴリは未選択が既定なので、送る前に選ばせる（サーバーも同じ検証をする）
+    if (!category) {
+      setFieldErrors((prev) => ({ ...prev, category: t("feedback.categoryRequired") }));
+      categoryRef.current?.focus();
+      return;
+    }
     const formData = new FormData();
     formData.set("subject", subject);
     formData.set("message", message);
@@ -257,7 +269,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
           <CardContent>
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-16 w-16 text-success mb-4" aria-hidden />
-              <h1 className="text-xl font-semibold mb-2">
+              <h1 className="text-2xl font-bold mb-2">
                 {t("feedback.sentTitle")}
               </h1>
               <p className={cn("text-muted-foreground", issueUrl ? "mb-3" : "mb-6")}>
@@ -289,7 +301,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
       <Card>
         <CardHeader>
           {/* ページの h1。見た目は CardTitle と同じ */}
-          <h1 data-slot="card-title" className="flex items-center gap-2 leading-snug font-semibold">
+          <h1 data-slot="card-title" className="flex items-center gap-2 text-2xl leading-snug font-bold">
             <MessageSquare className="h-5 w-5" aria-hidden />
             {t("feedback.pageTitle")}
           </h1>
@@ -305,8 +317,20 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="category">{t("feedback.category")}</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="category">
+              <Select
+                value={category}
+                onValueChange={(value) => {
+                  setCategory(value);
+                  if (fieldErrors.category) setFieldErrors((prev) => ({ ...prev, category: null }));
+                }}
+              >
+                <SelectTrigger
+                  ref={categoryRef}
+                  id="category"
+                  aria-required
+                  aria-invalid={fieldErrors.category ? true : undefined}
+                  aria-describedby={fieldErrors.category ? "category-error" : undefined}
+                >
                   <SelectValue placeholder={t("feedback.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -315,6 +339,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                   <SelectItem value="other">{t("feedback.categoryOther")}</SelectItem>
                 </SelectContent>
               </Select>
+              <FieldError id="category-error" message={fieldErrors.category} />
             </div>
 
             <div className="space-y-2">

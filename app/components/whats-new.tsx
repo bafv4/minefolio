@@ -186,14 +186,14 @@ export function WhatsNew() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative"
+          className="relative size-11 md:size-9"
           aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
         >
           {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
           <Sparkles aria-hidden />
           {hasUnread && (
             <span
-              className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
+              className="absolute top-2.5 right-2.5 md:top-1.5 md:right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
               aria-hidden
             />
           )}

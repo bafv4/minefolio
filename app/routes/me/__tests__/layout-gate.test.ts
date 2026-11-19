@@ -62,14 +62,14 @@ describe("/me/* ミドルウェア", () => {
     authMocks.getSession.mockResolvedValue({ user: { id: "discord-wip" } });
     const { thrown, context } = await runMiddleware();
     expect((thrown as Response).status).toBe(302);
-    expect((thrown as Response).headers.get("Location")).toBe("/onboarding");
+    expect((thrown as Response).headers.get("Location")).toBe("/onboarding?returnTo=%2Fme%2Faccount");
     expect(context.get(registeredUserContext)).toBeNull();
   });
 
   it("users 行が無いセッションも /onboarding へ redirect", async () => {
     authMocks.getSession.mockResolvedValue({ user: { id: "discord-nobody" } });
     const { thrown } = await runMiddleware();
-    expect((thrown as Response).headers.get("Location")).toBe("/onboarding");
+    expect((thrown as Response).headers.get("Location")).toBe("/onboarding?returnTo=%2Fme%2Faccount");
   });
 
   it("登録済みは通り、context にユーザー行を積む", async () => {

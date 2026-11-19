@@ -30,6 +30,7 @@ export default function ApiDocsPage() {
       icon={FileText}
       heading={t("developers.apiTitle")}
       markdown={apiMd}
+      toc
       backLink={{ to: "/developers", label: t("developers.heading") }}
     />
   );

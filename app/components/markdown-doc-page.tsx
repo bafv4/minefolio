@@ -10,7 +10,7 @@ import { useT } from "@/hooks/use-locale";
 import { useHorizontalOverflow } from "@/hooks/use-horizontal-overflow";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronsRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 /** 畳んで出す節（更新履歴の古い版など）。`heading` を summary の h2 にし、`markdown` を中身にする */
@@ -72,10 +72,19 @@ function hastText(node: unknown): string {
     本文の行の長さの上限（.doc-content の 42em）は掛けず、幅を使ってよい（doc-wide） */
 function ScrollableTable({ node: _node, ...props }: ComponentProps<"table"> & ExtraProps) {
   const t = useT();
-  const { ref, regionProps } = useHorizontalOverflow<HTMLDivElement>(t("common.tableScrollRegion"));
+  const { ref, overflowing, regionProps } = useHorizontalOverflow<HTMLDivElement>(t("common.tableScrollRegion"));
   return (
-    <div ref={ref} className={cn("doc-wide my-6 overflow-x-auto [&>table]:my-0", SCROLL_FOCUS_CLASS)} {...regionProps}>
-      <table {...props} />
+    <div className="doc-wide my-6">
+      {/* 列の多い表は md 未満で最小幅を持ち（app.css）、この器の中で横に動く。動かせることを先に知らせる */}
+      {overflowing && (
+        <p className="mb-1 inline-flex items-center gap-1 text-xs text-muted-foreground md:hidden">
+          {t("common.scrollHorizontalHint")}
+          <ChevronsRight className="h-3 w-3" aria-hidden />
+        </p>
+      )}
+      <div ref={ref} className={cn("overflow-x-auto [&>table]:my-0", SCROLL_FOCUS_CLASS)} {...regionProps}>
+        <table {...props} />
+      </div>
     </div>
   );
 }
@@ -190,7 +199,7 @@ export function MarkdownDocPage({
                   className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
                   aria-hidden
                 />
-                <h2 id={docHeadingId(section.heading)} className="text-lg font-semibold">
+                <h2 id={docHeadingId(section.heading)} className="text-xl font-bold">
                   {section.heading}
                 </h2>
               </summary>

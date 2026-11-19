@@ -1268,6 +1268,23 @@ body {
 .doc-content.prose > :not(pre, .doc-wide) {
   max-width: 42em;
 }
+/* 見出しの段: h1（ページ名）は text-2xl。本文の h2 は text-xl、h3 は text-lg（prose 既定の 1.5em・1.25em は
+   h1 と同じ大きさになる）。畳んだ節の h2（markdown-doc-page.tsx）も text-xl で、開いた版と同じ大きさにそろえる */
+.doc-content.prose :where(h2) {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.doc-content.prose :where(h3) {
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+/* 4 列以上の表は、狭い画面で 1 文字ずつの縦長にならないよう最小幅を持たせ、
+   既にある横スクロールの器（.doc-wide、markdown-doc-page.tsx の ScrollableTable）の中で動かす */
+@media (max-width: 767px) {
+  .doc-content.prose table:has(thead th:nth-child(4)) {
+    min-width: 36rem;
+  }
+}
 /* 注記（blockquote）は斜体にしない（和文の斜体は読みにくい）。引用符も付けない */
 .doc-content.prose :where(blockquote) {
   font-style: normal;

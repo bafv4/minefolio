@@ -41,8 +41,8 @@
 - ソース: `app/content/api.md`
 - Vite の `?raw` import でファイル内容を JS バンドルに埋め込み
 - 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`doc-content prose max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）。配色は `app/app.css` の `.doc-content.prose` がテーマトークンへ割り当てる（ガイド本文と同じ割り当て。`prose-invert` / `dark:` は使わない）。本文は `text-base`、1行は 42em まで（表の器とコードブロックは幅を使う）。注記（blockquote）は斜体にしない
-- `/privacy`・`/terms` は冒頭に h2 の目次（ページ内リンク）を出す（`toc`）。h2 の id と目次のリンクは同じ `docHeadingId` から作る
-- 表は横スクロールの器（`overflow-x-auto`）で包み、コードブロック（`pre`）は prose の `overflow-x: auto` のまま使う。狭い画面でもページ全体は横に動かない。はみ出しているときだけ、器に `tabindex="0"`・`role="region"`・`aria-label`（`common.tableScrollRegion` / `common.codeScrollRegion`）を付けてキーボードで横スクロールできるようにする（収まっているときは Tab の停止点を増やさない）
+- `/privacy`・`/terms`・`/developers/api` は冒頭に h2 の目次（ページ内リンク）を出す（`toc`。API 文書は12エンドポイントの節を持つため）。h2 の id と目次のリンクは同じ `docHeadingId` から作る
+- 表は横スクロールの器（`overflow-x-auto`）で包み、コードブロック（`pre`）は prose の `overflow-x: auto` のまま使う。狭い画面でもページ全体は横に動かない。4列以上の表は md 未満で `min-width: 36rem`（`app.css`）を持ち、器の中で横に動く（はみ出しているときは表の上に「横にスクロールできます」を出す）。本文の h2 は `text-xl`・h3 は `text-lg`（h1 は `text-2xl`）、畳んだ節の h2 も `text-xl`。はみ出しているときだけ、器に `tabindex="0"`・`role="region"`・`aria-label`（`common.tableScrollRegion` / `common.codeScrollRegion`）を付けてキーボードで横スクロールできるようにする（収まっているときは Tab の停止点を増やさない）
 
 掲載対象は **認証不要の公開 API のみ**。`/api/me/*` や `/api/auth/*` などの認証必須 API、`/api/cron/*` の Cron 専用 API は掲載しない。
 

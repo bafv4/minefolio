@@ -166,7 +166,7 @@ function LayoutShell({ data, children }: { data: LayoutData; children: React.Rea
           {t("common.skipToContent")}
         </a>
         <NavigationProgress />
-        <Header user={user} />
+        <Header user={user} onboardingPending={onboardingPending} />
         {showResumeNotice && (
           <div className="container mx-auto px-4 pt-4 sm:px-6 lg:px-8">
             <NoticeBanner tone="info" icon={Info} className="items-center">

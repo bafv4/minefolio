@@ -17,7 +17,8 @@ export function createFeedbackSchema(t: Translator) {
       .min(1, t("feedback.bodyRequired"))
       .min(10, t("feedback.bodyTooShort"))
       .max(2000, t("feedback.bodyTooLong")),
-    category: z.enum(["bug", "feature", "other"]).optional().default("other"),
+    // 未選択（空文字・欠落）はエラー。既定は「その他」にせず、選んでもらう
+    category: z.enum(["bug", "feature", "other"], { error: t("feedback.categoryRequired") }),
   });
 }
 

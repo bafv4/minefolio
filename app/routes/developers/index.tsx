@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/index";
 import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Code, FileText, History, Download, MessageSquare, ChevronRight } from "lucide-react";
 import { Github } from "@/components/brand-icons";
@@ -78,7 +78,7 @@ export default function DevelopersHubPage() {
                 <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold">{t(section.titleKey)}</h3>
+                    <h2 className="font-semibold">{t(section.titleKey)}</h2>
                     <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -94,7 +94,9 @@ export default function DevelopersHubPage() {
       {/* 関連リンク */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t("developers.relatedLinks")}</CardTitle>
+          <h2 data-slot="card-title" className="text-base leading-snug font-semibold">
+            {t("developers.relatedLinks")}
+          </h2>
           <CardDescription>{t("developers.relatedLinksDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">

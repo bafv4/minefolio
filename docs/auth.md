@@ -25,6 +25,11 @@ MinefolioはDiscord OAuthによるソーシャルログインを採用してい�
    - `callbackURL: "/onboarding"`（`returnTo` があれば `/onboarding?returnTo=<encodeReturnToForCallback済みの値>`）
 5. Discord OAuth認可後、better-authがコールバックを処理し、セッションを作成
 6. `/onboarding` へリダイレクト（`returnTo` はクエリで引き継がれる）
+7. Discord 側の拒否・取り消し・コールバック失敗のときは、`signIn.social` の `errorCallbackURL`
+   （`/login`、`returnTo` があれば `/login?returnTo=<…>`）へ better-auth が `?error=…` を付けて戻す。
+   `/login` は `error` の有無だけを見て `NoticeBanner`（error）で「ログインできませんでした」を出す
+   （コード・説明文は画面にもログにも出さない）。`signIn.social` 自体がエラーを返した／例外のときも
+   ボタンを元に戻して同じ帯を出す
 
 ### OAuthスコープ
 
@@ -71,6 +76,12 @@ identify, email
 - `getSession()`（`app/lib/session.ts`）が未認証時に `throw redirect("/login")` する際、
   `request.url` の pathname + search から導出（`getCurrentUser` / `getCurrentUserOrOnboarding` も
   内部で `getSession` を使うため同じ挙動になる）
+- `getCurrentUser()` が「未登録（users 行なし・初期設定未完了）」で `throw redirect("/onboarding")` する際も、
+  同じく `request.url` から導出した `returnTo` を `/onboarding?returnTo=…`（`sanitizeReturnTo` 済み）で付ける
+  （`/me/*` ミドルウェア・`getCurrentUser` を使う各ページ。`/api/*` は `sanitizeReturnTo` が拒否するので付かず、
+  `/api/me/*` に登録完了のゲートをかけない決まりも変わらない）
+- ヘッダーのユーザーメニュー・モバイルメニューは、初期設定が未完了の人（`_layout` loader の `onboardingPending`）には
+  「設定」（`/me/edit`）の代わりに「初期設定を続ける」（`/onboarding`）を出す
 
 ### 消費先（returnTo を使って遷移する箇所）
 

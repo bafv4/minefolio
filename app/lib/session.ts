@@ -77,7 +77,10 @@ export async function getCurrentUser(request: Request, auth: Auth, db: Database)
   });
 
   if (!isRegistered(user)) {
-    throw redirect("/onboarding");
+    // 元のページ（returnTo）を付け、ウィザード完了後に戻れるようにする（検証は sanitizeReturnTo）
+    const url = new URL(request.url);
+    const returnTo = sanitizeReturnTo(`${url.pathname}${url.search}`);
+    throw redirect(returnTo ? `/onboarding?returnTo=${encodeURIComponent(returnTo)}` : "/onboarding");
   }
 
   return { session, user };

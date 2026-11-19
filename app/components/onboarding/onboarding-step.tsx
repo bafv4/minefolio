@@ -56,7 +56,7 @@ export function OnboardingStepHeader({
         ref={titleRef}
         tabIndex={-1}
         data-slot="card-title"
-        className="text-xl font-semibold leading-snug focus-visible:outline-none"
+        className="text-2xl font-bold leading-snug focus-visible:outline-none"
       >
         {title}
       </h1>

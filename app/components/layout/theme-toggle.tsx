@@ -1,4 +1,4 @@
-import { Moon, Sun, Eclipse, Check, Monitor } from "lucide-react";
+import { Moon, Sun, SunMoon, Eclipse, Check, Monitor } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 import { useTheme } from "next-themes";
@@ -37,9 +37,8 @@ export function ThemeToggle() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={t("theme.toggle")}>
-          {/* light = 太陽、dark / ultra-dark = 月（dark variant で切替） */}
-          <Sun className="rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" aria-hidden />
-          <Moon className="absolute rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" aria-hidden />
+          {/* 現在のテーマに依らない 1 つの印（dark: での出し分けはしない。選択中はメニューのチェックが示す） */}
+          <SunMoon aria-hidden />
           <span className="sr-only">{t("theme.toggle")}</span>
         </Button>
       </DropdownMenuTrigger>

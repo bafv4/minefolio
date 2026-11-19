@@ -1653,6 +1653,8 @@ export const PAGES_JA = {
     /** /me/* へ戻るときのページ名 */
     returnToSettings: "プロフィールの設定",
     /** Discord から受け取る情報（privacy.md「1. (1)」と auth.ts の scope に合わせる） */
+    /** Discord の認証が失敗・取り消しになって /login へ戻ったとき（理由の文字列は出さない） */
+    authFailed: "ログインできませんでした。もう一度お試しください。",
     discordDataNote: "Discord から、Discord ID・ユーザー名・アバター画像・メールアドレスを受け取ります。メールアドレスは画面に表示されず、ログインのためにだけ使います。",
   },
   // ローカル開発専用の簡易ログイン（/dev/login。DEV_AUTH=1 のときのみ表示）
@@ -1702,7 +1704,7 @@ export const PAGES_JA = {
     linksTitle: "連携",
     linksDescription: "配信・動画・記録のアカウントをプロフィールに表示します。空欄のままでも進めます。",
     linkFieldError: "{platform}: {message}",
-    linkPlaceholder: "例: couriern3w",
+    linkPlaceholder: "例: {example}",
     // ステップ5: 公開設定
     visibilityTitle: "公開設定",
     visibilityDescription: "最後に、プロフィールを誰に見せるかを選んでください。下の表示設定では、あなたのペース・配信・動画をホームに出すかどうかも選べます（既定はオン）。",
@@ -1751,6 +1753,7 @@ export const PAGES_JA = {
     deliveryNote: "送った内容は、あなたの Discord ID・MCID・表示名とあわせて、運営者にメールで届きます。内容の確認などのため、運営者から Discord でご連絡することがあります。",
     category: "カテゴリ",
     categoryPlaceholder: "カテゴリを選択",
+    categoryRequired: "カテゴリを選んでください",
     categoryBug: "バグ報告",
     categoryFeature: "機能リクエスト",
     categoryOther: "その他",

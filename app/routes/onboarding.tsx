@@ -79,15 +79,16 @@ type ProfileVisibility = (typeof VISIBILITIES)[number];
 const TOTAL_STEPS = ONBOARDING_TOTAL_STEPS;
 
 // 連携ステップで扱うプラットフォーム（custom は扱わない）。
-// label / prefix は /me/edit のリンク欄（platformOptions）に倣う。プレースホルダは翻訳キー（onboarding.linkPlaceholder）
+// label / prefix は /me/edit のリンク欄（platformOptions）に倣う。プレースホルダは翻訳キー（onboarding.linkPlaceholder）に example を差し込む
 const LINK_PLATFORMS = [
-  { value: "youtube", label: "YouTube", prefix: "youtube.com/@", icon: Youtube },
-  { value: "twitch", label: "Twitch", prefix: "twitch.tv/", icon: Twitch },
-  { value: "twitter", label: "Twitter/X", prefix: "x.com/", icon: Twitter },
+  { value: "youtube", label: "YouTube", prefix: "youtube.com/@", example: "yourchannel", icon: Youtube },
+  { value: "twitch", label: "Twitch", prefix: "twitch.tv/", example: "your_name", icon: Twitch },
+  { value: "twitter", label: "Twitter/X", prefix: "x.com/", example: "your_handle", icon: Twitter },
   {
     value: "speedruncom",
     label: "Speedrun.com",
     prefix: "speedrun.com/users/",
+    example: "YourName",
     icon: ExternalLink,
   },
 ] as const;
@@ -1083,7 +1084,7 @@ function LinksStep({
                   id={`link-${platform.value}`}
                   name={platform.value}
                   defaultValue={links[platform.value]}
-                  placeholder={t("onboarding.linkPlaceholder")}
+                  placeholder={t("onboarding.linkPlaceholder", { example: platform.example })}
                   maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
                   autoComplete="off"
                   className="min-w-0 flex-1"

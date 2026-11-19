@@ -41,6 +41,8 @@ interface HeaderProps {
     uuid?: string | null;
     customSkinUrl?: string | null;
   } | null;
+  /** 初期設定（/onboarding）が未完了。true のとき「設定」（/me/*）は開けないので「初期設定を続ける」に差し替える */
+  onboardingPending?: boolean;
 }
 
 /** ナビ・ロゴのキーボードフォーカス（ほかの操作部品と同じ不透明の 2px） */
@@ -87,7 +89,7 @@ const navigation = [
   { key: "nav.guides", href: "/guides", icon: BookOpen },
 ] as const;
 
-export function Header({ user }: HeaderProps) {
+export function Header({ user, onboardingPending = false }: HeaderProps) {
   const t = useT();
   const locale = useLocale();
   const setLocale = useSetLocale();
@@ -102,6 +104,10 @@ export function Header({ user }: HeaderProps) {
 
   // 英語表示ではアルファベット表記を優先する
   const userName = user ? getLocalizedDisplayName(user, locale) : "";
+  // 未完了の人は /me/* に入ると /onboarding へ戻されるので、最初から初期設定へ案内する
+  const settingsLink = onboardingPending
+    ? { href: "/onboarding", label: t("onboarding.resumeAction") }
+    : { href: "/me/edit", label: t("nav.settings") };
 
   // ログイン後、遷移前にいたページ（現在地）へ戻れるように returnTo を付ける
   const loginHref = useLoginHref();
@@ -208,9 +214,9 @@ export function Header({ user }: HeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
-                      <Link to="/me/edit">
+                      <Link to={settingsLink.href}>
                         <Settings className="mr-2 h-4 w-4" />
-                        {t("nav.settings")}
+                        {settingsLink.label}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
@@ -263,6 +269,7 @@ export function Header({ user }: HeaderProps) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="size-11 md:size-9"
                     aria-label={t("nav.openMenu")}
                   >
                     <Menu className="size-5" aria-hidden />
@@ -272,8 +279,8 @@ export function Header({ user }: HeaderProps) {
               <SheetContent
                 side="right"
                 closeLabel={t("common.close")}
-                // 閉じるボタン（見た目 28px）の押せる範囲を 44px に広げる
-                closeClassName="after:absolute after:-inset-2"
+                // 閉じるボタンを 44px 四方にする（ヘッダー帯 64px の中で縦中央）
+                closeClassName="top-2.5 right-2.5 flex size-11 items-center justify-center p-0"
                 className="w-[86%] max-w-xs p-0 flex flex-col gap-0"
               >
                 <SheetTitle className="sr-only">{t("nav.navigation")}</SheetTitle>
@@ -344,7 +351,7 @@ export function Header({ user }: HeaderProps) {
                       <div className="mt-2 flex flex-col gap-0.5">
                         {[
                           { href: `/player/${user.slug}`, icon: User, label: t("nav.myProfile") },
-                          { href: "/me/edit", icon: Settings, label: t("nav.settings") },
+                          { href: settingsLink.href, icon: Settings, label: settingsLink.label },
                           { href: "/my-guides", icon: NotebookPen, label: t("nav.myGuides") },
                           { href: "/playground", icon: FlaskConical, label: t("nav.playground") },
                           { href: "/favorites", icon: Heart, label: t("nav.favorites") },
@@ -436,8 +443,8 @@ export function Header({ user }: HeaderProps) {
                         aria-pressed={locale === value}
                         onClick={() => setLocale(value)}
                         className={cn(
-                          // 見た目は 28px のまま、押せる範囲を上下に 8px ずつ広げて 44px にする
-                          "relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2",
+                          // 高さは 44px 以上（押せる範囲も見た目もそのまま）
+                          "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
                           locale === value
                             ? "bg-secondary text-foreground"
                             : "text-muted-foreground hover:text-foreground",

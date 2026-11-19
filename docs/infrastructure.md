@@ -59,7 +59,7 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 
 ## テーマとハイコントラスト
 
-- テーマ（light / dark / ultra-dark）は next-themes（`providers.tsx`、class 切替、localStorage `theme`。既定は `system`＝OS に従い、ダークは通常ダーク）。切替 UI は `layout/theme-toggle.tsx`（デスクトップ）と `layout/header.tsx` のモバイルメニュー。選択肢（`THEME_OPTIONS`）は「システム・ライト・ダーク・ウルトラダーク」の4つで、一度ほかを選んでも「システム」で OS 追従へ戻せる
+- テーマ（light / dark / ultra-dark）は next-themes（`providers.tsx`、class 切替、localStorage `theme`。既定は `system`＝OS に従い、ダークは通常ダーク）。切替 UI は `layout/theme-toggle.tsx`（デスクトップ。ボタンはテーマとハイコントラストの両方を持つ「表示設定」）と `layout/header.tsx` のモバイルメニュー。選択肢（`THEME_OPTIONS`）は「システム・ライト・ダーク・ウルトラダーク」の4つで、一度ほかを選んでも「システム」で OS 追従へ戻せる
 - **ハイコントラスト**はテーマとは別軸のオン・オフ（3テーマ × 2）。`<html data-contrast="more">` を付け、`app/app.css` の「ハイコントラスト」ブロックが3テーマそれぞれのトークンを上書きする（強化基準: 通常の文字 7:1 以上、枠線・フォーカスリング等の UI 部品 4.5:1 以上）
 - 判定: localStorage `contrast`（`"more"` / `"normal"`）が明示の選択で、キーなし（または不正値）は OS の `prefers-contrast: more` に従う。純粋関数は `app/lib/contrast.ts` の `resolveContrast`。サーバー・Cookie へは送らない（プライバシーポリシーの「テーマ設定の保存（ローカルストレージ）」の範囲）
 - 初回描画前に `root.tsx` の head のインラインスクリプト（`CONTRAST_INIT_SCRIPT`）が属性を付ける（ちらつき防止）。以降は `app/hooks/use-contrast.ts`（`useContrast` / `ContrastSync`）が OS の設定の変更・別タブ（storage）に追従する

@@ -16,7 +16,8 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { NoticeBanner } from "@/components/notice-banner";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useT } from "@/hooks/use-locale";
 import { localeFromMatches } from "@/lib/locale";
@@ -71,26 +72,47 @@ export async function loader({ request }: Route.LoaderArgs) {
     appUrl: env.APP_URL || "https://minefolio.app",
     devAuthEnabled: isDevAuthEnabled(),
     returnTo,
+    // Discord 側の拒否・取り消し・コールバック失敗では better-auth が errorCallbackURL に ?error=... を付けて戻す。
+    // 値（コード・説明文）は画面に出さず、失敗したかどうかだけを使う
+    authFailed: new URL(request.url).searchParams.has("error"),
   };
 }
 
 export default function LoginPage({ loaderData }: Route.ComponentProps) {
   const t = useT();
   const [isLoading, setIsLoading] = useState(false);
-  const { returnTo } = loaderData;
+  // ログインを始める前（signIn.social がエラーを返した）の失敗
+  const [startFailed, setStartFailed] = useState(false);
+  const { returnTo, authFailed } = loaderData;
 
   const handleDiscordLogin = async () => {
     setIsLoading(true);
+    setStartFailed(false);
     // returnTo は /onboarding のクエリとして引き継ぐ（既存ユーザーはそこで即座に returnTo へ、
     // 新規ユーザーはオンボーディング完了後に returnTo へ遷移する）。better-auth の callbackURL は
     // 独自の許可文字集合で検証されるため、encodeReturnToForCallback で追加エスケープする
     const callbackURL = returnTo
       ? `/onboarding?returnTo=${encodeReturnToForCallback(returnTo)}`
       : "/onboarding";
-    await authClient.signIn.social({
-      provider: "discord",
-      callbackURL,
-    });
+    // Discord 側で拒否・取り消し・失敗したときは、better-auth がここ（/login）へ ?error=... 付きで戻す
+    const errorCallbackURL = returnTo
+      ? `/login?returnTo=${encodeReturnToForCallback(returnTo)}`
+      : "/login";
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: "discord",
+        callbackURL,
+        errorCallbackURL,
+      });
+      // 成功時は Discord へ遷移するのでボタンは押せない状態のまま。エラーのときだけ戻す
+      if (error) {
+        setIsLoading(false);
+        setStartFailed(true);
+      }
+    } catch {
+      setIsLoading(false);
+      setStartFailed(true);
+    }
   };
 
   const returnToPage = returnTo ? returnToPageKey(returnTo) : null;
@@ -115,6 +137,11 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {(authFailed || startFailed) && (
+            <NoticeBanner tone="error" icon={AlertCircle}>
+              {t("login.authFailed")}
+            </NoticeBanner>
+          )}
           <Button
             onClick={handleDiscordLogin}
             disabled={isLoading}
