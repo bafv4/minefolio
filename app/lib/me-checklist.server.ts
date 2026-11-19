@@ -6,7 +6,7 @@ import { computeMeChecklist, type MeChecklistData } from "./me-guide";
 
 type UserRow = typeof users.$inferSelect;
 
-/** 閉じ済み、または全手順が済んでいれば null（欄を出さない）。 */
+/** 閉じ済みなら null（欄を出さない）。全手順が済んでいても閉じるまでは返す（欄は達成表示になる。完了は doneCount >= total で導く）。 */
 export async function loadMeChecklist(
   db: Database,
   user: Pick<UserRow, "id" | "mcid" | "bedrockMcid" | "bio" | "speedruncomUsername" | "speedruncomId" | "meChecklistDismissedAt">,
@@ -29,5 +29,5 @@ export async function loadMeChecklist(
     recordCount: recordRows[0]?.n ?? 0,
     playstyle: playstyle ?? null,
   });
-  return checklist.doneCount >= checklist.total ? null : checklist;
+  return checklist;
 }

@@ -1673,6 +1673,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       close: "Dismiss",
       done: "Done",
       todo: "Not done",
+      achieved: "Advancement made! Your runner page is all set",
+      achievedDescription: "All {total} steps are done. Take a look at how others see your page.",
+      viewPlayer: "View my runner page",
       steps: {
         mcid: "Set your MCID (Java or Bedrock)",
         bio: "Write your bio",

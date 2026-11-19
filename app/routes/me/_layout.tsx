@@ -67,7 +67,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 
-  // 「はじめに」チェックリスト（/me/edit が useRouteLoaderData で読む。閉じ済み・全完了なら null）
+  // 「はじめに」チェックリスト（/me/edit が useRouteLoaderData で読む。閉じ済みなら null）
   const checklist = await loadMeChecklist(db, user);
 
   return { user, appUrl, checklist };

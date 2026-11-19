@@ -1661,6 +1661,10 @@ export const PAGES_JA = {
       close: "閉じる",
       done: "完了",
       todo: "未完了",
+      /** 全手順が済んだときの達成表示 */
+      achieved: "進捗を達成しました: 走者画面がひととおりそろいました",
+      achievedDescription: "{total}つの手順がすべて済みました。ほかの人からどう見えるかを確かめてみましょう。",
+      viewPlayer: "自分の走者画面を見る",
       steps: {
         mcid: "MCID を登録する（Java 版か Bedrock 版）",
         bio: "自己紹介を入力する",
