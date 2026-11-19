@@ -1058,6 +1058,9 @@ export default function PlayerProfilePage() {
     });
   }
 
+  // ゲーム言語だけではテクニックの欄を作らない（言語はデバイスタブに出る。プレイスタイルの項目が無いのに「テクニック」見出しだけが立つのを避ける）
+  if (showPlaystyleGameLanguage && playstyleTechniqueRows.length === 1) playstyleTechniqueRows.length = 0;
+
   const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
   const hasPlaystyleControls = playstyleControlsRows.length > 0;
   const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
@@ -3091,18 +3094,22 @@ function StatsContent({
     pendingSpeedrunRecords.length === 0 &&
     player.categoryRecords.length === 0;
   const showEmptyState = allExternalResolved && !hasExternalError && noData;
-  // 取得を始めた（MCID／ユーザー名がある）のに結果が無かったサービスは、欄ごと消さず「記録なし」の1行で確定させる。
-  // 読み込み中の欄が数秒出てから消えると、下の欄が押し上がって高さが変わるため
-  const noneNote = (id: string, name: string) => (
-    <PageSection headingLevel="h3" id={`stats-${id}-none`} title={name}>
-      <p className="text-sm text-muted-foreground">{t("playerProfile.statsServiceNone", { name })}</p>
-    </PageSection>
-  );
+  // 結果が無かったサービスの欄は出さない（ui.md「中身が無い欄は出さない」。/player/:slug/stats と同じ）
+
+  // 取得前に「記録がある見込み」が loader で分からないサービス（Ranked は Minefolio 内順位なし、PaceMan は週間統計なし）は、
+  // 読み込み中の欄（約140px）を出さない。取得後に空で消えると下の内容が押し上がるため、1行の確認中表示だけを末尾に出す。失敗時は再試行のため欄で出す
+  const rankedExpected = !!minefolioEloRank;
+  const rankedCardShown =
+    player.showRankedStats !== false && loadState.ranked !== "done" && (loadState.ranked === "error" || rankedExpected);
+  const pacemanCardShown = !hasWeeklyStats && loadState.paceman === "error";
+  const checkingExternal =
+    (player.showRankedStats !== false && loadState.ranked === "loading" && !rankedExpected) ||
+    (!hasWeeklyStats && loadState.paceman === "loading");
 
   const sections: Record<StatsSectionKey, ReactNode> = {
     ranked: (
       <>
-        {player.showRankedStats !== false && loadState.ranked !== "done" && (
+        {rankedCardShown && (
           <StatsServiceLoadingCard
             framed={false}
             title="MCSR Ranked"
@@ -3116,15 +3123,13 @@ function StatsContent({
         {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
           <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
         )}
-        {!showEmptyState && player.mcid && player.showRankedStats !== false && loadState.ranked === "done" && !externalStats.ranked?.isRegistered &&
-          noneNote("ranked", "MCSR Ranked")}
       </>
     ),
     // PaceMan は欄を 1 つ（「PaceMan」）にまとめる。リンク（クライアント取得）は見出し右、週間統計（loader 取得済み）は中身
     paceman: (
       <>
         {/* 週間統計があるときは欄を 1 つにし、登録判定の状態は見出し右（PaceManStatsCard 側）で出す */}
-        {!hasWeeklyStats && loadState.paceman !== "done" && (
+        {pacemanCardShown && (
           <StatsServiceLoadingCard
             framed={false}
             title="PaceMan"
@@ -3152,7 +3157,6 @@ function StatsContent({
               />
             )
           ))}
-        {!showEmptyState && player.mcid && !showPacemanSection && loadState.paceman === "done" && noneNote("paceman", "PaceMan")}
       </>
     ),
     speedruncom: (
@@ -3178,8 +3182,6 @@ function StatsContent({
             expandable
           />
         )}
-        {!showEmptyState && player.speedruncomUsername && loadState.speedruncom === "done" && !externalStats.speedruncom?.personalBests?.length &&
-          noneNote("speedruncom", "Speedrun.com")}
 
         {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
         {pendingSpeedrunRecords.length > 0 && (
@@ -3200,6 +3202,13 @@ function StatsContent({
       {orderStatsSections(mainCategory).map((key) => (
         <Fragment key={key}>{sections[key]}</Fragment>
       ))}
+
+      {checkingExternal && (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          {t("playerProfile.statsLoadingExternal")}
+        </p>
+      )}
 
       {/* カスタム記録（RecordCard は1件ずつの箱のまま） */}
       {player.categoryRecords.length > 0 && (

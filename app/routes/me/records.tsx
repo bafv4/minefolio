@@ -11,9 +11,8 @@ import { users, categoryRecords } from "@/lib/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
-import { fetchSpeedrunComStats, getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
+import { fetchSpeedrunComStats } from "@/lib/external-stats";
 import { parseRunIdList, parseRunIdListInput, sameRunIdSet, toggleRunId } from "@/lib/run-id-list";
-import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
@@ -776,14 +775,12 @@ export default function RecordsPage() {
               {speedruncomRecords.personalBests.map((pb) => {
                 const isHidden = draftHidden.includes(pb.run.id);
                 const isPinned = draftPinned.includes(pb.run.id);
-                const videoEmbedUrl = getSpeedrunComVideoEmbedUrl(pb);
                 const timeText = formatTime(pb.run.times.primary_t * 1000);
                 const baseName = [pb.game?.data?.names?.international, pb.category?.data?.name]
                   .filter(Boolean)
                   .join(" ");
                 // 同じカテゴリでバージョン違いの記録が並んでも、ボタンの読み上げ名で区別できるようにする
                 const recordName = `${baseName} (${[pb.platformName, pb.versionName, timeText].filter(Boolean).join(" / ")})`;
-                const videoLabel = pb.category?.data?.name ?? baseName;
                 return (
                   <div
                     key={pb.run.id}
@@ -853,13 +850,6 @@ export default function RecordsPage() {
                         </p>
                       )}
                       <p className="text-lg font-mono font-bold">{timeText}</p>
-                      {videoEmbedUrl && (
-                        <YouTubeClickEmbed
-                          embedUrl={videoEmbedUrl}
-                          title={t("playerStatsCards.videoTitle", { label: videoLabel })}
-                          playLabel={t("playerStatsCards.playVideo", { label: `${videoLabel} ${timeText}` })}
-                        />
-                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {isPinned && <PinnedBadge />}
