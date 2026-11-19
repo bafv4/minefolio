@@ -7,6 +7,7 @@ import { createDb } from "@/lib/db";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/status-pill";
 import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -241,10 +242,9 @@ export default function RankingsPage() {
             <h1 className="text-2xl font-bold">{t("rankings.pageTitle")}</h1>
           </div>
           {items.length > 0 && (
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground">
-              <Trophy className="h-3.5 w-3.5" />
+            <StatusPill icon={Trophy} className="ml-auto">
               {t("rankings.count", { count: items.length })}
-            </span>
+            </StatusPill>
           )}
         </div>
         <p className="text-muted-foreground mt-1 text-sm">

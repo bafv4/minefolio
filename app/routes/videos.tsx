@@ -37,6 +37,7 @@ import {
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { VIDEOS_PAGE_SIZE } from "./api/videos";
 import { cn } from "@/lib/utils";
+import { StatusPill } from "@/components/status-pill";
 import { Play, Film, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
@@ -248,10 +249,9 @@ export default function VideosPage() {
           <h1 className="text-2xl font-bold">{t("videos.title")}</h1>
         </div>
         {visibleTotal > 0 && (
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-            <Film className="h-3.5 w-3.5" />
+          <StatusPill icon={Film} className="ml-auto">
             {t("videos.count", { count: visibleTotal })}
-          </span>
+          </StatusPill>
         )}
       </div>
       <p className="text-sm text-muted-foreground">{t("videos.description")}</p>

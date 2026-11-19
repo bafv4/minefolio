@@ -337,26 +337,20 @@ export function FeaturedRunnerCard({
         icon={<Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("home.featuredTitle")}
       >
-        {/* EmptyState の compact は横並び固定で、375px では見出しが詰まる。sm 未満は default（縦積み）に切り替え、
-            両方を描いて CSS で出し分ける */}
-        {(["default", "compact"] as const).map((size) => (
-          <div key={size} className={size === "compact" ? "max-sm:hidden" : "sm:hidden"}>
-            <EmptyState
-              size={size}
-              icon={<Sparkles className={size === "compact" ? "h-5 w-5" : "h-8 w-8"} />}
-              title={t("home.featuredEmptyTitle")}
-              description={t("home.featuredEmptyDescription")}
-              action={
-                <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-8">
-                  <Link to="/browse" prefetch="intent">
-                    <Search className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    {t("home.ctaBrowse")}
-                  </Link>
-                </Button>
-              }
-            />
-          </div>
-        ))}
+        <EmptyState
+          size="compact"
+          icon={<Sparkles className="h-5 w-5" />}
+          title={t("home.featuredEmptyTitle")}
+          description={t("home.featuredEmptyDescription")}
+          action={
+            <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-8">
+              <Link to="/browse" prefetch="intent">
+                <Search className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {t("home.ctaBrowse")}
+              </Link>
+            </Button>
+          }
+        />
       </PageSection>
     );
   }
