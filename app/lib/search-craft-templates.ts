@@ -89,6 +89,30 @@ export function groupCraftsByTiming<T extends { timing: string | null }>(
   return grouped;
 }
 
+/**
+ * 見出し（タイトル）つきのタイミンググループを描画順で返す（null＝「指定なし」。
+ * クラフトの表示用タイミング ∪ loopTimings。順は 指定なし → SEARCH_CRAFT_TIMINGS）。
+ * タイミングが1件も無い（指定なしだけ・クラフト 0 件）1枚表示は見出しが無いので空。
+ * 描画（SearchCraftGroupedList）と、ガイド記事の目次（埋め込みのグループ見出し。guide-embed-toc.ts）が
+ * 同じグループ集合を見るための単一情報源
+ */
+export function searchCraftGroupTimings(
+  crafts: { timing: string | null }[],
+  loopTimings: (string | null)[] = [],
+): (SearchCraftTiming | null)[] {
+  const keys = new Set<SearchCraftTiming | null>([
+    ...crafts.map((c) => resolveCraftTiming(c.timing)),
+    ...loopTimings.map((timing) => resolveCraftTiming(timing)),
+  ]);
+  if (![...keys].some((k) => k !== null)) return [];
+  const sorted: (SearchCraftTiming | null)[] = [];
+  if (keys.has(null)) sorted.push(null);
+  for (const timing of SEARCH_CRAFT_TIMINGS) {
+    if (keys.has(timing)) sorted.push(timing);
+  }
+  return sorted;
+}
+
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
   return SEARCH_CRAFT_TIMINGS.includes(value as SearchCraftTiming)
     ? (value as SearchCraftTiming)

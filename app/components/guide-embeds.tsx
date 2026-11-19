@@ -25,6 +25,7 @@ import {
   KeyBadgeLegend,
   SEARCH_CRAFT_OPEN_FIRST_MAX,
   SearchCraftGroupedList,
+  timingLabelById,
   type SearchCraftGroupHeadingLevel,
   type SearchCraftRowData,
 } from "@/components/search-craft-template-view";
@@ -39,13 +40,20 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { decodeHtmlAttr, isValidTemplateId } from "@/lib/guide-embed-attrs";
+import { embedGroupHeadingId, type TocSegment } from "@/lib/guide-embed-toc";
 import {
   GUIDE_YOUTUBE_BLOCK_SOURCE,
   htmlDepthDelta,
   lastHeadingLevel,
   parseGuideYouTubeEmbedUrl,
 } from "@/lib/guide-view-html";
-import { parseTemplateRemaps, resolveCraftTiming } from "@/lib/search-craft-templates";
+import {
+  parseTemplateRemaps,
+  resolveCraftTiming,
+  searchCraftGroupTimings,
+} from "@/lib/search-craft-templates";
+import type { Translator } from "@/lib/messages";
+import type { Locale } from "@/lib/locale";
 import { getGameLanguageName } from "@/lib/game-languages";
 import type { UiRemapInfo } from "@/lib/remap-utils";
 import type { KeyboardLayout } from "@/lib/keybindings";
@@ -123,15 +131,19 @@ export function getUniqueEmbedSlugs(refs: EmbedRef[]): string[] {
 export type ContentSegment =
   | { type: "html"; content: string }
   | { type: "keybind-embed"; userSlug: string; presetName: string | null }
-  | { type: "searchcraft-embed"; userSlug: string; presetName: string | null }
+  /** hideKeys: 押すキー（キーバッジ・キー入力順）を出さない（`data-hide-keys="true"`。属性なしは出す） */
+  | { type: "searchcraft-embed"; userSlug: string; presetName: string | null; hideKeys: boolean }
   /** サーチクラフトテンプレート埋め込み。templateId は形式外・欠落なら null（描画側で「表示できません」） */
-  | { type: "sctemplate-embed"; templateId: string | null }
+  | { type: "sctemplate-embed"; templateId: string | null; hideKeys: boolean }
   /**
    * 本文の直下の YouTube 埋め込み（押してから読み込む YouTubeClickEmbed で描く）。embedUrl は
    * youtube-nocookie.com の埋め込み URL。index は本文中の YouTube の出現順（1 始まり、入れ子の動画も数える。
    * titleGuideYouTubeIframes の番号と一致し、title / 再生ボタンの名前を一意にするのに使う）
    */
   | { type: "youtube"; embedUrl: string; index: number };
+
+/** 押すキーを隠す属性（サニタイズが値を "true" だけに絞っている） */
+const HIDE_KEYS_ATTR = /\sdata-hide-keys="true"/;
 
 const EMBED_REGEX_SOURCE = `<div[^>]*data-(keybind|searchcraft|sctemplate)-embed[^>]*></div>|${GUIDE_YOUTUBE_BLOCK_SOURCE}`;
 
@@ -180,7 +192,11 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
     if (match[1] === "sctemplate") {
       const idMatch = tag.match(/data-template-id="([^"]*)"/);
       const id = idMatch ? decodeHtmlAttr(idMatch[1]) : "";
-      segments.push({ type: "sctemplate-embed", templateId: isValidTemplateId(id) ? id : null });
+      segments.push({
+        type: "sctemplate-embed",
+        templateId: isValidTemplateId(id) ? id : null,
+        hideKeys: HIDE_KEYS_ATTR.test(tag),
+      });
       lastIndex = match.index + match[0].length;
       continue;
     }
@@ -188,11 +204,13 @@ export function splitContentAtEmbeds(html: string): ContentSegment[] {
     const slugMatch = tag.match(/data-user-slug="([^"]*)"/);
     const presetMatch = tag.match(/data-preset-name="([^"]*)"/);
 
-    segments.push({
-      type: `${embedType}-embed` as "keybind-embed" | "searchcraft-embed",
-      userSlug: slugMatch ? decodeHtmlAttr(slugMatch[1]) : "",
-      presetName: presetMatch ? decodeHtmlAttr(presetMatch[1]) : null,
-    });
+    const userSlug = slugMatch ? decodeHtmlAttr(slugMatch[1]) : "";
+    const presetName = presetMatch ? decodeHtmlAttr(presetMatch[1]) : null;
+    segments.push(
+      embedType === "keybind"
+        ? { type: "keybind-embed", userSlug, presetName }
+        : { type: "searchcraft-embed", userSlug, presetName, hideKeys: HIDE_KEYS_ATTR.test(tag) },
+    );
 
     lastIndex = match.index + match[0].length;
   }
@@ -224,6 +242,68 @@ export function embedGroupHeadingLevels(
     if (seg.type === "youtube") return null;
     const level = Math.min(Math.max((preceding ?? 2) + 1, 3), 6);
     return `h${level}` as SearchCraftGroupHeadingLevel;
+  });
+}
+
+/**
+ * 埋め込み（リマップ・サーチクラフト・テンプレート。YouTube・html は除く）の本文中の通し番号（0 始まり。並びは
+ * segments と同じで、埋め込みでないセグメントは null）。グループ見出しの id（embedGroupHeadingId）に使い、
+ * 描画（GuideContent）と目次（embedTocSegments）で同じ番号になる
+ */
+export function embedOrdinals(segments: ContentSegment[]): (number | null)[] {
+  let n = 0;
+  return segments.map((seg) => (seg.type === "html" || seg.type === "youtube" ? null : n++));
+}
+
+/**
+ * 目次に差し込むための断片（mergeEmbedGroupsIntoToc の入力）。埋め込みごとに、描画が見出しつきで出すグループを
+ * 描画と同じ関数（searchCraftGroupTimings）・同じデータの整え方（normalizeEmbedCrafts・buildEmbedLoops・押すキーを
+ * 隠すときは Loop を数えない）で求める。走者が無い・テンプレートが見えない・クラフトが 0 件・タイミングが無い
+ * 埋め込みは groups が空（描画に見出しが出ないので項目も作らない）。タイトルは閲覧者の言語（描画と同じ）
+ */
+export function embedTocSegments(
+  segments: ContentSegment[],
+  embedUsers: Record<string, EmbedUserData>,
+  embedTemplates: Record<string, EmbedTemplateData>,
+  t: Translator,
+  locale: Locale,
+): TocSegment[] {
+  const ordinals = embedOrdinals(segments);
+  return segments.map((seg, i): TocSegment => {
+    if (seg.type === "html") return { kind: "html", content: seg.content };
+    const index = ordinals[i];
+    if (index === null) return { kind: "other" };
+    let crafts: NormalizedEmbedCraft[] = [];
+    let loops: SearchCraftLoopRowData[] = [];
+    let name = "";
+    if (seg.type === "searchcraft-embed") {
+      const userData = embedUsers[seg.userSlug];
+      if (userData) {
+        const source = selectSearchCraftEmbedSource(userData, seg.presetName);
+        crafts = normalizeEmbedCrafts(source.rawCrafts);
+        if (!seg.hideKeys) {
+          loops = buildEmbedLoops(source.presetMode, source.rawLoopsData, userData.searchCraftLoops);
+        }
+        name = getLocalizedDisplayName(userData, locale);
+      }
+    } else if (seg.type === "sctemplate-embed") {
+      const template = seg.templateId ? embedTemplates[seg.templateId] : undefined;
+      if (template) {
+        crafts = normalizeEmbedCrafts(safeParseArray<unknown>(template.craftsData) ?? []);
+        if (!seg.hideKeys) loops = buildEmbedLoops(true, template.loopsData, []);
+        name = template.title;
+      }
+    }
+    const timings = crafts.length === 0 ? [] : searchCraftGroupTimings(crafts, loops.map((l) => l.timing));
+    return {
+      kind: "embed",
+      index,
+      name,
+      groups: timings.map((timing) => ({
+        timing,
+        title: timing ? timingLabelById(t, timing) : t("playerProfile.timingUnspecified"),
+      })),
+    };
   });
 }
 
@@ -394,6 +474,44 @@ function toSafeLoopSteps(steps: LoopStepData[]): LoopStepData[] {
 
 
 /**
+ * 埋め込みの Loop（繋ぎ方）の表示用データ。timing は resolveCraftTiming で一覧と同じ表示用の値に寄せる
+ * （enum 外の値は "other"。生のままだと一覧のグループに入らず Loop が表示から漏れる）。
+ * 描画（SearchCraftEmbedBody）と目次（embedTocSegments）が同じグループ集合を見るための共通関数
+ */
+function buildEmbedLoops(
+  presetMode: boolean,
+  rawLoopsData: string | null,
+  liveLoops: EmbedUserData["searchCraftLoops"],
+): SearchCraftLoopRowData[] {
+  return presetMode
+    ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
+        const rawSteps = loop && Array.isArray(loop.steps) ? loop.steps : [];
+        const steps: LoopStepData[] = rawSteps.map((rawStep) => {
+          const step = rawStep as Partial<PresetLoopStepData> | null | undefined;
+          const craftSeq = step && typeof step === "object" ? step.craftSeq : undefined;
+          return {
+            craftId: typeof craftSeq === "number" ? String(craftSeq) : "",
+            transition: step?.transition ?? null,
+            variationIndex: normalizeVariationIndex(step?.variationIndex),
+          };
+        });
+        const isObj = loop && typeof loop === "object";
+        return {
+          id: `preset-loop-embed-${idx}`,
+          timing: resolveCraftTiming(isObj && typeof loop.timing === "string" ? loop.timing : null),
+          comment: isObj && typeof loop.comment === "string" ? loop.comment : null,
+          steps: toSafeLoopSteps(steps),
+        };
+      })
+    : liveLoops.map((loop) => ({
+        id: loop.id,
+        timing: resolveCraftTiming(loop.timing),
+        comment: loop.comment,
+        steps: toSafeLoopSteps(loop.steps),
+      }));
+}
+
+/**
  * サーチクラフト一覧 + Loop の描画本体（埋め込みの外枠の中）。
  * ユーザー埋め込み（SearchCraftEmbedView）とテンプレート埋め込み（SearchCraftTemplateEmbedView）が共用する。
  * presetMode=true は「スナップショット由来」（Loop の craft 参照は sequence で突合し、Loop は rawLoopsData の生JSON）、
@@ -413,7 +531,13 @@ function SearchCraftEmbedBody({
   liveLoops,
   keyboardLayout,
   groupHeadingLevel,
+  embedIndex,
+  showInputKeys = true,
 }: {
+  /** 押すキー（キーバッジ・キー入力順・凡例・Loop）を出すか。作者が埋め込みごとに選ぶ（既定 true） */
+  showInputKeys?: boolean;
+  /** 本文中の埋め込みの通し番号（グループ見出しの id＝目次のアンカー。embedGroupHeadingId） */
+  embedIndex?: number;
   crafts: NormalizedEmbedCraft[];
   remaps: UiRemapInfo[];
   presetMode: boolean;
@@ -447,34 +571,9 @@ function SearchCraftEmbedBody({
     variations: c.variations,
   }));
 
-  // timing は resolveCraftTiming で一覧と同じ表示用の値に寄せる（enum 外の値は "other"。
-  // 生のままだと一覧のグループに入らず Loop が表示から漏れる）
-  const loops: SearchCraftLoopRowData[] = presetMode
-    ? (safeParseArray<PresetSearchCraftLoopData>(rawLoopsData) ?? []).map((loop, idx) => {
-        const rawSteps = loop && Array.isArray(loop.steps) ? loop.steps : [];
-        const steps: LoopStepData[] = rawSteps.map((rawStep) => {
-          const step = rawStep as Partial<PresetLoopStepData> | null | undefined;
-          const craftSeq = step && typeof step === "object" ? step.craftSeq : undefined;
-          return {
-            craftId: typeof craftSeq === "number" ? String(craftSeq) : "",
-            transition: step?.transition ?? null,
-            variationIndex: normalizeVariationIndex(step?.variationIndex),
-          };
-        });
-        const isObj = loop && typeof loop === "object";
-        return {
-          id: `preset-loop-embed-${idx}`,
-          timing: resolveCraftTiming(isObj && typeof loop.timing === "string" ? loop.timing : null),
-          comment: isObj && typeof loop.comment === "string" ? loop.comment : null,
-          steps: toSafeLoopSteps(steps),
-        };
-      })
-    : liveLoops.map((loop) => ({
-        id: loop.id,
-        timing: resolveCraftTiming(loop.timing),
-        comment: loop.comment,
-        steps: toSafeLoopSteps(loop.steps),
-      }));
+  // 押すキーを隠すときは Loop（繋ぎ方）も出さない（中身がほぼ押すキーの列のため）。
+  // 見出し（グループ）の集合も Loop を含めずに数える（目次と一致させる。buildEmbedLoops）
+  const loops = showInputKeys ? buildEmbedLoops(presetMode, rawLoopsData, liveLoops) : [];
 
   const loopTimings = Array.from(groupLoopsByTiming(loops).keys());
   const renderLoopExtra = makeLoopGroupExtra({
@@ -492,7 +591,11 @@ function SearchCraftEmbedBody({
     <div className="p-4">
       <SearchCraftGroupedList
         // 凡例は「すべて開く」と同じ行に置く（別の行に積むと一覧の上が空く）
-        toolbarStart={<KeyBadgeLegend showCraftMarker={loops.length > 0} />}
+        toolbarStart={showInputKeys ? <KeyBadgeLegend showCraftMarker={loops.length > 0} /> : undefined}
+        showInputKeys={showInputKeys}
+        groupHeadingId={
+          embedIndex === undefined ? undefined : (timing) => embedGroupHeadingId(embedIndex, timing)
+        }
         framed={false}
         collapsible={collapsible}
         // lg 未満は、先頭のグループが長いときは全部閉じて始める。lg 以上は全部開く（テンプレート詳細と同じ）
@@ -517,11 +620,17 @@ export function SearchCraftEmbedView({
   userData,
   presetName,
   groupHeadingLevel,
+  embedIndex,
+  showKeys = true,
 }: {
   userData: EmbedUserData;
   presetName: string | null;
   /** グループ見出しの段（embedGroupHeadingLevels） */
   groupHeadingLevel?: SearchCraftGroupHeadingLevel;
+  /** 本文中の埋め込みの通し番号（グループ見出しの id。embedOrdinals） */
+  embedIndex?: number;
+  /** 押すキーを出すか（`data-hide-keys` が無ければ true） */
+  showKeys?: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -560,6 +669,8 @@ export function SearchCraftEmbedView({
           liveLoops={userData.searchCraftLoops}
           keyboardLayout={keyboardLayout}
           groupHeadingLevel={groupHeadingLevel}
+          embedIndex={embedIndex}
+          showInputKeys={showKeys}
         />
       </div>
     </div>
@@ -595,11 +706,17 @@ function TemplateEmbedUnavailable() {
 export function SearchCraftTemplateEmbedView({
   template,
   groupHeadingLevel,
+  embedIndex,
+  showKeys = true,
 }: {
   /** null = 表示できない（ID 不正・未公開・削除済み・非公開プロフィール） */
   template: EmbedTemplateData | null;
   /** グループ見出しの段（embedGroupHeadingLevels） */
   groupHeadingLevel?: SearchCraftGroupHeadingLevel;
+  /** 本文中の埋め込みの通し番号（グループ見出しの id。embedOrdinals） */
+  embedIndex?: number;
+  /** 押すキーを出すか（`data-hide-keys` が無ければ true） */
+  showKeys?: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -657,8 +774,10 @@ export function SearchCraftTemplateEmbedView({
           rawLoopsData={template.loopsData}
           liveLoops={[]}
           groupHeadingLevel={groupHeadingLevel}
+          embedIndex={embedIndex}
+          showInputKeys={showKeys}
         />
-        {remaps.length > 0 && (
+        {showKeys && remaps.length > 0 && (
           <p className="px-4 pb-4 text-xs text-muted-foreground">
             {t("guideView.embedTemplateHasRemaps")}
           </p>

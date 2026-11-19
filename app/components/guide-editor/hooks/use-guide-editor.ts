@@ -16,7 +16,7 @@ interface UseGuideEditorOptions {
    * パフォーマンスのため HTML はここで渡さない（毎キー入力の getHTML を避ける）。
    * 保存時に editor.getHTML() を呼ぶこと。
    */
-  onUpdate: () => void;
+  onUpdate: (editor: Editor) => void;
   /** 画像ペースト時のアップロード処理（File を受け取る） */
   onImagePaste: (file: File) => void;
 }
@@ -37,8 +37,8 @@ export function useGuideEditor({
     // 先頭末尾・連続スペースが消え、次回保存で DB に焼き付くのを防ぐ。
     // 保存 HTML は editor.getHTML() の出力（整形空白なし）なので副作用はない。
     parseOptions: { preserveWhitespace: "full" },
-    onUpdate: () => {
-      onUpdate();
+    onUpdate: ({ editor }) => {
+      onUpdate(editor);
     },
     editorProps: {
       attributes: {

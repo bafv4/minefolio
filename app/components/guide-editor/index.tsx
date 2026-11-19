@@ -3,6 +3,7 @@
 // toolbar/ hooks/ へ移譲した結果のコンポジション層。
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
 import { toast } from "sonner";
 import { ArrowLeft, Pencil, Undo2 } from "lucide-react";
@@ -85,8 +86,13 @@ export function GuideEditor({
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(initialCoverImageUrl);
   // 編集中のURLスラッグ（初期値は現在のコミット済みスラッグ）。
   const [slug, setSlug] = useState(guideSlug);
-  // 未保存変更フラグ。同値 setState は React がバイパスするため毎キー再レンダリングしない。
-  const [dirty, setDirty] = useState(false);
+  // 未保存変更フラグ。本文とメタ（設定モーダルの値）を分けて持つ。同値 setState は React がバイパスするため
+  // 毎キー再レンダリングしない。本文は保存済みの doc と比べて判定する（「元に戻す」で保存時の状態へ戻れば
+  // 未保存でなくなる。HTML を毎キー作らず、構造の比較 doc.eq だけで済ませる）
+  const [contentDirty, setContentDirty] = useState(false);
+  const [metaDirty, setMetaDirty] = useState(false);
+  const dirty = contentDirty || metaDirty;
+  const savedDocRef = useRef<ProseMirrorNode | null>(null);
   // DB にコミット済みドラフトが存在するか（下書き保存で true、保存/破棄で false）。
   const [draftActive, setDraftActive] = useState(initialHasDraft);
 
@@ -127,11 +133,16 @@ export function GuideEditor({
 
   const editor = useGuideEditor({
     initialContent,
-    onUpdate: () => setDirty(true),
+    onUpdate: (ed) => setContentDirty(savedDocRef.current ? !ed.state.doc.eq(savedDocRef.current) : true),
     onImagePaste: (file) => imageUploadRef.current(file),
   });
 
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // 保存済み（初期・保存直後・ロールバック直後）の本文を基準として覚える。初回は編集の前に一度だけ取る
+  useEffect(() => {
+    if (editor && !savedDocRef.current) savedDocRef.current = editor.state.doc;
+  }, [editor]);
 
   // ── 手動保存（自動セーブ廃止） ──────────────
   const { submit, saving, lastSaved, data: saveResult } = useGuideSave();
@@ -140,7 +151,7 @@ export function GuideEditor({
 
   // メタ情報はラベル付きハンドラ側でダーティを立てる（ロールバック時の一括リセットと
   // 衝突しないよう、effect ではなく明示的にマークする）。本文は editor.onUpdate が立てる。
-  const markDirty = useCallback(() => setDirty(true), []);
+  const markDirty = useCallback(() => setMetaDirty(true), []);
 
   const save = useCallback(
     (mode: "draft" | "publish") => {
@@ -155,7 +166,9 @@ export function GuideEditor({
         slug,
         allowAutoTranslation: allowAutoTranslationToSend,
       });
-      setDirty(false);
+      savedDocRef.current = editor.state.doc;
+      setContentDirty(false);
+      setMetaDirty(false);
       setDraftActive(mode === "draft");
     },
     [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug, allowAutoTranslationToSend],
@@ -170,7 +183,7 @@ export function GuideEditor({
       toast.error(saveResult.error);
       // save() は送信の時点で未保存を解消しているので、失敗したら未保存に戻す（保存ボタンは変更が無いと
       // 押せない状態になるため、戻さないと編集し直すまで保存し直せない。離脱確認も効かせ直す）
-      setDirty(true);
+      setMetaDirty(true);
       return;
     }
     if (saveResult.slug && saveResult.slug !== guideSlug) {
@@ -181,8 +194,8 @@ export function GuideEditor({
   // ドラフトを破棄して公開版へロールバック（エディタ・メタを公開版へ戻し、ドラフト列を null に）
   const handleRollback = useCallback(() => {
     if (!editor) return;
-    // setContent は onUpdate→setDirty(true) を発火するが、同一ハンドラ内の
-    // 後続 setDirty(false) が最終値になる（React のバッチ処理）。
+    // setContent は onUpdate→setContentDirty を発火するが、同一ハンドラ内の
+    // 後続 setContentDirty(false) が最終値になる（React のバッチ処理）。
     // setContent はエディタの parseOptions を継承しないため、useGuideEditor と同じ
     // preserveWhitespace を明示（インライン code 内スペースの消失防止）
     editor.commands.setContent(publishedSnapshot.content, {
@@ -205,7 +218,9 @@ export function GuideEditor({
       slug: guideSlug,
       allowAutoTranslation: allowAutoTranslationToSend,
     });
-    setDirty(false);
+    savedDocRef.current = editor.state.doc;
+    setContentDirty(false);
+    setMetaDirty(false);
     setDraftActive(false);
   }, [editor, publishedSnapshot, submit, guideSlug, allowAutoTranslationToSend]);
 

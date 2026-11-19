@@ -2503,7 +2503,7 @@ export const PAGES_JA = {
     titleLabel: "タイトル",
     titlePlaceholder: "例: 最速Any% RSGの立ち回り",
     slugLabel: "URL",
-    slugHint: "ガイドの公開URLになります。半角英小文字・数字・「-」「_」が使えます。",
+    slugHint: "ガイドの公開URLになります。必須です。タイトルからは自動で決まらないので、半角英小文字・数字・「-」「_」で入力してください（日本語は入力しても取り除かれます）。",
     slugEmptyPreview: "（未入力）",
     createAndEdit: "作成して編集する",
     creating: "作成中...",
@@ -2683,6 +2683,9 @@ export const PAGES_JA = {
       removeTag: "{tag} を削除",
       /** 説明文はボタンの位置ではなく、いまのボタンの文言（{draft} / {save}）で指す */
       settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{draft}」か「{save}」で保存します）。",
+      /** 設定モーダル下部の固定の注記（適用は保存ではない） */
+      applyNote: "「適用」は編集中の内容に入るだけです。確定するには、ツールバーの「{draft}」か「{save}」を押してください。",
+      applyNoteSingle: "「適用」は編集中の内容に入るだけです。確定するには、ツールバーの「{save}」を押してください。",
       /** 公開版が無いガイド（保存ボタンが1つ） */
       settingsDescSingle: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{save}」で保存します）。",
       /** 公開スイッチの見えるラベル兼アクセシブルネーム（オン/オフは switch の状態で伝える） */
@@ -2805,6 +2808,9 @@ export const PAGES_JA = {
     embedInsertAnyway: "このまま挿入",
     /** 挿入済みの埋め込みの「変更」 */
     embedEdit: "変更",
+    /** サーチクラフト／テンプレート埋め込みの「押すキーの表示」スイッチ（オフなら記事にキーバッジ・キー入力順を出さない） */
+    embedShowKeys: "押すキーを表示",
+    embedShowKeysHint: "オフにすると、記事にはアイテムとサーチ文字列だけが表示されます",
     embedApply: "適用",
     embedApplyAnyway: "このまま適用",
     embedKeybindEditTitle: "リマップの埋め込みを変更",
@@ -2945,6 +2951,7 @@ export const PAGES_JA = {
     includesRemaps: "リマップ設定を含む",
     applyCount: "適用 {count}回",
     templateName: "テンプレート名",
+    requiredMark: "（必須）",
     templateNamePlaceholder: "例: スウェーデン語Steveセットアップ",
     descriptionOptional: "説明（任意）",
     descriptionPlaceholder: "このテンプレートの説明、想定するカテゴリやリマップの前提など...",
@@ -3046,6 +3053,8 @@ export const PAGES_JA = {
     keyboardLayoutLabel: "キーボード配列",
     craftSection: "サーチクラフト",
     loopCount: "Loop {count}件",
+    /** 詳細のアイテム名スイッチの説明（サーチ文字列はゲーム言語のアイテム名に依存し、スイッチは表示だけを変える） */
+    itemLangToggleHint: "サーチ文字列は「{gameLanguage}」のアイテム名で打つ前提です。スイッチは表示するアイテム名だけを切り替えます。",
     /** テンプレート詳細の見出しの隣の「Loop n件」の説明（ツールチップと読み上げ。先頭は見えている文字と同じ） */
     loopCountHint: "Loop {count}件: 複数のクラフトを続けて打つ繋ぎ方の数です。各タイミングのグループの中に表示されます",
     cancel: "キャンセル",

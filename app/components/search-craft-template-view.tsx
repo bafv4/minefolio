@@ -10,7 +10,12 @@ import {
 } from "@bafv4/mcitems/1.16/react";
 import { ItemIcon, TEXTURE_BASE_URL } from "@/components/item-icon";
 import { getActualKeyInfos, type UiRemapInfo, type RemapInfo } from "@/lib/remap-utils";
-import { groupCraftsByTiming, resolveCraftTiming, type SearchCraftTiming } from "@/lib/search-craft-templates";
+import {
+  groupCraftsByTiming,
+  resolveCraftTiming,
+  searchCraftGroupTimings,
+  type SearchCraftTiming,
+} from "@/lib/search-craft-templates";
 import type { SearchCraftVariation } from "@/lib/search-craft-variations";
 import type { FingerType, KeyboardLayout } from "@/lib/keybindings";
 import { FingerLegend } from "@/components/virtual-keyboard";
@@ -123,7 +128,6 @@ export function timingLabelById(t: Translator, id: string): string {
 const TIMING_DOT_CLASSES: Record<string, string> = Object.fromEntries(
   TIMING_META.map((m) => [m.id, m.dot]),
 );
-const TIMING_ORDER: SearchCraftTiming[] = TIMING_META.map((m) => m.id);
 
 /** 表示用のサーチクラフト行データ（items はデコード済み） */
 export type SearchCraftRowData = {
@@ -251,6 +255,9 @@ export function countSearchCraftGroups(
 // 行と列ヘッダーで共通のレスポンシブ3カラム定義（アイテム / サーチ文字列 / 入力キー）
 const SEARCH_CRAFT_GRID_COLS =
   "lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,5fr)] lg:gap-4";
+/** 入力キーを出さない（showInputKeys=false）ときの2カラム定義（アイテム / サーチ文字列） */
+const SEARCH_CRAFT_GRID_COLS_NO_KEYS =
+  "lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,9fr)] lg:gap-4";
 
 /**
  * 1 バリエーション分の [サーチ文字列, 入力キー] の包み。lg 未満は1段に並べて入りきらなければ折り返し、
@@ -278,11 +285,23 @@ export function SearchCraftGroupedList({
   stickyHeaders = false,
   stickyTopClassName,
   groupHeadingLevel = "h4",
+  groupHeadingId,
+  showInputKeys = true,
   openFirstMaxCount,
   openAllFromLg = false,
   keepClosedMounted = false,
   toolbarStart,
 }: {
+  /**
+   * グループ見出し（箱なし表示の h*）に付ける id（ガイド記事の目次のアンカー）。timing は表示用に解決済みのタイミング
+   * （null＝指定なし）。未指定なら id なし。呼び出し側が記事の中で一意にする（同じ記事に一覧が複数あるため）
+   */
+  groupHeadingId?: (timing: string | null) => string;
+  /**
+   * false にすると入力キー（キーバッジ・キー入力順ボタン・列見出し）を出さない（アイテムとサーチ文字列だけの2列）。
+   * ガイド記事のサーチクラフトテンプレート埋め込み用。既定 true
+   */
+  showInputKeys?: boolean;
   /**
    * 一覧の上の行の左に置く物（凡例など）。「すべて開く／すべて閉じる」と同じ行に並べ、凡例と開閉ボタンが
    * 別々の行に積まれて一覧の上が空くのを防ぐ。幅が足りなければ折り返す
@@ -368,11 +387,9 @@ export function SearchCraftGroupedList({
   }
 
   // ソート: 指定なし(null) → OW → Bastion → Bastion→Fort → Fortress → Blinded → その他
-  const sortedKeys: (string | null)[] = [];
-  if (grouped.has(null)) sortedKeys.push(null);
-  for (const timing of TIMING_ORDER) {
-    if (grouped.has(timing)) sortedKeys.push(timing);
-  }
+  // （目次が同じグループ集合を見るため、順と集合は searchCraftGroupTimings が単一情報源。
+  //   タイミングが1件も無い1枚表示は下の !hasAnyTiming で別に描くので、ここは空でよい）
+  const sortedKeys = searchCraftGroupTimings(crafts, extraTimings ?? []);
 
   // crafts が0件で、renderGroupExtra の中身（Loop）も無いグループは描かない
   // （extraTimings 由来の空グループは Loop を出すためのものなので、Loop があれば残る）
@@ -380,7 +397,7 @@ export function SearchCraftGroupedList({
     .map((timing) => ({
       timing,
       groupKey: timing ?? "__none",
-      crafts: grouped.get(timing)!,
+      crafts: grouped.get(timing) ?? [],
       extra: renderGroupExtra?.(timing),
     }))
     .filter((g) => g.crafts.length > 0 || Boolean(g.extra));
@@ -429,6 +446,7 @@ export function SearchCraftGroupedList({
         keyboardLayout={keyboardLayout}
         lang={lang}
         framed={framed}
+        showInputKeys={showInputKeys}
         extra={renderGroupExtra?.(null)}
       />
     );
@@ -490,6 +508,8 @@ export function SearchCraftGroupedList({
           stickyHeader={stickyHeaders}
           stickyTopClassName={stickyTopClassName}
           headingLevel={groupHeadingLevel}
+          headingId={groupHeadingId?.(g.timing)}
+          showInputKeys={showInputKeys}
           open={openKeys.has(g.groupKey)}
           openAtLg={cssOpenAtLg}
           keepClosedMounted={keepClosedMounted}
@@ -517,6 +537,8 @@ function SearchCraftGroupCard({
   stickyHeader = false,
   stickyTopClassName,
   headingLevel = "h4",
+  headingId,
+  showInputKeys = true,
   open = true,
   openAtLg = false,
   keepClosedMounted = false,
@@ -524,6 +546,10 @@ function SearchCraftGroupCard({
   onReveal,
 }: {
   headingLevel?: SearchCraftGroupHeadingLevel;
+  /** 箱なし表示の見出しに付ける id（目次のアンカー） */
+  headingId?: string;
+  /** false なら入力キーの列を出さない（SearchCraftGroupedList の showInputKeys） */
+  showInputKeys?: boolean;
   title?: string;
   dotClass?: string;
   crafts: SearchCraftRowData[];
@@ -589,12 +615,12 @@ function SearchCraftGroupCard({
     <div
       className={cn(
         "hidden pb-2 border-b text-xs text-muted-foreground",
-        SEARCH_CRAFT_GRID_COLS,
+        showInputKeys ? SEARCH_CRAFT_GRID_COLS : SEARCH_CRAFT_GRID_COLS_NO_KEYS,
       )}
     >
       <span>{t("playerProfile.colItems")}</span>
       <span>{t("playerProfile.colSearchStr")}</span>
-      <span>{t("playerProfile.colInputKeys")}</span>
+      {showInputKeys && <span>{t("playerProfile.colInputKeys")}</span>}
     </div>
   );
 
@@ -612,6 +638,7 @@ function SearchCraftGroupCard({
                 fingerAssignments={fingerAssignments}
                 keyboardLayout={keyboardLayout}
                 lang={lang}
+                showInputKeys={showInputKeys}
               />
             ))}
           </div>
@@ -647,6 +674,7 @@ function SearchCraftGroupCard({
     const Heading = headingLevel;
     const heading = title && (
           <Heading
+            id={headingId}
             className={cn(
               "text-base font-semibold",
               // 開閉ボタンの負のマージン（押せる範囲 44px）が見出しの外へ相殺して抜けないよう、見出しで閉じ込める
@@ -753,7 +781,10 @@ function SearchCraftRow({
   fingerAssignments,
   keyboardLayout,
   lang,
+  showInputKeys = true,
 }: {
+  /** false なら入力キーのセル（キーバッジ・キー入力順）を出さない */
+  showInputKeys?: boolean;
   craft: SearchCraftRowData;
   remaps: UiRemapInfo[] | RemapInfo[];
   fingerAssignments?: Record<string, FingerType[]>;
@@ -773,7 +804,12 @@ function SearchCraftRow({
 
   return (
     <div className="py-3">
-      <div className={cn("flex flex-col gap-2 lg:items-center", SEARCH_CRAFT_GRID_COLS)}>
+      <div
+        className={cn(
+          "flex flex-col gap-2 lg:items-center",
+          showInputKeys ? SEARCH_CRAFT_GRID_COLS : SEARCH_CRAFT_GRID_COLS_NO_KEYS,
+        )}
+      >
         {/* アイテム */}
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           {craft.items.map((itemId, idx) => (
@@ -803,7 +839,13 @@ function SearchCraftRow({
           1行が「アイテム／サーチ／入力キー」の3段にならないように）。sm 未満の段の間隔は 16px
           （コピー・キー入力順の 24px のボタンを上下に 10px ずつ広げているので、28px の段どうしで重ならない幅）。
         */}
-        <div className="min-w-0 flex flex-col gap-4 sm:gap-2 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2">
+        <div
+          className={cn(
+            "min-w-0 flex flex-col gap-4 sm:gap-2",
+            showInputKeys &&
+              "lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,4fr)_minmax(0,5fr)] lg:gap-x-4 lg:gap-y-2",
+          )}
+        >
           {craft.variations.length > 0 ? (
             craft.variations.map((variation, idx) => (
               <div key={idx} className={SEARCH_CRAFT_PAIR_CLASS}>
@@ -835,6 +877,7 @@ function SearchCraftRow({
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
               </div>
+              {showInputKeys && (
               <div className="flex min-h-7 items-center gap-1">
                 <span className="lg:hidden text-xs text-muted-foreground shrink-0">
                   {t("playerProfile.inputKeysLabel")}
@@ -862,6 +905,7 @@ function SearchCraftRow({
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
               </div>
+              )}
               </div>
             ))
           ) : (
@@ -872,12 +916,14 @@ function SearchCraftRow({
                 </span>
                 <span className="text-sm text-muted-foreground">—</span>
               </div>
-              <div className="flex min-h-7 items-center gap-1">
-                <span className="lg:hidden text-xs text-muted-foreground shrink-0">
-                  {t("playerProfile.inputKeysLabel")}
-                </span>
-                <span className="text-sm text-muted-foreground">—</span>
-              </div>
+              {showInputKeys && (
+                <div className="flex min-h-7 items-center gap-1">
+                  <span className="lg:hidden text-xs text-muted-foreground shrink-0">
+                    {t("playerProfile.inputKeysLabel")}
+                  </span>
+                  <span className="text-sm text-muted-foreground">—</span>
+                </div>
+              )}
             </div>
           )}
         </div>

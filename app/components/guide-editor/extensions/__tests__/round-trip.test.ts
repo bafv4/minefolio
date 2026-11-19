@@ -176,3 +176,21 @@ describe("guide editor round-trip", () => {
     expect(roundTrip(html)).toBe(html);
   });
 });
+
+describe("埋め込みの「押すキーを表示」属性（showKeys）", () => {
+  const SC = `<div data-searchcraft-embed="" data-user-slug="runner1" data-hide-keys="true"></div>`;
+  const TPL = `<div data-sctemplate-embed="" data-template-id="abcdefghijklmnopqrstuvwx" data-hide-keys="true"></div>`;
+
+  it("属性なし（既存の記事）は出力に data-hide-keys を足さない", () => {
+    expect(roundTrip(FIXTURES.searchCraftEmbed)).not.toContain("data-hide-keys");
+    expect(roundTrip(FIXTURES.searchCraftTemplateEmbed)).not.toContain("data-hide-keys");
+  });
+
+  it("隠す設定は編集→再保存で保たれ、不動点である", () => {
+    for (const html of [SC, TPL]) {
+      const once = roundTrip(html);
+      expect(once).toContain('data-hide-keys="true"');
+      expect(roundTrip(once)).toBe(once);
+    }
+  });
+});

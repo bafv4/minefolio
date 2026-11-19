@@ -10,7 +10,7 @@ import {
   Quote,
   Terminal,
   Lightbulb,
-  ChevronRight,
+  ListCollapse,
   Table2,
   Minus,
   Columns2,
@@ -118,7 +118,7 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
   {
     titleKey: "guideEditor.slash.toggleList",
     keywords: ["toggle", "details", "とぐる", "折りたたみ"],
-    icon: ChevronRight,
+    icon: ListCollapse,
     groupKey: GROUP.advanced,
     run: (editor) => setBlockType(editor, "toggleList"),
   },

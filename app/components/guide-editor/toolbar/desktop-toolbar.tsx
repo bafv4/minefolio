@@ -31,7 +31,7 @@ import {
   Info,
   TriangleAlert,
   Siren,
-  ChevronRight,
+  ListCollapse,
   ChevronDown,
   Link as LinkIcon,
   ImageIcon,
@@ -680,7 +680,7 @@ export function DesktopToolbar({
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <ToolbarButton label={t("guideEditor.slash.toggleList")} onClick={() => insertToggle(editor)}>
-                  <ChevronRight className="h-4 w-4" />
+                  <ListCollapse className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarSeparator />
                 {/* Minefolio 固有の埋め込み。ほかの汎用ツールと見分けられるよう、文字付きのボタンのグループにする */}

@@ -16,10 +16,10 @@ import {
   type TemplateEmbedMeta,
 } from "../lib/template-embed-meta";
 import { getEmbedEditContext } from "../lib/embed-edit-context";
-import { EmbedNodeActions, EmbedNodeFrame, deleteEmbedNode } from "./embed-node-actions";
+import { EmbedNodeActions, EmbedNodeFrame, EmbedShowKeysToggle, deleteEmbedNode } from "./embed-node-actions";
 
 interface Props {
-  node: { attrs: Record<string, string> };
+  node: { attrs: Record<string, string | boolean> };
   editor: Editor;
   selected: boolean;
   deleteNode: () => void;
@@ -30,7 +30,8 @@ interface Props {
 export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, deleteNode, getPos, updateAttributes }: Props) {
   const t = useT();
   const locale = useLocale();
-  const templateId = node.attrs.templateId;
+  const templateId = node.attrs.templateId as string;
+  const showKeys = node.attrs.showKeys !== false;
   const [meta, setMeta] = useState<TemplateEmbedMeta | null | undefined>(() =>
     getCachedTemplateEmbedMeta(templateId),
   );
@@ -118,6 +119,7 @@ export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, delet
             )}
           </p>
         )}
+        <EmbedShowKeysToggle checked={showKeys} onCheckedChange={(v) => updateAttributes({ showKeys: v })} />
       </EmbedNodeFrame>
     </NodeViewWrapper>
   );

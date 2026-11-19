@@ -10,10 +10,10 @@ import { getLocalizedDisplayName } from "@/lib/slug";
 import { useEmbedUser } from "../lib/embed-user-cache";
 import { getEmbedEditContext } from "../lib/embed-edit-context";
 import { EmbedSummary, type EmbedKind } from "../panels/embed-summary";
-import { EmbedNodeActions, EmbedNodeFrame, deleteEmbedNode } from "./embed-node-actions";
+import { EmbedNodeActions, EmbedNodeFrame, EmbedShowKeysToggle, deleteEmbedNode } from "./embed-node-actions";
 
 interface EmbedNodeViewProps {
-  node: { attrs: Record<string, string | null> };
+  node: { attrs: Record<string, string | boolean | null> };
   editor: Editor;
   selected: boolean;
   deleteNode: () => void;
@@ -32,8 +32,10 @@ function EmbedNodeView({
   label,
 }: EmbedNodeViewProps & { kind: EmbedKind; label: string }) {
   const locale = useLocale();
-  const userSlug = node.attrs.userSlug ?? "";
-  const presetName = node.attrs.presetName || null;
+  const userSlug = (node.attrs.userSlug as string | null) ?? "";
+  const presetName = (node.attrs.presetName as string | null) || null;
+  // 押すキーの表示（サーチクラフトだけ。属性なし＝表示）
+  const showKeys = node.attrs.showKeys !== false;
   const state = useEmbedUser(userSlug);
   const broken = state.status === "missing";
   // 宿主の注入は NodeView の初回描画より後になることがあるので、押したときに取り出す
@@ -72,6 +74,9 @@ function EmbedNodeView({
         }
       >
         <EmbedSummary kind={kind} state={state} userQuery={userSlug} presetName={presetName} showIdentity={false} />
+        {kind === "searchcraft" && (
+          <EmbedShowKeysToggle checked={showKeys} onCheckedChange={(v) => updateAttributes({ showKeys: v })} />
+        )}
       </EmbedNodeFrame>
     </NodeViewWrapper>
   );

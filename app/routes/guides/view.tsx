@@ -1,6 +1,7 @@
 import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { getGuideTranslation } from "@/lib/content-translation.server";
+import { getGuideTranslation, getGuideTranslations } from "@/lib/content-translation.server";
+import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { AutoTranslateNotice } from "@/components/auto-translate-notice";
 import {
   useLoaderData,
@@ -23,7 +24,7 @@ import { resolveEmbedUsers } from "@/lib/guide-embed-users.server";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 import { sanitizeGuideHtml } from "@/lib/guide-sanitize.server";
 import { parseGuideTags } from "@/lib/guide-tags";
-import { getGuideLikeCount } from "@/lib/likes.server";
+import { getGuideLikeCount, guideLikeCountSql } from "@/lib/likes.server";
 import { LikeButton } from "@/components/like-button";
 import { ShareButton } from "@/components/share-button";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
@@ -33,12 +34,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageSection, SectionHeaderLink } from "@/components/page-section";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { GUIDE_TAG_HIT_AREA } from "@/components/guide-list-views";
+import { GUIDE_TAG_HIT_AREA, GuideCardGrid, type GuideItem } from "@/components/guide-list-views";
 import { format } from "date-fns";
 import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
 import { useEffect, useRef } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { buildTableOfContents } from "@/lib/guide-toc";
+import { mergeEmbedGroupsIntoToc } from "@/lib/guide-embed-toc";
 import { demoteGuideHeadings } from "@/lib/guide-heading-demote";
 import { blankGenericImageAlt } from "@/lib/guide-image-alt";
 import { GuideTocSidebar, GuideTocMobile } from "@/components/guide-toc-nav";
@@ -58,6 +60,8 @@ import {
   getUniqueEmbedSlugs,
   splitContentAtEmbeds,
   embedGroupHeadingLevels,
+  embedOrdinals,
+  embedTocSegments,
   EmbedUnavailable,
   KeybindEmbedView,
   SearchCraftEmbedView,
@@ -284,7 +288,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 切替リンクを出すため、original 指定でも訳文の有無は引く
   // いいね数（guide.id にのみ依存）は翻訳取得と独立なので並行する
   // 末尾の「ほかのガイド」用に、同じ著者の公開済みガイドを最大3件（このガイドは除く。下書き・非公開は含めない）
-  const [translation, likeCount, otherGuides] = await Promise.all([
+  const [translation, likeCount, otherGuidesRaw] = await Promise.all([
     draftPreview ? null : getGuideTranslation(db, guide, resolveLocale(request)),
     getGuideLikeCount(db, guide.id),
     db.query.guides.findMany({
@@ -293,11 +297,28 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         eq(guides.isPublished, true),
         ne(guides.id, guide.id)
       ),
-      columns: { slug: true, title: true },
+      columns: {
+        id: true,
+        slug: true,
+        title: true,
+        summary: true,
+        tags: true,
+        coverImageUrl: true,
+        viewCount: true,
+        updatedAt: true,
+      },
+      extras: { likeCount: guideLikeCountSql().as("like_count") },
       orderBy: [desc(guides.updatedAt)],
       limit: 3,
     }),
   ]);
+  // 「ほかのガイド」のカードも一覧と同じく、自動翻訳の訳文があれば title / summary を差し替える
+  const otherGuideTranslations = await getGuideTranslations(
+    db,
+    otherGuidesRaw.map((g) => g.id),
+    resolveLocale(request),
+  );
+  const otherGuides = otherGuidesRaw.map((g) => applyGuideTranslation(g, otherGuideTranslations));
   const showOriginal = url.searchParams.get("original") === "1";
   const translated = translation !== null && !showOriginal ? translation : null;
   const displayTitle = translated?.title ?? viewTitle;
@@ -364,6 +385,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     resolveEmbedUsers(db, embedSlugs, presetNames),
     resolveEmbedTemplates(db, extractTemplateEmbedIds(contentWithIds), resolveLocale(request)),
   ]);
+  // 目次に、サーチクラフト埋め込み（ユーザー参照・テンプレート）のグループ見出し（OW・Bastion 等）を文書順で差し込む。
+  // 埋め込みの中身は HTML に無く、解決したデータから描くので、ここ（埋め込みの解決後）で合流させる（lib/guide-embed-toc.ts）
+  const tocWithEmbeds = mergeEmbedGroupsIntoToc(
+    embedTocSegments(
+      splitContentAtEmbeds(contentWithIds),
+      embedUsers,
+      embedTemplates,
+      tView,
+      resolveLocale(request),
+    ),
+    toc,
+  );
   return {
     // クライアントが使うフィールドのみ渡す。行をそのまま展開すると、著者の
     // 未公開ドラフト（draftTitle / draftContent 等）とサニタイズ前の生 content が
@@ -399,7 +432,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     isOwner,
     previewingDraft,
     unpublished,
-    toc,
+    toc: tocWithEmbeds,
     // 訳文が存在するとき（原文表示中も含む）だけ非 null。バナーの文言と切替リンクに使う
     autoTranslation: translation
       ? { sourceLocale: translation.sourceLocale, showingOriginal: showOriginal }
@@ -672,18 +705,11 @@ export default function GuideViewPage() {
           </Link>
         )}
         {otherGuides.length > 0 && (
-          <ul className="divide-y divide-border/60">
-            {otherGuides.map((g) => (
-              <li key={g.slug}>
-                <Link
-                  to={`/guides/${author.slug}/${g.slug}`}
-                  className="flex min-h-11 items-center py-2 text-sm font-medium transition-colors hover:text-primary"
-                >
-                  {g.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <GuideCardGrid
+            guides={otherGuides.map((g): GuideItem => ({ ...g, isOwn: isOwner }))}
+            linkFn={(g) => `/guides/${author.slug}/${g.slug}`}
+            surface="card"
+          />
         )}
       </PageSection>
     </article>
@@ -707,6 +733,8 @@ function GuideContent({
   const segments = splitContentAtEmbeds(html);
   // 埋め込みのグループ見出しの段（直前の本文の見出しの1つ下。html は降格済みなので SSR とハイドレーションで一致する）
   const headingLevels = embedGroupHeadingLevels(segments);
+  // 埋め込みの通し番号（グループ見出しの id＝目次のアンカー。loader の目次と同じ番号）
+  const ordinals = embedOrdinals(segments);
   const hasEmbeds = segments.some((s) => s.type !== "html");
 
   useCodeCopyButtons(contentRef, statusRef, html, t);
@@ -754,6 +782,8 @@ function GuideContent({
                 key={i}
                 template={seg.templateId ? (embedTemplates[seg.templateId] ?? null) : null}
                 groupHeadingLevel={headingLevels[i] ?? undefined}
+                embedIndex={ordinals[i] ?? undefined}
+                showKeys={!seg.hideKeys}
               />
             );
           }
@@ -774,6 +804,8 @@ function GuideContent({
               userData={userData}
               presetName={seg.presetName}
               groupHeadingLevel={headingLevels[i] ?? undefined}
+              embedIndex={ordinals[i] ?? undefined}
+              showKeys={!seg.hideKeys}
             />
           );
         })}

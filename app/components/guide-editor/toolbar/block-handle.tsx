@@ -18,7 +18,7 @@ import {
   Quote,
   Terminal,
   Lightbulb,
-  ChevronRight,
+  ListCollapse,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -37,7 +37,7 @@ const BLOCK_TYPES: { type: BlockType; labelKey: MessageKey; icon: LucideIcon }[]
   { type: "blockquote", labelKey: "guideEditor.slash.quote", icon: Quote },
   { type: "codeBlock", labelKey: "guideEditor.slash.codeBlock", icon: Terminal },
   { type: "callout", labelKey: "guideEditor.slash.callout", icon: Lightbulb },
-  { type: "toggleList", labelKey: "guideEditor.slash.toggleList", icon: ChevronRight },
+  { type: "toggleList", labelKey: "guideEditor.slash.toggleList", icon: ListCollapse },
 ];
 
 interface HandleState {

@@ -2517,7 +2517,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     titlePlaceholder: "e.g. Fastest Any% RSG routing",
     slugLabel: "URL",
     slugHint:
-      "This becomes the guide's public URL. Lowercase letters, digits, \"-\" and \"_\" are allowed.",
+      "This becomes the guide's public URL. Required. It is not generated from the title, so type it yourself using lowercase letters, digits, \"-\" and \"_\" (Japanese characters are removed).",
     slugEmptyPreview: "(not set)",
     createAndEdit: "Create and edit",
     creating: "Creating...",
@@ -2685,6 +2685,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       removeTag: "Remove {tag}",
       settingsDesc:
         "Edit the title, summary, cover image, tags, and visibility. “Apply” updates the editor but doesn't save — save with “{draft}” or “{save}” in the toolbar.",
+      applyNote:
+        "“Apply” only updates the editor. To confirm, press “{draft}” or “{save}” in the toolbar.",
+      applyNoteSingle:
+        "“Apply” only updates the editor. To confirm, press “{save}” in the toolbar.",
       settingsDescSingle:
         "Edit the title, summary, cover image, tags, and visibility. “Apply” updates the editor but doesn't save — save with “{save}” in the toolbar.",
       publishLabel: "Publish",
@@ -2793,6 +2797,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     embedInsert: "Insert",
     embedInsertAnyway: "Insert anyway",
     embedEdit: "Change",
+    embedShowKeys: "Show keys to press",
+    embedShowKeysHint: "When off, the article shows only the items and search strings",
     embedApply: "Apply",
     embedApplyAnyway: "Apply anyway",
     embedKeybindEditTitle: "Change the remaps embed",
@@ -2884,6 +2890,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     includesRemaps: "Includes remaps",
     applyCount: "Applied {count} times",
     templateName: "Template name",
+    requiredMark: " (required)",
     templateNamePlaceholder: "e.g. Swedish Steve setup",
     descriptionOptional: "Description (optional)",
     descriptionPlaceholder:
@@ -2988,6 +2995,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     keyboardLayoutLabel: "Keyboard layout",
     craftSection: "Search-craft",
     loopCount: "{count} loop(s)",
+    itemLangToggleHint:
+      "Search strings assume item names in \"{gameLanguage}\". The switch only changes which item names are displayed.",
     loopCountHint: "{count} loop(s): the number of loops, which chain several crafts in a row. They're shown inside each timing group",
     cancel: "Cancel",
   },

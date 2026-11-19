@@ -7,6 +7,7 @@ import type { Editor } from "@tiptap/core";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Pencil, Trash2 } from "lucide-react";
 
 /**
@@ -58,6 +59,31 @@ export function EmbedNodeFrame({
         <div className="px-4 py-3">{children}</div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 「押すキーを表示」のスイッチ（サーチクラフト／テンプレート埋め込みの showKeys 属性）。
+ * 要約の下に常に出す（ホバーで出す操作ではなく、記事の見え方を決める設定なので）。オンの色は brand（選択中）
+ */
+export function EmbedShowKeysToggle({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const t = useT();
+  return (
+    <label className="mt-2 flex min-h-8 w-fit cursor-pointer items-center gap-2 border-t border-border/60 pt-2 text-xs">
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="data-[state=checked]:bg-brand"
+      />
+      <span className="font-medium">{t("guideEditor.embedShowKeys")}</span>
+      <span className="text-muted-foreground">{t("guideEditor.embedShowKeysHint")}</span>
+    </label>
   );
 }
 

@@ -787,14 +787,25 @@ export default function TemplateViewPage() {
       >
         {canToggleItemLang && (
           // スイッチ＋ラベル（label で結ぶ。モバイルは押せる範囲 44px、sm 以上は 32px）
-          <label className="flex min-h-11 max-w-full cursor-pointer items-center gap-2 text-sm sm:min-h-8">
-            <Switch checked={itemNamesViewerLang} onCheckedChange={setItemNamesViewerLang} />
-            <span className="min-w-0">
-              {t("playerProfile.searchCraftItemNamesIn", {
-                language: t("playerProfile.searchCraftViewerLangName"),
+          <div>
+            <label className="flex min-h-11 max-w-full cursor-pointer items-center gap-2 text-sm sm:min-h-8">
+              <Switch
+                checked={itemNamesViewerLang}
+                onCheckedChange={setItemNamesViewerLang}
+                aria-describedby="template-item-lang-hint"
+              />
+              <span className="min-w-0">
+                {t("playerProfile.searchCraftItemNamesIn", {
+                  language: t("playerProfile.searchCraftViewerLangName"),
+                })}
+              </span>
+            </label>
+            <p id="template-item-lang-hint" className="text-xs text-muted-foreground">
+              {t("templates.itemLangToggleHint", {
+                gameLanguage: getGameLanguageName(t, locale, template.gameLanguage || "ja_jp"),
               })}
-            </span>
-          </label>
+            </p>
+          </div>
         )}
         {/* 記事内の埋め込み（guide-embeds.tsx の SearchCraftEmbedBody）と同じ開閉と枠: グループは箱にせず
             見出し（欄 h2 の下なので h3）＋行。2つ以上なら開閉でき、lg 以上は全部開いて、lg 未満は先頭が長ければ全部閉じて始める。

@@ -16,6 +16,11 @@ export const SearchCraftTemplateEmbedExtension = TiptapNode.create({
         default: "",
         parseHTML: (element: HTMLElement) => element.getAttribute("data-template-id") || "",
       },
+      // 押すキー（キーバッジ・キー入力順）を記事に出すか。属性なし（既存の記事）は出す
+      showKeys: {
+        default: true,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-hide-keys") !== "true",
+      },
     };
   },
 
@@ -29,6 +34,7 @@ export const SearchCraftTemplateEmbedExtension = TiptapNode.create({
       mergeAttributes({
         "data-sctemplate-embed": "",
         "data-template-id": HTMLAttributes.templateId as string,
+        ...(HTMLAttributes.showKeys === false ? { "data-hide-keys": "true" } : {}),
       }),
     ];
   },

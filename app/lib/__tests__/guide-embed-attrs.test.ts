@@ -82,7 +82,7 @@ describe("サーチクラフトテンプレート埋め込み", () => {
     const html = sanitizeGuideHtml(tpl(ID_A));
     expect(html).toContain("data-sctemplate-embed");
     expect(html).toContain(`data-template-id="${ID_A}"`);
-    expect(splitContentAtEmbeds(html)).toEqual([{ type: "sctemplate-embed", templateId: ID_A }]);
+    expect(splitContentAtEmbeds(html)).toEqual([{ type: "sctemplate-embed", templateId: ID_A, hideKeys: false }]);
     expect(extractTemplateEmbedIds(html)).toEqual([ID_A]);
   });
 
@@ -92,8 +92,8 @@ describe("サーチクラフトテンプレート埋め込み", () => {
     expect(extractTemplateEmbedIds(html)).toEqual([]);
     const segs = splitContentAtEmbeds(html).filter((s) => s.type === "sctemplate-embed");
     expect(segs).toEqual([
-      { type: "sctemplate-embed", templateId: null },
-      { type: "sctemplate-embed", templateId: null },
+      { type: "sctemplate-embed", templateId: null, hideKeys: false },
+      { type: "sctemplate-embed", templateId: null, hideKeys: false },
     ]);
   });
 
@@ -113,9 +113,27 @@ describe("サーチクラフトテンプレート埋め込み", () => {
       "sctemplate-embed",
     ]);
     expect(segs[1]).toEqual({ type: "keybind-embed", userSlug: "r1", presetName: null });
-    expect(segs[4]).toEqual({ type: "searchcraft-embed", userSlug: "r2", presetName: "メイン" });
+    expect(segs[4]).toEqual({ type: "searchcraft-embed", userSlug: "r2", presetName: "メイン", hideKeys: false });
     expect(extractTemplateEmbedIds(html)).toEqual([ID_A, ID_B]);
     // テンプレート埋め込みはユーザー参照に混ざらない
     expect(extractEmbedRefs(html).map((r) => r.userSlug)).toEqual(["r1", "r2"]);
+  });
+});
+
+describe("押すキーを隠す属性（data-hide-keys）", () => {
+  it("サニタイズは値が \"true\" のときだけ残す", () => {
+    const ok = sanitizeGuideHtml(`<div data-searchcraft-embed data-user-slug="a" data-hide-keys="true"></div>`);
+    expect(ok).toContain('data-hide-keys="true"');
+    const bad = sanitizeGuideHtml(`<div data-searchcraft-embed data-user-slug="a" data-hide-keys="x"></div>`);
+    expect(bad).not.toContain("data-hide-keys");
+  });
+
+  it("splitContentAtEmbeds は hideKeys を読む（属性なしは false）", () => {
+    const segs = splitContentAtEmbeds(
+      `<div data-searchcraft-embed="" data-user-slug="a" data-hide-keys="true"></div>` +
+        `<div data-searchcraft-embed="" data-user-slug="b"></div>` +
+        `<div data-sctemplate-embed="" data-template-id="abcdefghijklmnopqrstuvwx" data-hide-keys="true"></div>`,
+    );
+    expect(segs.map((s) => ("hideKeys" in s ? s.hideKeys : null))).toEqual([true, false, true]);
   });
 });

@@ -54,6 +54,8 @@ const TAG_ATTRS: Record<string, string[]> = {
     "data-user-slug", "data-preset-name",
     // サーチクラフトテンプレート埋め込み（data-template-id は onTagAttr で cuid2 形式を検証する）
     "data-sctemplate-embed", "data-template-id",
+    // サーチクラフト／テンプレート埋め込みで押すキーの表示を隠す（値は "true" のみ。onTagAttr で検証。属性なし＝表示）
+    "data-hide-keys",
   ],
   table: ["style"],
   col: ["style"],
@@ -112,6 +114,9 @@ const guideFilter = new FilterXSS({
     }
     if (name === "data-template-id" && !isValidTemplateId(value)) {
       return ""; // 形式外の ID は属性ごと除去（描画側は ID 無しを「表示できません」にする）
+    }
+    if (name === "data-hide-keys" && value !== "true") {
+      return ""; // "true" 以外は属性ごと除去（＝表示する）
     }
     // undefined を返すと既定処理（safeAttrValue のスキーム検査 + エスケープ）に進む
   },

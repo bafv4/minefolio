@@ -206,6 +206,13 @@ export function SettingsDialog({
           </div>
         )}
 
+        {/* 「適用」は編集中の内容に入るだけで、保存ではないことを、スクロールしても見える下部に固定で示す */}
+        <p className="text-xs text-muted-foreground">
+          {draftSaveAvailable
+            ? t("guideEditor.ui.applyNote", { draft: draftLabel, save: saveLabel })
+            : t("guideEditor.ui.applyNoteSingle", { save: saveLabel })}
+        </p>
+
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("guideEditor.ui.cancel")}

@@ -323,7 +323,7 @@ export function TemplateEditorForm({
         {hasCurrentSettings && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
                 <Download className="mr-2 h-4 w-4" />
                 {t("meTemplates.loadFromCurrent")}
               </Button>
@@ -363,11 +363,15 @@ export function TemplateEditorForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="template-title">{t("meTemplates.templateName")}</Label>
+            <Label htmlFor="template-title">
+              {t("meTemplates.templateName")}
+              <span className="font-normal text-muted-foreground">{t("meTemplates.requiredMark")}</span>
+            </Label>
             <Input
               ref={titleInputRef}
               id="template-title"
               value={title}
+              aria-required
               maxLength={TEMPLATE_TITLE_MAX}
               placeholder={t("meTemplates.templateNamePlaceholder")}
               aria-invalid={titleError ? true : undefined}
