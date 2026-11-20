@@ -88,6 +88,7 @@ export function AssignmentAccordion({
   remaps,
   count,
   className,
+  defaultOpen = false,
 }: {
   player: KeybindingsRow;
   /** 表示中の文脈（Trigger / Chat）に絞ったリマップ。キーボードの図と同じものを渡す */
@@ -95,9 +96,11 @@ export function AssignmentAccordion({
   /** summary に出す件数（中に並べる物の数。呼び出し側で countAssignments ＋ リマップ数） */
   count: number;
   className?: string;
+  /** 初期から開く（一覧で比べる用途。既定は閉じる） */
+  defaultOpen?: boolean;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <details
@@ -175,5 +178,34 @@ function AssignmentList({ player, remaps }: { player: KeybindingsRow; remaps: Re
         </div>
       )}
     </div>
+  );
+}
+
+/** md 未満で縮小図のラベルを隠す代わりに、主要な移動操作だけを kbd チップで1行（折り返しあり）に並べる */
+export function AssignmentHighlights({
+  player,
+  className,
+}: {
+  player: KeybindingsRow;
+  className?: string;
+}) {
+  const t = useT();
+  const layout = player.playerConfig?.keyboardLayout;
+  const customKeyNames = buildCustomKeyNames(player.customKeys);
+  const items = MOVEMENT_ACTIONS.flatMap((action) =>
+    player.keybindings.filter((kb) => kb.action === action && !isUnbound(kb.keyCode)).slice(0, 1),
+  );
+  if (items.length === 0) return null;
+  return (
+    <dl className={cn("flex flex-wrap gap-1.5", className)}>
+      {items.map((kb) => (
+        <div key={kb.id} className={CHIP_CLASS}>
+          <dt className="min-w-0 break-words">{getActionLabel(t, kb.action)}</dt>
+          <dd className="min-w-0">
+            <kbd className={KBD_CLASS}>{keyLabelOf(t, kb.keyCode, layout, customKeyNames)}</kbd>
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

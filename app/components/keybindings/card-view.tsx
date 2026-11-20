@@ -31,7 +31,7 @@ import {
   Cm360Cell,
 } from "./keybindings-cells";
 import { KeybindingsEmptyState } from "./keybindings-empty-state";
-import { AssignmentAccordion, countAssignments } from "./assignment-accordion";
+import { AssignmentAccordion, AssignmentHighlights, countAssignments } from "./assignment-accordion";
 import type { KeybindingsRow } from "./keybindings-columns";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
@@ -216,8 +216,9 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
             タップ/クリックで実寸の Dialog が開く。画面外のカードは IntersectionObserver で可視化されるまで
             プレースホルダーに留め、VirtualKeyboard/VirtualMouse の生成コストを可視分のみに抑える。
             @container: 縮小せずにキーボードとマウスが横に並ぶ幅（約 1360px）があるときだけ横並び */}
+        {/* md 未満は縮小で操作ラベルが読めないので、ラベルを隠して指色とリマップ枠だけの「形の図」にする（読む情報は下の割り当て一覧が担う） */}
         {visible ? (
-          <div className="@container">
+          <div className="@container max-md:[&_[data-key-actions]]:hidden">
             {/* md 未満は左手側（LEFT_HAND_CROP）だけを幅いっぱいに見せ、右側は切り落とす。全体は拡大で見る。
                 計測前の高さは、切り出したときの縦横比（キーボード約 370px ＋ 間隔 16px ＋ マウス 122px）で確保する */}
             <KeyboardScaledPreview
@@ -263,6 +264,9 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
 
         {/* md 未満: 縮小図（inert）を補う、割り当ての文字の一覧。既定は閉じる。件数は中に並べる物
             （操作の割り当て＋カスタムアクション＋表示中の文脈のリマップ）の数で、0 なら出さない */}
+        {assignmentCount + contextRemaps.length > 0 && (
+          <AssignmentHighlights player={player} className="md:hidden" />
+        )}
         {assignmentCount + contextRemaps.length > 0 && (
           <AssignmentAccordion
             player={player}

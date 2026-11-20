@@ -877,7 +877,7 @@ function VirtualKeyboardComponent({
         {/* 操作名チップ（下部）- リマップがあっても表示。
             複数操作を持つキーで全件読めるよう折り返しを許容（truncate しない）。 */}
         {showAction && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
                 "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
@@ -901,7 +901,7 @@ function VirtualKeyboardComponent({
         ariaLabel={ariaLabel}
         chips={
           showAction ? (
-            <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+            <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
               {filteredBindings.map((binding, i) => (
                 <span
                   key={i}
@@ -1161,7 +1161,7 @@ function VirtualKeyboardComponent({
                 </span>
               )}
               {showAction && (
-                <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+                <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
                   {bindings.map((binding, i) => (
                     <span
                       key={i}
@@ -1468,7 +1468,7 @@ export function VirtualMouse({
           </span>
         )}
         {showActionLabels && bindings.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span
                 key={i}
@@ -1766,7 +1766,7 @@ export function VirtualNumpad({
           </span>
         )}
         {showAction && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span key={i} className={cn(
                 "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
