@@ -958,7 +958,7 @@ export default function HomePage() {
     videos: (
       <PageSection
         id="home-videos"
-        icon={<Play className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+        icon={<Play className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("home.sectionVideos")}
         viewAllTo="/videos"
       >
@@ -1009,7 +1009,7 @@ export default function HomePage() {
       newGuides.length > 0 ? (
         <PageSection
           id="home-guides"
-          icon={<BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+          icon={<BookOpen className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("home.sectionGuides")}
           viewAllTo="/guides"
         >
@@ -1031,7 +1031,7 @@ export default function HomePage() {
     profiles: (
       <PageSection
         id="home-profiles"
-        icon={<UserCheck className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+        icon={<UserCheck className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("home.sectionProfiles")}
         badge={
           totalPublicProfiles > 0 ? (
