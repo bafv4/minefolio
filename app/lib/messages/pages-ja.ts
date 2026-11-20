@@ -3131,6 +3131,8 @@ export const PAGES_JA = {
     typingTestPressed: "押したキー",
     clearTypingTest: "入力をクリア",
     craftSection: "サーチクラフト",
+    emptyCraftTitle: "サーチクラフトはまだありません",
+    emptyCraftDescription: "アイテムを追加すると、区間ごとに並べて編集できます。",
     craftSectionDescription: "アイテムとサーチ文字列を編集します。現在のリマップ設定で実際に押すキーがプレビュー表示されます",
     saveHintLoggedIn: "この設定を実際に使うには、設定ページで保存してください:",
     goToKeybindings: "キー配置・リマップ設定",

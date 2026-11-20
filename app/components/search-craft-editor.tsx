@@ -921,9 +921,9 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   deleteWithUndo?: boolean;
   /**
    * true のとき、クラフトが0件の間は区間のブロックを出さず、最初の1件を足す入口だけの
-   * 空状態を出す（/me/search-craft 用。Playground・テンプレートエディタは既定の false のまま）
+   * 空状態を出す（true は /me/search-craft 用の既定サイズ、"compact" は Playground・テンプレートエディタ用の小さい空状態）
    */
-  emptyState?: boolean;
+  emptyState?: boolean | "compact";
   crafts: T[];
   onCraftsChange: (next: T[]) => void;
   loops: L[];
@@ -1214,9 +1214,12 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   if (emptyState && totalCraftCount === 0) {
     return (
       <EmptyState
-        icon={<Search className="h-12 w-12" aria-hidden="true" />}
-        title={t("meSearchCraft.emptyBoardTitle")}
-        description={t("meSearchCraft.emptyBoardDescription")}
+        size={emptyState === "compact" ? "compact" : "default"}
+        icon={<Search className={emptyState === "compact" ? "h-5 w-5" : "h-12 w-12"} aria-hidden="true" />}
+        title={t(emptyState === "compact" ? "playground.emptyCraftTitle" : "meSearchCraft.emptyBoardTitle")}
+        description={t(
+          emptyState === "compact" ? "playground.emptyCraftDescription" : "meSearchCraft.emptyBoardDescription",
+        )}
         action={
           <Button
             type="button"

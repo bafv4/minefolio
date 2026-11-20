@@ -78,7 +78,7 @@ type TemplateLoop = {
 
 - `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `delete` のみ（公開・非公開の切替は編集画面の保存に一本化した。`toggle-publish` は不明な操作として拒否する。いいねは `/api/likes` が担当）。一覧の行は、公開状態のピルに加え、公開中で下書きがあれば「未公開の変更あり」のピル、非公開なら「編集画面で公開できる」旨の補足を出す。並びは更新日時（`updatedAt`）の新しい順で、時刻は「{time}に更新」（`meGuides.updatedAgo`）。行はマイガイドの行と同じ作りで、行全体（タイトルのリンクの `::after`）が**編集**へ、公開ページへは右の Globe ボタン（公開中のときだけ・新しいタブ）、削除と並べて 44px 四方（sm 以上 32px。`ROW_ACTION_CLASS`）。
 - **作成 `/my-guides/templates/new`**（`app/routes/my-guides/template-new.tsx`）・**編集 `/my-guides/templates/:templateId/edit`**（`app/routes/my-guides/template-edit.tsx`）: テンプレートエディタでテンプレートの内容そのものを直接編集する。**プリセットや現在の設定を経由せずゼロから作成できる**。
-  - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同一構成**（バーチャルキーボード → キーリマップ編集 → サーチクラフト編集。タイピングテストはバーチャルキーボードカード右上のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
+  - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同じ部品**で、`craftFirst` によりサーチクラフト編集を先頭に置く（サーチクラフト編集 → バーチャルキーボード → キーリマップ編集。Playground はバーチャルキーボード → キーリマップ → サーチクラフト。タイピングテストはバーチャルキーボード欄のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
   - サーチクラフト＋繋ぎ方（Loop）編集部は **`SearchCraftTimingBoard`**（`app/components/search-craft-editor.tsx`）によるタイミングブロック型UI（「指定なし」+ 6種のタイミング、計7ブロックを常時表示。timing の変更はブロック間D&D）。クラフト行はアイテムチップ + サーチ文字列 + 「Shiftを押しながら」チェックボックス + コメント常時表示。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」を参照。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
   - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。検証は下書き保存と公開（保存）の両方に掛ける。
@@ -187,13 +187,15 @@ type TemplateLoop = {
 
 ### セクション構成（SearchCraftWorkbench）
 
+3つの欄は箱（Card）ではなく `PageSection`（欄区切り）で描く。サーチクラフトが0件のときは区間ブロックを描かず、`SearchCraftTimingBoard` の `emptyState="compact"` で「アイテムを追加」の EmptyState（compact）1つだけを出す（アイテムを追加すると区間ブロックが出る）。`craftFirst` を渡すと欄の順を サーチクラフト → キーボード → リマップ にする（テンプレートエディタ。Playground は既定の順）。
+
 編集セクションは共有コンポーネント **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）に集約されており、**Playground とテンプレートエディタ（作成・編集）で同一構成**を共有する。crafts / remaps / loops / layout の状態は親が持ち、ワークベンチは制御コンポーネントとして動作する（`WorkbenchRemap` 型・`effectiveRemapsFrom()`・`normalizeLayout()` / `LAYOUT_OPTIONS` もここから export）。
 
-1. **バーチャルキーボード＋マウス**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。下段に `VirtualMouse`（`showRemaps`。`keybindings` / `fingerAssignments` / `customButtons` は Playground・テンプレートエディタに対応データが無いため渡さない）を並べ、Mouse0〜Mouse4 のリマップも同じ導線で扱える。**キー/ボタンをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキー/ボタンを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。カードヘッダー右上に**タイピングテストを開くボタン**がある。
+1. **バーチャルキーボード＋マウス**: `VirtualKeyboard`（`showRemaps`）でリマップ割り当てを表示。US / JIS / US_TKL / JIS_TKL のレイアウト切替付き。下段に `VirtualMouse`（`showRemaps`。`keybindings` / `fingerAssignments` / `customButtons` は Playground・テンプレートエディタに対応データが無いため渡さない）を並べ、Mouse0〜Mouse4 のリマップも同じ導線で扱える。**キー/ボタンをクリックするとリマップ登録モーダルが開く**（`/me/keybindings` のキー編集ダイアログと同じ `DialogRemapRow` を使用。修飾キー組み合わせのトグル・出力タイプ選択に対応し、クリックしたキー/ボタンを起点とする既存リマップが一覧表示され、「追加」で新しい組み合わせを登録できる）。欄の説明の下に**タイピングテストを開くボタン**とレイアウト選択がある。
 2. **キーリマップ編集**: `/me/keybindings` のリマップタブと**同一のUI・UX**。共通コンポーネント `RemapRow`（`app/components/remap-row.tsx`、`useRemapOutputType` フック含む）を共用する。リマップ元は修飾キー組み合わせ対応の `KeyCaptureButton`（`app/components/key-capture-button.tsx`）、変更先はキー / 文字 / 無効の3タイプ。キーラベルは選択中のキーボードレイアウトに追従する。
 3. **サーチクラフト＋繋ぎ方（Loop）編集**: `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`）によるタイミングブロック型エディタ。「指定なし」+ 6種のタイミング、計7ブロックを常時表示し、各ブロック内でアイテムごとの登録・編集（アイテム選択ダイアログ・コメント・並べ替え・削除）と、その下の「繋ぎ方（Loop）」サブセクション（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` から再利用）でのステップ追加・並べ替え・削除を行う。timing の変更はブロック間D&D。サーチ文字列を編集すると、現在のリマップ設定で実際に押すキーが `getActualKeyInfos()`（逆方向変換）でリアルタイムにプレビュー表示される。サーチクラフト行の削除に連動して、削除された `craftId` を参照する Loop ステップを自動除去する（生存参照は温存、2件未満になった Loop は自動除去。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」「繋ぎ方（Loop）」参照）。
 
-このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボードカード右上のボタンから開く**モーダル**として表示される。
+このほか、**タイピングテスト**（フォーカスしてキーを押すとリマップ適用後の出力文字と押したキーの履歴を表示。`simulateRemapOutput()` の順方向シミュレーションを使用）は、バーチャルキーボード欄のボタンから開く**モーダル**として表示される。
 
 #### タイピングテストの編集モデル
 

@@ -782,7 +782,7 @@ export default function PlaygroundPage() {
 
       {/* データ読み込み・保存バー */}
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
           {loadedLabel && (
             <Badge variant="secondary" className="text-xs">
@@ -1056,7 +1056,7 @@ export default function PlaygroundPage() {
         )}
       </div>
 
-      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
+      {/* ワークベンチ（キーボード〔タイピングテストは欄内のボタン〕 → リマップ → サーチクラフト・Loop） */}
       <SearchCraftWorkbench
         deleteWithUndo
         crafts={crafts}

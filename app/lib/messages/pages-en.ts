@@ -3073,6 +3073,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     typingTestPressed: "Keys pressed",
     clearTypingTest: "Clear input",
     craftSection: "Search-craft",
+    emptyCraftTitle: "No search crafts yet",
+    emptyCraftDescription: "Add an item to arrange and edit it by section.",
     craftSectionDescription:
       "Edit items and search strings. The keys you'd actually press with your current remaps are previewed",
     saveHintLoggedIn:

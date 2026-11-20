@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -353,15 +353,8 @@ export function TemplateEditorForm({
         <div className="ml-auto">{submitButton}</div>
       </div>
 
-      {/* 基本情報（欄名はページの h1 の下の h2。CardTitle は div なので、同じ見た目の h2 で描く。
-          ワークベンチの欄名も sectionHeadingLevel="h2" で同じ段にそろえる） */}
-      <Card>
-        <CardHeader>
-          <h2 data-slot="card-title" className="text-lg leading-none font-semibold">
-            {t("meTemplates.basicInfo")}
-          </h2>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* 基本情報（欄名はページの h1 の下の h2。ワークベンチの欄名も同じ段） */}
+      <PageSection id="template-basic-info" title={t("meTemplates.basicInfo")}>
           <div className="space-y-2">
             <Label htmlFor="template-title">
               {t("meTemplates.templateName")}
@@ -425,8 +418,7 @@ export function TemplateEditorForm({
             </div>
             <p className="text-xs text-muted-foreground">{t("meTemplates.languageHint")}</p>
           </div>
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* サーチクラフト・Loop の検証エラー（ワークベンチの中の個々の欄は指せないので、ワークベンチの直前に出し、ここへフォーカスを移す） */}
       {contentError && (
@@ -441,7 +433,7 @@ export function TemplateEditorForm({
         </NoticeBanner>
       )}
 
-      {/* ワークベンチ（/playground と同一構成: リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
+      {/* ワークベンチ（/playground と同じ部品。craftFirst で、主作業のサーチクラフトを先頭にする: サーチクラフト → キーボード → リマップ） */}
       <SearchCraftWorkbench
         crafts={crafts}
         onCraftsChange={setCrafts}
@@ -452,6 +444,7 @@ export function TemplateEditorForm({
         layout={layout}
         onLayoutChange={setLayout}
         sectionHeadingLevel="h2"
+        craftFirst
       />
 
       {/* 末尾の送信ボタン（上端と同じ。文書が長いので、編集を終えた位置から送れるようにする） */}
