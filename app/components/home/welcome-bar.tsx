@@ -102,11 +102,12 @@ export function WelcomeBar({
           ref={customizeRef}
           type="button"
           variant="ghost"
-          className="ml-auto min-h-11 max-sm:has-[>svg]:px-2 sm:ml-0 sm:min-h-9"
+          className="ml-auto min-h-11 max-sm:min-w-11 max-sm:has-[>svg]:px-2 sm:ml-0 sm:min-h-9"
           onClick={() => setSettingsOpen(true)}
         >
+          {/* モバイルはアイコンだけにして3つを1行に収める（名前は sr-only で残す） */}
           <Settings2 className="h-4 w-4 sm:mr-1.5" />
-          {t("home.welcomeCustomize")}
+          <span className="max-sm:sr-only">{t("home.welcomeCustomize")}</span>
         </Button>
       </div>
       <HomeSettingsDialog
