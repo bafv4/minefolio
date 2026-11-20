@@ -260,6 +260,8 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
                     isFirst && "z-10 border-r-2 bg-muted px-2",
                     // 末尾の列の右に区切りを出さない（その先に列はない）
                     isLast && !isFirst && "border-r-0",
+                    // つまみの押せる範囲（セルの右端から内側へ 24px）が HintTip・並べ替えボタンに被らないよう右の余白を取る
+                    canResize && "pr-6 md:pr-6",
                   )}
                   style={
                     isFirst
@@ -339,6 +341,9 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
                       }}
                       className={cn(
                         "absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none touch-none",
+                        // 押せる幅は 18 + 6 = 24px（見た目の 6px は変えない）。右隣の列見出しの並べ替えボタンを奪わないよう、
+                        // 押せる範囲は自分のセルの内側（左）へだけ広げる
+                        "after:absolute after:inset-y-0 after:-left-[18px] after:right-0 after:content-['']",
                         "hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         header.column.getIsResizing() && "bg-primary/60",
                       )}
