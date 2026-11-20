@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
 import { PaceFeedCard } from "@/components/pace-feed-card";
+import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
@@ -361,7 +362,7 @@ export default function PacesPage() {
                 <SelectItem value="all">{t("paces.splitAll")}</SelectItem>
                 {PACE_FEED_SPLITS.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s}
+                    <PaceManSplitMark timeline={s} size={14} labelClassName="leading-normal" />
                   </SelectItem>
                 ))}
               </SelectContent>
