@@ -9,6 +9,7 @@ import {
 } from "@/components/guide-list-views";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
+import { itemSegmentLabel } from "@/lib/segment-labels";
 import { loadPendingSpeedrunRecords, type PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -2499,7 +2500,7 @@ function ItemLayoutRow({
       first={first}
       className={className}
       icon={<span aria-hidden className={cn("block h-2.5 w-2.5 rounded-full", dotClass)} />}
-      title={layout.segment}
+      title={itemSegmentLabel(layout.segment)}
     >
       <ItemHotbar
         slots={slots}

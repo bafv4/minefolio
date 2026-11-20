@@ -40,6 +40,8 @@ Minefolioにおけるアイテム配置（ホットバー構成）とサーチ�
 
 カスタムセグメント（`custom_*` 形式）もユーザーが自由に追加可能。
 
+**表示名**: 保存値（上表のセグメント名）は変えず、区間の表示名だけをサーチクラフトのタイミングと共有する。辞書は `app/lib/segment-labels.ts`（`SEGMENT_LABELS` / `itemSegmentLabel()`）で、`/me/items` のセグメント選択では `Overworld` を「OW」、`Bastion → Fort` を「Bastion→Fort」と表示する（`TIMING_META` も同じ辞書を参照）。辞書に無い値（Common・カスタム名など）は保存値のまま表示する。
+
 ### スロット構造
 
 各スロットは以下の構造を持つ。

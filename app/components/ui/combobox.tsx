@@ -73,7 +73,10 @@ export function Combobox({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (allowCustomValue && e.key === "Enter" && inputValue) {
       const exists = options.some(
-        (option) => option.value.toLowerCase() === inputValue.toLowerCase()
+        // 表示名（label）で打った場合も既存の選択肢として扱う（値と表示名が違う選択肢があるため）
+        (option) =>
+          option.value.toLowerCase() === inputValue.toLowerCase() ||
+          option.label.toLowerCase() === inputValue.toLowerCase()
       )
       if (!exists) {
         onValueChange(inputValue)

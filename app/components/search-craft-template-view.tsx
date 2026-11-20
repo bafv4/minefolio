@@ -27,6 +27,7 @@ import {
   getFingersForKeyCode,
 } from "@/components/search-craft-badges";
 import { cn } from "@/lib/utils";
+import { SEGMENT_LABELS } from "@/lib/segment-labels";
 import { ShiftMark } from "@/components/shift-mark";
 import { useT } from "@/hooks/use-locale";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -104,11 +105,11 @@ export const TIMING_META: {
   labelKey?: MessageKey;
   dot: string;
 }[] = [
-  { id: "ow", label: "OW", dot: "bg-success" },
-  { id: "bastion", label: "Bastion", dot: "bg-warning" },
-  { id: "bastion_fort", label: "Bastion→Fort", dot: "bg-info" },
-  { id: "fortress", label: "Fortress", dot: "bg-destructive" },
-  { id: "blinded", label: "Blinded", dot: "bg-primary" },
+  { id: "ow", label: SEGMENT_LABELS.ow, dot: "bg-success" },
+  { id: "bastion", label: SEGMENT_LABELS.bastion, dot: "bg-warning" },
+  { id: "bastion_fort", label: SEGMENT_LABELS.bastion_fort, dot: "bg-info" },
+  { id: "fortress", label: SEGMENT_LABELS.fortress, dot: "bg-destructive" },
+  { id: "blinded", label: SEGMENT_LABELS.blinded, dot: "bg-primary" },
   { id: "other", labelKey: "playerProfile.timingOther", dot: "bg-muted-foreground" },
 ];
 

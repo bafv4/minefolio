@@ -14,6 +14,7 @@ import { eq, asc, and } from "drizzle-orm";
 import { formString } from "@/lib/save-limits";
 import { isValidItemLayoutsPayload } from "@/lib/item-layouts-payload";
 import { cn } from "@/lib/utils";
+import { itemSegmentLabel } from "@/lib/segment-labels";
 import { NoticeBanner } from "@/components/notice-banner";
 import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
@@ -523,7 +524,7 @@ function SegmentNameInput({
 
   const options = availablePresets.map((preset) => ({
     value: preset,
-    label: preset,
+    label: itemSegmentLabel(preset),
   }));
 
   return (
@@ -567,7 +568,7 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
 }) {
   const t = useT();
   // 配置の名前（未入力の行でも読み上げが「の削除」だけにならないよう代わりの語を使う）
-  const layoutName = segment.trim() || t("meItems.unnamedLayout");
+  const layoutName = itemSegmentLabel(segment.trim()) || t("meItems.unnamedLayout");
 
   return (
     <>
@@ -746,7 +747,7 @@ function EditableLayoutRow({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meItems.dragHandleAria", { name: layout.segment.trim() || t("meItems.unnamedLayout") })}
+          aria-label={t("meItems.dragHandleAria", { name: itemSegmentLabel(layout.segment.trim()) || t("meItems.unnamedLayout") })}
           className="flex size-8 max-sm:size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <GripVertical className="h-5 w-5" aria-hidden="true" />
