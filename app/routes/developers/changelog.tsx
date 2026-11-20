@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
 import { History } from "lucide-react";
 import { MarkdownDocPage, type CollapsedDocSection } from "@/components/markdown-doc-page";
+import { JaOnlyNotice } from "@/components/ja-only-notice";
 import changelogMd from "@/content/changelog.md?raw";
 import { parseChangelog } from "@/lib/changelog";
 import { createTranslator } from "@/lib/messages";
@@ -50,6 +51,7 @@ export default function ChangelogPage() {
       heading={t("developers.changelogTitle")}
       markdown={openMarkdown}
       collapsedSections={collapsedSections}
+      notice={<JaOnlyNotice />}
       backLink={{ to: "/developers", label: t("developers.heading") }}
     />
   );

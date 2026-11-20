@@ -29,6 +29,8 @@ interface MarkdownDocPageProps {
   toc?: boolean;
   /** 本文の後ろに、畳んだ節（details）として並べる物 */
   collapsedSections?: CollapsedDocSection[];
+  /** 見出しの直後（本文の前）に置く通知帯など */
+  notice?: ReactNode;
 }
 
 /** 横スクロールの器のキーボードフォーカス（--ring の 2px） */
@@ -131,6 +133,7 @@ export function MarkdownDocPage({
   backLink,
   toc = false,
   collapsedSections,
+  notice,
 }: MarkdownDocPageProps) {
   const t = useT();
   const tocHeadings = toc ? extractH2Headings(markdown) : [];
@@ -154,6 +157,8 @@ export function MarkdownDocPage({
         <Icon className="h-6 w-6" aria-hidden />
         <h1 className="text-2xl font-bold">{heading}</h1>
       </div>
+
+      {notice}
 
       {tocHeadings.length > 0 && (
         <nav aria-labelledby="doc-toc-title" className="max-w-[42em] border-b border-border/60 pb-4">

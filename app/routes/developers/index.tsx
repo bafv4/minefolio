@@ -3,6 +3,7 @@ import type { Route } from "./+types/index";
 import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { JaOnlyNotice } from "@/components/ja-only-notice";
 import { Button } from "@/components/ui/button";
 import { Code, FileText, History, Download, MessageSquare, ChevronRight } from "lucide-react";
 import { Github } from "@/components/brand-icons";
@@ -62,6 +63,8 @@ export default function DevelopersHubPage() {
           {t("developers.lead")}
         </p>
       </div>
+
+      <JaOnlyNotice />
 
       {/* セクション一覧 */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

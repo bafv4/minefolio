@@ -230,6 +230,7 @@ export const PAGES_JA = {
   },
   /** 開発者向けページ（/developers 配下） */
   developers: {
+    jaOnlyNotice: "このページの本文は日本語のみで提供しています。",
     githubRepository: "GitHub リポジトリ",
     title: "開発者向け - Minefolio",
     metaDescription: "Minefolio の開発者向け情報・APIドキュメント・更新履歴・データエクスポート",

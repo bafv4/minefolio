@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
 import { FileText } from "lucide-react";
 import { MarkdownDocPage } from "@/components/markdown-doc-page";
+import { JaOnlyNotice } from "@/components/ja-only-notice";
 import apiMd from "@/content/api.md?raw";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
@@ -31,6 +32,7 @@ export default function ApiDocsPage() {
       heading={t("developers.apiTitle")}
       markdown={apiMd}
       toc
+      notice={<JaOnlyNotice />}
       backLink={{ to: "/developers", label: t("developers.heading") }}
     />
   );

@@ -212,6 +212,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     speedruncomStats: "Loading personal best records",
   },
   developers: {
+    jaOnlyNotice: "The content of this page is available in Japanese only.",
     githubRepository: "GitHub Repository",
     title: "Developers - Minefolio",
     metaDescription:
