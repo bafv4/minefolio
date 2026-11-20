@@ -89,7 +89,8 @@ import {
   Search,
   Settings,
 } from "lucide-react";
-import { getGameLanguageName } from "@/lib/game-languages";
+import { getGameLanguageName, normalizeGameLanguage } from "@/lib/game-languages";
+import { decodePresetPlayerConfig } from "@/lib/preset-read";
 import { formatDistanceToNow } from "date-fns";
 import { dateFnsLocale } from "@/lib/date-locale";
 
@@ -136,7 +137,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           where: eq(users.discordId, session.user.id),
           columns: { id: true },
           with: {
-            configPresets: { columns: { id: true, name: true, isActive: true } },
+            configPresets: {
+              columns: { id: true, name: true, isActive: true, playerConfigData: true },
+            },
+            // 編集中プリセットの言語はライブの設定が正（スナップショットは古いことがある）
+            playerConfig: { columns: { gameLanguage: true } },
           },
         })
       : null
@@ -194,7 +199,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // ログイン中は反映先選択用に自分のプリセット一覧を返す
   const [me, likeCount] = await Promise.all([myPresetsPromise, likeCountPromise]);
-  const myPresets: { id: string; name: string; isActive: boolean }[] = me?.configPresets ?? [];
+  // ゲーム言語（未設定・不明は null）。反映先の言語とテンプレートの言語の比較に使う。
+  // snapshotGameLanguage: プリセット行の playerConfigData の言語。新規プリセットの元にしたときコピーされるのはこちら
+  // liveGameLanguage: 編集中（アクティブ）のプリセットだけ。既存のアクティブプリセットへ反映した場合、実際に効くのはライブ側
+  const myPresets: {
+    id: string;
+    name: string;
+    isActive: boolean;
+    liveGameLanguage: string | null;
+    snapshotGameLanguage: string | null;
+  }[] = (me?.configPresets ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    isActive: p.isActive,
+    liveGameLanguage: p.isActive ? normalizeGameLanguage(me?.playerConfig?.gameLanguage) : null,
+    snapshotGameLanguage: normalizeGameLanguage(
+      decodePresetPlayerConfig(p.playerConfigData)?.gameLanguage,
+    ),
+  }));
 
   const appUrl = env.APP_URL || "https://minefolio.app";
 
@@ -345,7 +367,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         .where(eq(searchCraftTemplates.id, template.id));
     }
 
-    return { success: true, action: "apply", target, presetName, wasActive };
+    return { success: true, action: "apply", target, presetId, presetName, wasActive };
   } catch (error) {
     console.error("Template apply error:", error);
     return { error: t("templates.applyFailed") };
@@ -360,6 +382,11 @@ export default function TemplateViewPage() {
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
+  // 反映した（または新規作成した）プリセットを、その場で編集中にする。/me/presets の action（intent=apply-preset）へ送る
+  const activateFetcher = useFetcher<{ success?: boolean; error?: string }>();
+  const prevActivateDataRef = useRef<typeof activateFetcher.data>(undefined);
+  const pendingActivateRef = useRef<{ id: string; name: string } | null>(null);
+  const [activatedPreset, setActivatedPreset] = useState<{ id: string; name: string } | null>(null);
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyTarget, setApplyTarget] = useState<"new" | "existing">("new");
   const [newPresetName, setNewPresetName] = useState(template.title);
@@ -378,6 +405,16 @@ export default function TemplateViewPage() {
 
   const isSubmitting = fetcher.state === "submitting";
   const selectedTargetPreset = myPresets.find((p) => p.id === targetPresetId);
+  // 反映先のゲーム言語（未設定は null）。
+  // 既存: 編集中ならライブ、それ以外はスナップショット。新規: 元プリセットのスナップショット（「なし」は言語が決まらない）
+  const applyTargetLang =
+    applyTarget === "existing"
+      ? ((selectedTargetPreset?.isActive
+          ? selectedTargetPreset.liveGameLanguage
+          : selectedTargetPreset?.snapshotGameLanguage) ?? null)
+      : (myPresets.find((p) => p.id === basePresetId)?.snapshotGameLanguage ?? null);
+  const templateLang = (template.gameLanguage || "ja_jp").toLowerCase();
+  const languageMismatch = !!applyTargetLang && applyTargetLang !== templateLang;
 
   // 別テンプレートへ直接遷移した場合に選択状態をリセット
   useEffect(() => {
@@ -404,6 +441,27 @@ export default function TemplateViewPage() {
       toast.error(data.error);
     }
   }, [fetcher.data]);
+
+  useEffect(() => {
+    const data = activateFetcher.data;
+    if (!data || data === prevActivateDataRef.current) return;
+    prevActivateDataRef.current = data;
+    const pending = pendingActivateRef.current;
+    if (data.success && pending) {
+      setActivatedPreset(pending);
+      toast.success(t("templates.activateSuccess", { name: pending.name }));
+    } else if (data.error) {
+      toast.error(data.error);
+    }
+  }, [activateFetcher.data]);
+
+  const handleActivate = (presetId: string, presetName: string) => {
+    const formData = new FormData();
+    formData.set("intent", "apply-preset");
+    formData.set("presetId", presetId);
+    pendingActivateRef.current = { id: presetId, name: presetName };
+    activateFetcher.submit(formData, { method: "post", action: "/me/presets" });
+  };
 
   const handleApplyDialogOpenChange = (open: boolean) => {
     setApplyDialogOpen(open);
@@ -639,9 +697,6 @@ export default function TemplateViewPage() {
                         </p>
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      {t("templates.applyNewNote")}
-                    </p>
                   </>
                 ) : (
                   <div className="space-y-2">
@@ -692,6 +747,15 @@ export default function TemplateViewPage() {
                     </div>
                   </div>
                 )}
+
+                {languageMismatch && applyTargetLang && (
+                  <NoticeBanner tone="warning" className="px-3 py-2">
+                    {t("templates.applyLanguageMismatch", {
+                      templateLang: getGameLanguageName(t, locale, templateLang),
+                      myLang: getGameLanguageName(t, locale, applyTargetLang),
+                    })}
+                  </NoticeBanner>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setApplyDialogOpen(false)}>
@@ -706,7 +770,7 @@ export default function TemplateViewPage() {
                   }
                 >
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {t("templates.applyConfirm")}
+                  {t(applyTarget === "new" ? "templates.applyConfirmNew" : "templates.applyConfirm")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -753,17 +817,50 @@ export default function TemplateViewPage() {
 
       {fetcher.data && "success" in fetcher.data && fetcher.data.success && (
         <NoticeBanner tone="success" className="px-3 py-2">
-          {t("templates.appliedHint")}{" "}
-          {fetcher.data.target === "existing" && fetcher.data.wasActive ? (
-            // アクティブプリセットへ反映した場合は現在の設定が変わっている
-            <Link to="/me/search-craft" className="text-primary hover:underline">
-              {t("templates.goToMySearchCraft")}
-            </Link>
+          {activatedPreset && activatedPreset.id === fetcher.data.presetId ? (
+            <>
+              {t("templates.activatedHint", { name: activatedPreset.name })}{" "}
+              <Link to="/me/search-craft" className="text-primary hover:underline">
+                {t("templates.goToMySearchCraft")}
+              </Link>
+            </>
+          ) : fetcher.data.target === "existing" && fetcher.data.wasActive ? (
+            // 編集中のプリセットへ反映した場合は現在の設定が変わっている
+            <>
+              {t("templates.appliedHint")}{" "}
+              <Link to="/me/search-craft" className="text-primary hover:underline">
+                {t("templates.goToMySearchCraft")}
+              </Link>
+            </>
           ) : (
-            // 新規 / 非アクティブプリセットへの反映はプリセット管理から適用する
-            <Link to="/me/presets" className="text-primary hover:underline">
-              {t("templates.goToPresets")}
-            </Link>
+            // 新規 / 編集中でないプリセットへの反映では今の設定は変わらないので、その場で編集中にできるようにする
+            <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {t(
+                  fetcher.data.target === "new"
+                    ? "templates.appliedHintNew"
+                    : "templates.appliedHintInactive",
+                )}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                disabled={activateFetcher.state !== "idle"}
+                onClick={() =>
+                  handleActivate(
+                    (fetcher.data as { presetId: string }).presetId,
+                    (fetcher.data as { presetName: string }).presetName,
+                  )
+                }
+              >
+                {activateFetcher.state !== "idle" && (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                )}
+                {t("templates.activatePreset")}
+              </Button>
+            </span>
           )}
         </NoticeBanner>
       )}

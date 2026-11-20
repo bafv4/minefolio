@@ -2978,17 +2978,18 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     apply: "Apply to my settings",
     applyConfirmTitle: "Apply this template to your settings",
     applyDialogDescription: "Choose where to apply the template",
-    applyTargetNew: "Create a new preset and apply",
+    applyLanguageMismatch:
+      "This template assumes item names in \"{templateLang}\". The target's game language is \"{myLang}\". Even if you apply it, some items won't be found by the in-game search.",
+    applyTargetNew: "Save as a new preset (your current settings stay as they are)",
     applyTargetExisting: "Apply to an existing preset",
     applyTargetPresetLabel: "Target preset",
-    applyNewNote:
-      "A new preset is only created, not set as the one you edit. To use it, choose \"Edit this one\" in preset management.",
     applyActiveWarning:
       "This is the preset you're editing, so your current search-craft settings will be overwritten by this template.",
     applyRemapsLabel: "Also apply the remaps ({count})",
     applyRemapsHint:
       "The target's key remaps will also be overwritten by the template",
     applyConfirm: "Apply",
+    applyConfirmNew: "Save",
     applySuccessNew:
       "Created new preset \"{name}\" and applied the template",
     applySuccessActive:
@@ -2998,8 +2999,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     applyChangeHistoryToPreset:
       "Applied template \"{title}\" to preset \"{name}\"",
     appliedHint: "The template has been applied.",
+    appliedHintNew: "Saved as a new preset. Your current settings haven't changed.",
+    appliedHintInactive: "Applied to the preset. Your current settings haven't changed.",
+    activatePreset: "Switch to editing this preset",
+    activateSuccess: "You're now editing preset \"{name}\"",
+    activatedHint: "You're now editing preset \"{name}\".",
     goToMySearchCraft: "Check my search-craft settings",
-    goToPresets: "Open preset management",
     loginToApply: "Log in to apply",
     tryInPlayground: "Try in Playground",
     manage: "Template management",
