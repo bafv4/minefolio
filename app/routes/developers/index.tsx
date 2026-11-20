@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import type { Route } from "./+types/index";
 import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
 import { JaOnlyNotice } from "@/components/ja-only-notice";
 import { Button } from "@/components/ui/button";
 import { Code, FileText, History, Download, MessageSquare, ChevronRight } from "lucide-react";
@@ -74,7 +74,7 @@ export default function DevelopersHubPage() {
             <Link
               key={section.to}
               to={section.to}
-              className="group rounded-lg border bg-card p-4 hover:bg-accent transition-colors"
+              className="group rounded-xl border border-border/70 bg-card p-4 transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <div className="flex items-start gap-3">
                 {/* 素のアイコン（丸背景のチップは公開一覧ページのヘッダだけ。ui.md 13 章） */}
@@ -95,14 +95,9 @@ export default function DevelopersHubPage() {
       </div>
 
       {/* 関連リンク */}
-      <Card>
-        <CardHeader>
-          <h2 data-slot="card-title" className="text-base leading-snug font-semibold">
-            {t("developers.relatedLinks")}
-          </h2>
-          <CardDescription>{t("developers.relatedLinksDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
+      <PageSection id="developers-related" title={t("developers.relatedLinks")}>
+        <p className="text-sm text-muted-foreground">{t("developers.relatedLinksDescription")}</p>
+        <div className="flex flex-wrap gap-3">
           <Button variant="outline" asChild>
             <a
               href="https://github.com/bafv4/minefolio"
@@ -129,8 +124,8 @@ export default function DevelopersHubPage() {
               {t("nav.feedback")}
             </Link>
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </PageSection>
     </div>
   );
 }

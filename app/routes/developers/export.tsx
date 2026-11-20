@@ -248,8 +248,8 @@ export default function ExportPage() {
               <label
                 key={section.id}
                 className={cn(
-                  "flex w-full cursor-pointer items-start gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent/50",
-                  isChecked ? "border-brand/60 bg-brand/10" : "border-border bg-card",
+                  "flex w-full cursor-pointer items-start gap-3 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/50",
+                  isChecked ? "border-brand" : "border-border/70",
                 )}
               >
                 <Checkbox
@@ -259,15 +259,7 @@ export default function ExportPage() {
                   aria-labelledby={titleId}
                   aria-describedby={descriptionId}
                 />
-                <span
-                  className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
-                    isChecked ? "bg-brand/15 text-brand" : "bg-muted text-muted-foreground",
-                  )}
-                  aria-hidden
-                >
-                  <Icon className="h-4 w-4" />
-                </span>
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
                 <span className="block flex-1 min-w-0">
                   <span id={titleId} className="block font-semibold">
                     {t(section.labelKey)}
@@ -328,13 +320,13 @@ export default function ExportPage() {
           </div>
 
           {/* ユーザー一覧 */}
-          <div className="rounded-lg border max-h-80 overflow-y-auto">
+          <div className="rounded-xl border border-border/70 max-h-80 overflow-y-auto">
             {filteredUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 {t("developers.exportNoUsers")}
               </p>
             ) : (
-              <div className="divide-y">
+              <div className="divide-y divide-border/60">
                 {filteredUsers.map((user) => {
                   const isChecked = selectedUsers.has(user.slug);
                   const name = getDisplayName(user, locale);
@@ -343,8 +335,8 @@ export default function ExportPage() {
                     <label
                       key={user.slug}
                       className={cn(
-                        "w-full cursor-pointer text-left px-3 py-2 min-h-11 hover:bg-accent/50 transition-colors flex items-center gap-2",
-                        isChecked && "bg-brand/10",
+                        "w-full cursor-pointer text-left px-3 py-2 min-h-11 hover:bg-muted/50 transition-colors flex items-center gap-2",
+                        isChecked && "bg-secondary/50",
                       )}
                     >
                       <Checkbox
@@ -373,7 +365,7 @@ export default function ExportPage() {
       </p>
 
       {/* ダウンロードバー（ページ末尾） */}
-      <div className="rounded-xl border-2 border-primary/20 bg-card/95 p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-muted-foreground">
           {selectedSections.size === 0 ? (
             t("developers.exportPickSections")
