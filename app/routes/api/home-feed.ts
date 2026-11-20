@@ -126,7 +126,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       // 共通キャッシュキー（ユーザーに依存しない）
       const cacheKey = "home-feed:live-runs:v3";
       // マップは liveRuns に出てくる mcid の分だけ（全公開ユーザー分を15秒ポーリングで再送しない）。
-      // splitBests: 走者ごとの「同区間のベスト IGT」（蓄積ペース〈直近2か月〉内の最小。区間名 → ミリ秒）
+      // splitBests: 走者ごとの「同区間のベスト IGT」（蓄積ペース〈直近2か月〉内の最小。区間名 → ミリ秒）。
+      // paceman_paces は列名に反して rta 列に IGT が入っている（igt 列は常に null。paceman-cache.ts 参照）ので、
+      // 下の集計の min(rta) / max(rta) は IGT どうしの比較になる。igt 列に置き換えると全区間が null になる
       type LiveRunsCache = {
         liveRuns: PaceManLiveRun[];
         splitBests: Record<string, Record<string, number>>;
