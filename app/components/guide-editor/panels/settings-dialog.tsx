@@ -1,6 +1,7 @@
 // ガイド設定モーダル（タイトル / 概要 / カバー画像 / タグ / 公開設定）。
 // モーダル内はローカル State を持ち、「適用」で親 State へコミット、「キャンセル」で破棄する。
 // ※ 適用は保存（下書き保存・公開）ではなく、あくまで全体 State への反映のみ。
+// ただしツールバーの「公開…」から開いたときは、主ボタンが「公開する」になり、適用と公開の保存を一度に行う。
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 import { MetadataFields } from "./metadata-fields";
 import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
 import { getPublishAction, hasDraftSave, PUBLISH_ACTION_MESSAGES } from "../hooks/use-guide-save";
@@ -49,6 +51,10 @@ interface SettingsDialogProps {
   uploadError: string | null;
   /** 適用: モーダル内 State を親 State へコミット（保存はしない） */
   onApply: (values: GuideSettingsValues) => void;
+  /** 適用して公開の保存まで行う（「公開…」から開いたときの「公開する」）。保存が成功するまで閉じるのは親の責務 */
+  onApplyAndPublish: (values: GuideSettingsValues) => void;
+  /** 保存の送信中。主ボタンを無効にして二重送信を防ぎ、閉じる操作も受け付けない */
+  saving: boolean;
 }
 
 export function SettingsDialog({
@@ -63,6 +69,8 @@ export function SettingsDialog({
   isUploadingCover,
   uploadError,
   onApply,
+  onApplyAndPublish,
+  saving,
 }: SettingsDialogProps) {
   const t = useT();
   // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
@@ -83,7 +91,8 @@ export function SettingsDialog({
       setSummary(initialValues.summary);
       setTags(initialValues.tags);
       setCoverImageUrl(initialValues.coverImageUrl);
-      setIsPublished(initialValues.isPublished);
+      // 「公開…」から開いたときは公開する側で開く（キャンセルすれば親の値は変わらない）
+      setIsPublished(focusPublishOnOpen ? true : initialValues.isPublished);
       setSlug(initialValues.slug);
       setAllowAutoTranslation(initialValues.allowAutoTranslation);
     }
@@ -111,13 +120,23 @@ export function SettingsDialog({
       ? "guideEditor.ui.publishOffLive"
       : "guideEditor.ui.publishOffNew";
 
+  // 「公開…」から開き、公開するのスイッチがオンのあいだは、主ボタンが適用と公開の保存を一度に行う。
+  // 注意書きはこの主ボタンの説明を1か所に出し、「適用は保存ではない」の注記は出さない
+  const publishPrimary = focusPublishOnOpen && !livePublished && isPublished;
+
   const apply = () => {
-    onApply({ title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation });
+    const values = { title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation };
+    if (publishPrimary) {
+      // 保存が成功するまで閉じない（失敗したら開いたままエラーを出す）。親が結果を見て閉じる
+      if (!saving) onApplyAndPublish(values);
+      return;
+    }
+    onApply(values);
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !(saving && !next) && onOpenChange(next)}>
       <DialogContent
         className="sm:max-w-lg"
         {...returnFocus}
@@ -132,9 +151,11 @@ export function SettingsDialog({
         <DialogHeader>
           <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>
-            {draftSaveAvailable
-              ? t("guideEditor.ui.settingsDesc", { draft: draftLabel, save: saveLabel })
-              : t("guideEditor.ui.settingsDescSingle", { save: saveLabel })}
+            {publishPrimary
+              ? t("guideEditor.ui.publishDesc")
+              : draftSaveAvailable
+                ? t("guideEditor.ui.settingsDesc", { draft: draftLabel, save: saveLabel })
+                : t("guideEditor.ui.settingsDescSingle", { save: saveLabel })}
           </DialogDescription>
         </DialogHeader>
 
@@ -177,7 +198,9 @@ export function SettingsDialog({
           <div className="space-y-0.5">
             <Label htmlFor="guide-publish-toggle">{t("guideEditor.ui.publishLabel")}</Label>
             <p id="guide-publish-toggle-desc" className="text-xs text-muted-foreground">
-              {t(publishDescKey, { save: saveLabel, draft: draftLabel })}
+              {publishPrimary
+                ? t("guideEditor.ui.publishToggleHint")
+                : t(publishDescKey, { save: saveLabel, draft: draftLabel })}
             </p>
           </div>
           {/* オンの色は brand（ui.md 1 章: brand ＝選択中。基底の Switch は primary のまま） */}
@@ -207,18 +230,21 @@ export function SettingsDialog({
         )}
 
         {/* 「適用」は編集中の内容に入るだけで、保存ではないことを、スクロールしても見える下部に固定で示す */}
-        <p className="text-xs text-muted-foreground">
-          {draftSaveAvailable
-            ? t("guideEditor.ui.applyNote", { draft: draftLabel, save: saveLabel })
-            : t("guideEditor.ui.applyNoteSingle", { save: saveLabel })}
-        </p>
+        {!publishPrimary && (
+          <p className="text-xs text-muted-foreground">
+            {draftSaveAvailable
+              ? t("guideEditor.ui.applyNote", { draft: draftLabel, save: saveLabel })
+              : t("guideEditor.ui.applyNoteSingle", { save: saveLabel })}
+          </p>
+        )}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             {t("guideEditor.ui.cancel")}
           </Button>
-          <Button type="button" onClick={apply}>
-            {t("guideEditor.ui.apply")}
+          <Button type="button" onClick={apply} disabled={publishPrimary && saving}>
+            {publishPrimary && saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+            {publishPrimary ? t("guideEditor.ui.publishNow") : t("guideEditor.ui.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -38,7 +38,7 @@ import {
 import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { insertEmbed, insertGuideLink, insertTemplateEmbed } from "./lib/block-commands";
-import { SettingsDialog } from "./panels/settings-dialog";
+import { SettingsDialog, type GuideSettingsValues } from "./panels/settings-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
 import { TemplateEmbedDialog } from "./panels/template-embed-dialog";
 import { primeTemplateEmbedMeta, type TemplateEmbedMeta } from "./lib/template-embed-meta";
@@ -153,26 +153,50 @@ export function GuideEditor({
   // 衝突しないよう、effect ではなく明示的にマークする）。本文は editor.onUpdate が立てる。
   const markDirty = useCallback(() => setMetaDirty(true), []);
 
+  // override: 設定モーダルの「公開する」が、適用した値でそのまま保存するときに渡す（state の更新を待たない）
   const save = useCallback(
-    (mode: "draft" | "publish") => {
+    (mode: "draft" | "publish", override?: GuideSettingsValues) => {
       if (!editor) return;
       submit(mode, {
-        title,
+        title: override?.title ?? title,
         content: editor.getHTML(),
-        summary,
-        tags,
-        isPublished,
-        coverImageUrl,
-        slug,
-        allowAutoTranslation: allowAutoTranslationToSend,
+        summary: override?.summary ?? summary,
+        tags: override?.tags ?? tags,
+        isPublished: override?.isPublished ?? isPublished,
+        coverImageUrl: override ? override.coverImageUrl : coverImageUrl,
+        slug: override?.slug ?? slug,
+        allowAutoTranslation: translationEnabled
+          ? (override?.allowAutoTranslation ?? allowAutoTranslation)
+          : undefined,
       });
       savedDocRef.current = editor.state.doc;
       setContentDirty(false);
       setMetaDirty(false);
       setDraftActive(mode === "draft");
     },
-    [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug, allowAutoTranslationToSend],
+    [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug, allowAutoTranslation, translationEnabled],
   );
+
+  // 設定モーダルの「公開する」で保存中か。保存が成功するまでモーダルは閉じず、失敗したら開いたままエラーを出す
+  const [settingsPublishing, setSettingsPublishing] = useState(false);
+
+  // 設定モーダルの値を全体 State へ反映する（保存はしない）
+  const applySettings = (v: GuideSettingsValues) => {
+    // モーダル内 State を全体 State へ反映（保存はしない）。値が実際に変わったときだけダーティにする
+    // （開いて「適用」しただけで未保存扱いにしない）
+    const changed = isSettingsChanged(
+      { title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation },
+      v,
+    );
+    setTitle(v.title);
+    setSummary(v.summary);
+    setTags(v.tags);
+    setCoverImageUrl(v.coverImageUrl);
+    setIsPublished(v.isPublished);
+    setSlug(v.slug);
+    setAllowAutoTranslation(v.allowAutoTranslation);
+    if (changed) markDirty();
+  };
 
   // 保存結果の監視: エラーはトースト、スラッグ変更時は新しい編集URLへ差し替える。
   // 同一ルートなのでエディタは再マウントされず、本文・メタ状態は保持される。
@@ -181,15 +205,20 @@ export function GuideEditor({
     prevResultRef.current = saveResult;
     if (saveResult.error) {
       toast.error(saveResult.error);
+      setSettingsPublishing(false);
       // save() は送信の時点で未保存を解消しているので、失敗したら未保存に戻す（保存ボタンは変更が無いと
       // 押せない状態になるため、戻さないと編集し直すまで保存し直せない。離脱確認も効かせ直す）
       setMetaDirty(true);
       return;
     }
+    if (settingsPublishing) {
+      setSettingsPublishing(false);
+      setSettingsOpen(false);
+    }
     if (saveResult.slug && saveResult.slug !== guideSlug) {
       navigate(`/my-guides/${saveResult.slug}/edit`, { replace: true });
     }
-  }, [saveResult, guideSlug, navigate]);
+  }, [saveResult, guideSlug, navigate, settingsPublishing]);
 
   // ドラフトを破棄して公開版へロールバック（エディタ・メタを公開版へ戻し、ドラフト列を null に）
   const handleRollback = useCallback(() => {
@@ -570,22 +599,14 @@ export function GuideEditor({
           }
           isUploadingCover={coverUpload.isUploading}
           uploadError={coverUpload.error ?? imageUpload.error}
-          onApply={(v) => {
-            // モーダル内 State を全体 State へ反映（保存はしない）。値が実際に変わったときだけダーティにする
-            // （開いて「適用」しただけで未保存扱いにしない）
-            const changed = isSettingsChanged(
-              { title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation },
-              v,
-            );
-            setTitle(v.title);
-            setSummary(v.summary);
-            setTags(v.tags);
-            setCoverImageUrl(v.coverImageUrl);
-            setIsPublished(v.isPublished);
-            setSlug(v.slug);
-            setAllowAutoTranslation(v.allowAutoTranslation);
-            if (changed) markDirty();
+          saving={saving}
+          onApplyAndPublish={(v) => {
+            // 適用と公開の保存を一度に行う。保存の結果が返るまでモーダルは閉じない（保存結果の effect）
+            applySettings(v);
+            setSettingsPublishing(true);
+            save("publish", v);
           }}
+          onApply={applySettings}
         />
 
         <EmbedDialog

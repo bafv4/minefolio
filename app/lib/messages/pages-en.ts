@@ -2703,6 +2703,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       settingsDescSingle:
         "Edit the title, summary, cover image, tags, and visibility. “Apply” updates the editor but doesn't save — save with “{save}” in the toolbar.",
       publishLabel: "Publish",
+      publishNow: "Publish",
+      publishDesc: "Review the details, then press \"Publish\" to save and make the guide public right away.",
+      publishToggleHint: "Turn off to change the settings without publishing",
       publishOnLive: "It's public. “{save}” shows the current content to readers (“{draft}” doesn't change the published version)",
       publishOnNew: "Readers will see it once you save with “{save}”",
       publishOffLive: "Saving with “{save}” unpublishes it (readers can no longer see it). “{draft}” doesn't change visibility",
