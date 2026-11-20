@@ -55,7 +55,7 @@ export function FavoriteActivity({
               )}
             >
               {recommended.map((p) => (
-                <li key={p.slug} className="flex w-[83%] shrink-0 snap-start flex-col md:w-auto">
+                <li key={p.slug} className="flex w-[calc(100%-4rem)] shrink-0 snap-start flex-col md:w-auto">
                   <ProfileFeedCard player={p} surface="card" showFavoriteButton className="flex-1" />
                 </li>
               ))}

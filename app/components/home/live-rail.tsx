@@ -509,7 +509,7 @@ function RecentPaceCard({ run, maps, className }: { run: CachedPace; maps: McidM
 }
 
 // md 未満は横レール（モバイル 1.2 枚 / sm 2.5 枚見え）、md 以上は折り返すグリッド（幅はグリッド任せ）
-const RAIL_ITEM = "w-[83%] shrink-0 snap-start sm:w-[40%] md:w-auto";
+const RAIL_ITEM = "w-[calc(100%-4rem)] shrink-0 snap-start sm:w-[40%] md:w-auto";
 
 /** md 以上のグリッド列数（md=2 / lg=3 / xl=4）と、折りたたみ時に出す件数（2行分） */
 const GRID_COLS = "md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";

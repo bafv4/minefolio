@@ -197,7 +197,7 @@
 - 4件のグリッドは `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4`（中間の幅で3＋1の孤立を作らない）
 - 3列は `md:grid-cols-3` から（走者画面の記録は `md:grid-cols-2 lg:grid-cols-3`）
 - モバイルで横に流すときは、`HorizontalScrollArea` か、スナップするレール
-  （`-mx-2 -mt-2 flex snap-x snap-mandatory scroll-px-2 gap-4 overflow-x-auto px-2 pt-2 pb-3`、各要素 `w-[83%] shrink-0 snap-start`）
+  （`-mx-2 -mt-2 flex snap-x snap-mandatory scroll-px-2 gap-4 overflow-x-auto px-2 pt-2 pb-3`、各要素 `w-[calc(100%-4rem)] shrink-0 snap-start`。次の要素が画面幅によらず約 3rem 見えるよう、幅は割合でなく固定の差し引きで決める）
 
 ### 丸ピル
 `inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground`（件数・状態のピル）

@@ -561,7 +561,7 @@ const VideosSkeleton = memo(function VideosSkeleton() {
     // YouTube のカード行1段ぶん（モバイルは横レールの見た目）。空状態に縮んでも下の欄が跳ねにくい高さ
     <div className="flex gap-4 overflow-hidden md:grid md:grid-cols-3 md:overflow-visible" aria-hidden="true">
       {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="h-56 w-[83%] shrink-0 rounded-xl md:w-auto" />
+        <Skeleton key={i} className="h-56 w-[calc(100%-4rem)] shrink-0 rounded-xl md:w-auto" />
       ))}
     </div>
   );
@@ -985,7 +985,7 @@ export default function HomePage() {
                 {/* モバイルの横レールはホバーの浮き上がりと影が切れないよう上下左右に余白を取り、負のマージンで打ち消す */}
                 <div className="-mx-2 -mt-2 flex snap-x snap-mandatory scroll-px-2 gap-4 overflow-x-auto px-2 pt-2 pb-3 md:mx-0 md:mt-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
                   {youtubeVideos.map((video) => (
-                    <div key={feedVideoKey(video)} className="w-[83%] shrink-0 snap-start md:w-auto">
+                    <div key={feedVideoKey(video)} className="w-[calc(100%-4rem)] shrink-0 snap-start md:w-auto">
                       <HomeVideoCard video={video} />
                     </div>
                   ))}
