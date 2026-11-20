@@ -1,5 +1,4 @@
 import { PAGES_JA } from "./pages-ja";
-import { PAGES_EN } from "./pages-en";
 import { DEFAULT_LOCALE, type Locale } from "../locale";
 
 type MessageSchema = typeof PAGES_JA;
@@ -13,11 +12,34 @@ export type PartialMessages<T> = {
 };
 
 // ja は全キーを持つ「基準」であり、同時に未翻訳キーのフォールバック先でもある。
-// Record<Locale, …> なので、SUPPORTED_LOCALES に言語を足すとここで型エラーになる
-export const MESSAGES: Record<Locale, PartialMessages<MessageSchema>> = {
+// ja 以外は遅延読み込み（クライアントの共有チャンクに英語カタログを載せないため）。
+// 読み込み済みのロケールだけがここに入る。
+export const MESSAGES: Partial<Record<Locale, PartialMessages<MessageSchema>>> = {
   ja: PAGES_JA,
-  en: PAGES_EN,
 };
+
+// Record<Locale, …> なので、SUPPORTED_LOCALES に言語を足すとここで型エラーになる
+const LOADERS: Record<Locale, () => Promise<PartialMessages<MessageSchema>>> = {
+  ja: async () => PAGES_JA,
+  en: async () => (await import("./pages-en")).PAGES_EN,
+};
+
+/**
+ * 指定ロケールの文言を読み込んで登録する（読み込み済みなら即時に解決する）。
+ *
+ * クライアントは、ハイドレーションの前（app/entry.client.tsx）と言語切替の前
+ * （useSetLocale）にこれを待つ。未読み込みのまま `t()` を呼ぶと日本語になる。
+ */
+export async function loadLocaleMessages(locale: Locale): Promise<void> {
+  if (MESSAGES[locale]) return;
+  MESSAGES[locale] = await LOADERS[locale]();
+}
+
+// サーバー（SSR・Vitest）は同期的に全ロケールを引くので、モジュール評価時に読み切る。
+// クライアントのビルドでは `import.meta.env.SSR` が false に畳まれ、この分岐ごと消える。
+if (typeof import.meta.env === "undefined" || import.meta.env.SSR) {
+  await Promise.all((Object.keys(LOADERS) as Locale[]).map(loadLocaleMessages));
+}
 
 type NestedMessageKey<T> = T extends string
   ? never
@@ -80,4 +102,3 @@ export function createTranslator(locale: Locale = DEFAULT_LOCALE) {
 export type Translator = ReturnType<typeof createTranslator>;
 
 export { PAGES_JA } from "./pages-ja";
-export { PAGES_EN } from "./pages-en";

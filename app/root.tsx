@@ -11,6 +11,7 @@ import { Analytics } from "@vercel/analytics/react";
 import type { Route } from "./+types/root";
 import { CONTRAST_INIT_SCRIPT } from "@/lib/contrast";
 import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
+import { loadLocaleMessages } from "@/lib/messages";
 import { ErrorView } from "@/components/layout/error-view";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
@@ -24,6 +25,17 @@ import "./app.css";
  */
 export function loader({ request }: Route.LoaderArgs) {
   return { locale: resolveLocale(request) };
+}
+
+/**
+ * 遷移・送信のたびに root ローダーが再実行され、別タブで言語を切り替えた後などに
+ * ロケールが変わりうる。英語カタログが未読み込みのまま描画しないよう、描画前に読み込む。
+ * 初回（ハイドレーション）は app/entry.client.tsx が担うので `hydrate` は付けない。
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  const data = await serverLoader();
+  await loadLocaleMessages(data.locale).catch(() => undefined);
+  return data;
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

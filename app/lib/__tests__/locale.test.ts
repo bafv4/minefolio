@@ -15,7 +15,8 @@ import {
   parseLocaleCookie,
   resolveLocale,
 } from "../locale";
-import { t, PAGES_JA, PAGES_EN } from "../messages";
+import { t, PAGES_JA } from "../messages";
+import { PAGES_EN } from "../messages/pages-en";
 import { MESSAGES } from "../messages";
 
 /** ネストしたメッセージ定義を "a.b.c" のドットパス一覧へ潰す */

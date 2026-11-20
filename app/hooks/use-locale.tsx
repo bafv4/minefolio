@@ -8,7 +8,7 @@
 // 不一致は起きない。
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { useFetcher } from "react-router";
-import { createTranslator, type Translator } from "@/lib/messages";
+import { createTranslator, loadLocaleMessages, type Translator } from "@/lib/messages";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 
 const LocaleContext = createContext<Locale>(DEFAULT_LOCALE);
@@ -57,7 +57,11 @@ export function useSetLocale(): (locale: Locale) => void {
   return useCallback(
     (locale: Locale) => {
       if (locale === current) return;
-      fetcher.submit({ locale }, { method: "post", action: "/api/set-locale" });
+      // 再検証で新しいロケールの描画が走る前に、そのカタログを読み込んでおく
+      // （英語は遅延読み込み。失敗しても切替は進め、未訳は日本語で出る）
+      void loadLocaleMessages(locale)
+        .catch(() => undefined)
+        .then(() => fetcher.submit({ locale }, { method: "post", action: "/api/set-locale" }));
     },
     [fetcher, current],
   );
