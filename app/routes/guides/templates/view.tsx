@@ -572,6 +572,25 @@ export default function TemplateViewPage() {
               locale: dateFnsLocale(locale),
             })}
           </span>
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <Search className="h-3 w-3" aria-hidden />
+            {t("templates.craftCount", { count: crafts.length })}
+          </span>
+          {remaps.length > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <Keyboard className="h-3 w-3" aria-hidden />
+                {t("templates.remapCount", { count: remaps.length })}
+              </span>
+            </>
+          )}
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <Download className="h-3 w-3" aria-hidden />
+            {t("templates.applyCount", { count: template.applyCount })}
+          </span>
         </div>
         {template.description && (
           <p className="text-sm whitespace-pre-wrap">{template.description}</p>
@@ -588,22 +607,6 @@ export default function TemplateViewPage() {
             </span>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Search className="h-3 w-3" aria-hidden />
-            {t("templates.craftCount", { count: crafts.length })}
-          </span>
-          {remaps.length > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <Keyboard className="h-3 w-3" aria-hidden />
-              {t("templates.remapCount", { count: remaps.length })}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1">
-            <Download className="h-3 w-3" aria-hidden />
-            {t("templates.applyCount", { count: template.applyCount })}
-          </span>
-        </div>
       </div>
 
       {/* アクションボタン。モバイルは主操作（反映）だけを全幅で1段目に置き、残り（Playground・シェア・いいね・管理）は
