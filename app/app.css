@@ -650,6 +650,11 @@ body {
 :root[data-contrast="more"] [data-selected="true"] svg {
   color: inherit !important;
 }
+/* セグメント（キー配置のビュー切替）の選択中: 面の差だけでは 3:1 に届かないので、前景色の内側アウトラインを足す */
+:root[data-contrast="more"] [data-slot="view-switcher"] [aria-current="page"] {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
 /* スイッチを持つ項目（ハイコントラストの切替）は、スイッチの塗りが反転面に埋もれるので、反転せずアウトラインにする */
 :root[data-contrast="more"] [data-highlighted]:has([data-slot="switch"]) {
   outline: 2px solid var(--foreground);

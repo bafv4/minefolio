@@ -43,23 +43,31 @@ const INVENTORY_TAB_ACTIONS: readonly string[] = [...INVENTORY_ACTIONS, ...HOTBA
 export function KeybindingsPageTitle({
   title,
   description,
+  trailing,
   children,
 }: {
   title?: string;
   description?: string;
+  /** タイトル行の右に置くもの（ビュー切替。モバイルではタイトルの下） */
+  trailing?: ReactNode;
   /** 説明文の下に置くもの（凡例など） */
   children?: ReactNode;
 }) {
   const t = useT();
   return (
     <div>
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Keyboard className="h-6 w-6" aria-hidden />
-        {title ?? t("keybindings.title")}
-      </h1>
-      <p className="text-sm text-muted-foreground mt-1">
-        {description ?? t("keybindings.description")}
-      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Keyboard className="h-6 w-6" aria-hidden />
+            {title ?? t("keybindings.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {description ?? t("keybindings.description")}
+          </p>
+        </div>
+        {trailing}
+      </div>
       {children}
     </div>
   );
@@ -192,31 +200,28 @@ export function KeybindingsListLayout({
       <KeybindingsPageTitle
         title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
         description={mode === "visual" ? t("keybindings.visualDescription") : undefined}
+        trailing={<ViewSwitcher />}
       >
         {mode === "visual" && <VisualLegend />}
       </KeybindingsPageTitle>
 
-      {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
+      {/* ツールバー: 件数 / フィルター */}
       <div className="flex flex-col gap-3">
-        <ViewSwitcher
-          actions={
-            <>
-              {/* 件数の変化を読み上げる（aria-live は描画済みの領域の変化だけを読むので、初回表示では読まれない） */}
-              <span className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
-                {mode === "visual"
-                  ? t("keybindings.countText", {
-                      count: visibleCount,
-                      suffix: t("keybindings.countSuffix"),
-                    })
-                  : t("keybindings.countTabText", {
-                      count: visibleCount,
-                      total: filteredPlayers.length,
-                    })}
-              </span>
-              <FilterDialog players={players} />
-            </>
-          }
-        />
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          {/* 件数の変化を読み上げる（aria-live は描画済みの領域の変化だけを読むので、初回表示では読まれない） */}
+          <span className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+            {mode === "visual"
+              ? t("keybindings.countText", {
+                  count: visibleCount,
+                  suffix: t("keybindings.countSuffix"),
+                })
+              : t("keybindings.countTabText", {
+                  count: visibleCount,
+                  total: filteredPlayers.length,
+                })}
+          </span>
+          <FilterDialog players={players} />
+        </div>
         <UserFilterChips players={players} />
         {tabShownOfSpecified != null && (
           <p className="text-sm text-muted-foreground" role="status">

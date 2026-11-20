@@ -480,7 +480,7 @@ type ControllerSettings = {
   - `--kb-action-col`: 1 キーのアクション列（md 未満 56px / md 以上 104px）。md 未満は見出しの並べ替え矢印を文字の下に置く
   - `--kb-hotbar-col`: ホットバー列（md 未満 240px / md 以上 360px。md 未満は 9 枠が 2 行に折り返す）
   - `--kb-fill-col`: リマップ・カスタムアクション列（md 未満は下限 0 で残りの幅に収めてチップを折り返す / md 以上は 600px 下限）
-- md 未満のツールバー: ビュー切替は全幅の 3 分割で、件数・フィルタは次の行（`ViewSwitcher`。DOM は 1 つで CSS により並べ替え）。サブタブは `TabsList scrollFade`（`ui/tabs.tsx` の opt-in。続きがある側の端にフェード）。選択中のタブが横スクロールで隠れていれば、マウント時（動きなし）と選択変更時に見える位置へ寄せる（`TabsList` の共通挙動。リスト自身の `scrollLeft` だけを動かす）。タップ領域は 44px（`max-md:h-11` / `max-md:min-h-11`）
+- ビュー切替（`ViewSwitcher`）はセグメント形（タブの線は使わない）で、タイトル行の右（`KeybindingsPageTitle` の `trailing`）に置く。sm 未満はタイトルの下で全幅 3 分割。件数・フィルタは別のツールバー行。サブタブは `TabsList scrollFade`（`ui/tabs.tsx` の opt-in。続きがある側の端にフェード）。選択中のタブが横スクロールで隠れていれば、マウント時（動きなし）と選択変更時に見える位置へ寄せる（`TabsList` の共通挙動。リスト自身の `scrollLeft` だけを動かす）。タップ領域は 44px（`max-md:h-11` / `max-md:min-h-11`）
 - 件数表示は、いま見えている表の行数（タブごと）。**キーのタブ（移動・インベントリ・戦闘・UI）は、そのタブの列がすべて「未割り当て」の走者を載せず**（タブごとに判定。インベントリはホットバー 1〜9 を含む）、マウスタブも設定のある走者のみ（`hasKeyBindings` / `hasMouseSettings`、`lib/keybindings-filter.ts`）。ビジュアルは、キーボードに描くものが何もない走者（割り当て・リマップ・カスタムアクションのどれも無い。`hasKeyboardContent`）を除いた、絞り込み後の走者。件数は `aria-live="polite"` で変化を伝える（初回表示では読まれない）
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 

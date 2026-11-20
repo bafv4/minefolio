@@ -51,8 +51,8 @@ export default function KeybindingsStatsPage() {
       <KeybindingsPageTitle
         title={t("keybindingsStats.title")}
         description={t("keybindingsStats.description")}
+        trailing={<ViewSwitcher />}
       />
-      <ViewSwitcher />
       {isTabSwitching ? (
         <TabContentSkeleton
           variant={targetPathname === "/keybindings" ? "table" : "cards"}
