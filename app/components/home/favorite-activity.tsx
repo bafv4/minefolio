@@ -62,7 +62,7 @@ export function FavoriteActivity({
             </ul>
           </div>
         ) : (
-          <EmptyState icon={<Heart className="h-12 w-12" />} title={t("home.favEmpty")} description="" />
+          <EmptyState icon={<Heart className="h-12 w-12" />} title={t("home.favEmpty")} />
         )
       ) : state.data.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("home.favNoActivity")}</p>

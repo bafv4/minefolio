@@ -1,5 +1,6 @@
 // ホームの表示用整形（クライアント・サーバー共用の純粋関数）。
 // ホームの時刻は m:ss（1時間以上は h:mm:ss）に統一する。ミリ秒はタイムラインのモーダル内だけで使う。
+import type { Translator } from "@/lib/messages";
 
 /** ミリ秒を "m:ss"（1時間以上は "h:mm:ss"）に変換。数値化できない値は "-" */
 export function formatClock(ms: number): string {
@@ -17,6 +18,13 @@ export function formatClock(ms: number): string {
 /** 秒を "h:mm:ss"（アーカイブの長さ用。1時間未満は "m:ss"） */
 export function formatClockSeconds(totalSeconds: number): string {
   return formatClock(totalSeconds * 1000);
+}
+
+/** 配信時間（「配信 15分」「配信 1時間12分」）。走りのタイム（m:ss）と見分けられるよう時・分の単位で書く */
+export function formatStreamDuration(t: Translator, ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  if (totalMinutes < 60) return t("home.twitchDurationMinutes", { minutes: totalMinutes });
+  return t("home.twitchDurationHours", { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 });
 }
 
 /** 読み上げ用に分・秒へ分解する */

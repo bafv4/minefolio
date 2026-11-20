@@ -246,29 +246,25 @@ export function FeaturedReasonRow({ runner }: { runner: FeaturedRunner }) {
   if (!runner.reason) return null;
   return (
     <div className="flex flex-wrap items-start gap-x-3 gap-y-1 text-xs font-medium text-primary">
-      {runner.reason && (
-        <>
-          {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
-          <p className="flex min-w-0 items-start gap-1.5">
-            <ReasonIcon reason={runner.reason} />
-            <span className="line-clamp-2">
-              <span className="mr-1.5 font-normal text-muted-foreground">{t("home.featuredReasonLabel")}</span>
-              {reasonText(t, runner.reason)}
-            </span>
-          </p>
-          {/* 審査中の申請は記録タブに出ないため、審査中の記録を表示した状態のプロフィールへ誘導する。
-              カード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
-          {runner.reason.type === "speedruncom" && runner.reason.status === "new" && (
-            <Link
-              to={`/player/${runner.slug}?tab=stats&srcPending=1`}
-              prefetch="intent"
-              className="relative z-10 -my-3.5 ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm py-3.5 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {t("home.featuredPendingLink")}
-              <ArrowRight className="h-3 w-3" aria-hidden="true" />
-            </Link>
-          )}
-        </>
+      {/* 何の記録か（カテゴリ・タイム）が切れないよう、1行で切らず2行まで折り返す。リンクは収まらなければ下段へ回る */}
+      <p className="flex min-w-0 items-start gap-1.5">
+        <ReasonIcon reason={runner.reason} />
+        <span className="line-clamp-2">
+          <span className="mr-1.5 font-normal text-muted-foreground">{t("home.featuredReasonLabel")}</span>
+          {reasonText(t, runner.reason)}
+        </span>
+      </p>
+      {/* 審査中の申請は記録タブに出ないため、審査中の記録を表示した状態のプロフィールへ誘導する。
+          カード全面のオーバーレイリンクより手前（z-10）。縦に余白を足してタップ領域を約44pxにする */}
+      {runner.reason.type === "speedruncom" && runner.reason.status === "new" && (
+        <Link
+          to={`/player/${runner.slug}?tab=stats&srcPending=1`}
+          prefetch="intent"
+          className="relative z-10 -my-3.5 ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-sm py-3.5 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("home.featuredPendingLink")}
+          <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </Link>
       )}
     </div>
   );

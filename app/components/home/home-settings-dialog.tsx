@@ -148,11 +148,11 @@ export function HomeSettingsDialog({
               className="min-h-11 sm:min-h-8"
               onClick={reset}
             >
-              <RotateCcw className="mr-1.5" />
+              <RotateCcw />
               {t("home.settingsReset")}
             </Button>
           </div>
-          <ul ref={listRef} className="divide-y rounded-xl border border-border/70 bg-background/80">
+          <ul ref={listRef} className="divide-y divide-border/60 rounded-xl border border-border/70 bg-background/80">
             {order.map((id, index) => {
               const name = t(HOME_SECTION_LABEL_KEYS[id]);
               const visible = !hidden.includes(id);
@@ -225,10 +225,10 @@ export function HomeSettingsDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" className="min-h-11 sm:min-h-8" onClick={() => onOpenChange(false)}>
             {t("home.settingsCancel")}
           </Button>
-          <Button type="button" onClick={save} disabled={saving || !changed}>
+          <Button type="button" className="min-h-11 sm:min-h-8" onClick={save} disabled={saving || !changed}>
             {t("common.save")}
           </Button>
         </DialogFooter>

@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { pickMcidDisplayName } from "@/lib/mcid-display-name";
 import { pickDisplayName } from "@/lib/slug";
 import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
-import { formatClock, splitMinutesSeconds } from "@/lib/home-format";
+import { formatClock, formatStreamDuration, splitMinutesSeconds } from "@/lib/home-format";
 import {
   isFinishedRun,
   LIVE_STAGES,
@@ -186,13 +186,6 @@ function TimeBlock({
 function igtAria(t: Translator, ms: number): string {
   const { minutes, seconds } = splitMinutesSeconds(ms);
   return t("home.igtAria", { minutes, seconds });
-}
-
-/** 配信時間（「配信 15分」「配信 1時間12分」）。走りのタイム（m:ss）と見分けられるよう時・分の単位で書く */
-function formatStreamDuration(t: Translator, ms: number): string {
-  const totalMinutes = Math.floor(ms / 60000);
-  if (totalMinutes < 60) return t("home.twitchDurationMinutes", { minutes: totalMinutes });
-  return t("home.twitchDurationHours", { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 });
 }
 
 /** リンク行。リンクが無いカードでも同じ高さを確保し、カード下端に揃える */
@@ -574,8 +567,10 @@ export function LiveRail({
   if (loading) {
     return (
       <div className={cn("flex gap-4 overflow-hidden md:overflow-visible", GRID_COLS)} aria-hidden="true">
+        {/* 1枚の高さは LiveRunCard（CARD_CLASS の border 2 + p-4 の 32 + gap-3 の 3つ分 36 + 顔 36 + StateBand 40 + TIME_SLOT 56 + LinkRow）に合わせる。
+            LinkRow は min-h-11（44）で sm 以上は min-h-8（32）なので 246px / sm 以上 234px。Ranked・Twitch のカードも同じ段の固定高で同寸 */}
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} className={cn("h-40 rounded-xl", RAIL_ITEM)} />
+          <Skeleton key={i} className={cn("h-[15.375rem] rounded-xl sm:h-[14.625rem]", RAIL_ITEM)} />
         ))}
       </div>
     );
@@ -717,10 +712,11 @@ export function LiveRail({
       )}
       {recentLoading ? (
         // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
-        // 多めに描くと、少なかったときに下の欄が大きく上へ動く
+        // 多めに描くと、少なかったときに下の欄が大きく上へ動く。
+        // 1枚の高さは RecentPaceCard（border 2 + p-4 の 32 + gap-3 の 2つ分 24 + 顔 36 + StateBand 40 + TIME_SLOT 56 = 190px。LinkRow は無い）に合わせる
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3" aria-hidden="true">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className={cn("h-36 rounded-xl", i > 0 && "max-md:hidden")} />
+            <Skeleton key={i} className={cn("h-[11.875rem] rounded-xl", i > 0 && "max-md:hidden")} />
           ))}
         </div>
       ) : recentError ? (
