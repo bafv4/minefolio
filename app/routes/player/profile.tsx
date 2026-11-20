@@ -1390,7 +1390,7 @@ export default function PlayerProfilePage() {
                   <button
                     type="button"
                     onClick={() => handleTabChange("playstyle")}
-                    className="inline-flex min-h-6 items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="relative inline-flex min-h-6 items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] sm:after:hidden"
                   >
                     {categoryLabel(t, mainCategoryKey)}
                   </button>
