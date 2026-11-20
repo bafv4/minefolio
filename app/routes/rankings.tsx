@@ -4,6 +4,8 @@ import { useLoaderData, useSearchParams, useNavigation } from "react-router";
 import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
 import { createDb } from "@/lib/db";
+import { eq } from "drizzle-orm";
+import { users } from "@/lib/schema";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,15 @@ function rankMedalClass(rank: number): string {
   if (rank === 3) return "text-bronze";
   return "";
 }
+
+/** 自分の行の id（「あなたは #N」のリンクの行き先） */
+const SELF_ROW_ID = "ranking-self";
+// 自分の行は brand（現在地）の淡い面。順位セルは固定列で不透明にする必要があるため、背景色に brand を混ぜた色にする
+// 「あなたは #N」のボタンが focus() で受ける。tr は box-shadow が描けないので内側の outline で不透明の --ring 2px
+const SELF_ROW_CLASS =
+  "bg-brand/10 hover:bg-brand/15 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+const SELF_RANK_CELL_CLASS =
+  "bg-[color-mix(in_oklab,var(--background),var(--brand)_10%)] [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--brand)_15%)]";
 
 type RankingsTableKind = "speedruncom" | "rankedPb" | "rankedElo";
 
@@ -136,6 +147,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   // 空状態に「自分の Ranked 統計の公開設定」への導線を出すかどうか（ログイン時のみ）
   const session = await getOptionalSession(request, createAuth(db, env));
+  // 自分の行を示す・たどり着くために、ログイン中は users.id を引く（session.user.id は Discord ID）
+  const viewer = session
+    ? await db.query.users.findFirst({
+        where: eq(users.discordId, session.user.id),
+        columns: { id: true },
+      })
+    : undefined;
   const url = new URL(request.url);
   let args = parseRankingsParams(url.searchParams);
   // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
@@ -194,6 +212,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     lastFetchedMs,
     rankedType: args.rankedType,
     isSignedIn: !!session,
+    viewerUserId: viewer?.id ?? null,
     appUrl: env.APP_URL || "https://minefolio.app",
   };
 }
@@ -215,6 +234,11 @@ export default function RankingsPage() {
 
   // /rankings は遅延読み込み無効。loader が全件返す。
   const items = data.rankings;
+  // 自分の行（審査待ちを除く順位付きの行）と、順位が付いている人数（順位の数え方は loader のまま）
+  const selfEntry = data.viewerUserId
+    ? items.find((e) => e.userId === data.viewerUserId && e.rank !== null)
+    : undefined;
+  const rankedTotal = items.filter((e) => e.rank !== null).length;
 
   const handleCategoryClick = (category: {
     type: "speedruncom" | "ranked";
@@ -309,6 +333,19 @@ export default function RankingsPage() {
         </div>
       </div>
 
+      {/* 自分の順位（ログイン中で表に載っているときだけ）。行は id で受け、scroll-padding-top に任せて固定ヘッダーの裏に隠さない */}
+      {selfEntry && selfEntry.rank !== null && (
+        <p className="text-sm">
+          <button
+            type="button"
+            onClick={() => document.getElementById(SELF_ROW_ID)?.focus()}
+            className="-my-2 inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:my-0 sm:min-h-0"
+          >
+            {t("rankings.jumpToSelf", { rank: selfEntry.rank, total: rankedTotal })}
+          </button>
+        </p>
+      )}
+
       {/* ランキングテーブル。再取得中は表を差し替えず薄くして残す（表が無いときだけスケルトン）。
           記録の公開設定の注記は見出しの下に1回だけ出す（空状態では繰り返さない） */}
       {isLoading && items.length === 0 ? (
@@ -351,11 +388,11 @@ export default function RankingsPage() {
               />
             )
           ) : currentKind === "speedruncom" ? (
-            <SpeedruncomRankingsTable rankings={items} />
+            <SpeedruncomRankingsTable rankings={items} selfUserId={data.viewerUserId} />
           ) : currentKind === "rankedPb" ? (
-            <RankedPbTable rankings={items} />
+            <RankedPbTable rankings={items} selfUserId={data.viewerUserId} />
           ) : (
-            <RankedEloTable rankings={items} />
+            <RankedEloTable rankings={items} selfUserId={data.viewerUserId} />
           )}
         </div>
       )}
@@ -364,7 +401,7 @@ export default function RankingsPage() {
 }
 
 // Speedrun.com ランキングテーブル
-function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
+function SpeedruncomRankingsTable({ rankings, selfUserId }: { rankings: RankingEntry[]; selfUserId: string | null }) {
   const t = useT();
   const locale = useLocale();
   const headerRow = (
@@ -387,12 +424,16 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
         <TableBody>
           {rankings.map((entry, index) => {
             const isPending = entry.verificationStatus === "new";
+            const isSelf = !!selfUserId && entry.userId === selfUserId && entry.rank !== null;
             return (
               <TableRow
                 key={`${entry.userId}-${entry.verificationStatus}-${index}`}
-                className={cn(isPending ? "bg-muted/30 hover:bg-muted/40" : "hover:bg-muted/30")}
+                id={isSelf ? SELF_ROW_ID : undefined}
+                tabIndex={isSelf ? -1 : undefined}
+                aria-current={isSelf || undefined}
+                className={cn(isSelf ? SELF_ROW_CLASS : isPending ? "bg-muted/30 hover:bg-muted/40" : "hover:bg-muted/30")}
               >
-                <TableCell className={cn("sticky left-0 z-10 text-center font-medium", isPending ? "bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)] [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_40%)]" : "bg-background [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]")}>
+                <TableCell className={cn("sticky left-0 z-10 text-center font-medium", isSelf ? SELF_RANK_CELL_CLASS : isPending ?"bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)] [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_40%)]" : "bg-background [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]")}>
                   {isPending ? (
                     // 意味は名前の下の「審査待ち」の行が伝える（タッチでも読める）。時計は飾りとして読み上げない
                     <Clock className="h-4 w-4 inline text-muted-foreground" aria-hidden="true" />
@@ -414,9 +455,12 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                       className={`rounded-lg shrink-0 ${isPending ? "opacity-70" : ""}`}
                     />
                     <div className="min-w-0">
-                      <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
-                        {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
-                      </p>
+                      <div className="flex items-baseline gap-1.5">
+                        <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
+                          {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
+                        </p>
+                        {isSelf && <span className="shrink-0 text-xs text-muted-foreground">{t("rankings.you")}</span>}
+                      </div>
                       {/* 名前と別の行に置き、名前が省略されても切れずに読めるようにする */}
                       {isPending && (
                         <p className="text-xs text-warning">{t("rankings.pendingVerification")}</p>
@@ -466,7 +510,7 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
 }
 
 // Ranked PB テーブル
-function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
+function RankedPbTable({ rankings, selfUserId }: { rankings: RankingEntry[]; selfUserId: string | null }) {
   const t = useT();
   const locale = useLocale();
   const headerRow = (
@@ -485,9 +529,24 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
       <table className={PB_TABLE_CLASS}>
         <TableHeader>{headerRow}</TableHeader>
         <TableBody>
-          {rankings.map((entry) => (
-            <TableRow key={entry.userId} className="hover:bg-muted/30">
-              <TableCell className="sticky left-0 z-10 bg-background text-center font-medium [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]">
+          {rankings.map((entry) => {
+            const isSelf = !!selfUserId && entry.userId === selfUserId && entry.rank !== null;
+            return (
+            <TableRow
+              key={entry.userId}
+              id={isSelf ? SELF_ROW_ID : undefined}
+              tabIndex={isSelf ? -1 : undefined}
+              aria-current={isSelf || undefined}
+              className={isSelf ? SELF_ROW_CLASS : "hover:bg-muted/30"}
+            >
+              <TableCell
+                className={cn(
+                  "sticky left-0 z-10 text-center font-medium",
+                  isSelf
+                    ? SELF_RANK_CELL_CLASS
+                    : "bg-background [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]",
+                )}
+              >
                 {entry.rank !== null && entry.rank <= 3 ? (
                   <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
@@ -505,16 +564,18 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
                     size={32}
                     className="rounded-lg shrink-0"
                   />
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
                     <p className="font-medium text-sm truncate">
                       {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
                     </p>
+                    {isSelf && <span className="shrink-0 text-xs text-muted-foreground">{t("rankings.you")}</span>}
                   </div>
                 </Link>
               </TableCell>
               <TableCell className="font-mono text-right">{entry.timeFormatted ?? "-"}</TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </table>
     </ScrollUpStickyHeader>
@@ -522,7 +583,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
 }
 
 // Ranked Elo テーブル
-function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
+function RankedEloTable({ rankings, selfUserId }: { rankings: RankingEntry[]; selfUserId: string | null }) {
   const t = useT();
   const locale = useLocale();
   const headerRow = (
@@ -543,9 +604,24 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
       <table className={ELO_TABLE_CLASS}>
         <TableHeader>{headerRow}</TableHeader>
         <TableBody>
-          {rankings.map((entry) => (
-            <TableRow key={entry.userId} className="hover:bg-muted/30">
-              <TableCell className="sticky left-0 z-10 bg-background text-center font-medium [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]">
+          {rankings.map((entry) => {
+            const isSelf = !!selfUserId && entry.userId === selfUserId && entry.rank !== null;
+            return (
+            <TableRow
+              key={entry.userId}
+              id={isSelf ? SELF_ROW_ID : undefined}
+              tabIndex={isSelf ? -1 : undefined}
+              aria-current={isSelf || undefined}
+              className={isSelf ? SELF_ROW_CLASS : "hover:bg-muted/30"}
+            >
+              <TableCell
+                className={cn(
+                  "sticky left-0 z-10 text-center font-medium",
+                  isSelf
+                    ? SELF_RANK_CELL_CLASS
+                    : "bg-background [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]",
+                )}
+              >
                 {entry.rank !== null && entry.rank <= 3 ? (
                   <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
@@ -563,10 +639,11 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
                     size={32}
                     className="rounded-lg shrink-0"
                   />
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
                     <p className="font-medium text-sm truncate">
                       {pickDisplayName(entry, locale) ?? entry.mcid ?? t("rankings.unknownPlayer")}
                     </p>
+                    {isSelf && <span className="shrink-0 text-xs text-muted-foreground">{t("rankings.you")}</span>}
                   </div>
                 </Link>
               </TableCell>
@@ -578,7 +655,8 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
               </TableCell>
               <TableCell className="text-right">{entry.winRate ?? 0}%</TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </table>
     </ScrollUpStickyHeader>

@@ -1854,6 +1854,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     scopeSpeedruncom: "Rank among runners with public profiles on Minefolio. This differs from the overall Speedrun.com ranking.",
     scopeRanked: "Rank among runners with public profiles on Minefolio who made their Ranked stats public. This differs from the overall MCSR Ranked ranking.",
     updatedAt: "Updated: {time}",
+    you: "You",
+    jumpToSelf: "You are #{rank} (of {total})",
     publicityNote: "Depending on a runner's record visibility settings, they may not appear in the rankings.",
     pendingVerification: "Pending verification",
   },

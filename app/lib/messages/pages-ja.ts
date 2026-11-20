@@ -1869,6 +1869,8 @@ export const PAGES_JA = {
     scopeSpeedruncom: "Minefolio に登録した公開プロフィールの走者の中での順位です。Speedrun.com 全体の順位とは異なります。",
     scopeRanked: "Minefolio の公開プロフィールで、Ranked 統計の公開を許可した走者の中での順位です。MCSR Ranked 全体の順位とは異なります。",
     updatedAt: "集計: {time}",
+    you: "あなた",
+    jumpToSelf: "あなたは #{rank}（全 {total} 人中）",
     publicityNote: "記録の公開設定によってはランキングに表示されないことがあります。",
     pendingVerification: "審査待ち",
   },
