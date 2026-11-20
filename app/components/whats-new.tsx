@@ -202,7 +202,7 @@ export function WhatsNew() {
       <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand shrink-0" aria-hidden />
+            <Sparkles className="h-4 w-4 text-primary shrink-0" aria-hidden />
             <span className="text-sm font-semibold">{t("whatsNew.title")}</span>
             {multi ? (
               <Badge variant="secondary">
