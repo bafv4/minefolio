@@ -3,6 +3,7 @@ import { useT } from "@/hooks/use-locale";
 import { Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { StatusPill } from "@/components/status-pill";
 
 const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -162,12 +163,8 @@ export function KeyboardScaledPreview({
               />
             </DialogTrigger>
             {/* 拡大できることを示す装飾チップ（クリックは下のボタンに通す） */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-xs text-muted-foreground"
-            >
-              <Maximize2 className="h-3 w-3" />
-              {t("keyboardView.expandChip")}
+            <span aria-hidden="true" className="pointer-events-none absolute bottom-2 right-2 flex">
+              <StatusPill icon={Maximize2}>{t("keyboardView.expandChip")}</StatusPill>
             </span>
           </>
         )}

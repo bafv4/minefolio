@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -199,7 +199,7 @@ export function TemplateEditorForm({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const contentErrorRef = useRef<HTMLParagraphElement>(null);
+  const contentErrorId = useId();
   // 直した内容が変わったら、その欄のエラーを消す（次の保存で改めて検証する）
   useEffect(() => {
     setContentError(null);
@@ -226,7 +226,7 @@ export function TemplateEditorForm({
       // 最初の誤りへフォーカスを移す（文書順でテンプレート名が先）。文は描画後に出るので次のフレームで移す
       requestAnimationFrame(() => {
         if (nextTitleError) titleInputRef.current?.focus();
-        else contentErrorRef.current?.focus();
+        else document.getElementById(contentErrorId)?.focus();
       });
       return;
     }
@@ -430,13 +430,15 @@ export function TemplateEditorForm({
 
       {/* サーチクラフト・Loop の検証エラー（ワークベンチの中の個々の欄は指せないので、ワークベンチの直前に出し、ここへフォーカスを移す） */}
       {contentError && (
-        <p
-          ref={contentErrorRef}
+        <NoticeBanner
+          tone="error"
+          role="status"
+          id={contentErrorId}
           tabIndex={-1}
-          className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {contentError}
-        </p>
+        </NoticeBanner>
       )}
 
       {/* ワークベンチ（/playground と同一構成: リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}

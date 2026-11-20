@@ -84,6 +84,9 @@ const SKIN_VIEW_RENDER_SIZE = { width: 320, height: 380 } as const;
 // md 未満は身元帯の顔と重なり最初の画面を占めるので 128px に抑える（縦横比は 206:240 のまま）
 const SKIN_VIEW_BOX_CLASS = "h-32 w-[110px] md:h-[280px] md:w-[240px]";
 
+// ui.md 7章の kbd チップ（単発のキー表示）
+const KBD_CHIP_CLASS = "bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center";
+
 // 記録タブの外部統計は到着が遅いので、読み込み中の欄に、届いたあとの中身に近い最小の高さを確保する
 // （初期表示のフッターが到着で押し下げられる CLS を抑える。確保は読み込み中だけで、到着後は外れる）。
 // 値は実測の目安（Ranked: 統計＋推移グラフ＋直近5試合、SRC: PB カード最大6件。モバイルは1列で縦に長い）
@@ -1817,7 +1820,7 @@ export default function PlayerProfilePage() {
                               className="flex justify-between items-center py-2.5"
                             >
                               <span className="text-sm">{getActionLabel(t, kb.action)}</span>
-                              <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                              <kbd className={KBD_CHIP_CLASS}>
                                 {resolveKeyLabel(kb.keyCode)}
                               </kbd>
                             </div>
@@ -1846,7 +1849,7 @@ export default function PlayerProfilePage() {
                                     {i > 0 && (
                                       <span className="text-muted-foreground text-xs">+</span>
                                     )}
-                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                    <kbd className={KBD_CHIP_CLASS}>
                                       {label}
                                     </kbd>
                                   </span>
@@ -1885,7 +1888,7 @@ export default function PlayerProfilePage() {
                               }`}
                             >
                               {chips.length === 0 && (
-                                <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                <kbd className={KBD_CHIP_CLASS}>
                                   <EmptyValue />
                                 </kbd>
                               )}
@@ -1894,7 +1897,7 @@ export default function PlayerProfilePage() {
                                   {i > 0 && (
                                     <span className="text-muted-foreground text-xs">+</span>
                                   )}
-                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                  <kbd className={KBD_CHIP_CLASS}>
                                     {label}
                                   </kbd>
                                 </span>
