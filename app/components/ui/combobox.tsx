@@ -91,9 +91,9 @@ export function Combobox({
           variant="ghost"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full max-sm:min-h-11 justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input", className)}
+          className={cn("w-full max-sm:min-h-11 justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input min-w-0", className)}
         >
-          <span className={cn(!value && "text-muted-foreground")}>
+          <span className={cn("min-w-0 flex-1 truncate text-left", !value && "text-muted-foreground")}>
             {selectedLabel}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

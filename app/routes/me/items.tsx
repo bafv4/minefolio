@@ -578,7 +578,7 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
           existingSegments={existingSegments}
         />
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="flex shrink-0 gap-1 max-sm:w-full max-sm:justify-end">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -741,7 +741,7 @@ function EditableLayoutRow({
       style={style}
       className={cn("px-4 py-3", isDragging && "opacity-50")}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <button
           {...attributes}
           {...listeners}
