@@ -194,7 +194,9 @@ export default function FavoritesPage() {
       ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
-            <ProfileFeedCard key={player.slug} player={player} />
+            // 外してもカードはその場に残る（ハートが空になるだけ。もう一度押せば戻せる＝取り消し）。
+            // 一覧は再読み込みまで変えない（並びの slug 順を保ち、押した直後にカードが消えて位置がずれるのを避ける）
+            <ProfileFeedCard key={player.slug} player={player} showFavoriteButton />
           ))}
         </div>
       ) : (

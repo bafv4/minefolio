@@ -158,7 +158,7 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 | ページ | お気に入りの利用 |
 |---|---|
-| `/favorites` | お気に入り一覧。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
+| `/favorites` | お気に入り一覧。各カードに `FavoriteButton`（`showFavoriteButton`）を出す。ハートを外してもカードはその場に残り（ハートが空になるだけ）、再読み込みまで一覧は変わらない（誤操作しても同じ位置でハートを押し直せば戻せる）。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
 | `/favorites/activity` | お気に入り走者の動き一覧（下記）。ホームの「お気に入り走者の動き」の「すべて見る」の遷移先 |
 | `/browse` | ログイン時のみ、お気に入りを上位に並べ替え（loader で DB から取得） |
 | `/player/:slug` | `<FavoriteButton slug={player.slug} />` でトグル |
