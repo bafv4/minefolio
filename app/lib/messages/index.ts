@@ -12,8 +12,9 @@ export type PartialMessages<T> = {
   [K in keyof T]?: T[K] extends string ? string : PartialMessages<T[K]>;
 };
 
-// ja は全キーを持つ「基準」であり、同時に未翻訳キーのフォールバック先でもある
-const MESSAGES: Record<Locale, PartialMessages<MessageSchema>> = {
+// ja は全キーを持つ「基準」であり、同時に未翻訳キーのフォールバック先でもある。
+// Record<Locale, …> なので、SUPPORTED_LOCALES に言語を足すとここで型エラーになる
+export const MESSAGES: Record<Locale, PartialMessages<MessageSchema>> = {
   ja: PAGES_JA,
   en: PAGES_EN,
 };

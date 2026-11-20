@@ -3,6 +3,7 @@ import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
 import { HintTip } from "@/components/hint-tip";
 import { useLocale, useT } from "@/hooks/use-locale";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import type { Locale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
 /**
@@ -152,6 +153,12 @@ const SLOT_KEY_CHIP_CLASS =
   "inline-flex h-6 w-full min-w-0 max-w-full items-center justify-center rounded border-2 border-border/50 bg-secondary/50 px-0.5 font-mono text-xs font-semibold text-muted-foreground";
 
 /** スロットのタイルを、アイテム名のヒント（ポインタ=Tooltip / タッチ=Popover）で包む。空スロットは包まない */
+/** 複数のアイテム名をつなぐ区切り（言語ごと） */
+const ITEM_NAME_SEPARATORS: Record<Locale, string> = {
+  ja: "、",
+  en: ", ",
+};
+
 function ItemNameTip({
   items,
   describedBy,
@@ -168,7 +175,7 @@ function ItemNameTip({
   const locale = useLocale();
   const t = useT();
   if (items.length === 0) return <>{children}</>;
-  const separator = locale === "en" ? ", " : "、";
+  const separator = ITEM_NAME_SEPARATORS[locale];
   const names = items.map((id) => getLocalizedItemName(id, locale)).join(separator);
   const message = keyLabel ? t("playerProfile.hotbarSlotTip", { name: names, key: keyLabel }) : names;
   return (

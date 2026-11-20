@@ -32,9 +32,21 @@ function ItemIconSpinner({ size, className }: { size: number; className?: string
   );
 }
 
-/** UI ロケールに対応する mcitems の言語コード（"en" → "en_us"、それ以外は "ja_jp"） */
-export function itemLangForLocale(locale: Locale): "en_us" | "ja_jp" {
-  return locale === "en" ? "en_us" : "ja_jp";
+/**
+ * UI ロケール → mcitems の言語コード。言語を足したら型エラーで足し忘れが分かる。
+ * 足すときのコードは zh_cn / zh_tw / ko_kr（docs/i18n.md「言語を追加する手順」）。
+ * 辞書ファイル（public/mcitems の言語ファイル）が存在するコードを指定すること。
+ */
+const ITEM_LANGS = {
+  ja: "ja_jp",
+  en: "en_us",
+} as const satisfies Record<Locale, string>;
+
+export type ItemLang = (typeof ITEM_LANGS)[Locale];
+
+/** UI ロケールに対応する mcitems の言語コード */
+export function itemLangForLocale(locale: Locale): ItemLang {
+  return ITEM_LANGS[locale];
 }
 
 /**
@@ -43,8 +55,10 @@ export function itemLangForLocale(locale: Locale): "en_us" | "ja_jp" {
  * → 無ければ英語にフォールバックする（player/profile.tsx・guide-embeds.tsx で共用）。
  */
 export function getLocalizedItemName(itemId: string, locale: Locale): string {
-  if (locale === "en") return formatItemName(itemId, itemLangForLocale(locale));
-  return getItemNameJa(itemId) || formatItemName(itemId);
+  // 和名辞書（getItemNameJa）があるのは日本語だけ。ほかの言語は formatItemName に言語コードを渡す
+  const lang = itemLangForLocale(locale);
+  if (lang === "ja_jp") return getItemNameJa(itemId) || formatItemName(itemId);
+  return formatItemName(itemId, lang);
 }
 
 /**

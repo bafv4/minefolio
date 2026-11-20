@@ -32,7 +32,7 @@ import { platformLabel } from "@/lib/platform-label";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
 import { format, formatDistanceToNow } from "date-fns";
-import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
+import { dateFnsLocale, dateFormatPattern, intlLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
@@ -2579,9 +2579,9 @@ type SocialStatsData = {
 // 日本語は「1.2万」等のコンパクト表記（1万以上）、英語は "1.2K" 等（Intl compact）。
 // いずれも閾値未満は桁区切り（例: 2,170）
 function formatCompactCount(count: number, locale: Locale): string {
-  const intlLocale = locale === "en" ? "en-US" : "ja-JP";
-  if (count < 10000) return count.toLocaleString(intlLocale);
-  return new Intl.NumberFormat(intlLocale, {
+  const intlTag = intlLocale(locale);
+  if (count < 10000) return count.toLocaleString(intlTag);
+  return new Intl.NumberFormat(intlTag, {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(count);

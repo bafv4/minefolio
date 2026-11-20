@@ -24,6 +24,35 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   en: "English",
 };
 
+/**
+ * Accept-Language のタグ（小文字）→ 対応ロケール。照合は「タグ全体 → 主部分」の順。
+ * 地域・文字種つきのタグを別ロケールへ振り分けたいときに足す
+ * （例: 将来 "zh-tw" / "zh-hk" → zh-Hant、"zh" / "zh-cn" → zh-Hans）。
+ * 言語を足したら、その言語のタグ（Locale 値そのものも含む）をここへ足す。表に無いタグは未対応扱い。
+ */
+export const ACCEPT_LANGUAGE_MAP: Readonly<Record<string, Locale>> = {
+  ja: "ja",
+  en: "en",
+};
+
+/** Accept-Language の 1 タグ（小文字）を対応ロケールへ。タグ全体 → 主部分の順に表を引く */
+export function matchAcceptLanguageTag(tag: string): Locale | null {
+  const full = ACCEPT_LANGUAGE_MAP[tag];
+  if (full) return full;
+  const primary = tag.split("-")[0];
+  const mapped = ACCEPT_LANGUAGE_MAP[primary];
+  if (mapped) return mapped;
+  // 表に足し忘れても、主部分が Locale 値そのもの（ja / en など）なら拾う
+  return isLocale(primary) ? primary : null;
+}
+
+/**
+ * 利用者コンテンツ（bio・ガイド）の自動翻訳の対象ロケール。UI の SUPPORTED_LOCALES とは独立。
+ * UI の言語を足しても、ここを変えない限り翻訳回数（API の費用）は増えない。
+ * 翻訳先は「ここに含まれるロケールのうち原文以外」（content-translation.server.ts）。
+ */
+export const CONTENT_TRANSLATION_LOCALES = ["ja", "en"] as const satisfies readonly Locale[];
+
 export const LOCALE_COOKIE = "minefolio_locale";
 
 /** Cookie の有効期間（1年） */
@@ -51,8 +80,8 @@ export function parseLocaleCookie(cookieHeader: string | null | undefined): Loca
 
 /**
  * Accept-Language から対応ロケールを選ぶ。
- * q 値の降順で見て、最初に対応している言語を返す（`ja-JP` のような
- * 地域つきタグは主部分だけで判定する）。同じ q 値なら記述順を優先する。
+ * q 値の降順で見て、最初に対応している言語を返す。
+ * 各タグは ACCEPT_LANGUAGE_MAP で「タグ全体 → 主部分」の順に照合する（`ja-JP` は主部分の `ja` で解決）。同じ q 値なら記述順を優先する。
  */
 export function parseAcceptLanguage(header: string | null | undefined): Locale | null {
   if (!header) return null;
@@ -74,8 +103,8 @@ export function parseAcceptLanguage(header: string | null | undefined): Locale |
 
   for (const { tag } of entries) {
     if (tag === "*") return DEFAULT_LOCALE;
-    const primary = tag.split("-")[0];
-    if (isLocale(primary)) return primary;
+    const matched = matchAcceptLanguageTag(tag);
+    if (matched) return matched;
   }
   return null;
 }

@@ -58,6 +58,7 @@ import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Pac
 import { StatusPill } from "@/components/status-pill";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { intlLocale } from "@/lib/date-locale";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -1513,7 +1514,7 @@ export default function PresetsPage() {
                       >
                         {mounted && (
                           <>
-                            {new Date(entry.createdAt).toLocaleString(locale === "en" ? "en-US" : "ja-JP", { dateStyle: "medium", timeStyle: "short" })}
+                            {new Date(entry.createdAt).toLocaleString(intlLocale(locale), { dateStyle: "medium", timeStyle: "short" })}
                             {" · "}
                           </>
                         )}

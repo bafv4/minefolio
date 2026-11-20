@@ -18,7 +18,7 @@ import { waitUntil } from "@vercel/functions";
 import { and, asc, eq, gt, inArray, lt, ne, notExists, or, sql } from "drizzle-orm";
 import type { Database } from "./db";
 import { contentTranslations, guides, users } from "./schema";
-import { SUPPORTED_LOCALES, type Locale } from "./locale";
+import { CONTENT_TRANSLATION_LOCALES, type Locale } from "./locale";
 import { GLOSSARY_VERSION } from "./translation-glossary";
 import {
   MAX_INPUT_CHARS,
@@ -38,14 +38,20 @@ import { deleteTranslationsForGuide, deleteTranslationsForUser } from "./content
 /** ひらがな・カタカナ・漢字（CJK 統合漢字と拡張A）・半角カナ */
 const JAPANESE_CHAR_RE = /[぀-ヿ㐀-䶿一-鿿ｦ-ﾟ]/;
 
-/** 原文の言語を文字種で判定する。日本語の文字（ひらがな・カタカナ・漢字）を含めば "ja"、含まなければ "en" */
+/**
+ * 原文の言語を文字種で判定する。日本語の文字（ひらがな・カタカナ・漢字）を含めば "ja"、含まなければ "en"。
+ *
+ * 限界: 中国語（かなを含まない漢字だけの文）は漢字を含むので "ja" と誤判定し、
+ * 韓国語（ハングル）は日本語の文字を含まないので "en" と誤判定する。
+ * 中国語・韓国語を原文として扱う（CONTENT_TRANSLATION_LOCALES に足す）ときは、この判定を作り直すこと。
+ */
 export function detectSourceLocale(text: string): Locale {
   return JAPANESE_CHAR_RE.test(text) ? "ja" : "en";
 }
 
-/** 翻訳先ロケール = 対応ロケールのうち原文ロケール以外のすべて（同じロケールへは翻訳しない） */
+/** 翻訳先ロケール = 翻訳対象ロケール（CONTENT_TRANSLATION_LOCALES）のうち原文ロケール以外（同じロケールへは翻訳しない） */
 export function translationTargetLocales(source: Locale): Locale[] {
-  return SUPPORTED_LOCALES.filter((locale) => locale !== source);
+  return CONTENT_TRANSLATION_LOCALES.filter((locale) => locale !== source);
 }
 
 export interface UserBioSource {
@@ -510,7 +516,7 @@ async function deleteRowsOutsideLocales(
   targetId: string,
   keep: Locale[],
 ): Promise<void> {
-  const all = SUPPORTED_LOCALES.filter((l) => !keep.includes(l));
+  const all = CONTENT_TRANSLATION_LOCALES.filter((l) => !keep.includes(l));
   if (all.length === 0) return;
   await db
     .delete(contentTranslations)
