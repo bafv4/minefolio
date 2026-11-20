@@ -45,6 +45,7 @@ import { PageSection } from "@/components/page-section";
 import { NoticeBanner } from "@/components/notice-banner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KeyDialogSection } from "@/components/keybindings/key-dialog-section";
+import { KeyActionPicker } from "@/components/keybindings/key-action-picker";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -2838,18 +2839,11 @@ export default function KeybindingsPage() {
                   ? t("meKeybindings.actionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-              <div>
-                {modalDisplayGroups.map((group) => {
-                  const bindings = group.bindings;
-                  if (bindings.length === 0) return null;
-
-                  return (
-                    <div key={group.key} className="mb-3 last:mb-0">
-                      <p className="text-xs font-medium mb-1.5">
-                        {group.label}
-                      </p>
-                      <div className="space-y-1.5 pl-2">
-                        {bindings.map((kb) => {
+              <KeyActionPicker
+                groups={modalDisplayGroups}
+                editingKeyCode={editingKeyCode}
+                getLabel={(kb) => getActionLabel(t, kb.action)}
+                renderRow={(kb) => {
                           const isAssignedToThisKey = kb.keyCode === editingKeyCode;
                           const assignmentStatus = editingKeyCode
                             ? getActionAssignmentStatus(kb, editingKeyCode, modalAssignedCountOnKey)
@@ -2890,12 +2884,8 @@ export default function KeybindingsPage() {
                               </label>
                             </div>
                           );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                }}
+              />
             </KeyDialogSection>
 
             {/* リマップ（コントローラーボタン以外のみ表示） */}
