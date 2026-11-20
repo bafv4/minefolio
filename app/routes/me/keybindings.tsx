@@ -1450,6 +1450,7 @@ export default function KeybindingsPage() {
 
   // ダイアログ関連
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
+  const keyModalReturnFocusRef = useRef<{ el: HTMLElement | null; keyCode: string } | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   // 行ごとの確定結果を読み上げるページ共通のライブ領域（行ごとに持つと空の aria-live が行数だけ並ぶ）
   const [keyAnnouncement, setKeyAnnouncement] = useState("");
@@ -1848,6 +1849,12 @@ export default function KeybindingsPage() {
 
   // 仮想キーボードでキーをクリック
   const handleKeyClick = useCallback((keyCode: string) => {
+    // Dialog は trigger を持たない（open を state で制御）ので、閉じたときの戻り先をここで覚える
+    const active = document.activeElement;
+    keyModalReturnFocusRef.current = {
+      el: active instanceof HTMLElement && active !== document.body ? active : null,
+      keyCode,
+    };
     setEditingKeyCode(keyCode);
     setIsCapturing(false);
   }, []);
@@ -2369,7 +2376,7 @@ export default function KeybindingsPage() {
                       <button
                         key={keyCode}
                         type="button"
-                        onClick={() => setEditingKeyCode(keyCode)}
+                        onClick={() => handleKeyClick(keyCode)}
                         className={cn(
                           "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
@@ -2395,7 +2402,7 @@ export default function KeybindingsPage() {
                       <button
                         key={keyCode}
                         type="button"
-                        onClick={() => setEditingKeyCode(keyCode)}
+                        onClick={() => handleKeyClick(keyCode)}
                         className={cn(
                           "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
@@ -2812,6 +2819,17 @@ export default function KeybindingsPage() {
           onMouseDown={isCapturing ? handleMouseCapture : undefined}
           onContextMenu={isCapturing ? (e) => e.preventDefault() : undefined}
           onEscapeKeyDown={keyCaptureEscapeGuard}
+          onCloseAutoFocus={(e) => {
+            // 開いたキーのボタン（仮想キーボードのそのキー）へ戻す。要素が差し替わっていたら roving key の属性で探す
+            const ret = keyModalReturnFocusRef.current;
+            if (!ret) return;
+            e.preventDefault();
+            const target =
+              ret.el && ret.el.isConnected
+                ? ret.el
+                : document.querySelector<HTMLElement>(`[data-roving-key$=":${CSS.escape(ret.keyCode)}"]`);
+            target?.focus({ preventScroll: true });
+          }}
         >
           <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
             <DialogTitle className="flex items-center gap-2">
