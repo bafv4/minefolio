@@ -1784,6 +1784,7 @@ export const PAGES_JA = {
     completeDescription: "プロフィールの準備ができました。キー配置やデバイスなどの詳細はいつでも追加できます。",
     viewProfile: "プロフィールを見る",
     moreSettings: "さらに詳しく設定する",
+    registerKeybindings: "キー配置を登録する",
     // エラー
     errorInvalidRequest: "無効なリクエストです。最初からやり直してください。",
     errorInvalidAction: "無効な操作です。ページを再読み込みしてお試しください。",

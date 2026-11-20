@@ -1768,6 +1768,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     completeDescription: "Your profile is ready. You can add controls, devices, and more at any time.",
     viewProfile: "View profile",
     moreSettings: "Set up more details",
+    registerKeybindings: "Register your key bindings",
     errorInvalidRequest: "Invalid request. Please start over.",
     errorInvalidAction: "Invalid action. Please reload the page and try again.",
     errorAlreadyRegistered: "You're already registered. Please reload the page.",

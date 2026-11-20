@@ -1276,13 +1276,19 @@ function CompleteScreen({ completion, focusTitle }: { completion: Completion; fo
         <CardDescription>{t("onboarding.completeDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="px-4 sm:px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+        {/* 主操作は「キー配置を登録する」1つ（製品の核へつなぐため）。副次の2つは2段目に並べる */}
+        <div className="flex flex-col gap-2 sm:items-center">
           <Button asChild size="lg" className="min-h-11">
-            <Link to={completion.redirectTo}>{t("onboarding.viewProfile")}</Link>
+            <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="min-h-11">
-            <Link to="/me/edit">{t("onboarding.moreSettings")}</Link>
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+            <Button asChild size="lg" variant="outline" className="min-h-11">
+              <Link to={completion.redirectTo}>{t("onboarding.viewProfile")}</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="min-h-11">
+              <Link to="/me/edit">{t("onboarding.moreSettings")}</Link>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </>
