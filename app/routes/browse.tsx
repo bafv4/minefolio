@@ -367,16 +367,16 @@ export default function BrowsePage() {
     <div className="space-y-6">
       {/* ヘッダー */}
       <div>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex items-center justify-between gap-x-4 gap-y-2">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Users className="h-6 w-6" />
             {t("browse.title")}
           </h1>
           {/* 副次の操作: ランダムな走者のプロフィールへ（/random-player はリダイレクトだけのリソースルートなので文書ごと読み込む） */}
-          <Button variant="outline" size="sm" asChild className="min-h-11 sm:min-h-8">
+          <Button variant="outline" size="sm" asChild className="min-h-11 min-w-11 md:min-h-8 md:min-w-0">
             <Link to="/random-player" reloadDocument>
               <Shuffle className="h-4 w-4" aria-hidden="true" />
-              {t("browse.randomRunner")}
+              <span className="sr-only md:not-sr-only">{t("browse.randomRunner")}</span>
             </Link>
           </Button>
         </div>
@@ -408,13 +408,14 @@ export default function BrowsePage() {
                   className="h-11 pl-10 sm:h-9"
                 />
               </div>
-              <Button type="submit" className="min-h-11 sm:min-h-9">
+              {/* モバイルは Enter（と debounce）で送れるので検索ボタンを出さない */}
+              <Button type="submit" className="hidden sm:inline-flex sm:min-h-9">
                 <Search className="mr-2 h-4 w-4" />
                 {t("common.search")}
               </Button>
             </div>
           </Form>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             {/* フィルタ */}
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
               <DialogTrigger asChild>
@@ -436,14 +437,14 @@ export default function BrowsePage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-6 py-4">
+                <div className="space-y-5 py-2">
                   {/* ロール */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.role")}</div>
                     {draftFilters.roles.length === 0 && (
                       <p className="text-xs text-muted-foreground">{t("browse.roleDefaultNote")}</p>
                     )}
-                    <div className="space-y-0.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                       <FilterCheckboxRow id="role-runner" checked={draftFilters.roles.includes("runner")} onCheckedChange={(checked) => handleDraftFilterChange("roles", "runner", checked)}>
                         {t("browse.roleRunner")}
                       </FilterCheckboxRow>
@@ -456,7 +457,7 @@ export default function BrowsePage() {
                   {/* エディション */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.edition")}</div>
-                    <div className="space-y-0.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                       <FilterCheckboxRow id="edition-java" checked={draftFilters.editions.includes("java")} onCheckedChange={(checked) => handleDraftFilterChange("editions", "java", checked)}>
                         {t("browse.editionJava")}
                       </FilterCheckboxRow>
@@ -469,7 +470,7 @@ export default function BrowsePage() {
                   {/* プラットフォーム */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.platform")}</div>
-                    <div className="space-y-0.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                       <FilterCheckboxRow id="platform-windows" checked={draftFilters.platforms.includes("pc_windows")} onCheckedChange={(checked) => handleDraftFilterChange("platforms", "pc_windows", checked)}>
                         Windows
                       </FilterCheckboxRow>
@@ -508,7 +509,7 @@ export default function BrowsePage() {
                   </div>
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2">
+                <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 flex-col gap-2 border-t border-border/60 bg-background px-6 py-4 sm:flex-row">
                   {(draftFilters.roles.length + draftFilters.editions.length + draftFilters.inputMethods.length + draftFilters.platforms.length) > 0 && (
                     <Button
                       variant="outline"
@@ -541,9 +542,9 @@ export default function BrowsePage() {
             </Dialog>
 
             {/* ソート */}
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <ArrowUpDown className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
             <Select value={sortBy} onValueChange={handleSortChange}>
-              <SelectTrigger className="min-h-11 w-[140px] sm:min-h-9" aria-label={t("contentSort.label")}>
+              <SelectTrigger className="min-h-11 min-w-0 flex-1 sm:min-h-9 sm:w-[140px] sm:flex-none" aria-label={t("contentSort.label")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
