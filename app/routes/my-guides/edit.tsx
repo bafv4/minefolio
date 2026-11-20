@@ -17,6 +17,8 @@ import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content
 import { isTranslationEnabled } from "@/lib/translate.server";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { GuideRouteNotFound } from "@/components/guide-route-not-found";
+import { useT } from "@/hooks/use-locale";
 
 // 公開ガイド本文の最大文字数（多層防御。下書きには適用しない）
 const MAX_PUBLISHED_CONTENT_LENGTH = 500_000;
@@ -50,7 +52,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       eq(guides.authorId, user.id)
     ),
   });
-  if (!guide) return redirect("/my-guides");
+  if (!guide) {
+    throw new Response(createTranslator(resolveLocale(request))("guides.notFoundGuide"), { status: 404 });
+  }
 
   // 未コミットのドラフトがあれば、編集対象としてドラフトを優先する。
   const hasDraft = guide.draftUpdatedAt !== null;
@@ -304,6 +308,18 @@ export default function GuideEditPage() {
       }}
       authorSlug={user.slug}
       guideSlug={guide.slug}
+    />
+  );
+}
+
+export function ErrorBoundary() {
+  const t = useT();
+  return (
+    <GuideRouteNotFound
+      title={t("guides.notFoundGuide")}
+      description={t("guides.notFoundHint")}
+      backTo="/my-guides"
+      backLabel={t("meGuides.backToManagement")}
     />
   );
 }

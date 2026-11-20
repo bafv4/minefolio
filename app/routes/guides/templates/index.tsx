@@ -405,7 +405,7 @@ export default function TemplatesIndexPage() {
                 <span className="sr-only">{t("templates.removeAuthorFilter")}</span>
               </Link>
             )}
-            {hasFilters && (
+            {hasFilters && templates.length > 0 && (
               <Button asChild variant="link" size="sm" className="h-11 px-0 sm:h-8">
                 <Link to={clearFiltersHref} preventScrollReset>
                   {t("templates.resetFilters")}
