@@ -471,6 +471,7 @@ loader が `app/lib/guide-view-html.ts` の変換を掛ける。先頭のタイ�
 
 - タイトルと **URL（スラッグ）** を入力して空のガイドを作り、`/my-guides/{slug}/edit` へ遷移する
 - 本文は空の段落（`<p></p>`）で始める。タイトルはガイド設定と公開ページの h1 が持つ（以前は `<h1>タイトル</h1><p></p>` で始めていて、公開ページでタイトルが重なっていた。既存の記事は表示時に取り除く。上記「公開表示の本文」）。空の本文には、エディタの案内「本文を書く。/ でブロックや埋め込みを挿入」（`guideEditor.contentPlaceholder`）が出る
+- 説明文は「タイトルは後から変えられる。URL は公開後に変えると共有したリンクが開けなくなる」（ガイド本体のスラッグ変更には旧URLからのリダイレクトが無いため）。URL 欄の `aria-describedby` はプレビュー（`new-guide-slug-preview`）とヒント（`new-guide-slug-hint`）、エラー時は `new-guide-error` も結ぶ
 - 構成は他の管理ページ（`/my-guides/templates/new`）と同じ「戻るリンク（`/my-guides`）＋ h1 ＋ 説明 ＋ フォーム」。カードには入れない
 - ページの `<title>` は「新しいガイドを作成 - Minefolio」
 - タイトルか URL に入力があれば、離れるときに確認を出す（`useUnsavedWarning` ＋ `UnsavedChangesDialog`）。送信中（`navigation.formMethod` あり）は外すので、作成に成功したあとの編集ページへのリダイレクトは止めない。失敗して戻ったら入力が残るので再び確認を出す

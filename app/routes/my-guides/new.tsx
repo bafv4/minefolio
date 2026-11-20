@@ -177,18 +177,24 @@ export default function NewGuidePage() {
             required
             maxLength={MAX_GUIDE_SLUG_LENGTH}
             aria-invalid={errorField === "slug" || undefined}
-            aria-describedby={errorField === "slug" ? "new-guide-error" : undefined}
+            aria-describedby={
+              errorField === "slug"
+                ? "new-guide-slug-preview new-guide-slug-hint new-guide-error"
+                : "new-guide-slug-preview new-guide-slug-hint"
+            }
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
           />
-          <p className="text-xs text-muted-foreground break-all">
+          <p id="new-guide-slug-preview" className="text-xs text-muted-foreground break-all">
             /guides/{authorSlug}/
             <span className="text-foreground font-medium">
               {resolvedSlug || t("meGuides.slugEmptyPreview")}
             </span>
           </p>
-          <p className="text-xs text-muted-foreground">{t("meGuides.slugHint")}</p>
+          <p id="new-guide-slug-hint" className="text-xs text-muted-foreground">
+            {t("meGuides.slugHint")}
+          </p>
         </div>
         {errorMessage && (
           <p id="new-guide-error" role="alert" className="text-sm text-destructive">

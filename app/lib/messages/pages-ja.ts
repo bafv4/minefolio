@@ -2512,7 +2512,7 @@ export const PAGES_JA = {
     pin: "プロフィールにピン留めする",
     unpin: "ピン留めを解除する",
     newTitle: "新しいガイドを作成",
-    newDesc: "ガイドのタイトルと公開URLを入力してください。どちらも後から変更できます。",
+    newDesc: "ガイドのタイトルと公開URLを入力してください。タイトルは後から変えられます。URLは公開後に変えると、共有したリンクが開けなくなります。",
     titleLabel: "タイトル",
     titlePlaceholder: "例: 最速Any% RSGの立ち回り",
     slugLabel: "URL",

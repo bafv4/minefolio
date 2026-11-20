@@ -2523,7 +2523,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unpin: "Unpin",
     newTitle: "Create a new guide",
     newDesc:
-      "Enter a title and a public URL for your guide. Both can be changed later.",
+      "Enter a title and a public URL for your guide. You can change the title later. If you change the URL after publishing, links you have shared will stop working.",
     titleLabel: "Title",
     titlePlaceholder: "e.g. Fastest Any% RSG routing",
     slugLabel: "URL",
