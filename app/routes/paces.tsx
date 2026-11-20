@@ -217,7 +217,8 @@ export default function PacesPage() {
     setSort(searchParams.get("sort") === "time" ? "time" : "recent");
   }, [searchParams]);
 
-  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
+  // 並び順（sort）は絞り込みではなく表示の設定なので、適用中・リセットの対象に含めない
+  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => key !== "sort" && searchParams.get(key));
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
@@ -241,11 +242,8 @@ export default function PacesPage() {
   if (appliedMaxTime) {
     appliedChips.push({ key: "maxTime", label: `${t("paces.filterMaxTime")}: ${appliedMaxTime}` });
   }
-  if (searchParams.get("sort") === "time") {
-    appliedChips.push({ key: "sort", label: `${t("paces.filterSort")}: ${t("paces.sortTime")}` });
-  }
 
-  // 折りたたみバッジの件数は下のチップの数と同じ（開始日・終了日は「時期」の1件。並び順もチップに出るので数える）
+  // 折りたたみバッジの件数は下のチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みの外なので数えない）
   const activeFilterCount = appliedChips.length;
 
   // 並び順は選んだ時点で反映（/browse と同じ即時反映）。他の入力中の下書きは送らず、URL上の適用済み条件に sort だけ足す
@@ -282,7 +280,10 @@ export default function PacesPage() {
 
   const handleClear = () => {
     setPeriodInvalid(false);
-    setSearchParams(new URLSearchParams(), { preventScrollReset: true });
+    // 並び順は表示の設定なので残す
+    const params = new URLSearchParams();
+    if (searchParams.get("sort") === "time") params.set("sort", "time");
+    setSearchParams(params, { preventScrollReset: true });
   };
 
   // 検索条件が変わったら一覧を作り直すためのキー
@@ -340,7 +341,7 @@ export default function PacesPage() {
           </ul>
         )}
         <div id="pace-filter-panel" className={cn("mt-3 sm:mt-0 sm:block", filtersOpen ? "block" : "hidden")}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_2fr_1fr]">
           <div className="space-y-1.5">
             <Label htmlFor="pace-filter-player">{t("paces.filterPlayer")}</Label>
             <Input
@@ -438,18 +439,6 @@ export default function PacesPage() {
               </p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pace-filter-sort">{t("paces.filterSort")}</Label>
-            <Select value={sort} onValueChange={handleSortChange}>
-              <SelectTrigger id="pace-filter-sort" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>
-                <SelectItem value="time">{t("paces.sortTime")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
         <div className="mt-3 flex items-center gap-2">
           <Button type="submit" size="sm" className="min-h-11 sm:min-h-8">
@@ -465,6 +454,24 @@ export default function PacesPage() {
         </div>
         </div>
       </form>
+
+      {/* 表示の設定: 並び順は絞り込みのフォームとは別で、選んだ時点で反映する（/browse と同じ即時反映） */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="pace-filter-sort" className="text-sm">
+            {t("paces.filterSort")}
+          </Label>
+          <Select value={sort} onValueChange={handleSortChange}>
+            <SelectTrigger id="pace-filter-sort" className="min-h-11 w-40 sm:min-h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>
+              <SelectItem value="time">{t("paces.sortTime")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
       {/* 絞り込み・並び替えの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
       <div

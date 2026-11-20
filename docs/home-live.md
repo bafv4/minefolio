@@ -327,10 +327,10 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 - 検索条件パネル（面は `rounded-xl border border-border/70 bg-card`。大型パネルの見た目にはしない）はモバイルで畳める（開閉ボタンは高さ44px）。畳んだ間も、URL に適用済みの条件を丸ピル（`rounded-full` のチップ）で表示する（入力中の下書きは含めない）。走者の欄のラベルは「走者」（`paces.filterPlayer`）
 - 一覧のグリッドは `sm:grid-cols-2 xl:grid-cols-4`（4件のグリッドの規約）
-- 並び順はセレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す
+- ヘッダーは「アイコンチップ＋h1＋件数ピル（右端 `ml-auto`）」（`/videos`・`/rankings` と同じ形。件数は 0 のとき出さない）。並び順はフォームの外の「表示の設定」の行（`justify-end`、ラベル＋セレクトだけ）にあり、セレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す。並び順は適用中チップ・「N件適用中」の件数に入らず、「条件をリセット」でも残る
 - タイム上限は `m:ss`（`^\d{1,3}:[0-5]?\d$`、サーバーの `parseTimeParamToMs` と同じ）をクライアントで検証し、不正なら送信せず入力欄の下にエラーを表示する（`aria-invalid` / `aria-describedby` でエラー文・ヒント文を関連付け）
 - 開始日が終了日より後なら送信せず、期間の欄の下にエラー（`paces.filterPeriodError`、`role="alert"`、/videos と同じ）を出す。日付入力には `min`（保持期間の開始日＝過去2か月）と `max`（今日・JST）を付ける。値は loader が `toJstDateString`（`paces-feed.server.ts`）で作って返す（SSR とクライアントで「今日」がずれない）
-- 折りたたみバッジ「N件適用中」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件、並び順もチップに出るので数える）
+- 折りたたみバッジ「N件適用中」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みではないので数えない）
 - 絞り込み・並び替えの再取得中（`useNavigation` が `/paces` 内の `loading`）は、一覧（または空状態）を差し替えず `opacity-50` ＋ `aria-busy` で残す（`/rankings` と同じ。`navigation-progress.tsx` は同一パス内の遷移では何も出さないため）
 - 絞り込みの無い空状態は「どうすれば載るか」を説明する（`paces.emptyHint`: MCID を登録して公開プロフィールにした走者の、PaceMan に記録された過去2か月のペース。`getUserData` の条件に対応）。ログイン中の人には `/me/edit` への `action`（loader の `signedIn`）。未ログインは説明だけ
 
