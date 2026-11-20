@@ -445,7 +445,7 @@ type ControllerSettings = {
 | ルート | ファイル | 内容 |
 |---|---|---|
 | `/keybindings`（既定） | `routes/keybindings.tsx` | テーブルビュー。サブタブ（`tab`）で表示内容を変更 |
-| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。ページ上端に1行の凡例（指色・リマップ済みの枠・空きキー）と、2人を並べる `/compare` へのリンクを置く。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け。h1 / `<title>` は「操作設定ビジュアル」 |
+| `/keybindings/visual` | `routes/keybindings-visual.tsx` | **ビジュアルカードビュー**。一覧の直上（件数・フィルターの行の下）に1行の凡例（指色・リマップ済みの枠・空きキー）と、2人を並べる `/compare` へのリンクを置く。走者ごとに読み取り専用の `VirtualKeyboard` でキー配置を表示。発見・参考用途向け。h1 / `<title>` は「操作設定ビジュアル」 |
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
 - 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる

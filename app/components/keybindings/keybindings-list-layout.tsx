@@ -77,7 +77,7 @@ export function KeybindingsPageTitle({
 function VisualLegend() {
   const t = useT();
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <FingerLegend />
       <span className="flex items-center gap-1">
         <span
@@ -201,9 +201,7 @@ export function KeybindingsListLayout({
         title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
         description={mode === "visual" ? t("keybindings.visualDescription") : undefined}
         trailing={<ViewSwitcher />}
-      >
-        {mode === "visual" && <VisualLegend />}
-      </KeybindingsPageTitle>
+      />
 
       {/* ツールバー: 件数 / フィルター */}
       <div className="flex flex-col gap-3">
@@ -233,8 +231,13 @@ export function KeybindingsListLayout({
         )}
       </div>
 
-      {/* 本体 */}
+      {/* 本体（ビジュアルは凡例を一覧の直上に置き、ビュー切替の縦位置をビュー間でそろえる） */}
       <div>
+        {mode === "visual" && !isTabSwitching && (
+          <div className="mb-4">
+            <VisualLegend />
+          </div>
+        )}
         {isTabSwitching ? (
           <TabContentSkeleton
             variant={targetPathname === "/keybindings" ? "table" : "cards"}
