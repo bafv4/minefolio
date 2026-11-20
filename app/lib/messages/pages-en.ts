@@ -212,6 +212,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     speedruncomStats: "Loading personal best records",
   },
   developers: {
+    githubRepository: "GitHub Repository",
     title: "Developers - Minefolio",
     metaDescription:
       "Developer resources for Minefolio — API documentation, changelog, and data export",

@@ -214,6 +214,14 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
   const subjectRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const prevDataRef = useRef(fetcher.data);
+  const sentHeadingRef = useRef<HTMLHeadingElement>(null);
+  // 完了表示・フォーム復帰の切替でボタンが消えてもフォーカスが body に落ちないよう、移し先を決める
+  const prevSentRef = useRef(sent);
+  useEffect(() => {
+    if (sent && !prevSentRef.current) sentHeadingRef.current?.focus();
+    else if (!sent && prevSentRef.current) subjectRef.current?.focus();
+    prevSentRef.current = sent;
+  }, [sent]);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -269,7 +277,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
           <CardContent>
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-16 w-16 text-success mb-4" aria-hidden />
-              <h1 className="text-2xl font-bold mb-2">
+              <h1 ref={sentHeadingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">
                 {t("feedback.sentTitle")}
               </h1>
               <p className={cn("text-muted-foreground", issueUrl ? "mb-3" : "mb-6")}>

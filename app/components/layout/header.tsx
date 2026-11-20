@@ -136,7 +136,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
             {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className={cn("flex items-center space-x-2 rounded-md", NAV_FOCUS_CLASS)}>
-                <img src="/icon.png" alt="Minefolio" className="h-8 w-8" />
+                <img src="/icon.png" alt="" className="h-8 w-8" />
                 <span className="text-xl font-bold">Minefolio</span>
               </Link>
             </div>
@@ -291,7 +291,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                     className={cn("flex items-center gap-2 rounded-md", NAV_FOCUS_CLASS)}
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <img src="/icon.png" alt="Minefolio" className="h-7 w-7" />
+                    <img src="/icon.png" alt="" className="h-7 w-7" />
                     <span className="text-lg font-bold">Minefolio</span>
                   </Link>
                 </div>

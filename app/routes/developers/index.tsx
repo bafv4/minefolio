@@ -107,7 +107,7 @@ export default function DevelopersHubPage() {
               rel="noopener noreferrer"
             >
               <Github className="mr-2 h-4 w-4" />
-              GitHub Repository
+              {t("developers.githubRepository")}
             </a>
           </Button>
           <Button variant="outline" asChild>
