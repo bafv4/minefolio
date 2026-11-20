@@ -4,6 +4,11 @@ import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
 import { LIVE_STAGES, LIVE_STAGE_SPLIT_MARKS, countLiveStages, type LiveSplitEntry } from "@/lib/home-live";
 
+/** sm 未満（375px で 44px 幅）で収まらない区間名だけ短くする。読み上げは sr-only の要約が全名で担う */
+const SHORT_NAMES: Partial<Record<(typeof LIVE_STAGES)[number], string>> = {
+  Stronghold: "SH",
+};
+
 /**
  * ライブ中の走者が「いまどの区間に何人いるか」を示す帯（7段 = 区間進行バーと同じ並び）。
  * 見た目は aria-hidden、読み上げは sr-only の1文（人数の読み上げはライブ欄の件数側が担うので aria-live は付けない）。
@@ -46,7 +51,16 @@ export function LiveSplitStrip({
                 {n > 0 && <span className="text-xs font-semibold tabular-nums">×{n}</span>}
               </div>
               <span className={cn("h-1.5 rounded-full", n > 0 ? "bg-brand" : "bg-muted", muted && "opacity-60")} />
-              <span className={cn("truncate text-[11px] text-muted-foreground", n === 0 && "hidden sm:block")}>{name}</span>
+              <span className="truncate text-[11px] text-muted-foreground">
+                {SHORT_NAMES[name] ? (
+                  <>
+                    <span className="sm:hidden">{SHORT_NAMES[name]}</span>
+                    <span className="hidden sm:inline">{name}</span>
+                  </>
+                ) : (
+                  name
+                )}
+              </span>
             </div>
           );
         })}
