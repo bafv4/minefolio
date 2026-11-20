@@ -75,9 +75,9 @@ export function WelcomeBar({
         )}
       </div>
       {/* DOM 順（＝フォーカス順）は アバター（マイプロフィール。モバイルのみ）→ 編集 → マイプロフィール（sm 以上のみ）→ お気に入り → 設定。モバイルは2段目に折り返し、設定は末尾（右端） */}
-      <div className="flex w-full items-center gap-x-1 sm:ml-auto sm:w-auto sm:flex-wrap sm:justify-end sm:gap-x-2">
+      <div className="flex w-full flex-wrap items-center gap-x-1 gap-y-1 sm:ml-auto sm:w-auto sm:justify-end sm:gap-x-2">
         <Button asChild variant="outline" className="min-h-11 max-sm:has-[>svg]:px-2 sm:min-h-9">
-          {/* モバイルは「カスタマイズ」の文字を残すぶん、編集は短い表記にして1行に収める（読み上げは全文） */}
+          {/* モバイルは「カスタマイズ」の文字を残すぶん、編集は短い表記にしてなるべく1行に収める（狭い幅・大きい文字では折り返す。読み上げは全文） */}
           <Link to="/me/edit" aria-label={t("home.welcomeEditProfile")}>
             <Pencil className="h-4 w-4 sm:mr-1.5" />
             <span className="sm:hidden">{t("home.welcomeEditProfileShort")}</span>
