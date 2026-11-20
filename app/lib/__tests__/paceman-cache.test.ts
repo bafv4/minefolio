@@ -81,8 +81,7 @@ function makeRun(id: number, nickname: string, date: Date, splits: RunSplits = {
     bastion: null,
     fortress: null,
     first_portal: null,
-    first_structure: null,
-    second_structure: null,
+    obtainRod: null,
     stronghold: null,
     end: null,
     finish: null,
@@ -142,7 +141,7 @@ describe("cachePacemanPaces - 蓄積型の置き換え", () => {
       makeRun(1, "Runner", NOW, {
         nether: 90_000,
         bastion: 150_000,
-        second_structure: 300_000,
+        obtainRod: 300_000,
         finish: 600_000,
       }),
     ]);
@@ -158,10 +157,12 @@ describe("cachePacemanPaces - 蓄積型の置き換え", () => {
       isNetherEnter: false,
       is2ndStructureOrLater: false,
     });
-    // second_structure は "Obtain Blaze Rods" として入る
+    // obtainRod は "Obtain Blaze Rods"（IGT として rta 列）として入る。
+    // 主なペースに含めるかは未決のため is2ndStructureOrLater は false
     expect(byTimeline.get("Obtain Blaze Rods")).toMatchObject({
+      rta: 300_000,
       isNetherEnter: false,
-      is2ndStructureOrLater: true,
+      is2ndStructureOrLater: false,
     });
     expect(byTimeline.get("Finish")).toMatchObject({
       isNetherEnter: false,
@@ -272,7 +273,7 @@ describe("getMainPaces - 同一ランのグループ化", () => {
       is2ndStructureOrLater: true,
     });
     await seedPace(db, {
-      pacemanRunId: 1, mcid: "Runner", timeline: "Obtain Blaze Rods", rta: 300_000, date,
+      pacemanRunId: 1, mcid: "Runner", timeline: "Finish", rta: 600_000, date,
       is2ndStructureOrLater: true,
     });
     await seedPace(db, {
@@ -283,14 +284,35 @@ describe("getMainPaces - 同一ランのグループ化", () => {
     const groups = await getMainPaces("Runner");
 
     expect(groups).toHaveLength(1);
-    expect(groups[0].latestSplit).toEqual({ timeline: "Enter End", rta: 400_000 });
+    expect(groups[0].latestSplit).toEqual({ timeline: "Finish", rta: 600_000 });
     // splits は進行順（SPLIT_ORDER）に並ぶ
     expect(groups[0].splits.map((s) => s.timeline)).toEqual([
-      "Obtain Blaze Rods",
       "Enter Stronghold",
       "Enter End",
+      "Finish",
     ]);
     expect(groups[0].date).toBe(date.toISOString());
+  });
+
+  it("Obtain Blaze Rods（is2ndStructureOrLater: false）は含まれない", async () => {
+    const date = offset(NOW, -DAY);
+    await seedPace(db, {
+      pacemanRunId: 1, mcid: "Runner", timeline: "Obtain Blaze Rods", rta: 300_000, date,
+      is2ndStructureOrLater: false,
+    });
+    await seedPace(db, {
+      pacemanRunId: 2, mcid: "Runner", timeline: "Enter End", rta: 400_000, date,
+      is2ndStructureOrLater: true,
+    });
+    await seedPace(db, {
+      pacemanRunId: 2, mcid: "Runner", timeline: "Obtain Blaze Rods", rta: 300_000, date,
+      is2ndStructureOrLater: false,
+    });
+
+    const groups = await getMainPaces("Runner");
+
+    expect(groups.map((g) => g.pacemanRunId)).toEqual([2]);
+    expect(groups[0].splits.map((s) => s.timeline)).toEqual(["Enter End"]);
   });
 
   it("2nd Structure より前のスプリットと1週間より古いランは対象外", async () => {

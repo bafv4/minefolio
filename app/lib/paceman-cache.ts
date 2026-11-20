@@ -34,13 +34,13 @@ export interface GroupedPaceEntry {
   }>;
 }
 
-// スプリットの進行順序
+// スプリットの進行順序（ゲーム進行順。Blaze Rods は Fortress 内で、First Portal（Blind）の前）
 const SPLIT_ORDER: Record<string, number> = {
   "Enter Nether": 1,
   "Bastion": 2,
   "Fortress": 3,
-  "First Portal": 4,
-  "Obtain Blaze Rods": 5,
+  "Obtain Blaze Rods": 4,
+  "First Portal": 5,
   "Enter Stronghold": 6,
   "Enter End": 7,
   "Finish": 8,
@@ -87,12 +87,16 @@ function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
     });
   }
 
-  if (run.second_structure !== null) {
+  // getRecentRuns はブレイズロッド取得を obtainRod で返す。値は他の区間（nether / fortress /
+  // first_portal）と同じ IGT として rta 列へ入れる（実応答で fortress < obtainRod < first_portal と
+  // 同じ時間軸で並ぶため）。API 応答に obtainRod が無い場合は null（fetchRecentRuns で正規化）で、未到達扱い。
+  // is2ndStructureOrLater: 「主なペース」に含めるかは未決。含めるなら true。現状は挙動を変えない false
+  if (run.obtainRod != null) {
     entries.push({
       timeline: "Obtain Blaze Rods",
-      rta: run.second_structure,
+      rta: run.obtainRod,
       isNetherEnter: false,
-      is2ndStructureOrLater: true,
+      is2ndStructureOrLater: false,
     });
   }
 

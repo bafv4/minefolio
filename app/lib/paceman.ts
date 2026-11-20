@@ -94,8 +94,8 @@ export interface PaceManRecentRun {
   bastion: number | null;
   fortress: number | null;
   first_portal: number | null;
-  first_structure: number | null;
-  second_structure: number | null;
+  // ブレイズロッド取得（Fortress 内の区間）。API 応答に obtainRod が無い場合は null（fetchRecentRuns で正規化）
+  obtainRod: number | null;
   stronghold: number | null;
   end: number | null;
   finish: number | null;
@@ -133,8 +133,7 @@ export async function fetchRecentRuns(
       bastion: run.bastion,
       fortress: run.fortress,
       first_portal: run.first_portal,
-      first_structure: null, // APIには含まれない
-      second_structure: null, // APIには含まれない
+      obtainRod: run.obtainRod ?? null,
       stronghold: run.stronghold,
       end: run.end,
       finish: run.finish,

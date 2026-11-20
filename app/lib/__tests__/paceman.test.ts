@@ -1,7 +1,8 @@
-// PaceMan APIの依存ゼロの純関数群（fetch を伴う fetchLiveRuns / fetchRecentRuns 等は対象外）。
+// PaceMan APIの依存ゼロの純関数群（純関数群と、fetch をモックした fetchRecentRuns の整形）。
 // スプリット表示・進行順ソートを担い、境界を誤ると誤ったスプリットが表示される。
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  fetchRecentRuns,
   getLatestSplit,
   getSplitOrder,
   getSplitLabelEnglish,
@@ -28,6 +29,32 @@ function liveRun(eventList: PaceManEvent[]): PaceManLiveRun {
     numLeaves: 0,
   };
 }
+
+// ============================================
+// fetchRecentRuns（fetch をモック）
+// ============================================
+
+describe("fetchRecentRuns", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("生応答の obtainRod をそのまま渡し、欠けていれば null にする", async () => {
+    const raw = [
+      {
+        id: 1, nether: 122102, bastion: 153702, fortress: 315534, first_portal: 379684,
+        stronghold: 463769, end: 496512, finish: null, obtainRod: 321234, time: 1700000000,
+      },
+      { id: 2, nether: 100000, bastion: null, fortress: null, first_portal: null, stronghold: null, end: null, finish: null, time: 1700000100 },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => raw })));
+
+    const runs = await fetchRecentRuns("Runner");
+
+    expect(runs[0]).toMatchObject({ id: 1, nickname: "Runner", fortress: 315534, obtainRod: 321234 });
+    expect(runs[1].obtainRod).toBeNull();
+  });
+});
 
 // ============================================
 // getLatestSplit / getSplitOrder

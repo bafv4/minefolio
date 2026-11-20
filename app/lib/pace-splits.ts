@@ -5,8 +5,8 @@ import type { PaceManEvent, PaceManLiveRun } from "./paceman";
 export const PACE_FEED_SPLITS = [
   "Bastion",
   "Fortress",
-  "First Portal",
   "Obtain Blaze Rods",
+  "First Portal",
   "Enter Stronghold",
   "Enter End",
   "Finish",

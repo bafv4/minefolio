@@ -769,7 +769,7 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意、mcid 経由で再リンク前提）
 
   // ペース情報
-  timeline: text("timeline").notNull(), // "Eye Spy", "Enter Nether", "Obtain Blaze Rods", etc.
+  timeline: text("timeline").notNull(), // "Enter Nether", "Obtain Blaze Rods", etc.
   rta: integer("rta").notNull(), // リアルタイム（ミリ秒）
   igt: integer("igt"), // ゲーム内時間（ミリ秒）
   date: integer("date", { mode: "timestamp" }).notNull(), // ペースの日時

@@ -717,7 +717,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `paceman_run_id` | int | 同一ランのスプリットをまとめるキー |
 | `mcid` | text | ⇢ `users.mcid`（`user_id` が null でもここから再リンクできる） |
 | `user_id` | text? | → `users.id` (**set null**) |
-| `timeline` | text | `Enter Nether` / `Eye Spy` 等 |
+| `timeline` | text | `Enter Nether` / `Obtain Blaze Rods` 等 |
 | `rta` | int | ミリ秒 |
 | `igt` | int? | ミリ秒 |
 | `date` | ts | |

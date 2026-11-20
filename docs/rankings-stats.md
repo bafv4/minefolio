@@ -125,10 +125,15 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 ランの進行状況を示すスプリットポイント:
 
-- `"Enter Nether"` — ネザー突入
-- `"Obtain Blaze Rods"` — ブレイズロッド取得
-- `"Eye Spy"` — エンダーアイ使用（要塞発見）
-- その他のマイルストーン
+進行順（`paceman-cache.ts` の `SPLIT_ORDER`）:
+
+1. `"Enter Nether"` — ネザー突入
+2. `"Bastion"` / `"Fortress"` — 各ストラクチャー到達
+3. `"Obtain Blaze Rods"` — ブレイズロッド取得（`getRecentRuns` の `obtainRod` から。他の区間と同じ IGT。`is2ndStructureOrLater` は false で、「主なペース」には含めない。含めるかは未決）
+4. `"First Portal"` — 2つ目のポータル（Blind）
+5. `"Enter Stronghold"` / `"Enter End"` / `"Finish"`
+
+過去に保存された `Obtain Blaze Rods` 行は無い（obtainRod 対応前は一度も保存されていない。埋め直しはしない）。
 
 ### キャッシュ更新
 
