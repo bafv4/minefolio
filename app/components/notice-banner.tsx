@@ -27,17 +27,24 @@ export function NoticeBanner({
   tone,
   icon: Icon,
   role,
+  id,
+  tabIndex,
   className,
   children,
 }: {
   tone: NoticeTone;
   icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   role?: "status" | "alert";
+  /** フォーカスの移動先にするときの id（`tabIndex={-1}` と組で使う） */
+  id?: string;
+  tabIndex?: number;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <div
+      id={id}
+      tabIndex={tabIndex}
       role={role ?? (tone === "error" ? "alert" : "status")}
       className={cn("flex items-start gap-2 rounded-xl border px-4 py-3 text-sm", TONE_CLASS[tone], className)}
     >

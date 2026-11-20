@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 interface EmptyStateProps {
   icon: ReactNode;
   title: string;
-  description: string;
+  /** 補足の文（省略可。無いときは <p> を描かない） */
+  description?: string;
   /** 空状態からの誘導リンク・ボタン等（省略可）。例: 本人閲覧時の編集ページへの誘導 */
   action?: ReactNode;
   /** compact: sm 以上は横並び、sm 未満は縦積み（欄内の空状態用）。既定は縦積みの大きい表示 */
@@ -19,7 +20,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
         <div className="shrink-0 opacity-50">{icon}</div>
         <div className="min-w-0 flex-1">
           <Title className="text-sm font-medium text-foreground">{title}</Title>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
         {action && <div className="shrink-0 max-sm:self-start max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11">{action}</div>}
       </div>
@@ -30,7 +31,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
       <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <div className="space-y-1">
         <Title className="text-lg font-medium text-foreground">{title}</Title>
-        <p className="text-sm">{description}</p>
+        {description && <p className="text-sm">{description}</p>}
       </div>
       {action && <div className="mt-4 max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11">{action}</div>}
     </div>
