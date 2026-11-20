@@ -1786,7 +1786,9 @@ export default function PlayerProfilePage() {
                 <button
                   type="button"
                   onClick={skipToKeyList}
-                  className="sr-only rounded-md bg-background px-3 py-1.5 text-sm font-medium focus:not-sr-only focus-visible:ring-2 focus-visible:ring-ring"
+                  // md 未満は縮小キーボード（キーの文字が読めない）より前に、読める割り当て一覧への導線を見せる。
+                  // md 以上はキーボード利用者向けに、フォーカスされたときだけ現れる
+                  className="sr-only rounded-md bg-background px-3 py-1.5 text-sm font-medium focus:not-sr-only focus-visible:ring-2 focus-visible:ring-ring max-md:not-sr-only max-md:-my-1 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-0 max-md:text-primary max-md:underline-offset-4 max-md:hover:underline"
                 >
                   {t("playerProfile.skipToKeyList")}
                 </button>
