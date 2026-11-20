@@ -539,7 +539,10 @@ export function LiveRail({
   recentLoading,
   recentError,
   onRetryRecent,
+  emptyStrip,
 }: {
+  /** 0人のときだけ、0件の1文と導線の下に置く区間分布の帯（文言と導線を帯の上にするため） */
+  emptyStrip?: ReactNode;
   entries: LiveRailEntry[];
   maps: McidMaps;
   splitBests: Record<string, Record<string, number>>;
@@ -710,6 +713,7 @@ export function LiveRail({
           </Link>
         </p>
       )}
+      {emptyStrip}
       {recentLoading ? (
         // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
         // 多めに描くと、少なかったときに下の欄が大きく上へ動く。

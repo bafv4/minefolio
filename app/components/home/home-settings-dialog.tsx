@@ -31,7 +31,10 @@ export function HomeSettingsDialog({
   onOpenChange,
   layout,
   returnFocusRef,
+  emptySections = [],
 }: {
+  /** 今日は中身が無くホームに出ていない欄。行に「今日は該当なし」を添える（スイッチの設定自体は有効） */
+  emptySections?: HomeSectionId[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** 閉じたあとにフォーカスを戻す要素（制御型で DialogTrigger を使わない呼び出し側が、開いたボタンを渡す） */
@@ -177,6 +180,9 @@ export function HomeSettingsDialog({
                     )}
                   >
                     {name}
+                    {visible && emptySections.includes(id) && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">{t("home.settingsEmptyToday")}</span>
+                    )}
                   </label>
                   <Button
                     type="button"

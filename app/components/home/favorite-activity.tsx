@@ -1,6 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
-import { EmptyState } from "@/components/empty-state";
 import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
 import { PageSection } from "@/components/page-section";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
@@ -62,7 +61,7 @@ export function FavoriteActivity({
             </ul>
           </div>
         ) : (
-          <EmptyState icon={<Heart className="h-12 w-12" />} title={t("home.favEmpty")} />
+          <p className="text-sm text-muted-foreground">{t("home.favEmpty")}</p>
         )
       ) : state.data.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("home.favNoActivity")}</p>

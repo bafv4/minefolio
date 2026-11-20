@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router";
-import type { HomeLayout } from "@/lib/home-sections";
+import type { HomeLayout, HomeSectionId } from "@/lib/home-sections";
 import { Button } from "@/components/ui/button";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -18,7 +18,10 @@ export function WelcomeBar({
   layout,
   liveCount,
   liveSplit,
+  emptySections = [],
 }: {
+  /** 今日は中身が無く、ホームに出ていない欄（設定モーダルの行に補足を出す） */
+  emptySections?: HomeSectionId[];
   name: string;
   slug: string;
   uuid: string | null;
@@ -114,6 +117,7 @@ export function WelcomeBar({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         layout={layout}
+        emptySections={emptySections}
         // 制御型で DialogTrigger を使わないので、閉じたとき（キャンセル・Esc・保存）に開いたボタンへフォーカスを戻す
         returnFocusRef={customizeRef}
       />

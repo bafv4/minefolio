@@ -48,7 +48,6 @@ import {
 } from "@/lib/home-live";
 import { GuideCardGrid, type GuideItem, type GuideItemWithAuthorSlug } from "@/components/guide-list-views";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/empty-state";
 import { FavoritesFirstNote } from "@/components/favorite-mark";
 import { PageSection, SectionHeaderLink } from "@/components/page-section";
 import { WelcomeBar } from "@/components/home/welcome-bar";
@@ -902,6 +901,9 @@ export default function HomePage() {
   const noVideoData = youtubeVideos.length === 0 && !showTwitch;
 
   const hasProfiles = recentlyUpdatedUsers.length > 0;
+  const liveEmptySettled = liveSettled && !feed.loading.liveRuns && liveEntries.length === 0;
+  // 注目の走者の候補が無い日（ログイン中は欄ごと出さない。カスタマイズの行には補足を出す）
+  const featuredEmpty = !(spotlight?.candidates?.length || spotlight?.fallback);
 
   const sections: Record<HomeSectionId, ReactNode> = {
     favoriteActivity: (
@@ -935,10 +937,14 @@ export default function HomePage() {
         )}
         <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
-        {(feed.loading.liveRuns || liveSettled) && (
+        {/* 0人のときは帯を弱め、0件の1文と導線の下（LiveRail 内）へ置く。人が居るとき・取得中は従来どおり先頭 */}
+        {(feed.loading.liveRuns || liveSettled) && !liveEmptySettled && (
           <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
         )}
         <LiveRail
+          emptyStrip={
+            liveEmptySettled ? <LiveSplitStrip entries={activeLiveEntries} muted /> : undefined
+          }
           entries={liveEntries}
           maps={feed}
           splitBests={feed.splitBests}
@@ -967,12 +973,12 @@ export default function HomePage() {
         ) : (feed.errors.videos || feed.errors.twitchVods) && noVideoData ? (
           <FeedErrorNotice message={t("home.videosFetchFailed")} onRetry={retryVideos} />
         ) : noVideoData ? (
-          <EmptyState
-            size="compact"
-            icon={<Play className="h-5 w-5" />}
-            title={t("home.noVideos")}
-            description={t("home.noVideosDescription")}
-          />
+          // 面を重ねず muted の1文（導線は欄見出しの「すべて見る」が担う）
+          <p className="text-sm text-muted-foreground">
+            {t("home.noVideos")}
+            {t("home.noVideosSeparator")}
+            {t("home.noVideosDescription")}
+          </p>
         ) : (
           <div className="space-y-6">
             {youtubeVideos.length > 0 && (
@@ -1022,7 +1028,7 @@ export default function HomePage() {
         </PageSection>
       ) : null,
     // ログイン時の注目の走者（ゲストはヒーロー右に出すので、ここはログイン時のみ）
-    featured: isRegistered ? (
+    featured: isRegistered && !featuredEmpty ? (
       <FeaturedRunnerCard
         candidates={spotlight?.candidates ?? []}
         initial={spotlight?.fallback ?? null}
@@ -1051,11 +1057,9 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          <EmptyState
-            icon={<UserCheck className="h-12 w-12" />}
-            title={t("home.noProfiles")}
-            description={t("home.noProfilesDescription")}
-          />
+          <p className="text-sm text-muted-foreground">
+            {t("home.noProfiles")}
+          </p>
         )}
       </PageSection>
     ),
@@ -1076,6 +1080,10 @@ export default function HomePage() {
             layout={layout}
             liveCount={liveSettled ? liveCount : 0}
             liveSplit={leadingLiveSplit}
+            emptySections={[
+              ...(featuredEmpty ? (["featured"] as const) : []),
+              ...(newGuides.length === 0 ? (["guides"] as const) : []),
+            ]}
           />
         </>
       ) : (
