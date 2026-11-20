@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
 import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
@@ -648,10 +649,21 @@ export default function DevicesPage() {
   );
 
   // フォームリセット
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef(initialFormValues);
+  latestBaseRef.current = initialFormValues;
+
   const handleReset = useCallback(() => {
+    const prev = formValues; // 破棄の前の下書き（フィールドエラーは再検証で出し直す）
+    const baseAtReset = initialFormValues;
     setFormValues(initialFormValues);
     setFieldErrors({});
-  }, [initialFormValues, setFormValues]);
+    return () => {
+      if (!jsonEqual(latestBaseRef.current, baseAtReset)) return false;
+      setFormValues(prev);
+      return true;
+    };
+  }, [formValues, initialFormValues, setFormValues]);
 
   // 保存処理
   const handleSave = useCallback(() => {

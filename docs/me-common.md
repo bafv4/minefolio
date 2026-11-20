@@ -35,6 +35,24 @@
 - lg 以上の `/me` は本文の列がサイドバー（16rem＋gap 2rem）の分だけ右にあるので、バーは `translate-x-[var(--save-bar-shift,0px)]` で半分（9rem）右へずらして
   本文の列の中央に揃える。`--save-bar-shift` は `app.css` が lg 以上かつ `[data-me-tour="sidebar"]` がある画面だけで解決する（サイドバー幅・gap を変えたら合わせる）。
 - 「トップへ戻る」は `bottom-[calc(1.5rem+var(--bottom-fixed-inset,0px))]`。保存バーが見えている間はその上に出て、保存ボタンの右端と重ならない。
+- 「取消」（`onReset`）は誤タップで全損しうるので、画面は元に戻せる形で渡せる。`onReset` の型は `() => void | (() => boolean)`。
+  下書きを破棄する前にその内容を取っておき、**それを戻す関数（戻せたら `true`）を返す**と、トーストに「元に戻す」（`common.undo`、8 秒）が付く。
+  押すと返した関数が呼ばれ、`true` のときだけ `common.changesRestored` のトーストを出して保存ボタンへフォーカスを移す（戻した後は `hasChanges` が真に戻り、バーが再び出る）。
+  `false`（戻せない）のときは部品が `common.undoUnavailable` を出す（画面側で toast.error を出さない）。
+  部品は次の場合に戻す関数を呼ばず `common.undoUnavailable` を出す: 取り消した後に別の編集をした（`hasChanges` が真）／FloatingSaveBar がアンマウント済み。
+  また、アンマウント時に「元に戻す」のトーストを閉じる（ページをまたいで残らない）。
+  何も返さない画面は従来どおり（action なし）。部品は復元方法を知らない。
+  ```tsx
+  onReset={() => {
+    const prev = draft;          // 破棄の前の下書きを取っておく
+    setDraft(initial);           // 破棄
+    return () => {               // 戻す関数: 戻せたら true
+      if (!canRestore(prev)) return false;
+      setDraft(prev);
+      return true;
+    };
+  }}
+  ```
 - 離脱確認ダイアログのボタンはモバイルで高さ 44px（`max-sm:min-h-11`、消費側で指定）。
 - 既定で有効。`useBlocker` は 1 ルーターに 1 つしか効かないため、自前で `useUnsavedWarning` + `UnsavedChangesDialog` を
   持つ画面は `<FloatingSaveBar unsavedGuard={false} />` を渡して二重にしない（現在は該当なし。`/me/*` の保存バーのある画面はすべて保存バー側に移した）。

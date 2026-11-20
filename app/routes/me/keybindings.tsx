@@ -63,6 +63,7 @@ import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindings
 import { FingerToggleGroup, sortFingers } from "@/components/finger-toggle-group";
 import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
 import type { Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
@@ -2070,14 +2071,53 @@ export default function KeybindingsPage() {
     });
   }, []);
 
-  // 変更を取り消す
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBasesRef = useRef({ remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource });
+  latestBasesRef.current = { remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource };
+
+  // 変更を取り消す（取り消し前の下書きをまとめて取っておき、元に戻す関数を返す）
   const resetChanges = useCallback(() => {
+    const prev = {
+      keybindingChanges,
+      remaps: localRemaps,
+      fingerAssignments: localFingerAssignments,
+      customActions: localCustomActions,
+      customKeys: localCustomKeys,
+    };
+    const bases = { remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource };
     setKeybindingChanges({});
     setLocalRemaps(remapsSource);
     setLocalFingerAssignments(fingerAssignmentsSource);
     setLocalCustomActions(customActionsSource);
     setLocalCustomKeys(customKeysSource);
-  }, [remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource]);
+    return () => {
+      const latest = latestBasesRef.current;
+      if (
+        !jsonEqual(latest.remapsSource, bases.remapsSource) ||
+        !jsonEqual(latest.fingerAssignmentsSource, bases.fingerAssignmentsSource) ||
+        !jsonEqual(latest.customActionsSource, bases.customActionsSource) ||
+        !jsonEqual(latest.customKeysSource, bases.customKeysSource)
+      ) {
+        return false;
+      }
+      setKeybindingChanges(prev.keybindingChanges);
+      setLocalRemaps(prev.remaps);
+      setLocalFingerAssignments(prev.fingerAssignments);
+      setLocalCustomActions(prev.customActions);
+      setLocalCustomKeys(prev.customKeys);
+      return true;
+    };
+  }, [
+    keybindingChanges,
+    localRemaps,
+    localFingerAssignments,
+    localCustomActions,
+    localCustomKeys,
+    remapsSource,
+    fingerAssignmentsSource,
+    customActionsSource,
+    customKeysSource,
+  ]);
 
   // 保存
   const handleSave = useCallback(() => {

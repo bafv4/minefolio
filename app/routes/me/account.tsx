@@ -1,5 +1,6 @@
 import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import { NoticeBanner } from "@/components/notice-banner";
@@ -254,9 +255,20 @@ export default function AccountPage() {
   const defaultTabKey = DEFAULT_PROFILE_TAB_LABEL_KEYS[formValues.defaultProfileTab as SelectableProfileTabValue];
   const defaultTabLabel = defaultTabKey ? t(defaultTabKey) : undefined;
 
+  // 「元に戻す」の間に基準（保存済みの値）が変わっていないか見るための最新値
+  const savedFormValuesRef = useRef(savedFormValues);
+  savedFormValuesRef.current = savedFormValues;
+
   const handleReset = useCallback(() => {
-    setFormValues(savedFormValues);
-  }, [savedFormValues]);
+    const prev = formValues;
+    const base = savedFormValues;
+    setFormValues(base);
+    return () => {
+      if (!jsonEqual(savedFormValuesRef.current, base)) return false;
+      setFormValues(prev);
+      return true;
+    };
+  }, [formValues, savedFormValues]);
 
   const handleSave = useCallback(() => {
     const formData = new FormData();
@@ -507,7 +519,9 @@ export default function AccountPage() {
                       variant="destructive"
                       disabled={confirmText !== (user.mcid || user.slug) || isDeleting}
                       // 削除後の遷移を未保存警告（useBlocker）に止められないよう、下書きを先に破棄する
-                      onClick={handleReset}
+                      onClick={() => {
+                        handleReset();
+                      }}
                     >
                       {isDeleting ? (
                         <>

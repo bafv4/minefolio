@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,13 @@ interface FloatingSaveBarProps {
   hasChanges: boolean;
   isSubmitting: boolean;
   onSave: () => void;
-  onReset?: () => void;
+  /**
+   * 下書きを破棄する。「元に戻す」を出したい画面は、破棄の前の下書きを取っておき、それを戻す関数を返す
+   * （戻り値が関数ならトーストの「元に戻す」で呼ばれる。返さなければ従来どおり）。
+   * 戻す関数は、戻せたら true・戻せなかったら false を返す（false のとき部品が「戻せません」を出す）。
+   * 取り消した後に編集した場合やページを離れた後は、部品が戻す関数を呼ばずに「戻せません」を出す
+   */
+  onReset?: () => void | (() => boolean);
   saveLabel?: string;
   resetLabel?: string;
   className?: string;
@@ -81,11 +88,51 @@ export function FloatingSaveBar({
   const reset = resetLabel ?? t("common.discardChanges");
   // 取消の後は、押したボタンが（バーごと）隠れてフォーカスが body に落ちるので、ページの h1 へ移して
   // 取り消したことをトーストで知らせる。h1 は各画面が持つ（tabIndex が無ければここで -1 を付ける）。
-  // 「元に戻す」は付けない（下書きの持ち方が画面ごとに違い、取消の前の状態を共通の部品から復元できないため）
+  // 「元に戻す」: 下書きの持ち方は画面ごとに違い、共通の部品は復元方法を知らない。そこで onReset が
+  // 「直前の下書きを戻す関数」を返したときだけ、トーストに「元に戻す」を付けてそれを呼ぶ（返さない画面は従来どおり）。
+  // 戻すと hasChanges が真に戻りバーが再び出るので、出現を待って保存ボタンへフォーカスを移す
+  // 「元に戻す」は取り消した直後の状態に対してだけ有効。取り消した後に編集した（hasChanges が真）・
+  // 別ページへ移った（アンマウント）ときは、戻すと編集を黙って潰すので呼ばない
+  const hasChangesRef = useRef(hasChanges);
+  hasChangesRef.current = hasChanges;
+  const mountedRef = useRef(false);
+  const undoToastIdRef = useRef<string | number | undefined>(undefined);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (undoToastIdRef.current !== undefined) toast.dismiss(undoToastIdRef.current);
+    };
+  }, []);
   const handleReset = () => {
     if (!onReset) return;
-    onReset();
-    toast.success(t("common.changesDiscarded"));
+    // 前の取り消しのトーストは閉じる（古い「元に戻す」で、後の取り消しの前の下書きを被せないため）
+    if (undoToastIdRef.current !== undefined) toast.dismiss(undoToastIdRef.current);
+    const restore = onReset();
+    if (typeof restore === "function") {
+      undoToastIdRef.current = toast.success(t("common.changesDiscarded"), {
+        duration: 8000,
+        action: {
+          label: t("common.undo"),
+          onClick: () => {
+            if (!mountedRef.current || hasChangesRef.current || restore() !== true) {
+              toast.error(t("common.undoUnavailable"));
+              return;
+            }
+            toast.success(t("common.changesRestored"));
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                document
+                  .querySelector<HTMLElement>('[data-me-tour="save-bar"] [data-save-button]:not(:disabled)')
+                  ?.focus();
+              }),
+            );
+          },
+        },
+      });
+    } else {
+      toast.success(t("common.changesDiscarded"));
+    }
     const heading = document.querySelector<HTMLElement>("main h1") ?? document.querySelector<HTMLElement>("h1");
     if (heading) {
       if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
@@ -161,6 +208,7 @@ export function FloatingSaveBar({
         )}
         <Button
           type="button"
+          data-save-button
           onClick={onSave}
           disabled={isSubmitting || !hasChanges}
           className="flex-1 sm:flex-none sm:min-w-32 min-h-11 sm:min-h-9 touch-manipulation"

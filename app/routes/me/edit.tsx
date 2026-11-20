@@ -1,5 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, useRouteLoaderData, type ShouldRevalidateFunctionArgs } from "react-router";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
@@ -793,12 +794,32 @@ export default function EditProfilePage() {
   }, [rtaStartedYear, rtaStartedMonth, locale, t]);
 
   // フォームリセット
+  // 「元に戻す」の間に基準（保存済みの値）が差し替わっていないか見るための最新値
+  const latestBaseRef = useRef({ savedFormValues, savedDraft });
+  latestBaseRef.current = { savedFormValues, savedDraft };
+
   const handleReset = useCallback(() => {
+    const prev = { formValues, selectedPose, draft, fieldErrors };
+    const base = { savedFormValues, savedDraft };
     setFormValues(savedFormValues);
     setSelectedPose((savedFormValues.profilePose as PoseName) ?? "waving");
     setDraft(savedDraft);
     setFieldErrors({});
-  }, [savedFormValues, savedDraft]);
+    return () => {
+      // 再取得で基準が変わっていたら、古い下書きを新しい基準に被せない
+      if (
+        !jsonEqual(latestBaseRef.current.savedFormValues, base.savedFormValues) ||
+        !jsonEqual(latestBaseRef.current.savedDraft, base.savedDraft)
+      ) {
+        return false;
+      }
+      setFormValues(prev.formValues);
+      setSelectedPose(prev.selectedPose);
+      setDraft(prev.draft);
+      setFieldErrors(prev.fieldErrors);
+      return true;
+    };
+  }, [formValues, selectedPose, draft, fieldErrors, savedFormValues, savedDraft]);
 
   // 保存処理
   const handleSave = useCallback(() => {

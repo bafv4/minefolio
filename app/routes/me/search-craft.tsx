@@ -50,6 +50,7 @@ import {
   type SearchCraftVariation,
 } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -591,10 +592,27 @@ export default function SearchCraftPage() {
     fetcher.submit(formData, { method: "post" });
   }, [crafts, loops, fetcher, activePreset, t]);
 
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef({ initialCrafts, initialLoops });
+  latestBaseRef.current = { initialCrafts, initialLoops };
+
   const handleReset = useCallback(() => {
+    const prevCrafts = crafts;
+    const prevLoops = loops;
+    const baseCrafts = initialCrafts;
+    const baseLoops = initialLoops;
     setCrafts(initialCrafts);
     setLoops(initialLoops);
-  }, [initialCrafts, initialLoops]);
+    return () => {
+      const latest = latestBaseRef.current;
+      if (!jsonEqual(latest.initialCrafts, baseCrafts) || !jsonEqual(latest.initialLoops, baseLoops)) {
+        return false;
+      }
+      setCrafts(prevCrafts);
+      setLoops(prevLoops);
+      return true;
+    };
+  }, [crafts, loops, initialCrafts, initialLoops]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {

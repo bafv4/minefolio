@@ -527,10 +527,24 @@ export default function RecordsPage() {
     );
   };
 
+  // 「元に戻す」の間に保存済みの内容が変わっていないか見るための最新値
+  const latestSavedKeyRef = useRef(savedKey);
+  latestSavedKeyRef.current = savedKey;
+
   const handleReset = () => {
+    const prev = { hidden: draftHidden, pinned: draftPinned, records: draftRecords };
+    const baseKey = savedKey;
     setDraftHidden(savedHidden);
     setDraftPinned(savedPinned);
     setDraftRecords(toDrafts(records));
+    return () => {
+      // 再取得で保存済みの内容が変わっていたら、古い下書きを新しい基準に被せない
+      if (latestSavedKeyRef.current !== baseKey) return false;
+      setDraftHidden(prev.hidden);
+      setDraftPinned(prev.pinned);
+      setDraftRecords(prev.records);
+      return true;
+    };
   };
 
   const handleOpenCreate = () => {

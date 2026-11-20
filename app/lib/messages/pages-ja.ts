@@ -397,6 +397,9 @@ export const PAGES_JA = {
     discardChanges: "変更を取り消す",
     discard: "取消",
     changesDiscarded: "変更を取り消しました",
+    undo: "元に戻す",
+    changesRestored: "変更を元に戻しました",
+    undoUnavailable: "保存内容が更新されたため、元に戻せません",
     saveBar: "保存バー",
     /** カードに出す直近{days}日のページビュー数の説明（ガイド・プロフィールの人気順カードで共用） */
     pageViews7d: "直近{days}日の閲覧数",

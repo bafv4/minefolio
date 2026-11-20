@@ -91,6 +91,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
@@ -915,9 +916,20 @@ export default function ItemLayoutsPage() {
     fetcher.submit(formData, { method: "post" });
   }, [layouts, fetcher, activePreset]);
 
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef(initialLayouts);
+  latestBaseRef.current = initialLayouts;
+
   const handleReset = useCallback(() => {
+    const prev = layouts; // 破棄の前の下書き
+    const baseAtReset = initialLayouts;
     setLayouts(initialLayouts);
-  }, [initialLayouts]);
+    return () => {
+      if (!jsonEqual(latestBaseRef.current, baseAtReset)) return false;
+      setLayouts(prev);
+      return true;
+    };
+  }, [layouts, initialLayouts]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {

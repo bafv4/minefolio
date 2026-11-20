@@ -1,5 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/playstyle";
@@ -413,9 +414,21 @@ export default function PlaystylePage() {
     }));
   }, [setFormValues]);
 
+  // 「元に戻す」の間に基準（loader の値）が変わっていないか見るための最新値
+  const latestBaseRef = useRef(initialFormValues);
+  latestBaseRef.current = initialFormValues;
+
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues);
-  }, [initialFormValues, setFormValues]);
+    const prev = formValues;
+    const base = initialFormValues;
+    setFormValues(base);
+    return () => {
+      // 再取得で基準が変わっていたら、古い下書きを新しい基準に被せない
+      if (!jsonEqual(latestBaseRef.current, base)) return false;
+      setFormValues(prev);
+      return true;
+    };
+  }, [formValues, initialFormValues, setFormValues]);
 
   const handleSave = useCallback(() => {
     const formData = new FormData();
