@@ -296,10 +296,9 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                   </Link>
                 </div>
 
-                <nav
-                  aria-label={t("nav.mobileNav")}
-                  className="flex-1 overflow-y-auto px-3 py-4"
-                >
+                {/* スクロールはこの外側が持つ。nav は移動先だけにして、表示設定はその後ろに兄弟として置く */}
+                <div className="flex-1 overflow-y-auto px-3 py-4">
+                <nav aria-label={t("nav.mobileNav")}>
                   <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {t("nav.navigation")}
                   </h2>
@@ -397,10 +396,11 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                       </Link>
                     </Button>
                   )}
+
                 </nav>
 
-                {/* フッター: テーマ切替（ViewSwitcher と同じセグメント調） */}
-                <div className="border-t border-border px-4 py-3 shrink-0">
+                {/* 表示設定: ナビの後ろ（スクロール領域の末尾）。移動先を先に見せる */}
+                <div className="mt-5 border-t border-border px-1 pt-3 pb-2">
                   <span className="text-sm text-muted-foreground">{t("nav.theme")}</span>
                   <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
                     {THEME_OPTIONS.map(({ value, shortLabelKey, icon: Icon }) => (
@@ -454,6 +454,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                       </button>
                     ))}
                   </div>
+                </div>
                 </div>
               </SheetContent>
             </Sheet>
