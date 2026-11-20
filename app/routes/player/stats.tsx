@@ -178,7 +178,7 @@ export default function PlayerStatsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="min-h-11 sm:min-h-8" asChild>
           {/* 戻り先は走者画面の記録タブ（このページと同じ中身のタブ） */}
           <Link to={`/player/${slug}?tab=stats`}>
             <ArrowLeft className="h-4 w-4 mr-2" />

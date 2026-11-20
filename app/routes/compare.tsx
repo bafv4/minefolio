@@ -605,7 +605,7 @@ function CompareTable({
   const columnHeader = (player: CompareColumnPlayer) => {
     const name = getLocalizedDisplayName(player, locale);
     return (
-      <span role="columnheader" title={name} className="flex min-w-0 max-w-28 items-center justify-center gap-1.5 sm:max-w-40">
+      <span role="columnheader" title={name} className="flex min-w-0 max-w-20 items-center justify-center gap-1.5 sm:max-w-40">
         <MinecraftAvatar uuid={player.uuid} size={20} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
         <span className="min-w-0 truncate">{name}</span>
       </span>
@@ -615,7 +615,7 @@ function CompareTable({
     <div
       role="table"
       aria-labelledby={labelledBy}
-      className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 divide-y divide-border/60"
+      className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 sm:gap-x-4 divide-y divide-border/60"
     >
       <div
         role="row"
@@ -700,7 +700,7 @@ function SummaryPlayer({
         align === "start" && "justify-self-start",
       )}
     >
-      <MinecraftAvatar uuid={player.uuid} size={40} skinUrl={player.customSkinUrl} className="shrink-0" />
+      <MinecraftAvatar uuid={player.uuid} size={40} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
       <div className="min-w-0">
         <p className="truncate font-bold">{getLocalizedDisplayName(player, locale)}</p>
         {player.mcid && <p className="truncate text-xs text-muted-foreground">@{player.mcid}</p>}
@@ -1140,16 +1140,16 @@ function SimilarPlayersSection({
             {similarPlayers.map((player) => (
               <div
                 key={player.slug}
-                className="flex items-center justify-between p-3 rounded-lg border"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/60"
               >
-                <div className="flex items-center gap-3">
-                  <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
-                  <div>
-                    <p className="font-medium">{getLocalizedDisplayName(player, locale)}</p>
-                    {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{getLocalizedDisplayName(player, locale)}</p>
+                    {player.mcid && <p className="truncate text-xs text-muted-foreground">@{player.mcid}</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                   <div className="text-right">
                     {/* 一致率は良し悪しの色を付けない（前景色） */}
                     <p className="font-bold">

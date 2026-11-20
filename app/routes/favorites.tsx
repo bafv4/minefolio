@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { useLoaderData, Link } from "react-router";
 import type { Route } from "./+types/favorites";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -13,6 +13,7 @@ import { getLocalFavorites } from "@/lib/favorites-client";
 import { ProfileFeedCard, ProfileFeedCardSkeleton, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { FavoritesNav } from "@/components/favorites-nav";
 import { FavoritesCookieAlert, FavoritesEmptyState } from "@/components/favorites-shared";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, ArrowLeft } from "lucide-react";
@@ -101,19 +102,28 @@ export default function FavoritesPage() {
   // 未ログイン時はクライアント側で localStorage → /api/users/by-slugs を呼んで詳細取得
   const [guestPlayers, setGuestPlayers] = useState<FavoritePlayer[]>([]);
   const [guestLoading, setGuestLoading] = useState(false);
+  // 取得に失敗したとき（空の一覧と区別して、再試行を出す）。retryNonce は再試行で effect を取り直すための値
+  const [guestFailed, setGuestFailed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // 再試行が成功したら見出しへフォーカスを戻す（押した再試行ボタンが消えるため）
+  const focusHeadingAfterLoad = useRef(false);
 
   useEffect(() => {
     if (isLoggedIn) return;
     if (hasConsent !== true) {
       setGuestPlayers([]);
+      setGuestFailed(false);
       return;
     }
     const slugs = getLocalFavorites();
     if (slugs.length === 0) {
       setGuestPlayers([]);
+      setGuestFailed(false);
       return;
     }
     setGuestLoading(true);
+    setGuestFailed(false);
     fetch("/api/users/by-slugs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -127,21 +137,29 @@ export default function FavoritesPage() {
             (data.users as FavoritePlayer[]).map((u) => [u.slug, u]),
           );
           setGuestPlayers(slugs.map((s) => bySlug.get(s)).filter((u): u is FavoritePlayer => u != null));
+          if (focusHeadingAfterLoad.current) {
+            focusHeadingAfterLoad.current = false;
+            // 描画（一覧への切り替え）の後にフォーカスする
+            requestAnimationFrame(() => headingRef.current?.focus());
+          }
+        } else {
+          setGuestFailed(true);
         }
       })
-      .catch(() => {})
+      .catch(() => setGuestFailed(true))
       .finally(() => setGuestLoading(false));
-  }, [isLoggedIn, hasConsent]);
+  }, [isLoggedIn, hasConsent, retryNonce]);
 
   const players = isLoggedIn ? ssrPlayers : guestPlayers;
   const showCookieAlert = !isLoggedIn && hasConsent === false;
   const isLoadingList = !isLoggedIn && guestLoading;
+  const showFailure = !isLoggedIn && guestFailed && !guestLoading;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold flex items-center gap-2 outline-none">
             <Heart className="h-6 w-6 text-favorite fill-current" />
             {t("favorites.title")}
           </h1>
@@ -165,6 +183,14 @@ export default function FavoritesPage() {
 
       {isLoadingList ? (
         <FavoriteCardSkeletonGrid />
+      ) : showFailure ? (
+        <FeedErrorNotice
+          message={t("home.favFetchFailed")}
+          onRetry={() => {
+            focusHeadingAfterLoad.current = true;
+            setRetryNonce((n) => n + 1);
+          }}
+        />
       ) : players.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {players.map((player) => (
@@ -197,14 +223,16 @@ function FavoriteCardSkeletonGrid() {
 
 export function HydrateFallback() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" aria-hidden="true">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-48 mb-2" />
           <Skeleton className="h-5 w-64" />
         </div>
-        <Skeleton className="h-8 w-28" />
+        <Skeleton className="h-11 w-28 self-start sm:h-8 sm:self-auto" />
       </div>
+      {/* FavoritesNav（ContentTabs）の帯の高さ */}
+      <Skeleton className="h-11 w-full max-w-xs sm:h-9" />
       <FavoriteCardSkeletonGrid />
     </div>
   );

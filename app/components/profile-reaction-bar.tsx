@@ -101,7 +101,9 @@ export function ProfileReactionBar({
                 : t("profileReactions.reactAria", { emoji: emojiName, count: pill.count })
             }
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums",
+              "relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums",
+              // 見た目を変えずに押せる範囲を広げる（モバイル 44px。sm 以上は枠どおり）
+              "after:absolute after:-inset-x-1 after:-inset-y-[9.2px] sm:after:inset-0",
               "transition-[color,background-color,border-color,scale] duration-150 active:scale-95 motion-reduce:active:scale-100",
               "border-border bg-muted/50 hover:border-muted-foreground/40",
               pill.reacted && "border-brand/40 bg-brand/10 text-brand",
@@ -121,7 +123,8 @@ export function ProfileReactionBar({
               type="button"
               variant="outline"
               size="icon-sm"
-              className="rounded-full"
+              // 見た目は 32px のまま、モバイルの押せる範囲を 44px に広げる
+              className="relative rounded-full after:absolute after:-inset-1.5 sm:after:inset-0"
               aria-label={t("profileReactions.addLabel")}
             >
               <SmilePlus className="h-4 w-4" aria-hidden />
