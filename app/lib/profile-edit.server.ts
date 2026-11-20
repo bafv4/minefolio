@@ -14,6 +14,7 @@ import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import type { CapeDisplay } from "@/lib/cape";
 import { PROFILE_TAB_VALUES, type ProfileTabValue } from "@/lib/profile-tabs";
+import { parseAgeGroup, type AgeGroup } from "@/lib/age-group";
 import { isValidRtaStartedYearMonth } from "@/lib/rta-career";
 import {
   runAfterResponse,
@@ -155,6 +156,8 @@ type ProfileFields = {
   bio?: string | null;
   location?: string | null;
   pronouns?: string | null;
+  ageGroup?: AgeGroup | null;
+  ageGroupPublic?: boolean;
   profileVisibility?: "public" | "unlisted" | "private";
   profilePose?: "standing" | "walking" | "waving";
   slimSkin?: boolean;
@@ -194,6 +197,10 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   const bio = text("bio");
   const location = text("location");
   const pronouns = text("pronouns");
+  // 年代。空文字は未設定（null）、未知の値は保存を拒否する（null で上書きしない）
+  const ageGroupRaw = has("ageGroup") ? String(formData.get("ageGroup") ?? "") : undefined;
+  const ageGroup = ageGroupRaw === undefined ? undefined : ageGroupRaw === "" ? null : parseAgeGroup(ageGroupRaw);
+  const ageGroupPublic = flag("ageGroupPublic");
   const shortBio = text("shortBio");
   // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
   const rtaStartedYearMonth = text("rtaStartedYearMonth");
@@ -249,6 +256,7 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
   if (profilePose !== undefined && !POSES.includes(profilePose)) return { error: t("meEdit.invalidOption") };
   if (capeDisplayRaw !== undefined && capeDisplay === undefined) return { error: t("meEdit.invalidOption") };
   if (defaultProfileTabRaw !== undefined && defaultProfileTab === undefined) return { error: t("meEdit.invalidOption") };
+  if (ageGroupRaw !== undefined && ageGroup === undefined) return { error: t("meEdit.invalidOption") };
   if (invalidFlags.length > 0) return { error: t("meEdit.invalidOption") };
   if (allowAutoTranslationRaw !== undefined && allowAutoTranslation === undefined) {
     return { error: t("meEdit.invalidOption") };
@@ -273,6 +281,8 @@ function parseProfileFields(formData: FormData, t: Translator): { error: string 
       bio,
       location,
       pronouns,
+      ageGroup,
+      ageGroupPublic,
       profileVisibility,
       profilePose,
       slimSkin,
@@ -593,6 +603,7 @@ export async function saveProfileBatch({
     differs(fields.bio, user.bio) ||
     differs(fields.location, user.location) ||
     differs(fields.pronouns, user.pronouns) ||
+    differs(fields.ageGroup, user.ageGroup) ||
     differs(fields.profilePose, user.profilePose) ||
     differs(fields.slimSkin, user.slimSkin) ||
     differs(fields.capeDisplay, user.capeDisplay) ||
@@ -632,6 +643,8 @@ export async function saveProfileBatch({
       return existing !== undefined && existing.displayOrder !== index;
     });
   const contentChanged = userContentChanged || linksChanged || videosChanged;
+
+  const nextAgeGroup = fields.ageGroup !== undefined ? fields.ageGroup : user.ageGroup;
 
   // ---- ② DB 書き込み（単一トランザクション） ----
   const now = new Date();
@@ -762,6 +775,9 @@ export async function saveProfileBatch({
         bio: fields.bio,
         location: fields.location,
         pronouns: fields.pronouns,
+        ageGroup: fields.ageGroup,
+        // 年代が未設定のときは公開フラグも false に戻す（未設定の年代を公開する状態を残さない）
+        ageGroupPublic: nextAgeGroup === null ? false : fields.ageGroupPublic,
         profileVisibility: fields.profileVisibility,
         profilePose: fields.profilePose,
         slimSkin: fields.slimSkin,

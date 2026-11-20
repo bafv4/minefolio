@@ -11,6 +11,8 @@ export const PROFILE_PAGE_FIELDS = [
   "bio",
   "location",
   "pronouns",
+  "ageGroup",
+  "ageGroupPublic",
   "shortBio",
   "allowAutoTranslation",
   "rtaStartedYearMonth",

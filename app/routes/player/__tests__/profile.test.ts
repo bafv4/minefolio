@@ -154,6 +154,25 @@ describe("loader - プロフィール可視性のゲート", () => {
   });
 });
 
+describe("loader - 年代（ageGroup）の公開制御", () => {
+  it("非公開の年代は他人のレスポンスに含まれない", async () => {
+    await seedPlayer({ ageGroup: "30s", ageGroupPublic: false });
+
+    const data = await callLoader("runner");
+
+    expect((data.player as unknown as { ageGroup: string | null }).ageGroup).toBeNull();
+    expect(JSON.stringify(data)).not.toContain("30s");
+  });
+
+  it("公開の年代は返る", async () => {
+    await seedPlayer({ ageGroup: "30s", ageGroupPublic: true });
+
+    const data = await callLoader("runner");
+
+    expect((data.player as unknown as { ageGroup: string | null }).ageGroup).toBe("30s");
+  });
+});
+
 describe("loader - slug の解決", () => {
   it("存在しない slug は 404 を返す", async () => {
     await seedPlayer();

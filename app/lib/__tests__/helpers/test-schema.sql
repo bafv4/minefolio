@@ -672,7 +672,9 @@ CREATE TABLE `users` (
 	`onboarding_completed` integer DEFAULT true NOT NULL,
 	`allow_auto_translation` integer DEFAULT true NOT NULL,
 	`me_tour_completed_at` integer,
-	`me_checklist_dismissed_at` integer
+	`me_checklist_dismissed_at` integer,
+	`age_group` text,
+	`age_group_public` integer DEFAULT false NOT NULL
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);

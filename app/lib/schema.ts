@@ -4,6 +4,8 @@ import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
 // プロフィールタブ値の単一情報源。schema はここから enum を参照する（詳細は profile-tabs.ts 冒頭コメント）
 import { PROFILE_TAB_VALUES } from "./profile-tabs";
+// 年代の値の単一情報源（age-group.ts）。schema はここから enum を参照する
+import { AGE_GROUP_VALUES } from "./age-group";
 
 // ============================================
 // 1. users（ユーザー）
@@ -107,6 +109,12 @@ export const users = sqliteTable("users", {
   meTourCompletedAt: integer("me_tour_completed_at", { mode: "timestamp" }),
   // /me/edit の「はじめに」チェックリストを閉じた日時。null の間は手順が未完のときだけ表示する。
   meChecklistDismissedAt: integer("me_checklist_dismissed_at", { mode: "timestamp" }),
+
+  // 年代（任意。null は未設定）。値は age-group.ts の AGE_GROUP_VALUES。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  ageGroup: text("age_group", { enum: AGE_GROUP_VALUES }),
+  // 年代を走者画面に出すか。既定は非公開（未成年の区分があるため。本人が明示的に選んだときだけ公開する）
+  ageGroupPublic: integer("age_group_public", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),

@@ -261,6 +261,8 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `allow_auto_translation` | bool | 既定 **true**。bio / shortBio の自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `userBio` の翻訳行を削除する。既定 true は既存ユーザーを「許可」として扱うため。反映は `scripts/add-allow-auto-translation-columns.ts` |
 | `me_tour_completed_at` | timestamp | nullable。`/me` の初回ツアーを終えた（またはスキップした）日時。null の間は初めて `/me` を開いたときに1回だけ出す。反映は `scripts/add-me-guide-columns.ts`（詳細: [me-common.md](./me-common.md)） |
 | `me_checklist_dismissed_at` | timestamp | nullable。`/me/edit` の「はじめに」チェックリストを閉じた日時。反映は同スクリプト |
+| `age_group` | enum? | 年代。`junior_high` / `high_school` / `age_18_21` / `20s` / `30s` / `40s` / `50s` / `60s_plus`。null は未設定。値の単一情報源は `app/lib/age-group.ts` の `AGE_GROUP_VALUES`（検証・表示側もここから導く） |
+| `age_group_public` | bool | 既定 **false**。年代を走者画面に出すか（本人が選ぶ）。既定を非公開にするのは未成年の区分があるため。`age_group` 列とともに `scripts/add-age-group-columns.ts` で反映（falsy 既定の NOT NULL 列で `db:push` が TRUNCATE を提案するため手動 DDL） |
 
 索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
 

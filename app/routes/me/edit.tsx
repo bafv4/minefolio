@@ -16,6 +16,7 @@ import { eq, asc } from "drizzle-orm";
 import { safeExternalHref } from "@/lib/safe-url";
 import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
+import { AGE_GROUP_VALUES, parseAgeGroup } from "@/lib/age-group";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
 import {
   MAX_PROFILE_VIDEOS,
@@ -155,7 +156,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const translationEnabled = isTranslationEnabled();
 
   return {
-    user: userRow,
+    // 年代は既知の値だけを返す（未知の値は未設定として扱う）
+    user: { ...userRow, ageGroup: parseAgeGroup(userRow.ageGroup) ?? null },
     links: user.socialLinks,
     videos: user.profileVideos,
     translationEnabled,
@@ -240,6 +242,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 // Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
 const RTA_STARTED_NONE = "none";
+const AGE_GROUP_NONE = "none";
 
 // 代名詞のプリセット選択肢（値=表示。ロケール非依存の英語表記のため翻訳キーは持たない）。
 // Combobox の allowCustomValue により任意の自由記述も入力できる
@@ -610,6 +613,8 @@ export default function EditProfilePage() {
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
+    ageGroup: user.ageGroup ?? "",
+    ageGroupPublic: (user.ageGroup ?? null) !== null && user.ageGroupPublic,
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     capeDisplay: (user.capeDisplay as CapeDisplay) ?? "cape",
@@ -630,6 +635,7 @@ export default function EditProfilePage() {
   const [formValues, setFormValues] = useState(buildFormValues);
 
   // Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す
+  const selectedAgeGroup = parseAgeGroup(formValues.ageGroup);
   const mainPlatformLabels: Record<string, string> = {
     pc_windows: t("playerProfile.platformPcWindows"),
     pc_mac: t("playerProfile.platformPcMac"),
@@ -758,6 +764,8 @@ export default function EditProfilePage() {
     formData.set("bio", formValues.bio);
     formData.set("location", formValues.location);
     formData.set("pronouns", formValues.pronouns);
+    formData.set("ageGroup", formValues.ageGroup);
+    formData.set("ageGroupPublic", String(formValues.ageGroup !== "" && formValues.ageGroupPublic));
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("capeDisplay", formValues.capeDisplay);
@@ -1601,6 +1609,50 @@ export default function EditProfilePage() {
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.shortBioHint")}
               </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-2 sm:max-w-sm">
+                <Label htmlFor="ageGroup">{t("meEdit.ageGroup")}</Label>
+                <Select
+                  value={formValues.ageGroup === "" ? AGE_GROUP_NONE : formValues.ageGroup}
+                  onValueChange={(value) =>
+                    setFormValues((prev) =>
+                      value === AGE_GROUP_NONE
+                        ? { ...prev, ageGroup: "", ageGroupPublic: false }
+                        : { ...prev, ageGroup: value },
+                    )
+                  }
+                >
+                  <SelectTrigger id="ageGroup" className="w-full">
+                    <SelectValue>
+                      {selectedAgeGroup ? t(`meEdit.ageGroupLabels.${selectedAgeGroup}`) : t("meEdit.ageGroupNone")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AGE_GROUP_NONE}>{t("meEdit.ageGroupNone")}</SelectItem>
+                    {AGE_GROUP_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {t(`meEdit.ageGroupLabels.${value}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="ageGroupPublic" className="text-sm font-normal cursor-pointer">
+                    {t("meEdit.ageGroupPublic")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{t("meEdit.ageGroupPublicHint")}</p>
+                </div>
+                <Switch
+                  id="ageGroupPublic"
+                  checked={formValues.ageGroup !== "" && formValues.ageGroupPublic}
+                  disabled={formValues.ageGroup === ""}
+                  onCheckedChange={(checked) => setFormValues((prev) => ({ ...prev, ageGroupPublic: checked }))}
+                />
+              </div>
             </div>
 
             {translationEnabled && (

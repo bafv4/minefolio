@@ -92,6 +92,8 @@ const PROFILE_FORM = {
   bio: "new bio",
   location: "Osaka",
   pronouns: "she/her",
+  ageGroup: "40s",
+  ageGroupPublic: "true",
   shortBio: "new short",
   allowAutoTranslation: "false",
   rtaStartedYearMonth: "2022-02",

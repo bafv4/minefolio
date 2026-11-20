@@ -134,11 +134,14 @@ function applyMainPreset<
     keybindings: unknown;
     playerConfig: unknown;
     configPresets: (PresetSnapshot & { id: string; isActive: boolean })[];
+    ageGroup?: unknown;
+    ageGroupPublic?: unknown;
   },
 >(player: P): Omit<P, "configPresets"> {
-  const { configPresets: userPresets, ...rest } = player;
+  // 比較画面は年代を表示しないので、非公開の年代をクライアントへ送らないようここで落とす
+  const { configPresets: userPresets, ageGroup: _ageGroup, ageGroupPublic: _ageGroupPublic, ...rest } = player;
   const main = userPresets[0];
-  if (!shouldUsePresetSnapshot(main)) return rest;
+  if (!shouldUsePresetSnapshot(main)) return rest as unknown as Omit<P, "configPresets">;
   const decoded = decodePresetConfig(main, player.id);
   return {
     ...rest,

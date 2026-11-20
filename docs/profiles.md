@@ -30,6 +30,8 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 | `slimSkin` | boolean | スリムスキン使用 |
 | `location` | text | 所在地 |
 | `pronouns` | text | 代名詞 |
+| `ageGroup` | text? (enum) | 年代。値は `app/lib/age-group.ts` の `AGE_GROUP_VALUES`（若い順）。null = 未設定 |
+| `ageGroupPublic` | boolean | 年代を走者画面に表示するか（既定 false）。`ageGroup` が null のときは常に false |
 | `rtaStartedYearMonth` | text | RTAを始めた年月（`"YYYY-MM"` 形式、未回答は `null`）。別プロジェクトmcsr-buttonの `started_year_month` と同形式で、経過年数は表示時に算出する（下記「RTA歴」参照） |
 | `defaultProfileTab` | enum | デフォルト表示タブ（`profile` / `stats` / `keybindings` / `items` / `searchcraft` / `devices` / `settings` / `playstyle`。詳細は下記「プロフィール表示タブ」） |
 | `featuredVideoUrl` | text | 注目動画URL（レガシー。`profile_videos` が1件でもあればそちらを優先表示し、この値は無視される） |
@@ -844,7 +846,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 | ページ | 内容 | 送る項目（`app/lib/profile-edit-scope.ts`） |
 |---|---|---|
-| `/me/edit`「プロフィール」（訪問者が走者画面で見る中身） | MCID（Java / Bedrock）・スキン・マント・ポーズ・基本情報・Speedrun.com 連携（表示のみ）・ソーシャルリンク・動画 | `displayName` `displayNameAlphabet` `bio` `shortBio` `location` `pronouns` `allowAutoTranslation` `rtaStartedYearMonth` `mainPlatform` `role` `profilePose` `slimSkin` `capeDisplay` `speedruncomUsername`（リンクから決まる値）＋ `changes`（MCID・Bedrock・リンク・動画の差分） |
+| `/me/edit`「プロフィール」（訪問者が走者画面で見る中身） | MCID（Java / Bedrock）・スキン・マント・ポーズ・基本情報・Speedrun.com 連携（表示のみ）・ソーシャルリンク・動画 | `displayName` `displayNameAlphabet` `bio` `shortBio` `location` `pronouns` `ageGroup` `ageGroupPublic` `allowAutoTranslation` `rtaStartedYearMonth` `mainPlatform` `role` `profilePose` `slimSkin` `capeDisplay` `speedruncomUsername`（リンクから決まる値）＋ `changes`（MCID・Bedrock・リンク・動画の差分） |
 | `/me/account`「公開とアカウント」 | プロフィール設定（公開範囲・既定タブ・表示設定）・旧データ取り込み（`import_legacy`）・危険な操作（アカウント削除 `delete_account`） | `profileVisibility` `defaultProfileTab` `showPacemanOnHome` `showTwitchOnHome` `showYoutubeOnHome` `showRankedStats` `showPacemanStats` |
 
 - **送られた項目だけを更新する**: 保存本体（`saveProfileBatch`）は、フォームに**無い**項目を触らない（`undefined` = 未送信。空欄は空文字で送られ、`null` として保存される）。`/me/account` の保存が `/me/edit` の項目（基本情報・MCID・リンク・動画・Speedrun.com 連携）を空にしたり、`updatedAt` を進めたり、外部キャッシュのキックを走らせたりしない（逆も同じ）。commit 後の副作用（非公開なら訳文行を消す・公開への切替で外部キャッシュを追いつかせる）は、送られた公開範囲、無ければ保存済みの値で判定する。テストは `app/routes/me/__tests__/account.test.ts`
@@ -874,7 +876,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 `users.updatedAt` はホームの「最近の更新」と、お気に入り走者の動きの「プロフィールを更新」の元になる。**プロフィールの内容が変わったときだけ**進め、露出を減らす操作・表示設定の変更では進めない（非公開化や非表示にした操作が、かえって「更新」として目立たないようにするため）。
 
-- 進める: `/me/edit`（と既定タブは `/me/account`）の保存で、MCID・Bedrock MCID・表示名・表示名のアルファベット表記・自己紹介（`bio` / `shortBio`）・場所・代名詞・ポーズ・スリム・マント・既定タブ・メインプラットフォーム・ロール・RTA 歴・speedrun.com ユーザー名、ソーシャルリンク、動画（追加・削除・内容変更・並び替え）のいずれかが**既存値と違う**とき。記録（`category_records`）の追加・編集、speedrun.com 記録のピン留め切替
+- 進める: `/me/edit`（と既定タブは `/me/account`）の保存で、MCID・Bedrock MCID・表示名・表示名のアルファベット表記・自己紹介（`bio` / `shortBio`）・場所・代名詞・年代（`ageGroup`。`ageGroupPublic` だけの変更は表示設定なので進めない）・ポーズ・スリム・マント・既定タブ・メインプラットフォーム・ロール・RTA 歴・speedrun.com ユーザー名、ソーシャルリンク、動画（追加・削除・内容変更・並び替え）のいずれかが**既存値と違う**とき。記録（`category_records`）の追加・編集、speedrun.com 記録のピン留め切替
 - 進めない: `/me/edit` / `/me/account` の保存で変化した列が `profileVisibility` / `showPacemanOnHome` / `showTwitchOnHome` / `showYoutubeOnHome` / `showRankedStats` / `showPacemanStats` / `allowAutoTranslation` だけのとき（何も変わらない保存も同様）、`/me/records` の speedrun.com 記録の非表示切替、ホームの並び順保存
 - 判定は送信値ではなく既存値との差分で行う（`saveProfileBatch` の `contentChanged`）。
 
@@ -899,6 +901,16 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 - **`slug`・`uuid`・スキン表示には影響しない**（プロフィールURLは変わらない）。そのため Java版 MCID 変更時のような
   URL変更警告・ページリロードは行わず、トーストのみで完結する
 - 削除は `AlertDialog` の確認を挟む
+
+### 年代（ageGroup）
+
+任意項目。`/me/edit` の基本情報（代名詞の近く）に Select と「走者画面に表示する」スイッチを置く。
+
+- 選択肢は `AGE_GROUP_VALUES` の順（中学生 / 高校生 / 18〜21歳 / 二十代 / … / 六十代以上）。表示名は翻訳キー `meEdit.ageGroupLabels.*`（走者画面も同じキー）。先頭に「未設定」
+- スイッチは既定オフ。年代が未設定のときは無効（オンにできない）。説明文は「既定では非公開です。オンにすると、走者画面を見た人に表示されます。」
+- 保存: `profile-edit.server.ts` の `parseProfileFields` が `parseAgeGroup` で検証する。空文字は null（未設定）、未知の値は `meEdit.invalidOption` で拒否し、既存値を null で上書きしない。`ageGroup` が（保存後に）null になるときは `ageGroupPublic` も false に戻す。`ageGroup` の変更は内容の変化（`updatedAt` を進める）、`ageGroupPublic` だけの変更は表示設定なので進めない
+- 公開: 走者画面の loader は `publicAgeGroup()`（`age-group.ts`）を通し、`ageGroupPublic` が true のときだけ `player.ageGroup` を返す（非公開の値は本人を含めレスポンスに載せない）。身元帯のメタ情報（場所・代名詞と同じ並び、Cake アイコン）に表示する。本人が非公開にしているときはどこにも出さない
+- 他の公開経路（`/compare` は `applyMainPreset` で落とす。browse・by-slugs・OGP・お気に入りは列を明示選択しており含まない）へは出さない。新しく users を公開する経路を足すときは `ageGroup` を含めない
 
 ### 代名詞（pronouns）の入力
 

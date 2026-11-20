@@ -28,6 +28,7 @@ import {
   PendingSpeedrunRecordsCard,
   StatsServiceLoadingCard,
 } from "@/components/player-stats-cards";
+import { parseAgeGroup, publicAgeGroup } from "@/lib/age-group";
 import { platformLabel } from "@/lib/platform-label";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
@@ -217,6 +218,7 @@ import {
   Pin,
   Gamepad2,
   Speech,
+  Cake,
   CircleHelp,
 } from "lucide-react";
 import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
@@ -629,6 +631,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: Date.now(),
     player: {
       ...player,
+      // 年代は公開設定のときだけ返す（非公開の値は本人を含めレスポンスに載せない）
+      ageGroup: publicAgeGroup(player),
+      ageGroupPublic: undefined,
       keybindings: displayKeybindings,
       playerConfig: displayPlayerConfig,
       keyRemaps: displayKeyRemaps,
@@ -670,6 +675,7 @@ export default function PlayerProfilePage() {
   const [skin3dOpen, setSkin3dOpen] = useState(false);
   // 初期設定（/onboarding）が終わっていない本人。ページはまだ公開されていない
   const setupIncomplete = isOwner && !player.onboardingCompleted;
+  const ageGroup = parseAgeGroup(player.ageGroup);
   // 自己紹介（bio / shortBio）の自動翻訳。訳文があれば既定で訳文を出し、原文へ切り替えられる。
   // 切替はクライアント状態のみ（ローダーは訳文と原文の両方を返す）
   const [showBioOriginal, setShowBioOriginal] = useState(false);
@@ -1532,6 +1538,12 @@ export default function PlayerProfilePage() {
                       <span className="flex items-center gap-1">
                         <Speech className="h-4 w-4" aria-hidden />
                         {player.pronouns}
+                      </span>
+                    )}
+                    {ageGroup && (
+                      <span className="flex items-center gap-1">
+                        <Cake className="h-4 w-4" aria-hidden />
+                        {t(`meEdit.ageGroupLabels.${ageGroup}`)}
                       </span>
                     )}
                     {rtaCareer &&

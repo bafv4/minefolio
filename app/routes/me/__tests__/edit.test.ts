@@ -172,6 +172,52 @@ describe("action - pronouns の検証", () => {
   });
 });
 
+describe("action - ageGroup（年代）の検証", () => {
+  async function findAge(userId: string) {
+    const row = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    return { ageGroup: row?.ageGroup, ageGroupPublic: row?.ageGroupPublic };
+  }
+
+  it("正常値は保存され、公開フラグも保存される", async () => {
+    const user = await setupUser();
+
+    const res = await callAction(baseFormData({ ageGroup: "20s", ageGroupPublic: "true" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await findAge(user.id)).toEqual({ ageGroup: "20s", ageGroupPublic: true });
+  });
+
+  it("空文字は未設定（null）になり、公開フラグも false に戻る", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      ageGroup: "30s",
+      ageGroupPublic: true,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ ageGroup: "", ageGroupPublic: "true" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await findAge(user.id)).toEqual({ ageGroup: null, ageGroupPublic: false });
+  });
+
+  it("未知の値は保存せずエラーを返し、既存の値を null で上書きしない", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      ageGroup: "30s",
+      ageGroupPublic: true,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ ageGroup: "teens" }));
+
+    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(await findAge(user.id)).toEqual({ ageGroup: "30s", ageGroupPublic: true });
+  });
+});
+
 describe("action - profileVisibility の検証", () => {
   it("allowlist 外の値（foo）は invalidOption エラーになり、DB は無変更", async () => {
     const user = await setupUser();
