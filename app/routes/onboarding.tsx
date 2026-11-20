@@ -576,24 +576,43 @@ type Completion = { redirectTo: string; name: string };
  * ステップごとの保存用 fetcher。action が `{ success }` を返し、続く loader の再検証まで
  * 終わった（state が idle に戻った）時点で onSuccess を呼ぶ。失敗時は error を返す。
  */
-function useStepSubmit(onSuccess: () => void) {
+function useStepSubmit(onSuccess: () => void, onBack?: () => void) {
   const fetcher = useFetcher<typeof action>();
   const onSuccessRef = useRef(onSuccess);
+  const onBackRef = useRef(onBack);
+  // 「戻る」で保存を送ったときだけ true。成功したら onSuccess（次へ）ではなく onBack（前へ）へ進む
+  const backAfterSaveRef = useRef(false);
+  const [savingForBack, setSavingForBack] = useState(false);
   useEffect(() => {
     onSuccessRef.current = onSuccess;
+    onBackRef.current = onBack;
   });
 
   const { state, data } = fetcher;
   useEffect(() => {
-    if (state === "idle" && data && "success" in data && data.success) {
-      onSuccessRef.current();
+    if (state !== "idle") return;
+    const goBack = backAfterSaveRef.current;
+    backAfterSaveRef.current = false;
+    setSavingForBack(false);
+    if (data && "success" in data && data.success) {
+      if (goBack && onBackRef.current) onBackRef.current();
+      else onSuccessRef.current();
     }
   }, [state, data]);
+
+  /** 入力途中の「戻る」: 今の入力を保存してから前へ戻る。保存に失敗したらその手順に残り、エラーを見せる */
+  const saveThenBack = (form: HTMLFormElement | null) => {
+    if (!form) return;
+    if (!form.reportValidity()) return;
+    backAfterSaveRef.current = true;
+    setSavingForBack(true);
+    void fetcher.submit(new FormData(form), { method: "post" });
+  };
 
   const error = state === "idle" && data && "error" in data ? data.error : null;
   // 欄に結ぶエラー（save_minecraft の mcid / bedrockMcid）。欄の無いエラーは null
   const errorField = state === "idle" && data && "field" in data ? data.field : null;
-  return { fetcher, isSubmitting: state !== "idle", error, errorField };
+  return { fetcher, isSubmitting: state !== "idle", savingForBack, saveThenBack, error, errorField };
 }
 
 /**
@@ -852,7 +871,8 @@ function MinecraftStep({
   onNext: () => void;
 }) {
   const t = useT();
-  const { fetcher, isSubmitting, error, errorField } = useStepSubmit(onNext);
+  const { fetcher, isSubmitting, savingForBack, saveThenBack, error, errorField } = useStepSubmit(onNext, onBack);
+  const formRef = useRef<HTMLFormElement>(null);
   const { dirty, onInput } = useFormDirty({
     mcid: user.mcid ?? "",
     bedrockMcid: user.bedrockMcid ?? "",
@@ -887,7 +907,7 @@ function MinecraftStep({
         focusTitle={focusTitle}
       />
       <CardContent className="px-4 sm:px-5">
-        <fetcher.Form method="post" className="space-y-4" onInput={onInput}>
+        <fetcher.Form ref={formRef} method="post" className="space-y-4" onInput={onInput}>
           <input type="hidden" name="_action" value="save_minecraft" />
 
           <div className="space-y-2">
@@ -934,7 +954,8 @@ function MinecraftStep({
           {/* 欄に結んだエラーは下に重ねて出さない */}
           <OnboardingStepError error={errorField ? null : error} />
           <OnboardingStepFooter
-            onBack={onBack}
+            onBack={dirty ? () => saveThenBack(formRef.current) : onBack}
+            backSaving={savingForBack}
             onSkip={dirty ? undefined : onNext}
             nextLabel={t("onboarding.next")}
             isSubmitting={isSubmitting}
@@ -1054,7 +1075,8 @@ function LinksStep({
   onNext: () => void;
 }) {
   const t = useT();
-  const { fetcher, isSubmitting, error } = useStepSubmit(onNext);
+  const { fetcher, isSubmitting, savingForBack, saveThenBack, error } = useStepSubmit(onNext, onBack);
+  const formRef = useRef<HTMLFormElement>(null);
   const { dirty, onInput } = useFormDirty(links);
 
   return (
@@ -1067,7 +1089,7 @@ function LinksStep({
         focusTitle={focusTitle}
       />
       <CardContent className="px-4 sm:px-5">
-        <fetcher.Form method="post" className="space-y-4" onInput={onInput}>
+        <fetcher.Form ref={formRef} method="post" className="space-y-4" onInput={onInput}>
           <input type="hidden" name="_action" value="save_links" />
 
           {LINK_PLATFORMS.map((platform) => (
@@ -1095,7 +1117,8 @@ function LinksStep({
 
           <OnboardingStepError error={error} />
           <OnboardingStepFooter
-            onBack={onBack}
+            onBack={dirty ? () => saveThenBack(formRef.current) : onBack}
+            backSaving={savingForBack}
             onSkip={dirty ? undefined : onNext}
             nextLabel={t("onboarding.next")}
             isSubmitting={isSubmitting}

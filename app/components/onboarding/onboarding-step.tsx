@@ -84,6 +84,7 @@ export function OnboardingStepError({ error }: { error: string | null | undefine
  */
 export function OnboardingStepFooter({
   onBack,
+  backSaving = false,
   onSkip,
   onNext,
   nextLabel,
@@ -92,6 +93,8 @@ export function OnboardingStepFooter({
   hint,
 }: {
   onBack?: () => void;
+  /** 「戻る」で入力を保存している間 true（ボタンにスピナーを出す。二重送信は isSubmitting が防ぐ） */
+  backSaving?: boolean;
   onSkip?: () => void;
   onNext?: () => void;
   nextLabel: string;
@@ -111,7 +114,7 @@ export function OnboardingStepFooter({
           onClick={onBack}
           disabled={isSubmitting}
         >
-          <ChevronLeft className="h-4 w-4" />
+          {backSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronLeft className="h-4 w-4" />}
           {t("onboarding.back")}
         </Button>
       )}
@@ -134,7 +137,7 @@ export function OnboardingStepFooter({
           onClick={onNext}
           disabled={isSubmitting || nextDisabled}
         >
-          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isSubmitting && !backSaving && <Loader2 className="h-4 w-4 animate-spin" />}
           {nextLabel}
         </Button>
       </div>
