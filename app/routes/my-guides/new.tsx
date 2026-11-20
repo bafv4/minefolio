@@ -201,7 +201,7 @@ export default function NewGuidePage() {
             {errorMessage}
           </p>
         )}
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
+        <Button type="submit" className="w-full min-h-11 sm:min-h-9" disabled={isSubmitting}>
           {isSubmitting ? t("meGuides.creating") : t("meGuides.createAndEdit")}
         </Button>
       </Form>
