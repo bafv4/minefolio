@@ -422,7 +422,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
     });
     expect(created).toEqual({
       success: true, intent: "create-preset",
-      message: "プリセット「A」を作成し、編集先にしました",
+      message: "プリセット「A」を作成し、編集中にしました",
     });
 
     const presetA = await db.query.configPresets.findFirst({
@@ -459,7 +459,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
       ]),
     });
     const appliedB = await callAction({ intent: "apply-preset", presetId: presetB.id });
-    expect(appliedB).toEqual({ success: true, intent: "apply-preset", message: "プリセット「B」を編集先にしました" });
+    expect(appliedB).toEqual({ success: true, intent: "apply-preset", message: "プリセット「B」を編集中にしました" });
 
     // B は他種別を持たないので、ライブは B の内容だけに置き換わる（全ワイプの確認）
     expect(await readLiveConfig(user.id)).toEqual({
@@ -469,7 +469,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
 
     // A を再適用するとライブが完全復元される（craftId は新規採番だが参照は保たれる）
     const appliedA = await callAction({ intent: "apply-preset", presetId: presetA!.id });
-    expect(appliedA).toEqual({ success: true, intent: "apply-preset", message: "プリセット「A」を編集先にしました" });
+    expect(appliedA).toEqual({ success: true, intent: "apply-preset", message: "プリセット「A」を編集中にしました" });
 
     expect(await readLiveConfig(user.id)).toEqual(baseline);
   });
@@ -537,7 +537,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「旧世代」を編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「旧世代」を編集中にしました" });
     const live = await readLiveConfig(user.id);
     expect(live.keyRemaps).toEqual([
       {
@@ -605,7 +605,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「重複sequence」を編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「重複sequence」を編集中にしました" });
     const live = await readLiveConfig(user.id);
     // sequence は挿入順の1始まりへ振り直される
     expect(live.searchCraftLoops.map((l) => ({ sequence: l.sequence, comment: l.comment }))).toEqual(
@@ -699,7 +699,7 @@ describe("action - delete-preset の不変条件", () => {
 
     expect(res).toEqual({
       error:
-        "編集中のプリセットは削除できません。別のプリセットを編集対象にしてから削除してください。",
+        "編集中のプリセットは削除できません。別のプリセットを編集中にしてから削除してください。",
     });
     expect(await findPreset(active.id)).toBeDefined();
   });
@@ -889,7 +889,7 @@ describe("action - create-preset のソース別スナップショット", () =>
     });
     expect(res).toEqual({
       success: true, intent: "create-preset",
-      message: "プリセット「コピー先」を作成し、編集先にしました",
+      message: "プリセット「コピー先」を作成し、編集中にしました",
     });
 
     const copy = (await db.query.configPresets.findFirst({
@@ -918,7 +918,7 @@ describe("action - create-preset のソース別スナップショット", () =>
     const user = await setupUser();
 
     const res = await callAction({ intent: "create-preset", name: "初期", sourceType: "current" });
-    expect(res).toEqual({ success: true, intent: "create-preset", message: "プリセット「初期」を作成し、編集先にしました" });
+    expect(res).toEqual({ success: true, intent: "create-preset", message: "プリセット「初期」を作成し、編集中にしました" });
 
     const preset = (await db.query.configPresets.findFirst({
       where: eq(schema.configPresets.userId, user.id),

@@ -2224,17 +2224,17 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     lastPresetDeleteWarning:
       "This is your last preset. Deleting it also deletes your current settings (controls, devices, item layouts, search-craft, and so on).",
     deleteAria: "Delete preset \"{name}\"",
-    editAria: "Make preset \"{name}\" the one you edit",
+    editAria: "Set preset \"{name}\" as the editing preset",
     setMainAria: "Set preset \"{name}\" as main",
     notMainNotice: "This preset is not your main preset, so saving changes will not show them on your runner page",
     setMainDisabledHint: "You have unsaved changes. Save or discard them before setting as main",
     cannotDeleteActive:
-      "You can't delete the preset you're editing. Switch to another preset first.",
+      "You can't delete the preset you're editing. Set another preset as editing first.",
     cannotDeleteMain:
       "You can't delete your main preset. Set another preset as main first.",
     mainBadge: "Main",
     editingBadge: "Editing",
-    edit: "Edit this one",
+    edit: "Set as editing preset",
     rename: "Rename",
     renameAria: "Rename preset \"{name}\" and edit its description",
     renameTitle: "Rename preset and edit description",
@@ -2287,7 +2287,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     updatedPrefix: "Updated:",
     copiedAndApplied:
       "Created preset \"{name}\" (copied from \"{source}\")",
-    createdAndApplied: "Created preset \"{name}\" and set it as the one you edit",
+    createdAndApplied: "Created preset \"{name}\" and set it as editing",
     createdFromCurrentAndApplied:
       "Created preset \"{name}\" (from current settings)",
     appliedPreset: "Now editing preset \"{name}\"",
@@ -3008,7 +3008,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     appliedHint: "The template has been applied.",
     appliedHintNew: "Saved as a new preset. Your current settings haven't changed.",
     appliedHintInactive: "Applied to the preset. Your current settings haven't changed.",
-    activatePreset: "Switch to editing this preset",
+    activatePreset: "Set as editing preset",
     activateSuccess: "You're now editing preset \"{name}\"",
     activatedHint: "You're now editing preset \"{name}\".",
     goToMySearchCraft: "Check my search-craft settings",
@@ -3097,7 +3097,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Uncheck to leave the target's remaps unchanged",
     noPresetsToOverwrite:
       "There are no presets to save into. Save as a new preset instead.",
-    saveNewSuccess: "Saved as new preset \"{name}\" (not set as the one you edit)",
+    saveNewSuccess: "Saved as new preset \"{name}\" (not set as editing)",
     saveExistingSuccess: "Saved to preset \"{name}\"",
     saveExistingActiveSuccess:
       "Saved to preset \"{name}\" (editing) and updated your current settings",
