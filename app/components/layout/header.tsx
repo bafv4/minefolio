@@ -134,10 +134,10 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
         >
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center">
-              <Link to="/" className={cn("flex items-center space-x-2 rounded-md", NAV_FOCUS_CLASS)}>
-                <img src="/icon.png" alt="" className="h-8 w-8" />
-                <span className="text-xl font-bold">Minefolio</span>
+            <div className="flex min-w-0 items-center">
+              <Link to="/" className={cn("flex min-w-0 items-center space-x-2 rounded-md", NAV_FOCUS_CLASS)}>
+                <img src="/icon.png" alt="" className="h-8 w-8 shrink-0" />
+                <span className="truncate text-xl font-bold">Minefolio</span>
               </Link>
             </div>
 
@@ -263,7 +263,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
 
             {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <div className="flex items-center gap-1 lg:hidden">
+              <div className="flex shrink-0 items-center gap-1 lg:hidden">
                 <WhatsNew />
                 <SheetTrigger asChild>
                   <Button

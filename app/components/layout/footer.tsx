@@ -12,13 +12,11 @@ export function Footer() {
           折り返したリンクに重ならないよう、lg 未満はボタンの高さぶん（約 4.25rem）以上を空ける */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-20 lg:pb-8">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center">
-            <div className="flex items-center space-x-2">
-              <img src="/icon.png" alt="" className="h-8 w-8" />
-              <span className="text-xl font-bold">Minefolio</span>
-              <span className="text-xs text-muted-foreground ml-1">{version}</span>
-              <span className="text-xs text-muted-foreground ml-1">by bfmkn</span>
-            </div>
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1">
+            <img src="/icon.png" alt="" className="h-8 w-8" />
+            <span className="text-xl font-bold">Minefolio</span>
+            <span className="text-xs text-muted-foreground ml-1">{version}</span>
+            <span className="text-xs text-muted-foreground ml-1">by bfmkn</span>
           </div>
 
           {/* リンクはモバイルで高さ 44px（行の間隔は高さで取る）。sm 以上は文字の高さに戻す */}
