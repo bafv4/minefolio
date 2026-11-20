@@ -1514,9 +1514,6 @@ export const PAGES_JA = {
     deleting: "削除中...",
     deletePermanently: "完全に削除する",
     cancel: "キャンセル",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
   },
   /**
    * プレイスタイルの選択肢ラベル（app/lib/playstyle.ts の各 OPTIONS の labelKey が参照する）。
@@ -1613,9 +1610,6 @@ export const PAGES_JA = {
     errorInvalidOption: "不正な選択肢です",
     errorDragTapeTypeTooLong: "テープの種類は100文字以下にしてください",
     errorMousepadTypeTooLong: "マウスパッドの種類は100文字以下にしてください",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
   },
   meAccount: {
     title: "公開とアカウント - Minefolio",
@@ -1924,6 +1918,11 @@ export const PAGES_JA = {
     targetPreset: "取り込み先: 編集中のプリセット「{name}」",
     targetPresetNone: "取り込み先: プリセットがまだありません。取り込むと新しいプリセットが作られます。",
   },
+  meErrorBoundary: {
+    title: "エラーが発生しました",
+    description: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
+    reload: "ページをリロード",
+  },
   meDevices: {
     title: "デバイス - Minefolio",
     userNotFound: "ユーザーが見つかりません",
@@ -1997,9 +1996,6 @@ export const PAGES_JA = {
     noData: "データなし",
     noOtherPresets: "他のプリセットがありません",
     cancel: "キャンセル",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
   },
   meRecords: {
     title: "記録 - Minefolio",
@@ -2062,9 +2058,6 @@ export const PAGES_JA = {
     noCustomRecords: "カスタム記録がまだありません",
     noCustomRecordsDescription: "Speedrun.com以外の記録を追加できます。",
     addFirstRecord: "最初の記録を追加",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
   },
   meItems: {
     title: "アイテム配置 - Minefolio",
@@ -2111,9 +2104,6 @@ export const PAGES_JA = {
     layoutListHeading: "区間ごとの配置",
     noData: "データなし",
     noOtherPresets: "他のプリセットがありません",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
     duplicate: "複製",
     categoryAria: "カテゴリ",
     toggleNotesAria: "「{name}」のメモ欄を開閉",
@@ -2163,9 +2153,6 @@ export const PAGES_JA = {
     copyDialogDescription: "コピー元のプリセットを選択してください",
     noData: "データなし",
     noOtherPresets: "他のプリセットがありません",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
     timingNone: "指定なし",
     withShift: "Shiftを押しながら",
     loopSectionTitle: "繋ぎ方（Loop）",
@@ -2454,9 +2441,6 @@ export const PAGES_JA = {
     noData: "データなし",
     noOtherPresets: "他のプリセットがありません",
     cancel: "キャンセル",
-    errorTitle: "エラーが発生しました",
-    errorDescription: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reloadPage: "ページをリロード",
   },
   skinUploader: {
     pngOnly: "PNG形式の画像のみアップロードできます",

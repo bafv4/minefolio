@@ -17,7 +17,6 @@ import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination,
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +43,7 @@ import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { PageSection } from "@/components/page-section";
 import { NoticeBanner } from "@/components/notice-banner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { KeyDialogSection } from "@/components/keybindings/key-dialog-section";
 import {
   AlertDialog,
@@ -74,6 +74,7 @@ import { isValidRemapInputs, isValidCustomKeyInputs, isValidCustomActionInputs }
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -175,34 +176,37 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-5 w-64" />
         </div>
         <div className="flex gap-2">
-          <div className="h-9 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-9 w-24 bg-muted rounded animate-pulse" />
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-9 w-24" />
         </div>
       </div>
 
-      {/* Virtual Keyboard Card */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        <div className="h-80 w-full bg-muted rounded-lg animate-pulse" />
+      {/* キーボードの欄（上罫線＋見出し＋中身） */}
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-80 w-full rounded-xl" />
       </div>
 
-      {/* Tabs */}
-      <div className="h-10 w-96 bg-muted rounded animate-pulse" />
+      {/* タブ */}
+      <Skeleton className="h-10 w-96 max-w-full" />
 
-      {/* Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
+      {/* 内容 */}
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+        </div>
       </div>
     </div>
   );
@@ -2326,7 +2330,7 @@ export default function KeybindingsPage() {
                         type="button"
                         onClick={() => setEditingKeyCode(keyCode)}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
                           binding ? "border-primary/30" : "border-input"
                         )}
@@ -2352,7 +2356,7 @@ export default function KeybindingsPage() {
                         type="button"
                         onClick={() => setEditingKeyCode(keyCode)}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
                           binding ? "border-primary/30" : "border-input"
                         )}
@@ -2366,13 +2370,13 @@ export default function KeybindingsPage() {
                   })}
                 </div>
                 {/* スティックの説明 */}
-                <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                <NoticeBanner tone="info" className="mt-4">
                   <div className="font-medium mb-1">{t("meKeybindings.stickFixed")}</div>
                   <ul className="list-disc list-inside space-y-1 text-xs">
                     <li>{t("meKeybindings.leftStickDesc")}</li>
                     <li>{t("meKeybindings.rightStickDesc")}</li>
                   </ul>
-                </div>
+                </NoticeBanner>
               </div>
             </div>
         </PageSection>
@@ -3095,23 +3099,5 @@ export default function KeybindingsPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meKeybindings.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meKeybindings.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meKeybindings.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

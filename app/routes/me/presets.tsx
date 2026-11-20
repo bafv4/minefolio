@@ -59,6 +59,7 @@ import { StatusPill } from "@/components/status-pill";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { intlLocale } from "@/lib/date-locale";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -1309,7 +1310,7 @@ export default function PresetsPage() {
                 return (
                   <div
                     key={preset.id}
-                    className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className="p-4 rounded-xl border border-border/70 bg-card"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       <div className="flex-1 min-w-0">
@@ -1322,10 +1323,9 @@ export default function PresetsPage() {
                             </StatusPill>
                           )}
                           {preset.isActive && (
-                            <Badge variant="secondary" className="shrink-0">
-                              <Crosshair className="h-3 w-3 mr-1" aria-hidden="true" />
+                            <StatusPill icon={Crosshair} className="shrink-0">
                               {t("mePresets.editingBadge")}
-                            </Badge>
+                            </StatusPill>
                           )}
                         </div>
                         {preset.description && (
@@ -1572,4 +1572,8 @@ export default function PresetsPage() {
       </Dialog>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <MeErrorBoundary />;
 }

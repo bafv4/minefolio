@@ -18,7 +18,6 @@ import { NoticeBanner } from "@/components/notice-banner";
 import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,6 +97,7 @@ import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -206,7 +206,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200" aria-hidden="true">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-32 mb-2" />
@@ -1103,23 +1103,5 @@ export default function ItemLayoutsPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meItems.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meItems.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meItems.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

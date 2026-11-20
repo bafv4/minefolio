@@ -15,7 +15,6 @@ import { NoticeBanner } from "@/components/notice-banner";
 import { PageSection } from "@/components/page-section";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -28,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Keyboard,
@@ -67,6 +67,7 @@ import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -143,43 +144,39 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <div className="h-8 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-56 bg-muted rounded animate-pulse" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-5 w-56" />
         </div>
-        <div className="h-9 w-20 bg-muted rounded animate-pulse" />
+        <Skeleton className="h-9 w-20" />
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-24 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      {/* 欄（上罫線＋見出し＋中身） */}
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       </div>
-
-      {/* Settings Card */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-24" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
         </div>
       </div>
     </div>
@@ -1306,23 +1303,5 @@ export default function DevicesPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meDevices.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meDevices.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meDevices.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

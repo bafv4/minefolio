@@ -55,6 +55,7 @@ import { isHttpUrl } from "@/lib/safe-url";
 import { PROFILE_FIELD_LIMITS } from "@/lib/profile-edit-validation";
 import { categoryLabel, type CategoryKey } from "@/lib/playstyle";
 import { RECORD_CATEGORY_KEYS, resolveRecordCategory, splitRecordCategory } from "@/lib/record-category";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -117,7 +118,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Skeleton className="h-8 w-24 mb-2" />
@@ -125,9 +126,11 @@ export function HydrateFallback() {
         </div>
         <Skeleton className="h-11 sm:h-10 w-full sm:w-32" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-lg border bg-card p-6 space-y-4">
+          <div key={i} className="rounded-xl border border-border/70 bg-card p-6 space-y-4">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <Skeleton className="h-5 w-32" />
@@ -144,6 +147,7 @@ export function HydrateFallback() {
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );
@@ -608,8 +612,10 @@ export default function RecordsPage() {
     setDraftRecords((prev) => prev.map((d) => (d.key === record.key ? { ...d, deleted: false } : d)));
   };
 
-  const iconButtonClass =
-    "inline-flex size-11 items-center justify-center rounded transition-colors hover:bg-secondary disabled:opacity-50 sm:size-8";
+  const iconButtonClass = cn(
+    "inline-flex size-11 items-center justify-center rounded transition-colors hover:bg-secondary disabled:opacity-50 sm:size-8",
+    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+  );
 
   return (
     <div className="space-y-7 pb-24 sm:space-y-8">
@@ -752,12 +758,6 @@ export default function RecordsPage() {
           </DialogContent>
         </Dialog>
       </div>
-
-      {saveResult && "error" in saveResult && (
-        <NoticeBanner tone="error" icon={AlertCircle}>
-          {saveResult.error}
-        </NoticeBanner>
-      )}
 
       {/* Speedrun.com記録セクション */}
       {speedruncomUsername && (
@@ -1002,23 +1002,5 @@ export default function RecordsPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meRecords.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meRecords.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meRecords.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

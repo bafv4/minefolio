@@ -19,6 +19,7 @@ import { createPresetFromImport, syncActivePresetSnapshot, assertPresetIsActive,
 import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
 import { normalizeGameLanguage } from "@/lib/game-languages";
 import { useT } from "@/hooks/use-locale";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -475,4 +476,8 @@ export default function ImportPage() {
       </div>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <MeErrorBoundary />;
 }

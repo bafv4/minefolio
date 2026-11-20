@@ -1524,9 +1524,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     deleting: "Deleting…",
     deletePermanently: "Delete permanently",
     cancel: "Cancel",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
   },
   /**
    * Option labels for playstyle fields (referenced by the labelKey of each OPTIONS array in
@@ -1624,9 +1621,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     errorInvalidOption: "Invalid option",
     errorDragTapeTypeTooLong: "Tape type must be 100 characters or fewer",
     errorMousepadTypeTooLong: "Mousepad type must be 100 characters or fewer",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
   },
   meAccount: {
     title: "Visibility & account - Minefolio",
@@ -1910,6 +1904,11 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     targetPreset: "Imports into your editing preset \"{name}\".",
     targetPresetNone: "No preset yet. Importing will create a new one.",
   },
+  meErrorBoundary: {
+    title: "Something went wrong",
+    description: "An error occurred while loading the page. Please reload.",
+    reload: "Reload page",
+  },
   meDevices: {
     title: "Devices - Minefolio",
     userNotFound: "User not found",
@@ -1984,9 +1983,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noData: "No data",
     noOtherPresets: "You have no other presets",
     cancel: "Cancel",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
   },
   meRecords: {
     title: "Records - Minefolio",
@@ -2051,9 +2047,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noCustomRecords: "No custom records yet",
     noCustomRecordsDescription: "You can add records from outside Speedrun.com.",
     addFirstRecord: "Add your first record",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
   },
   meItems: {
     title: "Item layouts - Minefolio",
@@ -2102,9 +2095,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     layoutListHeading: "Layouts by split",
     noData: "No data",
     noOtherPresets: "You have no other presets",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
     duplicate: "Duplicate",
     categoryAria: "Category",
     toggleNotesAria: "Toggle notes for \"{name}\"",
@@ -2156,9 +2146,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     copyDialogDescription: "Select the preset to copy from",
     noData: "No data",
     noOtherPresets: "You have no other presets",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
     timingNone: "Unspecified",
     withShift: "While holding Shift",
     loopSectionTitle: "Chaining (Loop)",
@@ -2463,9 +2450,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noData: "No data",
     noOtherPresets: "You have no other presets",
     cancel: "Cancel",
-    errorTitle: "Something went wrong",
-    errorDescription: "An error occurred while loading the page. Please reload.",
-    reloadPage: "Reload page",
   },
   skinUploader: {
     pngOnly: "Only PNG images can be uploaded",

@@ -52,7 +52,6 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageSection } from "@/components/page-section";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
@@ -89,7 +88,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
@@ -112,6 +112,8 @@ import { SkinUploader } from "@/components/skin-uploader";
 import { CapeUploader } from "@/components/cape-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { cn } from "@/lib/utils";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -167,44 +169,37 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* Header Skeleton */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-5 w-64" />
       </div>
 
-      {/* Avatar Card Skeleton */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
         <div className="flex items-center gap-6">
-          <div className="w-24 h-24 bg-muted rounded-full animate-pulse" />
+          <Skeleton className="h-24 w-24 rounded-xl" />
           <div className="space-y-2">
-            <div className="h-5 w-40 bg-muted rounded animate-pulse" />
-            <div className="h-4 w-56 bg-muted rounded animate-pulse" />
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
           </div>
         </div>
       </div>
 
-      {/* Form Fields Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-24 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-24 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-24" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      </div>
+
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       </div>
     </div>
@@ -300,6 +295,40 @@ function getPlatformUrl(platform: string, identifier: string, customUrlValue?: s
   }
 }
 
+// Radix の Item を直接使う選択部品のフォーカスリング（不透明の --ring 2px。ui.md 9章）
+const FOCUS_RING = "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+const SEGMENT_ITEM_CLASS = cn(
+  "min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5",
+  FOCUS_RING,
+);
+
+/** ダイアログの検証エラー。field は入力欄の id（欄に結び付かないエラーは null で、通知帯に出す） */
+type DialogError = { field: string | null; message: string };
+
+/** validateLinkInput のエラーキーを、結び付ける入力欄の id へ対応づける（無いものは欄に結び付かない） */
+const LINK_ERROR_FIELD: Partial<Record<string, string>> = {
+  "meEdit.platformAndIdRequired": "link-identifier",
+  "meEdit.idMaxLength": "link-identifier",
+  "meEdit.idInvalidChars": "link-identifier",
+  "meEdit.idAllowedChars": "link-identifier",
+  "meEdit.customLabelRequired": "custom-label",
+  "meEdit.customLabelMax": "custom-label",
+  "meEdit.customUrlRequired": "custom-url",
+  "meEdit.customUrlMax": "custom-url",
+  "meEdit.customUrlInvalid": "custom-url",
+  "meEdit.customUrlScheme": "custom-url",
+};
+
+/** 入力欄の直下に出すインラインエラー（入力欄の aria-describedby から参照する） */
+function DialogFieldError({ id, error, field }: { id: string; error: DialogError | null; field: string }) {
+  if (error?.field !== field) return null;
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {error.message}
+    </p>
+  );
+}
+
 // ソーシャルリンク編集ダイアログ。確定しても保存はされず、下書き（保存バーで一括保存）に反映するだけ
 function SocialLinkDialog({
   editingLink,
@@ -313,10 +342,15 @@ function SocialLinkDialog({
 }) {
   const t = useT();
   const [selectedPlatform, setSelectedPlatform] = useState(editingLink?.platform ?? "youtube");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DialogError | null>(null);
 
   const currentOption = platformOptions.find((opt) => opt.value === selectedPlatform);
   const isCustom = selectedPlatform === "custom";
+
+  const showError = (next: DialogError) => {
+    setError(next);
+    if (next.field) document.getElementById(next.field)?.focus();
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -329,18 +363,25 @@ function SocialLinkDialog({
     };
     const errorKey = validateLinkInput(payload);
     if (errorKey) {
-      setError(t(errorKey));
+      showError({ field: LINK_ERROR_FIELD[errorKey] ?? null, message: t(errorKey) });
       return;
     }
     if (payload.platform !== "custom" && otherPlatforms.includes(payload.platform)) {
-      setError(t("meEdit.platformLinkExists"));
+      showError({ field: "link-identifier", message: t("meEdit.platformLinkExists") });
       return;
     }
     onSubmit(payload);
   };
 
+  const fieldProps = (id: string) => ({
+    "aria-invalid": error?.field === id || undefined,
+    "aria-describedby": error?.field === id ? `${id}-error` : undefined,
+    onInput: () => setError((prev) => (prev?.field === id ? null : prev)),
+  });
+
   return (
-    <form onSubmit={handleSubmit}>
+    // 検証は欄ごと（欄の下のエラー）に自前でやる。ブラウザ標準の吹き出しはロケールがブラウザの言語になるので切る
+    <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{editingLink ? t("meEdit.socialDialogEditTitle") : t("meEdit.socialDialogAddTitle")}</DialogTitle>
         <DialogDescription>
@@ -377,8 +418,10 @@ function SocialLinkDialog({
                 defaultValue={editingLink?.customLabel ?? ""}
                 placeholder={t("meEdit.customLabelPlaceholder")}
                 maxLength={PROFILE_FIELD_LIMITS.customLabel}
-                required
+                aria-required
+                {...fieldProps("custom-label")}
               />
+              <DialogFieldError id="custom-label-error" error={error} field="custom-label" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="custom-url">{t("meEdit.customUrlField")}</Label>
@@ -388,8 +431,10 @@ function SocialLinkDialog({
                 defaultValue={editingLink?.customUrl ?? ""}
                 placeholder={t("meEdit.customUrlPlaceholder")}
                 maxLength={PROFILE_FIELD_LIMITS.customUrl}
-                required
+                aria-required
+                {...fieldProps("custom-url")}
               />
+              <DialogFieldError id="custom-url-error" error={error} field="custom-url" />
             </div>
           </>
         )}
@@ -406,20 +451,21 @@ function SocialLinkDialog({
               name="identifier"
               defaultValue={editingLink?.identifier ?? ""}
               placeholder={currentOption?.placeholderKey ? t(currentOption.placeholderKey) : t("meEdit.linkPlaceholderUsername")}
-              required
+              aria-required
               maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
               className="flex-1"
+              {...fieldProps("link-identifier")}
             />
           </div>
+          <DialogFieldError id="link-identifier-error" error={error} field="link-identifier" />
           <p className="text-xs text-muted-foreground">
             {isCustom ? t("meEdit.customIdentifierHint") : t("meEdit.socialIdHint")}
           </p>
         </div>
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+        {error && !error.field && (
+          <NoticeBanner tone="error" icon={AlertCircle}>
+            {error.message}
+          </NoticeBanner>
         )}
         <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
@@ -444,7 +490,7 @@ function VideoDialog({
   onSubmit: (payload: VideoPayload) => void;
 }) {
   const t = useT();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DialogError | null>(null);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -456,14 +502,23 @@ function VideoDialog({
     };
     const errorKey = validateVideoInput(payload);
     if (errorKey) {
-      setError(t(errorKey));
+      const field = errorKey === "meEdit.videoTitleMaxLength" ? "video-title" : "video-url";
+      setError({ field, message: t(errorKey) });
+      document.getElementById(field)?.focus();
       return;
     }
     onSubmit(payload);
   };
 
+  const fieldProps = (id: string) => ({
+    "aria-invalid": error?.field === id || undefined,
+    "aria-describedby": error?.field === id ? `${id}-error` : undefined,
+    onInput: () => setError((prev) => (prev?.field === id ? null : prev)),
+  });
+
   return (
-    <form onSubmit={handleSubmit}>
+    // 検証は欄ごと（欄の下のエラー）に自前でやる。ブラウザ標準の吹き出しはロケールがブラウザの言語になるので切る
+    <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>
           {editingVideo ? t("meEdit.videoDialogEditTitle") : t("meEdit.videoDialogAddTitle")}
@@ -479,8 +534,10 @@ function VideoDialog({
             type="url"
             defaultValue={editingVideo?.url ?? defaultUrl ?? ""}
             placeholder="https://www.youtube.com/watch?v=..."
-            required
+            aria-required
+            {...fieldProps("video-url")}
           />
+          <DialogFieldError id="video-url-error" error={error} field="video-url" />
           <p className="text-xs text-muted-foreground">{t("meEdit.videoUrlHint")}</p>
         </div>
         <div className="space-y-2">
@@ -491,7 +548,9 @@ function VideoDialog({
             defaultValue={editingVideo?.title ?? ""}
             placeholder={t("meEdit.videoTitlePlaceholder")}
             maxLength={PROFILE_FIELD_LIMITS.videoTitle}
+            {...fieldProps("video-title")}
           />
+          <DialogFieldError id="video-title-error" error={error} field="video-title" />
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -505,12 +564,6 @@ function VideoDialog({
           </div>
           <p className="text-xs text-muted-foreground">{t("meEdit.videoPinnedHint")}</p>
         </div>
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
         <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
       <DialogFooter>
@@ -798,11 +851,6 @@ export default function EditProfilePage() {
     }
     fetcher.submit(formData, { method: "post" });
   }, [fetcher, formValues, draft, savedDraft, isRtaStartedIncomplete, t, translationEnabled, focusErrorTarget]);
-
-  // ポーズ変更を同期
-  useEffect(() => {
-    setFormValues((prev) => ({ ...prev, profilePose: selectedPose }));
-  }, [selectedPose]);
 
   // ポーズプレビュー用のマント。capeDisplay は保存前のフォーム値を使う（選択が即プレビューに反映される）
   const capeProps = resolveCapeProps({
@@ -1126,10 +1174,9 @@ export default function EditProfilePage() {
         <form onSubmit={handleMcidSubmit}>
           <div className="space-y-4 py-4">
             {draft.mcid.value && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{t("meEdit.mcidUrlChangeWarning")}</AlertDescription>
-              </Alert>
+              <NoticeBanner tone="warning" icon={AlertCircle}>
+                {t("meEdit.mcidUrlChangeWarning")}
+              </NoticeBanner>
             )}
             <div className="space-y-2">
               <Label htmlFor="new-mcid">
@@ -1149,10 +1196,9 @@ export default function EditProfilePage() {
               />
             </div>
             {mcidCheck.status === "error" && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{mcidCheck.message}</AlertDescription>
-              </Alert>
+              <NoticeBanner tone="error" icon={AlertCircle}>
+                {mcidCheck.message}
+              </NoticeBanner>
             )}
             <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
           </div>
@@ -1244,10 +1290,9 @@ export default function EditProfilePage() {
                 </div>
               )}
               {fieldErrors.mcid && (
-                <Alert variant="destructive" id="edit-error-mcid" tabIndex={-1}>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{fieldErrors.mcid}</AlertDescription>
-                </Alert>
+                <NoticeBanner tone="error" icon={AlertCircle} id="edit-error-mcid" tabIndex={-1}>
+                  {fieldErrors.mcid}
+                </NoticeBanner>
               )}
             </div>
 
@@ -1314,10 +1359,9 @@ export default function EditProfilePage() {
                             />
                           </div>
                           {bedrockError && (
-                            <Alert variant="destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>{bedrockError}</AlertDescription>
-                            </Alert>
+                            <NoticeBanner tone="error" icon={AlertCircle}>
+                              {bedrockError}
+                            </NoticeBanner>
                           )}
                           <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
                         </div>
@@ -1360,10 +1404,9 @@ export default function EditProfilePage() {
                 </div>
               </div>
               {fieldErrors.bedrockMcid && (
-                <Alert variant="destructive" id="edit-error-bedrockMcid" tabIndex={-1}>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{fieldErrors.bedrockMcid}</AlertDescription>
-                </Alert>
+                <NoticeBanner tone="error" icon={AlertCircle} id="edit-error-bedrockMcid" tabIndex={-1}>
+                  {fieldErrors.bedrockMcid}
+                </NoticeBanner>
               )}
             </div>
 
@@ -1376,12 +1419,9 @@ export default function EditProfilePage() {
                 {t("skinUploader.customSkinDesc")}
               </p>
               {customSkinUrl && (
-                <Alert className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {t("skinUploader.customSkinActive")}
-                  </AlertDescription>
-                </Alert>
+                <NoticeBanner tone="info" icon={AlertCircle} className="mt-2">
+                  {t("skinUploader.customSkinActive")}
+                </NoticeBanner>
               )}
               <SkinUploader
                 userId={user.id}
@@ -1400,12 +1440,9 @@ export default function EditProfilePage() {
                 {t("capeUploader.customCapeDesc")}
               </p>
               {customCapeUrl && (
-                <Alert className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {t("capeUploader.customCapeActive")}
-                  </AlertDescription>
-                </Alert>
+                <NoticeBanner tone="info" icon={AlertCircle} className="mt-2">
+                  {t("capeUploader.customCapeActive")}
+                </NoticeBanner>
               )}
               <CapeUploader
                 userId={user.id}
@@ -1434,10 +1471,13 @@ export default function EditProfilePage() {
                       <RadioGroupPrimitive.Item
                         key={pose}
                         value={pose}
-                        className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
-                          ? "border-brand bg-brand/5"
-                          : "border-muted hover:border-muted-foreground/30"
-                          }`}
+                        className={cn(
+                          "relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors",
+                          FOCUS_RING,
+                          selectedPose === pose
+                            ? "border-brand bg-brand/5"
+                            : "border-muted hover:border-muted-foreground/30",
+                        )}
                       >
                         <div className="w-16 h-24">
                           <MinecraftFullBody
@@ -1479,19 +1519,19 @@ export default function EditProfilePage() {
               >
                 <RadioGroupPrimitive.Item
                   value="default"
-                  className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${!formValues.slimSkin
-                    ? "bg-brand text-brand-foreground"
-                    : "hover:bg-muted"
-                    }`}
+                  className={cn(
+                    SEGMENT_ITEM_CLASS,
+                    !formValues.slimSkin ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                  )}
                 >
                   {t("meEdit.skinModelDefault")}
                 </RadioGroupPrimitive.Item>
                 <RadioGroupPrimitive.Item
                   value="slim"
-                  className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${formValues.slimSkin
-                    ? "bg-brand text-brand-foreground"
-                    : "hover:bg-muted"
-                    }`}
+                  className={cn(
+                    SEGMENT_ITEM_CLASS,
+                    formValues.slimSkin ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                  )}
                 >
                   {t("meEdit.skinModelSlim")}
                 </RadioGroupPrimitive.Item>
@@ -1513,10 +1553,10 @@ export default function EditProfilePage() {
                   <RadioGroupPrimitive.Item
                     key={option}
                     value={option}
-                    className={`min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5 ${formValues.capeDisplay === option
-                      ? "bg-brand text-brand-foreground"
-                      : "hover:bg-muted"
-                      }`}
+                    className={cn(
+                      SEGMENT_ITEM_CLASS,
+                      formValues.capeDisplay === option ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                    )}
                   >
                     {option === "cape" && t("meEdit.capeDisplayCape")}
                     {option === "elytra" && t("meEdit.capeDisplayElytra")}
@@ -1858,7 +1898,7 @@ export default function EditProfilePage() {
                   const pending = link.id === null || isLinkEdited(link);
                   return (
                     <div key={link.key} className="space-y-1">
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3 max-sm:flex-wrap">
                         <div className="flex items-center gap-3 min-w-0">
                           {getPlatformIcon(link.platform)}
                           <div className="min-w-0">
@@ -1880,7 +1920,7 @@ export default function EditProfilePage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex shrink-0 gap-1">
+                        <div className="flex shrink-0 gap-1 max-sm:w-full max-sm:justify-end">
                           {link.id !== null && isLinkEdited(link) && (
                             <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
                           )}
@@ -1907,7 +1947,7 @@ export default function EditProfilePage() {
                   return (
                     <div
                       key={link.key}
-                      className="flex items-center justify-between gap-3 p-3 border border-dashed rounded-lg opacity-70"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border/70 p-3 opacity-70"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         {getPlatformIcon(link.platform)}
@@ -1981,15 +2021,16 @@ export default function EditProfilePage() {
                   const pending = video.id === null || isVideoEdited(video);
                   return (
                     <div key={video.key} className="space-y-1">
-                      <div className="flex items-center gap-3 p-3 border rounded-lg">
+                      {/* 375px では、縮まないサムネイルとボタン4つ（44px）で本文が0幅になるので、ボタン群を本文の下の行へ折り返す */}
+                      <div className="flex items-center gap-3 rounded-xl border border-border/70 p-3 max-sm:flex-wrap">
                         {thumbnail ? (
                           <img
                             src={thumbnail}
                             alt=""
-                            className="w-24 h-14 object-cover rounded-md shrink-0"
+                            className="w-24 h-14 object-cover rounded-lg shrink-0"
                           />
                         ) : (
-                          <div className="w-24 h-14 bg-muted rounded-md shrink-0 flex items-center justify-center">
+                          <div className="w-24 h-14 bg-muted rounded-lg shrink-0 flex items-center justify-center">
                             <Video className="h-5 w-5 text-muted-foreground/50" />
                           </div>
                         )}
@@ -2010,7 +2051,7 @@ export default function EditProfilePage() {
                             {video.url}
                           </a>
                         </div>
-                        <div className="flex gap-1 shrink-0">
+                        <div className="flex gap-1 shrink-0 max-sm:w-full max-sm:justify-end">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -2052,7 +2093,7 @@ export default function EditProfilePage() {
                 {deletedVideos.map((video) => (
                   <div
                     key={video.key}
-                    className="flex items-center justify-between gap-3 p-3 border border-dashed rounded-lg opacity-70"
+                    className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border/70 p-3 opacity-70"
                   >
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate line-through">
@@ -2096,23 +2137,5 @@ export default function EditProfilePage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meEdit.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meEdit.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meEdit.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

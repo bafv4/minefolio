@@ -16,12 +16,10 @@ import { importFromLegacy } from "@/lib/legacy-import";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageSection } from "@/components/page-section";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -41,6 +39,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, AlertCircle, AlertTriangle, Download, Settings } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 // /me/account（公開とアカウント）。公開範囲・既定タブ・ホームの表示設定を保存バーで確定し、
 // 旧データの取り込みとアカウント削除を持つ。プロフィールの中身（MCID・基本情報・リンク・動画）は /me/edit。
@@ -476,13 +475,10 @@ export default function AccountPage() {
                 <deleteFetcher.Form method="post">
                   <input type="hidden" name="_action" value="delete_account" />
                   <div className="space-y-4 py-4">
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        {t("meEdit.cannotUndo")}
-                        {hasChanges && <> {t("meEdit.deleteDiscardNote")}</>}
-                      </AlertDescription>
-                    </Alert>
+                    <NoticeBanner tone="error" icon={AlertTriangle}>
+                      {t("meEdit.cannotUndo")}
+                      {hasChanges && <> {t("meEdit.deleteDiscardNote")}</>}
+                    </NoticeBanner>
                     <div className="space-y-2">
                       <Label htmlFor="confirmText">
                         {t("meEdit.confirmInput", { value: user.mcid || user.slug })}
@@ -497,10 +493,9 @@ export default function AccountPage() {
                       />
                     </div>
                     {deleteData && "error" in deleteData && deleteData.action === "delete" && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{deleteData.error}</AlertDescription>
-                      </Alert>
+                      <NoticeBanner tone="error" icon={AlertCircle}>
+                        {deleteData.error}
+                      </NoticeBanner>
                     )}
                   </div>
                   <DialogFooter>
@@ -535,19 +530,5 @@ export default function AccountPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meEdit.errorTitle")}</h2>
-            <p className="text-muted-foreground">{t("meEdit.errorDescription")}</p>
-            <Button onClick={() => window.location.reload()}>{t("meEdit.reloadPage")}</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }
