@@ -18,8 +18,7 @@ import {
   Save,
   Upload,
   UserCog,
-  X,
-  ChevronsDown,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShareButton } from "@/components/share-button";
@@ -195,7 +194,10 @@ export default function MeLayout() {
             onClick={() => setMobileMenuOpen((open) => !open)}
           >
             <span className="min-w-0 truncate text-sm font-medium text-brand">{currentLabel}</span>
-            {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
+            <ChevronDown
+              aria-hidden="true"
+              className={cn("h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none", mobileMenuOpen && "rotate-180")}
+            />
           </Button>
 
           <div id="me-mobile-menu" data-me-tour="sidebar" className={cn("space-y-1 max-lg:max-h-[calc(100dvh-9rem)] max-lg:overflow-y-auto", !mobileMenuOpen && "hidden", "lg:block")}>
