@@ -34,7 +34,6 @@ import { toast } from "sonner";
 import {
   Plus,
   Trash2,
-  Pencil,
   PencilLine,
   Globe,
   Lock,
@@ -70,7 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const templates = await db.query.searchCraftTemplates.findMany({
     where: eq(searchCraftTemplates.userId, user.id),
-    orderBy: [desc(searchCraftTemplates.createdAt)],
+    orderBy: [desc(searchCraftTemplates.updatedAt)],
   });
 
   return {
@@ -85,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       applyCount: template.applyCount,
       craftCount: parseTemplateCrafts(template.craftsData).length,
       hasRemaps: !!template.remapsData,
-      createdAt: template.createdAt.toISOString(),
+      updatedAt: template.updatedAt.toISOString(),
     })),
   };
 }
@@ -131,6 +130,9 @@ export async function action({ request }: Route.ActionArgs) {
 
   return { error: t("meTemplates.unknownAction") };
 }
+
+/** 行の操作ボタンの押せる大きさ（モバイル 44px 四方、sm 以上 32px。マイガイドの行と同じ。ui.md 9 章「タップ領域」） */
+const ROW_ACTION_CLASS = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
 
 export default function MyTemplatesPage() {
   const t = useT();
@@ -203,14 +205,20 @@ export default function MyTemplatesPage() {
       {templates.length > 0 ? (
         <div className="space-y-3">
           {templates.map((template) => (
-            <Card key={template.id} className="py-0">
+            // 行全体のクリックはタイトルのリンクの ::after で敷くオーバーレイが担う（マイガイドの行と同じ）。
+            // 行の操作（公開ページ・削除）は relative z-10 でオーバーレイより手前に出す
+            <Card
+              key={template.id}
+              className="relative py-0 transition-colors hover:border-primary/40"
+            >
               <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
+                      {/* 行き先は公開状態に依らず常に編集（公開ページは右の操作から別に開く） */}
                       <Link
-                        to={`/guides/templates/${template.id}`}
-                        className="font-medium hover:underline truncate"
+                        to={`/my-guides/templates/${template.id}/edit`}
+                        className="font-medium truncate outline-none hover:underline after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring"
                       >
                         {template.title}
                       </Link>
@@ -258,29 +266,38 @@ export default function MyTemplatesPage() {
                       </span>
                       {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
                       <span suppressHydrationWarning>
-                        {formatDistanceToNow(new Date(template.createdAt), {
-                          addSuffix: true,
-                          locale: dateFnsLocale(locale),
+                        {t("meGuides.updatedAgo", {
+                          time: formatDistanceToNow(new Date(template.updatedAt), {
+                            addSuffix: true,
+                            locale: dateFnsLocale(locale),
+                          }),
                         })}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link
-                        to={`/my-guides/templates/${template.id}/edit`}
-                        aria-label={t("guideEditor.edit")}
-                        title={t("guideEditor.edit")}
-                      >
-                        <Pencil className="h-4 w-4" aria-hidden />
-                      </Link>
-                    </Button>
+                  {/* 操作はモバイルで 44px 四方・間隔 12px（sm 以上は 32px・間隔 8px）。編集はタイトル（行全体）が担うので置かない */}
+                  <div className="relative z-10 flex shrink-0 items-center gap-3 sm:gap-2">
+                    {/* 公開ページ（公開中のときだけ）。新しいタブで開くことを名前でも伝える */}
+                    {template.isPublished && (
+                      <Button variant="ghost" size="sm" asChild className={ROW_ACTION_CLASS}>
+                        <Link
+                          to={`/guides/templates/${template.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${t("meGuides.viewPublished")}${t("meGuides.opensInNewTab")}`}
+                          title={t("meGuides.viewPublished")}
+                        >
+                          <Globe className="h-4 w-4" aria-hidden />
+                        </Link>
+                      </Button>
+                    )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className={ROW_ACTION_CLASS}
                           aria-label={t("meTemplates.delete")}
                           title={t("meTemplates.delete")}
                         >

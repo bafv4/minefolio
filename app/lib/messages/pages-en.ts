@@ -2904,7 +2904,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Published templates can be viewed by other runners and applied to their own settings.",
     viewGallery: "Browse templates",
     published: "Published",
-    unpublished: "Unpublished",
+    unpublished: "Private",
     publish: "Publish",
     unpublish: "Unpublish",
     craftCount: "{count} search-crafts",
