@@ -817,6 +817,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     keyboardLayout: "Keyboard layout",
     toggleSprint: "Toggle sprint",
     matched: "{matches}/{total} match",
+    fewComparable: "Few settings to compare",
     compareButton: "Compare",
     showSame: "Show matching rows too",
     noDifferencesHint: "The controls and the device settings are all the same.",

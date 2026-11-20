@@ -37,6 +37,7 @@ import { ArrowLeftRight, Check, ChevronsUpDown, GitCompare, User, Users, Triangl
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
+import { minComparableActions, sortSimilarPlayers } from "@/lib/similar-players";
 import type { Translator } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -248,9 +249,12 @@ export function compareKeyMaps(map1: Record<string, string>, map2: Record<string
   return { same, different, total, oneSided };
 }
 
+// 「比べられる設定が十分ある」とみなす最低の分母（比較対象の操作数の半数以上）。並びは app/lib/similar-players.ts
+const MIN_COMPARABLE_ACTIONS = minComparableActions(COMPARE_ACTIONS.length);
+
 /** p1 のキー配置に近い順に最大10人（比較画面と同じ数え方の一致率。両方に設定のある操作が無い人は除く） */
 export function rankSimilarPlayers(p1KeyMap: Record<string, string>, candidates: SimilarCandidate[]) {
-  return candidates
+  const rows = candidates
     .map((user) => {
       const mainPreset = user.configPresets[0];
       const userKeybindings = shouldUsePresetSnapshot(mainPreset)
@@ -274,9 +278,10 @@ export function rankSimilarPlayers(p1KeyMap: Record<string, string>, candidates:
         similarity,
       };
     })
-    .filter((p) => p.total > 0 && p.similarity > 0)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, 10);
+    .filter((p) => p.total > 0 && p.similarity > 0);
+  return sortSimilarPlayers(rows, MIN_COMPARABLE_ACTIONS)
+    .slice(0, 10)
+    .map((p) => ({ ...p, fewComparable: p.total < MIN_COMPARABLE_ACTIONS }));
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -1151,12 +1156,13 @@ function SimilarPlayersSection({
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="text-right">
-                    {/* 一致率は良し悪しの色を付けない（前景色） */}
+                    {/* 一致数/分母を主、% を従にする。良し悪しの色は付けない（前景色） */}
                     <p className="font-bold">
-                      {Math.round(player.similarity * 100)}%
+                      {t("compare.matched", { matches: player.matches, total: player.total })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {t("compare.matched", { matches: player.matches, total: player.total })}
+                      {Math.round(player.similarity * 100)}%
+                      {player.fewComparable && ` · ${t("compare.fewComparable")}`}
                     </p>
                   </div>
                   <Button

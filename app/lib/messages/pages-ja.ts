@@ -697,6 +697,7 @@ export const PAGES_JA = {
     keyboardLayout: "キーボードレイアウト",
     toggleSprint: "ダッシュ切替",
     matched: "{matches}/{total} 一致",
+    fewComparable: "比べられる設定が少ない",
     compareButton: "比較",
     /** 既定は違う行だけ。同じ行も出すスイッチ（URL の ?all=1） */
     showSame: "同じ行も表示",

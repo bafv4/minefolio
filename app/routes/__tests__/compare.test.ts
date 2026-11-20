@@ -1,6 +1,7 @@
 // /compare の「違う行」の判定と、?all=1 だけが変わるナビゲーションで loader を再実行しない判定の回帰テスト。
 import { describe, it, expect } from "vitest";
 import { compareKeyMaps, compareValues, rankSimilarPlayers, shouldRevalidate, type SimilarCandidate } from "../compare";
+import { minComparableActions, sortSimilarPlayers } from "@/lib/similar-players";
 
 describe("compareValues", () => {
   it("両方に値があって同じなら same", () => {
@@ -76,5 +77,29 @@ describe("compareKeyMaps / rankSimilarPlayers（一致率の数え方）", () =>
 
   it("両方に設定のある操作が無い人は除く", () => {
     expect(rankSimilarPlayers(p1, [candidate("none", { attack: "Mouse0" }), candidate("empty", {})])).toEqual([]);
+  });
+});
+
+describe("sortSimilarPlayers（分母を考慮した並び）", () => {
+  const row = (slug: string, same: number, total: number) => ({ slug, total, similarity: same / total });
+
+  it("分母が十分な 25/26 が、分母の少ない 10/10 より上に来る", () => {
+    const sorted = sortSimilarPlayers([row("small", 10, 10), row("big", 25, 26)], 13);
+    expect(sorted.map((r) => r.slug)).toEqual(["big", "small"]);
+  });
+
+  it("分母が足りない人は除外せず後ろに残す（その中は一致率順）", () => {
+    const sorted = sortSimilarPlayers([row("s1", 5, 10), row("s2", 10, 10), row("ok", 13, 26)], 13);
+    expect(sorted.map((r) => r.slug)).toEqual(["ok", "s2", "s1"]);
+  });
+
+  it("同点は分母の大きい順、さらに同じなら slug 順", () => {
+    const sorted = sortSimilarPlayers([row("b", 13, 13), row("a", 13, 13), row("c", 26, 26), row("d", 14, 14)], 13);
+    expect(sorted.map((r) => r.slug)).toEqual(["c", "d", "a", "b"]);
+  });
+
+  it("最低の分母は比較対象の操作数の半数以上", () => {
+    expect(minComparableActions(26)).toBe(13);
+    expect(minComparableActions(25)).toBe(13);
   });
 });
