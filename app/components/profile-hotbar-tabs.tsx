@@ -198,11 +198,12 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
                 // data-state を closed / delayed-open で上書きするため、data-[state=active] が効かない
                 "aria-selected:border-foreground aria-selected:bg-secondary/50 aria-selected:text-foreground",
                 // 空スロットは破線＋薄い表示（押せる状態は保つ）。選択中は aria-selected: が優先される。
-                // 枠の色は中身のあるスロットより目立たせない（border 程度）。判別は破線の形と名前の「、未登録」に任せる。
+                // 枠の強さは「未登録（/50）＜登録済み（/70）＜選択中」。ハイコントラストの app.css も /50 を /60 相当へ、
+                // /70 はそのままにするので順は保たれる。判別は破線の形と名前の「、未登録」に任せる。
                 // 薄くするのはアイコンだけ（下）。押せる部品のラベルなので文字は 4.5:1 を保つため薄めない
                 item.empty
-                  ? "border-dashed border-border"
-                  : "border-transparent md:border-border/70",
+                  ? "border-dashed border-border/50"
+                  : "border-border/70",
                 item.empty && "aria-selected:border-solid",
               )}
             >
