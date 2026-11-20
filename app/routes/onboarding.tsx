@@ -1240,9 +1240,7 @@ function CompleteScreen({ completion, focusTitle }: { completion: Completion; fo
   return (
     <>
       <CardHeader className="justify-items-center gap-3 px-4 text-center sm:px-5">
-        <div className="rounded-full bg-success/10 p-3">
-          <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
-        </div>
+        <CheckCircle2 className="mb-1 h-8 w-8 text-success" aria-hidden />
         <p className="text-sm font-medium text-success">{t("onboarding.completeTitle")}</p>
         <h1
           ref={titleRef}

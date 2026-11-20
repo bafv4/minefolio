@@ -125,7 +125,7 @@ function LoadingHighlightTile({ icon, label }: { icon: ReactNode; label: string 
       aria-busy="true"
       className={cn(TILE_HEIGHT_CLASS, TILE_SHELL_CLASS, "max-md:w-40 max-md:shrink-0")}
     >
-      <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
+      <span className="hidden shrink-0 text-primary sm:block" aria-hidden>
         {icon}
       </span>
       <span className="min-w-0">
@@ -158,7 +158,7 @@ function HighlightTile({
         "max-md:shrink-0 text-left transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
       )}
     >
-      <span className="hidden shrink-0 rounded-lg bg-primary/10 p-1.5 text-primary sm:block" aria-hidden>
+      <span className="hidden shrink-0 text-primary sm:block" aria-hidden>
         {icon}
       </span>
       <span className="min-w-0">
