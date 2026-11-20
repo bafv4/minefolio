@@ -56,6 +56,8 @@ export interface SpeedrunComPersonalBest {
         data?: {
           id: string;
           name: string;
+          /** サブカテゴリ変数か（embed=category.variables で返る変数リソースの項目） */
+          "is-subcategory"?: boolean;
           values: {
             values: Record<string, { label: string }>;
           };
@@ -66,6 +68,8 @@ export interface SpeedrunComPersonalBest {
   // 表示用に追加
   platformName?: string;
   versionName?: string;
+  /** バージョン以外のサブカテゴリ変数の値（"2 Players" 等）。同名カテゴリの見分けに使う */
+  subcategoryName?: string;
 }
 
 export interface SpeedrunComStats {
@@ -212,10 +216,25 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
         }
       }
 
+      // バージョン以外のサブカテゴリ変数（人数など）の値。同名カテゴリの見分け用。
+      // is-subcategory が true の変数だけ（サブカテゴリでない変数は名前に足さない）
+      const subcategoryLabels: string[] = [];
+      if (pb.run.values && pb.category?.data?.variables?.data) {
+        for (const variable of pb.category.data.variables.data) {
+          if (variable["is-subcategory"] !== true) continue;
+          const varName = variable.name.toLowerCase();
+          if (varName.includes("version") || varName.includes("バージョン")) continue;
+          const valueId = pb.run.values[variable.id];
+          const label = valueId ? variable.values.values[valueId]?.label : undefined;
+          if (label) subcategoryLabels.push(label);
+        }
+      }
+
       return {
         ...pb,
         platformName,
         versionName,
+        subcategoryName: subcategoryLabels.length > 0 ? subcategoryLabels.join(", ") : undefined,
       };
     });
 

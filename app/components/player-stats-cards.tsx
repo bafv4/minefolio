@@ -710,7 +710,7 @@ export function SpeedrunComCard({
                     <ExternalLink className="h-3 w-3" aria-hidden />
                     {t("playerStatsCards.viewRecord")}
                     {/* 同じ文言のリンクが並ぶので、どの記録かを読み上げで補う */}
-                    <span className="sr-only"> {displayName}</span>
+                    <span className="sr-only"> {displayName} #{pb.place}</span>
                   </a>
                 )}
               </div>

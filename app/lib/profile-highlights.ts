@@ -146,6 +146,7 @@ export function statsSrcCardId(runId: string): string {
 export interface LabelableSpeedrunComPb extends HighlightSpeedrunComPb {
   platformName?: string;
   versionName?: string;
+  subcategoryName?: string;
 }
 
 /** 版の短い名前。game 名 "Minecraft: Java Edition" → "Java"。game 名が無ければ platformName、それも無ければ空文字 */
@@ -174,7 +175,10 @@ export function speedrunComPbDisplayName<T extends LabelableSpeedrunComPb>(
   const edition = speedrunComEditionLabel(pb);
   const base = edition ? `${edition} · ${name}` : name;
   const sameEdition = same.some((o) => speedrunComEditionLabel(o) === edition);
-  return sameEdition && pb.versionName ? `${base} (${pb.versionName})` : base;
+  if (!sameEdition) return base;
+  // 版まで同じなら、バージョン名とサブカテゴリ（人数など）で見分ける
+  const detail = [pb.versionName, pb.subcategoryName].filter(Boolean).join(", ");
+  return detail ? `${base} (${detail})` : base;
 }
 
 /** MCSR Ranked の自己ベスト判定に使う最小形（MCSRRankedStats の部分集合） */
