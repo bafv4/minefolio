@@ -447,18 +447,12 @@ export default function TemplatesIndexPage() {
       ) : templates.length > 0 ? (
         <div className="divide-y divide-border/60">
           {templates.map((template) => (
-            // 行全体のクリックはオーバーレイのリンクが担う（いいねボタンを <a> の
-            // 子孫に置くと不正なHTMLになるため。pace-feed-card と同じ構造）
+            // 行全体のクリックはタイトルのリンクの ::after で敷くオーバーレイが担う（いいねボタンを <a> の
+            // 子孫に置くと不正なHTMLになるため。GuideListView と同じ after 方式。タイトルを2回読まない）
             <div
               key={template.id}
               className="group relative flex items-center gap-3 py-3 px-1 hover:bg-muted/50 -mx-1 rounded transition-colors"
             >
-              <Link
-                to={`/guides/templates/${template.id}`}
-                prefetch="intent"
-                className="absolute inset-0 z-0 rounded"
-                aria-label={template.title}
-              />
               <div className="flex-1 min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   {/* ゲーム内言語（最重要メタ情報として目立たせる）。狭い画面はタイトルの前置きとして1行目に出し、
@@ -470,7 +464,13 @@ export default function TemplatesIndexPage() {
                     </span>
                   )}
                   <h2 className="text-sm font-medium line-clamp-2 sm:line-clamp-1">
-                    {template.title}
+                    <Link
+                      to={`/guides/templates/${template.id}`}
+                      prefetch="intent"
+                      className="outline-none after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                    >
+                      {template.title}
+                    </Link>
                   </h2>
                   {template.gameLanguage && (
                     <span className="hidden shrink-0 items-center gap-1.5 text-sm font-medium sm:flex">

@@ -432,14 +432,24 @@ export default function GuidesIndexPage() {
             件数は一覧の先頭の目印にもなる（スキップリンクの飛び先） */}
         {/* 件数が長い（絞り込みの内容つき）ときは、並び替え・表示を次の行へ回す（件数を細い列に押し込まない） */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <p
-            id="guide-results"
-            tabIndex={-1}
-            aria-live="polite"
-            className="min-w-0 text-sm text-muted-foreground outline-none"
-          >
-            {resultCountText}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3">
+            <p
+              id="guide-results"
+              tabIndex={-1}
+              aria-live="polite"
+              className="min-w-0 text-sm text-muted-foreground outline-none"
+            >
+              {resultCountText}
+            </p>
+            {/* 絞り込み中は結果があっても解除の導線を件数の隣に出す（テンプレート一覧と同じ） */}
+            {(tag || q) && guideItems.length > 0 && (
+              <Button asChild variant="link" size="sm" className="h-11 px-0 sm:h-8">
+                <Link to={clearFiltersHref} preventScrollReset>
+                  {t("guides.clearFilters")}
+                </Link>
+              </Button>
+            )}
+          </div>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <ContentSortSelect
               value={sort}

@@ -2947,7 +2947,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "A collection of search-craft setups shared by runners. Apply them to your own settings or try them in the Playground.",
     metaDescription: "Search-craft templates published by {name}",
     openPlayground: "Try in Playground",
-    byAuthorPrefix: "Author:",
     craftCount: "{count} search-crafts",
     remapCount: "{count} remaps",
     applyCount: "Applied {count} times",

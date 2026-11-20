@@ -550,7 +550,6 @@ export default function TemplateViewPage() {
         </div>
         {/* MinecraftAvatar は div を描くので、p ではなく div で包む（p の中に div は置けずハイドレーションが壊れる） */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          <span>{t("templates.byAuthorPrefix")}</span>
           {/* 押せる高さは負のマージン＋同じ量の padding で広げる（モバイル 44px、sm 以上 24px。行の高さは変えない） */}
           <Link
             to={`/player/${author.slug}`}
