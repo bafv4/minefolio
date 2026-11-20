@@ -58,6 +58,10 @@ export function useTabScrollbar() {
     };
   }, [update]);
 
+  // ドラッグ中のリスナー解除関数。アンマウント時にも呼んで取り残さない
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -71,9 +75,14 @@ export function useTabScrollbar() {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (dragCleanupRef.current === up) dragCleanupRef.current = null;
     };
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }, []);
 
   const scrollbar: ReactNode = state.visible ? (
