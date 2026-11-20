@@ -50,7 +50,7 @@ import {
 } from "@/lib/rta-career";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageSection } from "@/components/page-section";
 import { EmptyState } from "@/components/empty-state";
@@ -1393,7 +1393,7 @@ export default function EditProfilePage() {
                           <AlertDialogAction
                             type="button"
                             onClick={handleBedrockRemove}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            className={buttonVariants({ variant: "destructive" })}
                           >
                             {t("meEdit.delete")}
                           </AlertDialogAction>

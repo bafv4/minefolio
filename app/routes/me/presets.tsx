@@ -17,7 +17,7 @@ import { resolveRowVariations, searchCraftColumnValues } from "@/lib/search-craf
 import { decodePresetSearchCraftLoops } from "@/lib/preset-read";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { PageSection } from "@/components/page-section";
 import { EmptyState } from "@/components/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1449,7 +1449,7 @@ export default function PresetsPage() {
                               <fetcher.Form method="post">
                                 <input type="hidden" name="intent" value="delete-preset" />
                                 <input type="hidden" name="presetId" value={preset.id} />
-                                <AlertDialogAction type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                <AlertDialogAction type="submit" className={buttonVariants({ variant: "destructive" })}>
                                   {t("mePresets.delete")}
                                 </AlertDialogAction>
                               </fetcher.Form>
