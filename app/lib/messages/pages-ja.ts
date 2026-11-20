@@ -1229,6 +1229,10 @@ export const PAGES_JA = {
     editLinkDevices: "デバイスを設定する",
     editLinkRecords: "記録を管理する",
     editLinkGuides: "ガイドを書く",
+    editLinkProfile: "プロフィールを編集する",
+    noOverviewTitle: "プロフィールの紹介はまだありません",
+    noOverview: "この走者はまだ自己紹介などを設定していません。",
+    noOverviewOwner: "自己紹介・SNS・動画などを設定すると、ここに表示されます。",
   },
   playerStats: {
     notFound: "走者が見つかりません",

@@ -1226,6 +1226,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     editLinkDevices: "Set up your devices",
     editLinkRecords: "Manage your records",
     editLinkGuides: "Write a guide",
+    editLinkProfile: "Edit your profile",
+    noOverviewTitle: "No profile intro yet",
+    noOverview: "This runner hasn't added a bio or other details yet.",
+    noOverviewOwner: "Add a bio, social links or videos and they will show up here.",
   },
   playerStats: {
     notFound: "Runner not found",

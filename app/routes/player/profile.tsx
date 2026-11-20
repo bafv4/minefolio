@@ -1664,6 +1664,22 @@ export default function PlayerProfilePage() {
               </div>
           </div>
 
+          {/* 概要に描く物が最終更新・リアクションしか無い走者: 谷にならないよう、ほかのタブへの導線（訪問者）か編集への導線（本人）を添える */}
+          {!(
+            player.uuid || player.customSkinUrl || player.bedrockMcid || displayShortBio ||
+            player.role || player.mainEdition || player.mainPlatform || player.inputMethod ||
+            player.location || player.pronouns || ageGroup || rtaCareer ||
+            player.socialLinks.length > 0 || displayBio || displayVideos.length > 0
+          ) && (
+            <EmptyState
+              size="compact"
+              icon={<User className="h-5 w-5" aria-hidden />}
+              title={t("playerProfile.noOverviewTitle")}
+              description={t(isOwner ? "playerProfile.noOverviewOwner" : "playerProfile.noOverview")}
+              action={isOwner ? <OwnerEditAction to="/me/edit" label={t("playerProfile.editLinkProfile")} /> : visitorEmptyAction}
+            />
+          )}
+
           {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
             <SocialLinksCard links={player.socialLinks} slug={player.slug} />
