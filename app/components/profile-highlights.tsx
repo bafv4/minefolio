@@ -114,10 +114,6 @@ const TILE_HEIGHT_CLASS = "h-[58px]";
 const TILE_SHELL_CLASS =
   "flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-background/80 px-3.5 py-2.5";
 
-function TileSkeleton() {
-  return <Skeleton className={cn(TILE_HEIGHT_CLASS, "rounded-xl max-md:w-40 max-md:shrink-0")} />;
-}
-
 /** ラベルが取得前から決まっているタイルの読み込み中表示（ラベルとアイコンは出し、値だけスケルトンにする。SSR でも同じ） */
 function LoadingHighlightTile({ icon, label }: { icon: ReactNode; label: string }) {
   return (
@@ -303,7 +299,7 @@ export function ProfileHighlights({
     <HorizontalScrollArea className="pb-1 md:pb-0">
     <div className="flex gap-2 sm:gap-3 md:grid md:grid-cols-4">
       {pbLoading ? (
-        <TileSkeleton />
+        <LoadingHighlightTile icon={<Timer className="h-4 w-4" />} label={t("playerProfile.pb")} />
       ) : representative ? (
         <HighlightTile
           icon={<Timer className="h-4 w-4" />}
