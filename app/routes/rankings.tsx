@@ -379,9 +379,9 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
             return (
               <TableRow
                 key={`${entry.userId}-${entry.verificationStatus}-${index}`}
-                className={isPending ? "bg-muted/30 hover:bg-muted/40" : "hover:bg-muted/30"}
+                className={cn(isPending ? "bg-muted/30 hover:bg-muted/40" : "hover:bg-muted/30")}
               >
-                <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
+                <TableCell className={cn("sticky left-0 z-10 text-center font-medium", isPending ? "bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)] [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_40%)]" : "bg-background [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]")}>
                   {isPending ? (
                     // 意味は名前の下の「審査待ち」の行が伝える（タッチでも読める）。時計は飾りとして読み上げない
                     <Clock className="h-4 w-4 inline text-muted-foreground" aria-hidden="true" />
@@ -394,13 +394,13 @@ function SpeedruncomRankingsTable({ rankings }: { rankings: RankingEntry[] }) {
                 <TableCell>
                   <Link
                     to={`/player/${entry.slug}`}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    className="-my-2 flex min-h-11 items-center gap-2 transition-opacity hover:opacity-80 sm:my-0 sm:min-h-0"
                   >
                     <MinecraftAvatar
                       uuid={entry.uuid}
                       skinUrl={entry.customSkinUrl}
-                      size={28}
-                      className={`rounded-sm shrink-0 ${isPending ? "opacity-70" : ""}`}
+                      size={32}
+                      className={`rounded-lg shrink-0 ${isPending ? "opacity-70" : ""}`}
                     />
                     <div className="min-w-0">
                       <p className={`font-medium text-sm truncate ${isPending ? "text-muted-foreground" : ""}`}>
@@ -476,7 +476,7 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
         <TableBody>
           {rankings.map((entry) => (
             <TableRow key={entry.userId} className="hover:bg-muted/30">
-              <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
+              <TableCell className="sticky left-0 z-10 bg-background text-center font-medium [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]">
                 {entry.rank !== null && entry.rank <= 3 ? (
                   <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
@@ -486,13 +486,13 @@ function RankedPbTable({ rankings }: { rankings: RankingEntry[] }) {
               <TableCell>
                 <Link
                   to={`/player/${entry.slug}`}
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  className="-my-2 flex min-h-11 items-center gap-2 transition-opacity hover:opacity-80 sm:my-0 sm:min-h-0"
                 >
                   <MinecraftAvatar
                     uuid={entry.uuid}
                     skinUrl={entry.customSkinUrl}
-                    size={28}
-                    className="rounded-sm shrink-0"
+                    size={32}
+                    className="rounded-lg shrink-0"
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
@@ -534,7 +534,7 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
         <TableBody>
           {rankings.map((entry) => (
             <TableRow key={entry.userId} className="hover:bg-muted/30">
-              <TableCell className="sticky left-0 bg-background z-10 text-center font-medium">
+              <TableCell className="sticky left-0 z-10 bg-background text-center font-medium [tr:hover_&]:bg-[color-mix(in_oklab,var(--background),var(--muted)_30%)]">
                 {entry.rank !== null && entry.rank <= 3 ? (
                   <span className={rankMedalClass(entry.rank)}>
                     {entry.rank}
@@ -544,13 +544,13 @@ function RankedEloTable({ rankings }: { rankings: RankingEntry[] }) {
               <TableCell>
                 <Link
                   to={`/player/${entry.slug}`}
-                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  className="-my-2 flex min-h-11 items-center gap-2 transition-opacity hover:opacity-80 sm:my-0 sm:min-h-0"
                 >
                   <MinecraftAvatar
                     uuid={entry.uuid}
                     skinUrl={entry.customSkinUrl}
-                    size={28}
-                    className="rounded-sm shrink-0"
+                    size={32}
+                    className="rounded-lg shrink-0"
                   />
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">
