@@ -441,6 +441,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 
+/** 閲覧数を送信済みのガイド id（このページの寿命の間だけ。リロードで消える） */
+const countedGuideIds = new Set<string>();
+
 export default function GuideViewPage() {
   const t = useT();
   const locale = useLocale();
@@ -464,12 +467,12 @@ export default function GuideViewPage() {
 
   // 1回のページ訪問につき1回だけ閲覧数を加算する。コンポーネントは search param（?original=1 等）の
   // 変更では再マウントされず guide.id も変わらないため、切替では再送されない。ドラフトプレビューは数えない。
-  // 送信済みの guide.id を ref で覚え、開発時の StrictMode による effect の二重実行でも1回に抑える。
+  // 送信済みの guide.id はモジュールのメモリ（countedGuideIds）に覚える。StrictMode の effect 二重実行と、
+  // SPA 遷移で同じページへ戻ってきたとき（ページの寿命の間）の再送を抑える。ブラウザのストレージは使わない。
   const guideId = guide.id;
-  const countedGuideIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (previewingDraft || countedGuideIdRef.current === guideId) return;
-    countedGuideIdRef.current = guideId;
+    if (previewingDraft || countedGuideIds.has(guideId)) return;
+    countedGuideIds.add(guideId);
     fetch("/api/guides/view-count", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
