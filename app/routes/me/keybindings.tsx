@@ -2472,7 +2472,30 @@ export default function KeybindingsPage() {
                   <p className="text-xs text-muted-foreground">{t("meKeybindings.mobileKeyboardRightNote")}</p>
                 </div>
               )}
-              <HorizontalScrollArea showHint wrapperClassName={cn(!mobileFullKeyboard && "max-md:hidden")}>
+              {/* xl 以上は、表示幅が実寸（約 1120px）に足りないとき（1280〜1535px）だけ全体を幅に合わせて縮め、
+                  ナビゲーション列まで一度に見せる。幅が足りるなら縮まない。xl 未満は横スクロール表示。
+                  計測前（SSR 直後）は実寸の縦横比（テンキーなし 1120×370）で高さを確保して、跳ねないようにする */}
+              <div className="w-full min-w-0 max-xl:hidden">
+                <KeyboardScaledPreview
+                  interactive
+                  dialogTitle={t("meKeybindings.keyboardView")}
+                  unmeasuredClassName="aspect-[1120/370] max-h-[370px]"
+                >
+                  <VirtualKeyboard
+                    layout={keyboardLayout}
+                    keybindings={keybindingsMap}
+                    fingerAssignments={localFingerAssignments}
+                    remaps={keyboardRemaps}
+                    customKeys={keyboardCustomKeys}
+                    onKeyClick={handleKeyClick}
+                    showActionLabels
+                    showFingerAssignments
+                    showRemaps
+                    hideNumpad
+                  />
+                </KeyboardScaledPreview>
+              </div>
+              <HorizontalScrollArea showHint wrapperClassName={cn("xl:hidden", !mobileFullKeyboard && "max-md:hidden")}>
                 <VirtualKeyboard
                   layout={keyboardLayout}
                   keybindings={keybindingsMap}
