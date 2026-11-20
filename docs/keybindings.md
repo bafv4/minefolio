@@ -533,7 +533,7 @@ type ControllerSettings = {
 - **ON / OFF 分布**: Raw Input・マウス加速（マウスタブ）・ダッシュ切替（キーボードタブの「ダッシュ」の直後）は共通部品 `BooleanDistribution`。`BooleanSettingStats`（`mouseConfigs` 由来、null は母数に入れない）。マウス加速の表リンクは `mouse` タブ、ダッシュ切替は表に列が無いのでリンクなし。ON / OFF は同じ見た目
 - 概要の人数は母集団が違うので、名前と注記で区別する: **登録走者数**（操作設定を登録している公開走者。`/keybindings` の一覧と同じ母集団で、`loadKeybindingsListPlayers` の件数）／**キー配置の登録者**・**マウス設定の登録者**（ライブの `keybindings` / `playerConfigs`（DPI あり）テーブルを数える）／**公開プロフィール**（公開設定の全走者）。割合は母集団が揃わないため出さない
 - 注意: 一覧は「メインプリセットが非アクティブならそのスナップショット」を、統計の集計はライブテーブルを元にする（今は未統一）
-- サブタブ（操作 → キー／キー → 操作／マウス。1つ目の名前は `keybindingsStats.keyboardTab`）は URL の `statsTab`（`keyboard` / `keys` / `mouse`）（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要はタイル（`rounded-xl bg-secondary/50`）
+- サブタブ（操作 → キー／キー → 操作／マウス。1つ目の名前は `keybindingsStats.keyboardTab`）は URL の `statsTab`（`keyboard` / `keys` / `mouse`）（表の `tab` と衝突させない）。統計は箱（Card）にせず、欄の見出し（h3）＋箱なしで並べる。概要は人数4つを1行に並べ（登録走者数・キー配置・マウス設定・公開プロフィール）、各人数の注記と対象範囲の注記は `details`「集計の対象を見る」に畳む
 
 #### 感度分布（`SENSITIVITY_RANGES`）
 

@@ -954,6 +954,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     metaTitle: "Controls stats - Minefolio",
     description: "Statistics on speedrunners' control settings and key layouts.",
     overviewHeading: "Overview",
+    overviewNotesSummary: "What is counted",
     registeredCount: "Registered runners",
     registeredCountNote: "Public runners with registered control settings (same as the list)",
     publicProfiles: "Public profiles",

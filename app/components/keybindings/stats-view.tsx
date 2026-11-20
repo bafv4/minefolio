@@ -104,33 +104,41 @@ export function StatsView({ data }: StatsViewProps) {
         <h2 id="kb-stats-overview-heading" className="sr-only">
           {t("keybindingsStats.overviewHeading")}
         </h2>
-        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <OverviewTile
+        {/* 1行の要約。各人数の注記は折りたたみに移す（本体を押し下げない） */}
+        <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+          <OverviewStat
             icon={<Users className="h-4 w-4" />}
             label={t("keybindingsStats.registeredCount")}
-            note={t("keybindingsStats.registeredCountNote")}
             value={registeredPlayers}
           />
-          <OverviewTile
+          <OverviewStat
             icon={<Keyboard className="h-4 w-4" />}
             label={t("keybindingsStats.keybindingsRegistered")}
-            note={t("keybindingsStats.keybindingsRegisteredNote")}
             value={playersWithKeybindings}
           />
-          <OverviewTile
+          <OverviewStat
             icon={<Mouse className="h-4 w-4" />}
             label={t("keybindingsStats.mouseRegistered")}
-            note={t("keybindingsStats.mouseRegisteredNote")}
             value={playersWithMouseSettings}
           />
-          <OverviewTile
+          <OverviewStat
             icon={<Users className="h-4 w-4" />}
             label={t("keybindingsStats.publicProfiles")}
-            note={t("keybindingsStats.publicProfilesNote")}
             value={publicProfiles}
           />
         </dl>
-        <p className="mt-2 text-xs text-muted-foreground">{t("keybindingsStats.scopeNote")}</p>
+        <details className="mt-2 text-xs text-muted-foreground">
+          <summary className="cursor-pointer rounded py-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:inline-flex max-md:min-h-11 max-md:items-center">
+            {t("keybindingsStats.overviewNotesSummary")}
+          </summary>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            <li>{t("keybindingsStats.registeredCountNote")}</li>
+            <li>{t("keybindingsStats.keybindingsRegisteredNote")}</li>
+            <li>{t("keybindingsStats.mouseRegisteredNote")}</li>
+            <li>{t("keybindingsStats.publicProfilesNote")}</li>
+            <li>{t("keybindingsStats.scopeNote")}</li>
+          </ul>
+        </details>
       </section>
 
       {/* タブ（選択は URL に残す） */}
@@ -383,25 +391,22 @@ function StatRowShell({ children, href, label }: { children: ReactNode; href: st
 }
 
 /** 概要の 1 件（箱にしないタイル。人数と、その母集団の説明） */
-function OverviewTile({
+function OverviewStat({
   icon,
   label,
-  note,
   value,
 }: {
   icon: ReactNode;
   label: string;
-  note: string;
   value: number;
 }) {
   return (
-    <div className="rounded-xl bg-secondary/50 p-3">
-      <dt className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+    <div className="flex items-baseline gap-1.5">
+      <dt className="flex items-center gap-1.5 text-sm text-muted-foreground">
         {icon}
         {label}
       </dt>
-      <dd className="mt-1 text-2xl font-bold tabular-nums">{value}</dd>
-      <p className="mt-1 text-xs text-muted-foreground">{note}</p>
+      <dd className="text-base font-bold tabular-nums">{value}</dd>
     </div>
   );
 }

@@ -946,6 +946,7 @@ export const PAGES_JA = {
     metaTitle: "操作設定統計 - Minefolio",
     description: "RTA走者の操作設定・キー配置の統計情報を確認できます。",
     overviewHeading: "概要",
+    overviewNotesSummary: "集計の対象を見る",
     registeredCount: "登録走者数",
     registeredCountNote: "操作設定を登録している公開走者（一覧と同じ）",
     publicProfiles: "公開プロフィール",
