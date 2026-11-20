@@ -1822,7 +1822,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   rankings: {
     title: "Rankings - Minefolio",
-    description: "Minecraft speedrun rankings and leaderboards.",
+    description: "Minecraft speedrun rankings among runners registered on Minefolio.",
     pageTitle: "Rankings",
     count: "{count}",
     noCategories: "No Speedrun.com rankings yet",
@@ -1844,6 +1844,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unknownPlayer: "Unknown runner",
     watchVideo: "Watch video",
     viewExternal: "View run details",
+    scopeSpeedruncom: "Rank among runners with public profiles on Minefolio. This differs from the overall Speedrun.com ranking.",
+    scopeRanked: "Rank among runners with public profiles on Minefolio who made their Ranked stats public. This differs from the overall MCSR Ranked ranking.",
+    updatedAt: "Updated: {time}",
     publicityNote: "Depending on a runner's record visibility settings, they may not appear in the rankings.",
     pendingVerification: "Pending verification",
   },

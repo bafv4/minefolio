@@ -65,6 +65,17 @@ interface LoadedRankings {
     slug: string;
     name: string;
   } | null;
+  /** 表の行のうち最新の集計時刻（cron が `player_rankings.lastFetched` に書く。UNIX ms）。行が無ければ null */
+  lastFetchedMs: number | null;
+}
+
+function latestFetchedMs(rows: { lastFetched: Date | null }[]): number | null {
+  let max: number | null = null;
+  for (const r of rows) {
+    const ms = r.lastFetched ? r.lastFetched.getTime() : null;
+    if (ms !== null && (max === null || ms > max)) max = ms;
+  }
+  return max;
 }
 
 const playerColumns = {
@@ -110,7 +121,7 @@ export async function loadRankings(
       : speedruncomCategories[0];
 
     if (!selectedCategory) {
-      return { rankings: [], selectedCategory: null };
+      return { rankings: [], selectedCategory: null, lastFetchedMs: null };
     }
 
     const rows = await db
@@ -122,6 +133,7 @@ export async function loadRankings(
         videoUrl: playerRankings.videoUrl,
         runWeblink: playerRankings.runWeblink,
         verificationStatus: playerRankings.verificationStatus,
+        lastFetched: playerRankings.lastFetched,
         ...playerColumns,
       })
       .from(playerRankings)
@@ -173,6 +185,7 @@ export async function loadRankings(
     });
     return {
       rankings,
+      lastFetchedMs: latestFetchedMs(rows),
       selectedCategory: {
         id: selectedCategory.id,
         slug: selectedCategory.slug,
@@ -187,6 +200,7 @@ export async function loadRankings(
         userId: playerRankings.userId,
         timeMs: playerRankings.timeMs,
         timeFormatted: playerRankings.timeFormatted,
+        lastFetched: playerRankings.lastFetched,
         ...playerColumns,
       })
       .from(playerRankings)
@@ -214,7 +228,7 @@ export async function loadRankings(
       winRate: null,
       verificationStatus: null,
     }));
-    return { rankings };
+    return { rankings, lastFetchedMs: latestFetchedMs(rows) };
   }
 
   // ranked elo
@@ -225,6 +239,7 @@ export async function loadRankings(
       wins: playerRankings.wins,
       losses: playerRankings.losses,
       winRate: playerRankings.winRate,
+      lastFetched: playerRankings.lastFetched,
       ...playerColumns,
     })
     .from(playerRankings)
@@ -252,7 +267,7 @@ export async function loadRankings(
     winRate: r.winRate,
     verificationStatus: null,
   }));
-  return { rankings };
+  return { rankings, lastFetchedMs: latestFetchedMs(rows) };
 }
 
 /**

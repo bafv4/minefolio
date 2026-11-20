@@ -12,6 +12,7 @@ import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
+import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { createAuth } from "@/lib/auth";
@@ -149,6 +150,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   let speedruncomCategories: Categories;
   let rankings: LoadedRankings["rankings"];
   let selectedCategory: LoadedRankings["selectedCategory"];
+  let lastFetchedMs: LoadedRankings["lastFetchedMs"];
 
   let loadedCategories: Categories | undefined;
   if (args.tab === "speedruncom") {
@@ -170,7 +172,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const loaded =
       cached ?? (await loadRankings(db, args, speedruncomCategories));
     if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
-    ({ rankings, selectedCategory } = loaded);
+    ({ rankings, selectedCategory, lastFetchedMs } = loaded);
   } else {
     // ranked タブはカテゴリ不要（nav 用の一覧だけ必要）なので並列に取得する
     const key = `rankings:ranked:${args.rankedType === "pb" ? "pb" : "elo"}`;
@@ -181,7 +183,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     ]);
     if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
     speedruncomCategories = cats;
-    ({ rankings, selectedCategory } = loaded);
+    ({ rankings, selectedCategory, lastFetchedMs } = loaded);
   }
 
   return {
@@ -189,6 +191,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     categories: speedruncomCategories,
     selectedCategory,
     rankings,
+    lastFetchedMs,
     rankedType: args.rankedType,
     isSignedIn: !!session,
     appUrl: env.APP_URL || "https://minefolio.app",
@@ -248,8 +251,16 @@ export default function RankingsPage() {
           )}
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
+          {data.tab === "speedruncom" ? t("rankings.scopeSpeedruncom") : t("rankings.scopeRanked")}{" "}
           {t("rankings.publicityNote")}
         </p>
+        {data.lastFetchedMs !== null && (
+          <p className="text-muted-foreground mt-1 text-xs" suppressHydrationWarning>
+            {t("rankings.updatedAt", {
+              time: formatRelativeTimeInMinutes(t, new Date(data.lastFetchedMs)),
+            })}
+          </p>
+        )}
       </div>
 
       {/* カテゴリ選択 */}

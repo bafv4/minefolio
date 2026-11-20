@@ -1836,7 +1836,7 @@ export const PAGES_JA = {
   },
   rankings: {
     title: "ランキング - Minefolio",
-    description: "Minecraftスピードランのランキングとリーダーボードを表示。",
+    description: "Minecraftスピードランのランキング。Minefolio に登録した走者の中での順位を表示します。",
     pageTitle: "ランキング",
     count: "{count}件",
     noCategories: "Speedrun.com のランキングはまだありません",
@@ -1859,6 +1859,9 @@ export const PAGES_JA = {
     unknownPlayer: "不明な走者",
     watchVideo: "動画を見る",
     viewExternal: "記録の詳細を見る",
+    scopeSpeedruncom: "Minefolio に登録した公開プロフィールの走者の中での順位です。Speedrun.com 全体の順位とは異なります。",
+    scopeRanked: "Minefolio の公開プロフィールで、Ranked 統計の公開を許可した走者の中での順位です。MCSR Ranked 全体の順位とは異なります。",
+    updatedAt: "集計: {time}",
     publicityNote: "記録の公開設定によってはランキングに表示されないことがあります。",
     pendingVerification: "審査待ち",
   },
