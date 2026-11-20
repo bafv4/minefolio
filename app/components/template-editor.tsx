@@ -395,6 +395,7 @@ export function TemplateEditorForm({
             <Label htmlFor="template-language">{t("meTemplates.languageLabel")}</Label>
             <div className="flex items-center gap-2">
               <Combobox
+                id="template-language"
                 options={gameLanguageOptions(t, locale)}
                 value={gameLanguage}
                 onValueChange={setGameLanguage}
