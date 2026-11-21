@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { NoticeBanner } from "@/components/notice-banner";
-import { getPublishAction, hasDraftSave, type PublishAction } from "@/components/guide-editor/hooks/use-guide-save";
+import { getPublishAction, hasDraftSave, publishToggleDescKey, type PublishAction } from "@/components/guide-editor/hooks/use-guide-save";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -416,16 +416,10 @@ export function TemplateEditorForm({
                 {t("meTemplates.publishSwitch")}
               </span>
               <span id={`${publishSwitchId}-desc`} className="block max-w-xs text-xs text-muted-foreground">
-                {t(
-                  publishSetting
-                    ? publishState.livePublished
-                      ? "guideEditor.ui.publishOnLive"
-                      : "guideEditor.ui.publishOnNew"
-                    : publishState.livePublished
-                      ? "guideEditor.ui.publishOffLive"
-                      : "guideEditor.ui.publishOffNew",
-                  { save: publishLabels[publishAction], draft: t("meTemplates.saveDraft") },
-                )}
+                {t(publishToggleDescKey(publishSetting, publishState.livePublished), {
+                  save: publishLabels[publishAction],
+                  draft: t("meTemplates.saveDraft"),
+                })}
               </span>
             </span>
           </label>

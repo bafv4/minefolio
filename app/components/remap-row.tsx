@@ -21,6 +21,7 @@ import {
 import { KeyCaptureButton } from "@/components/key-capture-button";
 import { ArrowRight, Trash2 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import type { MessageKey } from "@/lib/messages";
 
 /**
  * リマップ編集行（/me/keybindings のリマップタブと共通のUI・UX）。
@@ -30,6 +31,15 @@ import { useT } from "@/hooks/use-locale";
 
 // 変更先の出力タイプ（種別 KeyRemapType とは別概念）
 export type RemapOutputType = "none" | "keyboard" | "special" | "disabled";
+
+/** 出力種別に対応する翻訳キー（SelectValue と SelectItem で共用。"none" はキー扱い） */
+const OUTPUT_TYPE_LABEL_KEYS: Record<RemapOutputType, MessageKey> = {
+  none: "meKeybindings.outputTypeKey",
+  keyboard: "meKeybindings.outputTypeKey",
+  special: "meKeybindings.outputTypeCharacter",
+  disabled: "meKeybindings.outputTypeDisabled",
+};
+const OUTPUT_TYPE_SELECT_OPTIONS = ["keyboard", "special", "disabled"] as const;
 
 /** リマップ行が編集に必要とする最小のエントリ形状 */
 export type RemapRowEntry = {
@@ -169,13 +179,13 @@ export function RemapRow({
         >
           <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-9 max-sm:h-11 text-sm">
             <SelectValue>
-              {t(selectedOutputType === "special" ? "meKeybindings.outputTypeCharacter" : selectedOutputType === "disabled" ? "meKeybindings.outputTypeDisabled" : "meKeybindings.outputTypeKey")}
+              {t(OUTPUT_TYPE_LABEL_KEYS[selectedOutputType])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
-            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
-            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
+            {OUTPUT_TYPE_SELECT_OPTIONS.map((type) => (
+              <SelectItem key={type} value={type}>{t(OUTPUT_TYPE_LABEL_KEYS[type])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -337,13 +347,13 @@ export function DialogRemapRow({
         >
           <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-8 max-sm:h-11 text-sm">
             <SelectValue>
-              {t(selectedOutputType === "special" ? "meKeybindings.outputTypeCharacter" : selectedOutputType === "disabled" ? "meKeybindings.outputTypeDisabled" : "meKeybindings.outputTypeKey")}
+              {t(OUTPUT_TYPE_LABEL_KEYS[selectedOutputType])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
-            <SelectItem value="special">{t("meKeybindings.outputTypeCharacter")}</SelectItem>
-            <SelectItem value="disabled">{t("meKeybindings.outputTypeDisabled")}</SelectItem>
+            {OUTPUT_TYPE_SELECT_OPTIONS.map((type) => (
+              <SelectItem key={type} value={type}>{t(OUTPUT_TYPE_LABEL_KEYS[type])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 

@@ -4,6 +4,7 @@ import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
+import { escapeLike } from "@/lib/sql-like.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const db = createDb();
@@ -17,7 +18,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   // LIKE のワイルドカード(%,_)をエスケープし、入力を部分一致リテラルとして扱う。
-  const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const likePattern = `%${escapeLike(q)}%`;
 
   const results = await db
     .select({

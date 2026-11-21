@@ -1251,7 +1251,6 @@ export const PAGES_JA = {
     justNow: "たった今",
     minutesAgo: "{count}分前",
     hoursAgo: "{count}時間前",
-    daysAgo: "{count}日前",
   },
   /** MCSR Ranked / PaceMan / Speedrun.com の統計カード（player-stats-cards.tsx。プロフィールの活動タブと /player/:slug/stats で共有） */
   playerStatsCards: {

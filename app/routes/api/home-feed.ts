@@ -14,6 +14,7 @@ import {
   TWITCH_STREAMS_CACHE_KEY,
   HOME_LIVE_COUNT_CACHE_KEY,
   HOME_LIVE_COUNT_TTL_MS,
+  dropStaleEmptyOutlook,
 } from "@/lib/home-live-outlook.server";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getHomeHiddenUsers } from "@/lib/home-visibility.server";
@@ -237,6 +238,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
       // ホームの骨組みの見込み用に、登録走者で絞った後の件数を長めに残す（home-live-outlook.server.ts）
       await setCached(HOME_LIVE_COUNT_CACHE_KEY, filteredLiveRuns.length, HOME_LIVE_COUNT_TTL_MS);
+      // 見込みのメモ（最大45秒）が「0件」のままなら、人が来た時点で取り直させる
+      if (filteredLiveRuns.length > 0) await dropStaleEmptyOutlook("live");
 
       return jsonResponse(result, CDN_CACHE.LIVE_RUNS);
     }
@@ -398,6 +401,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (recentVideos.length === 0) {
         return jsonResponse({ recentVideos: [] }, 60);
       }
+      await dropStaleEmptyOutlook("videos");
 
       return jsonResponse({ recentVideos }, CDN_CACHE.YOUTUBE, CDN_SWR_LONG);
     }
@@ -412,6 +416,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (recentVods.length === 0) {
         return jsonResponse({ recentVods: [] }, 60);
       }
+      await dropStaleEmptyOutlook("videos");
 
       return jsonResponse({ recentVods }, CDN_CACHE.TWITCH_VODS, CDN_SWR_LONG);
     }

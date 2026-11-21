@@ -1,20 +1,22 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn } from "drizzle-orm";
 import { favorites, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
+import {
+  DEFAULT_PROFILE_EDITION,
+  DEFAULT_PROFILE_INPUT_METHOD,
+  DEFAULT_PROFILE_PLATFORM,
+  DEFAULT_PROFILE_ROLE,
+} from "./profile-defaults";
 import { profilePageViewsSql } from "./page-view-stats.server";
+import { escapeLike } from "./sql-like.server";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
 // ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
 const MAX_BROWSE_PAGE = 100_000;
-
-/** LIKE のワイルドカード(%,_)とエスケープ文字(\)を無害化する。 */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
 
 /** page パラメータを安全な整数範囲にクランプする。 */
 function parseBrowsePage(raw: string | null): number {
@@ -87,6 +89,11 @@ const BROWSE_LIST_COLUMNS = {
   customSkinUrl: true,
 } as const;
 
+/** 列 = value。value が既定値のときは、未設定（NULL）も既定値として含める */
+function eqOrNullWhenDefault(column: AnyColumn, value: string, defaultValue: string) {
+  return value === defaultValue ? or(isNull(column), eq(column, value))! : eq(column, value);
+}
+
 /**
  * 検索 + フィルタ条件を組み立てる（共通）。
  * デフォルトの視聴者除外もここで吸収する。
@@ -110,13 +117,7 @@ function buildWhere(args: BrowseQueryArgs) {
 
   if (args.roles.length > 0) {
     // role 未設定（NULL）は走者として扱う（excludeViewersCondition / 既定の一覧と同じ解釈）
-    conditions.push(
-      or(
-        ...args.roles.map((r) =>
-          r === "runner" ? or(isNull(users.role), eq(users.role, "runner"))! : eq(users.role, r),
-        ),
-      )!,
-    );
+    conditions.push(or(...args.roles.map((r) => eqOrNullWhenDefault(users.role, r, DEFAULT_PROFILE_ROLE)))!);
   } else {
     conditions.push(excludeViewersCondition!);
   }
@@ -124,25 +125,17 @@ function buildWhere(args: BrowseQueryArgs) {
   // カード（profile-feed-card.tsx）が既定値を出さないのと意味をそろえ、既定値で絞るときは NULL も含める
   if (args.editions.length > 0) {
     conditions.push(
-      or(...args.editions.map((e) => (e === "java" ? or(isNull(users.mainEdition), eq(users.mainEdition, e))! : eq(users.mainEdition, e))))!,
+      or(...args.editions.map((e) => eqOrNullWhenDefault(users.mainEdition, e, DEFAULT_PROFILE_EDITION)))!,
     );
   }
   if (args.inputMethods.length > 0) {
     conditions.push(
-      or(
-        ...args.inputMethods.map((i) =>
-          i === "keyboard_mouse" ? or(isNull(users.inputMethod), eq(users.inputMethod, i))! : eq(users.inputMethod, i),
-        ),
-      )!,
+      or(...args.inputMethods.map((i) => eqOrNullWhenDefault(users.inputMethod, i, DEFAULT_PROFILE_INPUT_METHOD)))!,
     );
   }
   if (args.platforms.length > 0) {
     conditions.push(
-      or(
-        ...args.platforms.map((p) =>
-          p === "pc_windows" ? or(isNull(users.mainPlatform), eq(users.mainPlatform, p))! : eq(users.mainPlatform, p),
-        ),
-      )!,
+      or(...args.platforms.map((p) => eqOrNullWhenDefault(users.mainPlatform, p, DEFAULT_PROFILE_PLATFORM)))!,
     );
   }
   return and(...conditions);

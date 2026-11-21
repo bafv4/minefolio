@@ -24,6 +24,7 @@ import {
   parseTemplateLoops,
   MAX_TEMPLATE_CRAFTS,
 } from "@/lib/search-craft-templates";
+import { keyboardLayoutLabel } from "@/lib/keybindings";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { useLoginHref } from "@/hooks/use-login-href";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,7 @@ import {
 } from "lucide-react";
 import { getGameLanguageName, normalizeGameLanguage } from "@/lib/game-languages";
 import { decodePresetPlayerConfig } from "@/lib/preset-read";
+import { readListSearchState } from "@/lib/list-back-state";
 import { RelativeTime } from "@/components/relative-time";
 
 // リマップ表示用のバーチャルキーボードのレイアウト切替（テンプレートはレイアウト情報を持たないため閲覧者が選択）
@@ -384,8 +386,7 @@ export default function TemplateViewPage() {
   const fetcher = useFetcher<typeof action>();
   // 一覧から来たときは、一覧の絞り込み（?lang= など）へ戻る。直接開いたときは素の一覧
   const location = useLocation();
-  const stateSearch = (location.state as { templateListSearch?: unknown } | null)?.templateListSearch;
-  const templateListSearch = typeof stateSearch === "string" && stateSearch.startsWith("?") ? stateSearch : "";
+  const templateListSearch = readListSearchState(location.state, "templateListSearch");
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   // 反映した（または新規作成した）プリセットを、その場で編集中にする。/me/presets の action（intent=apply-preset）へ送る
   const activateFetcher = useFetcher<{ success?: boolean; error?: string }>();
@@ -1022,12 +1023,12 @@ export default function TemplateViewPage() {
               onValueChange={(v) => setKeyboardLayout(v as KeyboardLayoutOption)}
             >
               <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
-                <SelectValue>{keyboardLayout.replace("_", " ")}</SelectValue>
+                <SelectValue>{keyboardLayoutLabel(keyboardLayout)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {LAYOUT_OPTIONS.map((option) => (
                   <SelectItem key={option} value={option}>
-                    {option.replace("_", " ")}
+                    {keyboardLayoutLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>

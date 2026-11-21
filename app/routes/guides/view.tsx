@@ -71,6 +71,7 @@ import {
   type EmbedTemplateData,
 } from "@/components/guide-embeds";
 import { collectPresetNames } from "@/lib/guide-embed-attrs";
+import { readListPathState, readListSearchState } from "@/lib/list-back-state";
 
 // コードブロックのコピーボタンに innerHTML で挿入する lucide アイコン（Copy / Check）。
 // stroke="currentColor" のため、ボタンの text-muted-foreground / hover 色がそのまま反映される。
@@ -456,18 +457,11 @@ export default function GuideViewPage() {
   const [searchParams] = useSearchParams();
   // 一覧から来たときは、一覧の絞り込み（?tag= など）へ戻る。直接開いたときは素の /guides
   const location = useLocation();
-  const stateSearch = (location.state as { guideListSearch?: unknown } | null)?.guideListSearch;
-  const guideListSearch = typeof stateSearch === "string" && stateSearch.startsWith("?") ? stateSearch : "";
+  const guideListSearch = readListSearchState(location.state, "guideListSearch");
   // 著者のガイド一覧（/guides/:author）から来たときは、全体の一覧ではなくその著者の一覧へ戻る。
   // 戻り先はこの記事の著者のパスだけを許す（state は履歴に残る任意の値なので、任意のパスへは飛ばさない。
   // URL の slug は大文字小文字を区別しないので、比べるときだけ小文字にそろえる）
-  const statePath = (location.state as { guideListPath?: unknown } | null)?.guideListPath;
-  const authorListPath = `/guides/${author.slug}`.toLowerCase();
-  const authorListBack =
-    typeof statePath === "string" &&
-    (statePath.toLowerCase() === authorListPath || statePath.toLowerCase().startsWith(`${authorListPath}?`))
-      ? statePath
-      : null;
+  const authorListBack = readListPathState(location.state, "guideListPath", `/guides/${author.slug}`);
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
     const next = new URLSearchParams(searchParams);

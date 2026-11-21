@@ -62,6 +62,19 @@ export function getPublishAction(livePublished: boolean, publishSetting: boolean
   return livePublished ? "unpublish" : "saveUnpublished";
 }
 
+/** 公開スイッチの説明文のキー（スイッチの値 × 保存済みの公開状態の4通り） */
+export function publishToggleDescKey(
+  isPublished: boolean,
+  livePublished: boolean,
+):
+  | "guideEditor.ui.publishOnLive"
+  | "guideEditor.ui.publishOnNew"
+  | "guideEditor.ui.publishOffLive"
+  | "guideEditor.ui.publishOffNew" {
+  if (isPublished) return livePublished ? "guideEditor.ui.publishOnLive" : "guideEditor.ui.publishOnNew";
+  return livePublished ? "guideEditor.ui.publishOffLive" : "guideEditor.ui.publishOffNew";
+}
+
 /**
  * 下書き保存（mode=draft）を出すか。下書き保存は「公開版を変えずに保存する」ためのものなので、
  * 読者に見える版がある（保存済みの isPublished が true）ときだけ出す。公開版が無い（一度も公開していない・

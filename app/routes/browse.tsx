@@ -580,10 +580,10 @@ export default function BrowsePage() {
                 <SelectValue>{sortLabels[sortBy]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="updatedAt">{t("browse.sortUpdatedAt")}</SelectItem>
-                <SelectItem value="popular">{t("browse.sortPopular")}</SelectItem>
-                <SelectItem value="mcid">{t("browse.sortMcid")}</SelectItem>
-                <SelectItem value="displayName">{t("browse.sortDisplayName")}</SelectItem>
+                <SelectItem value="updatedAt">{sortLabels.updatedAt}</SelectItem>
+                <SelectItem value="popular">{sortLabels.popular}</SelectItem>
+                <SelectItem value="mcid">{sortLabels.mcid}</SelectItem>
+                <SelectItem value="displayName">{sortLabels.displayName}</SelectItem>
               </SelectContent>
             </Select>
             <ViewToggle viewMode={viewMode} onChange={setViewMode} comfortable />

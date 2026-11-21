@@ -12,7 +12,7 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, itemLayouts, searchCrafts, keyRemaps, guides, searchCraftTemplates } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
@@ -82,6 +82,13 @@ export async function loader({ request }: Route.LoaderArgs) {
         or exists(select 1 from ${searchCrafts} where ${searchCrafts.userId} = "users"."id")
         or exists(select 1 from ${keyRemaps} where ${keyRemaps.userId} = "users"."id")
       )`.as("has_existing_data"),
+      // アカウント削除の確認に出す「公開中のものが消える」件数（ガイドとテンプレートはアカウント削除で cascade 削除される）
+      publishedGuideCount: sql<number>`(
+        select count(*) from ${guides} where ${guides.authorId} = "users"."id" and ${guides.isPublished} = 1
+      )`.as("published_guide_count"),
+      publishedTemplateCount: sql<number>`(
+        select count(*) from ${searchCraftTemplates} where ${searchCraftTemplates.userId} = "users"."id" and ${searchCraftTemplates.isPublished} = 1
+      )`.as("published_template_count"),
     },
   });
 
@@ -89,24 +96,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  const { hasExistingData: hasExistingDataRaw, ...userRow } = user;
-
-  // アカウント削除の確認に出す「公開中のものが消える」件数（ガイドとテンプレートはアカウント削除で cascade 削除される）
-  const [[guideRow], [templateRow]] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(guides)
-      .where(and(eq(guides.authorId, user.id), eq(guides.isPublished, true))),
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(searchCraftTemplates)
-      .where(and(eq(searchCraftTemplates.userId, user.id), eq(searchCraftTemplates.isPublished, true))),
-  ]);
+  const {
+    hasExistingData: hasExistingDataRaw,
+    publishedGuideCount,
+    publishedTemplateCount,
+    ...userRow
+  } = user;
 
   return {
     user: userRow,
-    publishedGuideCount: Number(guideRow?.count ?? 0),
-    publishedTemplateCount: Number(templateRow?.count ?? 0),
+    publishedGuideCount: Number(publishedGuideCount ?? 0),
+    publishedTemplateCount: Number(publishedTemplateCount ?? 0),
     // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
     legacyApiUrl: env.LEGACY_API_URL,
     hasExistingData: Boolean(hasExistingDataRaw),
@@ -510,18 +510,20 @@ export default function AccountPage() {
                   <div className="space-y-4 py-4">
                     <NoticeBanner tone="error" icon={AlertTriangle}>
                       {t("meEdit.cannotUndo")}
-                      {publishedGuideCount + publishedTemplateCount > 0 && (
+                      {publishedGuideCount > 0 && publishedTemplateCount > 0 && (
                         <>
                           {" "}
-                          {publishedGuideCount > 0 && publishedTemplateCount > 0
-                            ? t("meEdit.deletePublishedNote", {
-                                guides: publishedGuideCount,
-                                templates: publishedTemplateCount,
-                              })
-                            : publishedGuideCount > 0
-                              ? t("meEdit.deletePublishedGuidesNote", { guides: publishedGuideCount })
-                              : t("meEdit.deletePublishedTemplatesNote", { templates: publishedTemplateCount })}
+                          {t("meEdit.deletePublishedNote", {
+                            guides: publishedGuideCount,
+                            templates: publishedTemplateCount,
+                          })}
                         </>
+                      )}
+                      {publishedGuideCount > 0 && publishedTemplateCount === 0 && (
+                        <> {t("meEdit.deletePublishedGuidesNote", { guides: publishedGuideCount })}</>
+                      )}
+                      {publishedGuideCount === 0 && publishedTemplateCount > 0 && (
+                        <> {t("meEdit.deletePublishedTemplatesNote", { templates: publishedTemplateCount })}</>
                       )}
                       {hasChanges && <> {t("meEdit.deleteDiscardNote")}</>}
                     </NoticeBanner>

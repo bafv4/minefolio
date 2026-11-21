@@ -40,6 +40,7 @@ import {
   getKeyLabel,
   parseKeyCombination,
   KEYBOARD_LAYOUT_OPTIONS,
+  keyboardLayoutLabel,
   normalizeKeyboardLayout,
   type KeyboardLayout,
 } from "@/lib/keybindings";
@@ -398,12 +399,12 @@ export function SearchCraftWorkbench({
         </Button>
         <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
           <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
-            <SelectValue>{layout.replace("_", " ")}</SelectValue>
+            <SelectValue>{keyboardLayoutLabel(layout)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {LAYOUT_OPTIONS.map((option) => (
               <SelectItem key={option} value={option}>
-                {option.replace("_", " ")}
+                {keyboardLayoutLabel(option)}
               </SelectItem>
             ))}
           </SelectContent>

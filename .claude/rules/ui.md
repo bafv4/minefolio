@@ -177,7 +177,7 @@
 
 ### ホバー
 - **遷移先のある一覧カード**（走者・ペース・動画・ガイド）: 外側のラッパーで `-translate-y-0.5`、カードで `border-primary/40` ＋ `shadow-md`。
-  動きには `motion-reduce:` の打ち消しを付ける
+  ホバーで要素を動かす transform（`-translate-y-0.5`）には `motion-reduce:` の打ち消しを付ける（`motion-reduce:transform-none` 等）
 - パネル・タイル・ハイライトなど、ページ側の面は浮かせない。ホバーで変えるのは枠色（`border-primary/40`）と面（`bg-muted/50`）まで
 - クリックできない物にホバーの見た目を付けない
 
@@ -331,8 +331,9 @@
 - 初回表示（SSR・ハイドレーション・URL で直接開いたとき）では動かさない。ページを開いただけで演出を待たせない
 - 時間の目安: 手応え 100〜150ms、状態の切替 150〜300ms、並べ替え・重なり 300〜500ms。イージングは `cubic-bezier(0.16, 1, 0.3, 1)` 系の減速で、跳ねる曲線は使わない。退場は登場より速く（多くは即時）
 - 走者画面のタブ切替は、新しいタブの中身を opacity だけで 150ms 出す。ホットバーの選択枠は Minecraft と同じく瞬時に切り替える（移動させない）
-- 移動・拡大・スクロールのアニメーションには `motion-reduce:` の打ち消しを付ける
-- `app/app.css` の reduced-motion ルールは CSS のアニメーション・トランジションにしか効かない。Web Animations API（`element.animate`）を使うときは
+- `app/app.css` の全体の reduced-motion ルール（`animation-duration` / `transition-duration` を 0.01ms、`scroll-behavior: auto`）が CSS の transition と animation を実質止めるので、`motion-reduce:transition-none` や `motion-reduce:animate-none` は付けない
+- 打ち消しを付けるのは、ホバー・押下で要素を動かす分（`hover:-translate-*`・`active:scale-*` などの transform。上のルールは所要時間を縮めるだけで、動いた後の位置は残る）と、CSS の外の動き（Web Animations API・`scrollIntoView` の `behavior: "smooth"`）
+- Web Animations API（`element.animate`）を使うときは
   `matchMedia("(prefers-reduced-motion: reduce)")` を見て、移動をやめる。意味のある色・opacity の変化は残してよい
 - 選択状態のように SSR 直後から正しく見えるべきものに、移動のアニメーションを付けない
 

@@ -1,4 +1,4 @@
-import { createContext, Fragment, useContext, useState, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { Keyboard, Mouse, Users, Table2 } from "lucide-react";
@@ -82,13 +82,17 @@ export function StatsView({ data }: StatsViewProps) {
   } = data;
 
   // 操作の統計は表のタブと同じ順（移動 → インベントリ → 戦闘・UI）に並べ、区分ごとに小見出しを1回だけ出す
-  const orderedKeybindingStats = [...keybindingStats].sort((a, b) => {
-    const rank = (action: string) => {
-      const i = BIND_FILTER_ACTIONS.indexOf(action);
-      return i < 0 ? BIND_FILTER_ACTIONS.length : i;
-    };
-    return rank(a.action) - rank(b.action);
-  });
+  const orderedKeybindingStats = useMemo(
+    () =>
+      [...keybindingStats].sort((a, b) => {
+        const rank = (action: string) => {
+          const i = BIND_FILTER_ACTIONS.indexOf(action);
+          return i < 0 ? BIND_FILTER_ACTIONS.length : i;
+        };
+        return rank(a.action) - rank(b.action);
+      }),
+    [keybindingStats],
+  );
 
   // 描画するのはデータのあるキーだけ
   const keysWithData = keyActionStats.filter((k) => k.totalCount > 0);

@@ -918,6 +918,11 @@ export type KeyboardLayout = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 
 export const KEYBOARD_LAYOUT_OPTIONS: KeyboardLayout[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
 
+/** 配列の表示名（"US_TKL" → "US TKL"） */
+export function keyboardLayoutLabel(layout: string): string {
+  return layout.replace("_", " ");
+}
+
 /** 不明・欠落値は既定の "US" に正規化する */
 export function normalizeKeyboardLayout(value: string | null | undefined): KeyboardLayout {
   return KEYBOARD_LAYOUT_OPTIONS.includes(value as KeyboardLayout)

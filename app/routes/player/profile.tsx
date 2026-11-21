@@ -34,10 +34,9 @@ import { platformLabel } from "@/lib/platform-label";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
 import { format } from "date-fns";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { useRelativeTimeFormatter } from "@/components/relative-time";
 import { dateFnsLocale, dateFormatPattern, intlLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { useHydrated } from "@/hooks/use-hydrated";
 import type { Translator } from "@/lib/messages";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName, hasItemNameDictionary } from "@/lib/game-languages";
@@ -2718,7 +2717,7 @@ function SocialLinkRichCard({
   const t = useT();
   const locale = useLocale();
   // 暦日はタイムゾーン依存。SSR（サーバー UTC）と水和は経過日数で描き、水和後に端末の暦日へ切り替える
-  const calendar = useHydrated();
+  const formatRelativeTime = useRelativeTimeFormatter();
   const statParts: string[] = [];
   let isLive = false;
 
@@ -2734,7 +2733,7 @@ function SocialLinkRichCard({
       if (yt.latestVideoAt) {
         statParts.push(
           t("playerProfile.latestVideoAgo", {
-            time: formatRelativeTimeInMinutes(t, new Date(yt.latestVideoAt), { calendar }),
+            time: formatRelativeTime(yt.latestVideoAt),
           }),
         );
       }
@@ -2750,7 +2749,7 @@ function SocialLinkRichCard({
       if (!tw.isLive && tw.lastStreamAt) {
         statParts.push(
           t("playerProfile.lastStreamAgo", {
-            time: formatRelativeTimeInMinutes(t, new Date(tw.lastStreamAt), { calendar }),
+            time: formatRelativeTime(tw.lastStreamAt),
           }),
         );
       }
@@ -3293,27 +3292,22 @@ function StatsContent({
         ) : player.categoryRecords.length === 0 ? (
           // 直前に欄が1つも無い（上の引き上げ方だとタブ名に重なる）。取得後に出る空状態（EmptyState 既定の大きさ）と
           // 同じ外枠・同じ段（アイコン 48px・題・説明1行・操作の分）で場所を取り、読み終わっても下の導線が跳ねないようにする
-          <div
+          <EmptyState
             role="status"
-            className="rounded-xl border border-dashed bg-card/50 px-4 py-12 text-center text-muted-foreground sm:px-6"
-          >
-            <div className="mb-4 flex justify-center opacity-50">
-              <Loader2 className="h-12 w-12 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-lg font-medium text-foreground">{t("playerProfile.statsLoadingExternal")}</p>
-              <p className="text-sm" aria-hidden="true">
-                &nbsp;
-              </p>
-            </div>
-            {/* 操作の分は、取得後の EmptyState と同じ物を見えない状態で置いて高さをそろえる
-                （本人は OwnerEditAction、訪問者は他タブへの導線。訪問者で導線が無いときは何も置かない） */}
-            {(isOwner || visitorEmptyAction) && (
-              <div className="invisible mt-4 max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11" aria-hidden="true" inert>
-                {isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
-              </div>
-            )}
-          </div>
+            icon={<Loader2 className="h-12 w-12 animate-spin" aria-hidden="true" />}
+            title={t("playerProfile.statsLoadingExternal")}
+            // 説明1行ぶんの高さだけ確保する（空白文字）
+            description={" "}
+            // 操作の分は、取得後の EmptyState と同じ物を見えない状態で置いて高さをそろえる
+            // （本人は OwnerEditAction、訪問者は他タブへの導線。訪問者で導線が無いときは何も置かない）
+            action={
+              isOwner || visitorEmptyAction ? (
+                <div className="invisible" aria-hidden="true" inert>
+                  {isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
+                </div>
+              ) : undefined
+            }
+          />
         ) : (
           // カスタム記録だけがある走者: 流れの中の1行（取得後に消えても、続くカスタム記録が動くのは1行ぶんだけ）
           <p role="status" className="flex h-5 items-center gap-2 text-sm text-muted-foreground">

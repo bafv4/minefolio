@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { flushSync } from "react-dom";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher, useRevalidator, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
@@ -67,18 +67,39 @@ import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
 import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
-import type { Translator } from "@/lib/messages";
+import type { MessageKey, Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
 import { syncActivePresetSnapshot, type PresetSyncKind } from "@/lib/preset-utils";
 import { parseFingerAssignments } from "@/lib/preset-read";
 import { validateFingerAssignmentsJson } from "@/lib/finger-assignments";
 import { SAVE_LIMITS, formString } from "@/lib/save-limits";
 import { isValidRemapInputs, isValidCustomKeyInputs, isValidCustomActionInputs } from "@/lib/keybindings-payload";
-import { PresetSelector } from "@/components/preset-selector";
-import { ImportDialog } from "@/components/import-dialog";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
+
+/** カスタムアクションのカテゴリに対応する翻訳キー（SelectValue と SelectItem で共用） */
+const CUSTOM_ACTION_CATEGORIES = ["other", "macro", "tool"] as const;
+const CUSTOM_ACTION_CATEGORY_LABEL_KEYS: Record<(typeof CUSTOM_ACTION_CATEGORIES)[number], MessageKey> = {
+  other: "meKeybindings.categoryOther",
+  macro: "meKeybindings.categoryMacro",
+  tool: "meKeybindings.categoryTool",
+};
+
+/** プリセットのコピー対象に対応する翻訳キー（SelectValue と SelectItem で共用） */
+const COPY_TARGET_OPTIONS = ["all", "keybindings", "remaps", "fingers"] as const;
+const COPY_TARGET_LABEL_KEYS: Record<(typeof COPY_TARGET_OPTIONS)[number], MessageKey> = {
+  all: "meKeybindings.all",
+  keybindings: "meKeybindings.keybindingsOnly",
+  remaps: "meKeybindings.remapsOnly",
+  fingers: "meKeybindings.fingersOnly",
+};
+
+// 設定インポートのダイアログは開くときだけ読む（import-parser ごと別チャンクにする）
+const ImportDialog = lazy(() =>
+  import("@/components/import-dialog").then((m) => ({ default: m.ImportDialog })),
+);
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -92,7 +113,7 @@ export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAc
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
-  // 結果を返さない /me/presets・/me/import への送信の保険
+  // action が結果を返さずに終わった（throw した）場合の保険。/me/presets・/me/import への送信後は必ず取り直す
   if (formAction === "/me/presets" || formAction === "/me/import") {
     return true;
   }
@@ -192,7 +213,7 @@ export function HydrateFallback() {
       </div>
 
       {/* プリセットセレクター */}
-      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+      <PresetSelectorSkeleton />
 
       {/* キーボードの欄（上罫線＋見出し＋説明＋凡例＋中身） */}
       <div className="space-y-4 border-t border-foreground/15 pt-6">
@@ -1257,13 +1278,13 @@ function CustomActionRow({
         >
           <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28">
             <SelectValue>
-              {t(action.category === "macro" ? "meKeybindings.categoryMacro" : action.category === "tool" ? "meKeybindings.categoryTool" : "meKeybindings.categoryOther")}
+              {t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[action.category])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
-            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
-            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+            {CUSTOM_ACTION_CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>{t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[category])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button
@@ -1363,13 +1384,13 @@ function DialogCustomActionRow({
         >
           <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28 h-8 max-sm:h-11 text-sm">
             <SelectValue>
-              {t(action.category === "macro" ? "meKeybindings.categoryMacro" : action.category === "tool" ? "meKeybindings.categoryTool" : "meKeybindings.categoryOther")}
+              {t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[action.category])}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
-            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
-            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+            {CUSTOM_ACTION_CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>{t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[category])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -1411,17 +1432,23 @@ export default function KeybindingsPage() {
   const revalidator = useRevalidator();
   // プリセット行のインポートダイアログ。旧 URL /me/import は ?import=1 付きでここへ転送され、開いた状態で始まる
   const [searchParams, setSearchParams] = useSearchParams();
-  const [importDialogOpen, setImportDialogOpen] = useState(searchParams.get("import") === "1");
+  // 開閉は「ボタンで開いた」か「URL に ?import=1 が付いている」かの導出（クライアント遷移で付いたときも開く）
+  const [manualImportOpen, setManualImportOpen] = useState(false);
+  const importParamOn = searchParams.get("import") === "1";
+  // ?import=1 で開いたダイアログを閉じた直後は、URL から import が消えるまでのあいだ閉じたままにする
+  const [importParamDismissed, setImportParamDismissed] = useState(false);
+  if (importParamDismissed && !importParamOn) setImportParamDismissed(false);
+  const importDialogOpen = manualImportOpen || (importParamOn && !importParamDismissed);
+  // 初めて開くときにだけダイアログ（と import-parser）を読み込み、閉じたあとはマウントしたままにして閉じる演出・フォーカス復帰を保つ
+  const [importDialogMounted, setImportDialogMounted] = useState(false);
+  if (importDialogOpen && !importDialogMounted) setImportDialogMounted(true);
   // 閉じたあとのフォーカスの戻り先。0件の警告帯と通常の行のどちらの位置でも同じ ref を付ける
   const importTriggerRef = useRef<HTMLButtonElement>(null);
-  // クライアント遷移で ?import=1 が付いたときも開く
-  useEffect(() => {
-    if (searchParams.get("import") === "1") setImportDialogOpen(true);
-  }, [searchParams]);
   const handleImportDialogOpenChange = useCallback(
     (open: boolean) => {
-      setImportDialogOpen(open);
+      setManualImportOpen(open);
       if (!open && searchParams.has("import")) {
+        setImportParamDismissed(true);
         setSearchParams(
           (prev) => {
             const next = new URLSearchParams(prev);
@@ -2401,14 +2428,18 @@ export default function KeybindingsPage() {
           setCopyDialogOpen(true);
         } : undefined}
       />
-      <ImportDialog
-        open={importDialogOpen}
-        onOpenChange={handleImportDialogOpenChange}
-        returnFocusRef={importTriggerRef}
-        targetPresetName={activePreset?.name ?? null}
-        targetPresetId={activePreset?.id ?? null}
-        // 取り込み後の再検証は shouldRevalidate が /me/import の action 結果で行うので、ここでは呼ばない
-      />
+      {importDialogMounted && (
+        <Suspense fallback={null}>
+          <ImportDialog
+            open={importDialogOpen}
+            onOpenChange={handleImportDialogOpenChange}
+            returnFocusRef={importTriggerRef}
+            targetPresetName={activePreset?.name ?? null}
+            targetPresetId={activePreset?.id ?? null}
+            // 取り込み後の再検証は shouldRevalidate が /me/import の action 結果で行うので、ここでは呼ばない
+          />
+        </Suspense>
+      )}
 
       {/* プリセット切替中はキーボードビュー・入力欄をロックする */}
       <PresetSwitchLock locked={presetSwitching}>
@@ -3144,22 +3175,13 @@ export default function KeybindingsPage() {
               >
                 <SelectTrigger>
                   <SelectValue>
-                    {t(
-                      copyTarget === "keybindings"
-                        ? "meKeybindings.keybindingsOnly"
-                        : copyTarget === "remaps"
-                          ? "meKeybindings.remapsOnly"
-                          : copyTarget === "fingers"
-                            ? "meKeybindings.fingersOnly"
-                            : "meKeybindings.all",
-                    )}
+                    {t(COPY_TARGET_LABEL_KEYS[copyTarget])}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t("meKeybindings.all")}</SelectItem>
-                  <SelectItem value="keybindings">{t("meKeybindings.keybindingsOnly")}</SelectItem>
-                  <SelectItem value="remaps">{t("meKeybindings.remapsOnly")}</SelectItem>
-                  <SelectItem value="fingers">{t("meKeybindings.fingersOnly")}</SelectItem>
+                  {COPY_TARGET_OPTIONS.map((target) => (
+                    <SelectItem key={target} value={target}>{t(COPY_TARGET_LABEL_KEYS[target])}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

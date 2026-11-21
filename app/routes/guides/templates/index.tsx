@@ -10,6 +10,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, or, asc, desc, sql, isNotNull } from "drizzle-orm";
 import { templateLikeCountSql } from "@/lib/likes.server";
+import { escapeLike } from "@/lib/sql-like.server";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { useLoginHref } from "@/hooks/use-login-href";
 import {
@@ -100,7 +101,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (q) {
     // 名称・説明の部分一致。limit より前に SQL で効かせる（メモリ上で絞ると「新しい100件の中だけ」を探すことになり、
     // 101件目より古いテンプレートが検索に出ない）。LIKE のワイルドカードはエスケープして文字どおりに扱う
-    const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const likePattern = `%${escapeLike(q)}%`;
     conditions.push(
       or(
         sql`${searchCraftTemplates.title} LIKE ${likePattern} ESCAPE '\\'`,
@@ -226,7 +227,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return {
     templates,
     truncated,
-    limit: TEMPLATE_LIST_LIMIT,
     q,
     lang,
     author: authorSlug,
@@ -241,7 +241,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function TemplatesIndexPage() {
   const t = useT();
   const locale = useLocale();
-  const { templates, truncated, limit, q, lang, author, authorFilterName, languageCounts, sort, isLoggedIn } =
+  const { templates, truncated, q, lang, author, authorFilterName, languageCounts, sort, isLoggedIn } =
     useLoaderData<typeof loader>();
   const loginHref = useLoginHref();
   const [langValue, setLangValue] = useState(lang || "__all");
@@ -545,7 +545,7 @@ export default function TemplatesIndexPage() {
           ))}
         </div>
         {truncated && (
-          <p className="mt-3 text-xs text-muted-foreground">{t("templates.listTruncatedNote", { count: limit })}</p>
+          <p className="mt-3 text-xs text-muted-foreground">{t("templates.listTruncatedNote", { count: TEMPLATE_LIST_LIMIT })}</p>
         )}
         </>
       ) : hasFilters ? (

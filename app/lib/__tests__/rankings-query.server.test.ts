@@ -3,7 +3,6 @@ import {
   getMinefolioEloRank,
   loadRankingCategories,
   loadRankings,
-  parseRankingsParams,
   type RankingsArgs,
 } from "../rankings-query.server";
 import {
@@ -227,28 +226,5 @@ describe("getMinefolioEloRank", () => {
     const noRanking = await seedUser(db, { slug: "no-ranking", mcid: "NoRanking", showRankedStats: true });
 
     expect(await getMinefolioEloRank(db, noRanking.id)).toBeNull();
-  });
-});
-
-describe("parseRankingsParams", () => {
-  it("既定値（tab=speedruncom / rankedType=pb / category=null）", () => {
-    const parsed = parseRankingsParams(new URLSearchParams());
-    expect(parsed.tab).toBe("speedruncom");
-    expect(parsed.rankedType).toBe("pb");
-    expect(parsed.categorySlug).toBeNull();
-  });
-
-  it("クエリからタブ・カテゴリ・rankedType を解釈する", () => {
-    const sp = new URLSearchParams({ tab: "ranked", category: "any", rankedType: "elo" });
-    const parsed = parseRankingsParams(sp);
-    expect(parsed.tab).toBe("ranked");
-    expect(parsed.categorySlug).toBe("any");
-    expect(parsed.rankedType).toBe("elo");
-  });
-
-  it("不正な tab / rankedType は既定へ戻す", () => {
-    const parsed = parseRankingsParams(new URLSearchParams({ tab: "foo", rankedType: "bar" }));
-    expect(parsed.tab).toBe("speedruncom");
-    expect(parsed.rankedType).toBe("pb");
   });
 });

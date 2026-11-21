@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
 import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
-import { getPublishAction, hasDraftSave, PUBLISH_ACTION_MESSAGES } from "../hooks/use-guide-save";
+import { getPublishAction, hasDraftSave, publishToggleDescKey, PUBLISH_ACTION_MESSAGES } from "../hooks/use-guide-save";
 import { useT } from "@/hooks/use-locale";
 import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 
@@ -101,13 +101,7 @@ export function SettingsDialog({
   const draftSaveAvailable = hasDraftSave(livePublished);
   const saveLabel = t(PUBLISH_ACTION_MESSAGES[getPublishAction(livePublished, isPublished)].label);
   const draftLabel = t("guideEditor.toolbar.saveDraft");
-  const publishDescKey = isPublished
-    ? livePublished
-      ? "guideEditor.ui.publishOnLive"
-      : "guideEditor.ui.publishOnNew"
-    : livePublished
-      ? "guideEditor.ui.publishOffLive"
-      : "guideEditor.ui.publishOffNew";
+  const publishDescKey = publishToggleDescKey(isPublished, livePublished);
 
   const apply = () => {
     const values = { title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation };

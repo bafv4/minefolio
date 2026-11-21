@@ -11,6 +11,12 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { platformLabel } from "@/lib/platform-label";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
+import {
+  DEFAULT_PROFILE_EDITION,
+  DEFAULT_PROFILE_INPUT_METHOD,
+  DEFAULT_PROFILE_PLATFORM,
+  DEFAULT_PROFILE_ROLE,
+} from "@/lib/profile-defaults";
 import { cn } from "@/lib/utils";
 
 export interface ProfileFeedCardPlayer {
@@ -44,14 +50,16 @@ function FeedCardTags({ player, mobileMax = 3 }: { player: ProfileFeedCardPlayer
   if (isCategoryKey(player.mainCategory)) {
     tags.push({ key: "category", label: categoryLabel(t, player.mainCategory), variant: "secondary" });
   }
-  if (player.role === "viewer") tags.push({ key: "role", label: t("common.viewer"), variant: "secondary" });
-  if (player.mainEdition === "bedrock") tags.push({ key: "edition", label: "Bedrock", variant: "outline" });
+  if (player.role && player.role !== DEFAULT_PROFILE_ROLE) tags.push({ key: "role", label: t("common.viewer"), variant: "secondary" });
+  if (player.mainEdition && player.mainEdition !== DEFAULT_PROFILE_EDITION) {
+    tags.push({ key: "edition", label: "Bedrock", variant: "outline" });
+  }
   const platformText =
-    player.mainPlatform && player.mainPlatform !== "pc_windows"
+    player.mainPlatform && player.mainPlatform !== DEFAULT_PROFILE_PLATFORM
       ? platformLabel(t, player.mainPlatform, "short")
       : null;
   if (platformText) tags.push({ key: "platform", label: platformText, variant: "outline" });
-  if (player.inputMethod && player.inputMethod !== "keyboard_mouse") {
+  if (player.inputMethod && player.inputMethod !== DEFAULT_PROFILE_INPUT_METHOD) {
     tags.push({
       key: "input",
       label: player.inputMethod === "controller" ? t("browse.inputController") : t("browse.inputTouch"),
@@ -91,7 +99,6 @@ export function ProfileFeedCard({
   /** カードの面。既定は `bg-background/80`、欄の中でページ背景に直接並べるとき（ホーム）は "card"（不透明の `bg-card`） */
   surface?: "background" | "card";
 }) {
-  const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
   return (
@@ -169,7 +176,6 @@ export function ProfileFeedListItem({
   player: ProfileFeedCardPlayer;
   isFavorite?: boolean;
 }) {
-  const t = useT();
   const locale = useLocale();
   const displayName = getLocalizedDisplayName(player, locale);
 

@@ -44,8 +44,7 @@ import {
   Download,
   Languages,
 } from "lucide-react";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
-import { useHydrated } from "@/hooks/use-hydrated";
+import { UpdatedAgo } from "@/components/updated-ago";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -138,7 +137,6 @@ const ROW_ACTION_CLASS = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
 export default function MyTemplatesPage() {
   const t = useT();
   const locale = useLocale();
-  const hydrated = useHydrated();
   const { templates } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -176,7 +174,7 @@ export default function MyTemplatesPage() {
       {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
           先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
       {isTabSwitching ? (
-        <TabContentSkeleton variant="templateList" />
+        <TabContentSkeleton template />
       ) : (
       <>
       {/* タイトル・説明・作成ボタンはタブの内側（コンテンツ側）に置く */}
@@ -269,12 +267,7 @@ export default function MyTemplatesPage() {
                         <Download className="h-3 w-3" aria-hidden />
                         {t("meTemplates.applyCount", { count: template.applyCount })}
                       </span>
-                      {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
-                      <span suppressHydrationWarning>
-                        {t("meGuides.updatedAgo", {
-                          time: formatRelativeTimeInMinutes(t, new Date(template.updatedAt), { calendar: hydrated }),
-                        })}
-                      </span>
+                      <UpdatedAgo date={template.updatedAt} />
                     </div>
                   </div>
 

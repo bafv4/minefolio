@@ -41,15 +41,6 @@ export interface RankingsArgs {
   rankedType: RankedType;
 }
 
-export function parseRankingsParams(searchParams: URLSearchParams): RankingsArgs {
-  return {
-    // 不正な値は既定へ（URL の値をそのまま型に流さない）
-    tab: searchParams.get("tab") === "ranked" ? "ranked" : "speedruncom",
-    categorySlug: searchParams.get("category"),
-    rankedType: searchParams.get("rankedType") === "elo" ? "elo" : "pb",
-  };
-}
-
 /** カテゴリ一覧（speedruncom 用、UI ナビ用） */
 export async function loadRankingCategories(db: Database) {
   const categories = await db.query.speedrunCategories.findMany({

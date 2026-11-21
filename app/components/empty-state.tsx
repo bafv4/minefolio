@@ -11,12 +11,14 @@ interface EmptyStateProps {
   size?: "default" | "compact";
   /** タイトルの要素。既定は p（見出しの段を増やさない）。ページの主題になる空状態（404 など）は h1 / h2 */
   titleAs?: "p" | "h1" | "h2";
+  /** 読み込み中の枠など、状態の変化を知らせる空状態は "status"（既定は付けない） */
+  role?: "status";
 }
 
-export function EmptyState({ icon, title, description, action, size = "default", titleAs: Title = "p" }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action, size = "default", titleAs: Title = "p", role }: EmptyStateProps) {
   if (size === "compact") {
     return (
-      <div className="flex flex-col gap-3 rounded-xl border border-dashed bg-card/50 px-4 py-3 text-left sm:flex-row sm:items-center text-muted-foreground">
+      <div role={role} className="flex flex-col gap-3 rounded-xl border border-dashed bg-card/50 px-4 py-3 text-left sm:flex-row sm:items-center text-muted-foreground">
         <div className="shrink-0 opacity-50">{icon}</div>
         <div className="min-w-0 flex-1">
           <Title className="text-sm font-medium text-foreground">{title}</Title>
@@ -27,7 +29,7 @@ export function EmptyState({ icon, title, description, action, size = "default",
     );
   }
   return (
-    <div className="rounded-xl border border-dashed bg-card/50 px-4 text-center py-12 sm:px-6 text-muted-foreground">
+    <div role={role} className="rounded-xl border border-dashed bg-card/50 px-4 text-center py-12 sm:px-6 text-muted-foreground">
       <div className="mb-4 flex justify-center opacity-50">{icon}</div>
       <div className="space-y-1">
         <Title className="text-lg font-medium text-foreground">{title}</Title>

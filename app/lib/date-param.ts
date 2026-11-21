@@ -20,3 +20,8 @@ export function normalizeDateParam(value: string | null | undefined): string | u
   }
   return value;
 }
+
+/** 開始日が終了日より後（逆順）か。YYYY-MM-DD なので文字列の比較で前後が分かる。どちらかが空なら false */
+export function isReversedPeriod(from: string | null | undefined, to: string | null | undefined): boolean {
+  return Boolean(from && to) && (from ?? "") > (to ?? "");
+}

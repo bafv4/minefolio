@@ -38,7 +38,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
 import { cn } from "@/lib/utils";
 import { StatusPill } from "@/components/status-pill";
-import { normalizeDateParam } from "@/lib/date-param";
+import { isReversedPeriod, normalizeDateParam } from "@/lib/date-param";
 import { History, Activity, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
@@ -254,11 +254,10 @@ export default function PacesPage() {
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
-  const [periodInvalid, setPeriodInvalid] = useState(false);
-  // 送信時の検証（periodInvalid）に加え、URL から入った逆順の期間（フォームの入力欄にも反映される）も同じ文言で知らせる。
+  // 入力欄の期間（URL から入った逆順もフォームに反映される）が逆順なら、送信前から同じ文言で知らせる。
   // サーバーは from <= date <= to で絞るので、逆順は必ず0件になる。条件としては効いている（絞り込みに数える）が、原因が分からないため
-  const periodError = periodInvalid || (Boolean(from && to) && from > to);
-  const appliedPeriodReversed = Boolean(appliedFrom && appliedTo) && (appliedFrom ?? "") > (appliedTo ?? "");
+  const periodError = isReversedPeriod(from, to);
+  const appliedPeriodReversed = isReversedPeriod(appliedFrom, appliedTo);
   // 畳んだモバイルでも原因が見えるよう、URL の逆順の期間は開いて示す
   useEffect(() => {
     if (appliedPeriodReversed) setFiltersOpen(true);
@@ -313,8 +312,7 @@ export default function PacesPage() {
       return;
     }
     // 開始日が終了日より後なら送らずに知らせる（YYYY-MM-DD なので文字列の比較で前後が分かる。/videos と同じ）
-    if (from && to && from > to) {
-      setPeriodInvalid(true);
+    if (periodError) {
       setFiltersOpen(true);
       return;
     }
@@ -329,7 +327,6 @@ export default function PacesPage() {
   };
 
   const handleClear = () => {
-    setPeriodInvalid(false);
     // 並び順は表示の設定なので残す
     const params = new URLSearchParams();
     if (searchParams.get("sort") === "time") params.set("sort", "time");
@@ -439,10 +436,7 @@ export default function PacesPage() {
                   value={from}
                   min={dateRange.min}
                   max={dateRange.max}
-                  onChange={(e) => {
-                    setFrom(e.target.value);
-                    setPeriodInvalid(false);
-                  }}
+                  onChange={(e) => setFrom(e.target.value)}
                   aria-invalid={periodError || undefined}
                   aria-describedby={periodError ? "pace-filter-period-error" : undefined}
                 />
@@ -459,10 +453,7 @@ export default function PacesPage() {
                   value={to}
                   min={dateRange.min}
                   max={dateRange.max}
-                  onChange={(e) => {
-                    setTo(e.target.value);
-                    setPeriodInvalid(false);
-                  }}
+                  onChange={(e) => setTo(e.target.value)}
                   aria-invalid={periodError || undefined}
                   aria-describedby={periodError ? "pace-filter-period-error" : undefined}
                 />

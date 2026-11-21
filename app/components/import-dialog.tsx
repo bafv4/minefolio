@@ -38,12 +38,11 @@ interface ImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** 閉じたあとにフォーカスを戻す先（トリガーのボタン。ダイアログは親が1回だけ置き、トリガーはプリセット行の位置で付け替わるため ref で受ける） */
-  returnFocusRef?: RefObject<HTMLElement | null>;
+  returnFocusRef: RefObject<HTMLElement | null>;
   /** 取り込み先（編集中）のプリセット名。null はプリセットが無く、取り込みで新規作成される */
   targetPresetName: string | null;
   /** 取り込み先（編集中）のプリセット id。送り返して、別タブで編集先が切り替わっていないかサーバーが確認する */
   targetPresetId: string | null;
-  onSuccess?: () => void;
 }
 
 type ImportStep = "source" | "select" | "preview" | "done";
@@ -59,11 +58,12 @@ export function ImportDialog({
   returnFocusRef,
   targetPresetName,
   targetPresetId,
-  onSuccess,
 }: ImportDialogProps) {
   const t = useT();
+  // 取り込み元が空のあいだが最初の手順（"source"）。選んだあとの手順だけ phase が持つ
   const [source, setSource] = useState<ImportSource | null>(null);
-  const [step, setStep] = useState<ImportStep>("source");
+  const [phase, setPhase] = useState<Exclude<ImportStep, "source">>("select");
+  const step: ImportStep = source === null ? "source" : phase;
   const activeTab = source;
 
   // リマップインポート状態
@@ -95,7 +95,7 @@ export function ImportDialog({
 
   const resetState = useCallback(() => {
     setSource(null);
-    setStep("source");
+    setPhase("select");
     setParsedRemaps([]);
     setSelectedRemaps(new Set());
     setParsedMcSettings(null);
@@ -134,7 +134,7 @@ export function ImportDialog({
           }
           setParsedRemaps(remaps);
           setSelectedRemaps(new Set(remaps.map((_, i) => i)));
-          setStep("preview");
+          setPhase("preview");
         } else {
           // Minecraft設定解析
           const settings = parseMinecraftSettings(content, file.name);
@@ -143,7 +143,7 @@ export function ImportDialog({
             return;
           }
           setParsedMcSettings(settings);
-          setStep("preview");
+          setPhase("preview");
         }
       } catch {
         setError(t("meImport.readFailed"));
@@ -193,10 +193,9 @@ export function ImportDialog({
       setError(data.error ?? t("meImport.importFailed"));
     } else {
       setError(null);
-      setStep("done");
-      onSuccess?.();
+      setPhase("done");
     }
-  }, [fetcher.state, fetcher.data, step, onSuccess, t]);
+  }, [fetcher.state, fetcher.data, step, t]);
 
   const toggleRemapSelection = (index: number) => {
     setSelectedRemaps((prev) => {
@@ -229,7 +228,10 @@ export function ImportDialog({
   // 手順を変えるときはエラーの帯を消す
   const goToStep = (next: ImportStep) => {
     setError(null);
-    setStep(next);
+    if (next === "source") {
+      setSource(null);
+      setPhase("select");
+    } else setPhase(next);
   };
 
   return (
@@ -237,21 +239,10 @@ export function ImportDialog({
       <DialogContent
         showCloseButton={false}
         className="max-w-2xl max-h-[80vh] overflow-y-auto"
-        onEscapeKeyDown={(event) => {
-          if (isBusy) event.preventDefault();
-        }}
-        onPointerDownOutside={(event) => {
-          if (isBusy) event.preventDefault();
-        }}
-        onInteractOutside={(event) => {
-          if (isBusy) event.preventDefault();
-        }}
         onCloseAutoFocus={(event) => {
           // DialogTrigger を持たないので、フォーカスはトリガーのボタンへ明示的に戻す
-          if (returnFocusRef) {
-            event.preventDefault();
-            returnFocusRef.current?.focus();
-          }
+          event.preventDefault();
+          returnFocusRef.current?.focus();
         }}
       >
         {/* 閉じるボタン: 共有の DialogContent の既定は 16px。md 未満は 44px の押せる範囲にする */}
@@ -305,8 +296,8 @@ export function ImportDialog({
                 type="button"
                 variant="outline"
                 onClick={() => {
+                  setError(null);
                   setSource(value);
-                  goToStep("select");
                 }}
                 className="h-auto min-h-11 flex-col items-start gap-1 whitespace-normal py-3 text-left"
               >

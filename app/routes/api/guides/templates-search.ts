@@ -7,6 +7,7 @@ import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
+import { escapeLike } from "@/lib/sql-like.server";
 import { isValidTemplateId } from "@/lib/guide-embed-attrs";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 
@@ -47,7 +48,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } else {
     // LIKE のワイルドカード(%,_)とエスケープ文字(\)を無害化し、入力を部分一致リテラルとして扱う
     // （api/guides/search と同じ形）。
-    const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const likePattern = `%${escapeLike(q)}%`;
     const titleCondition = q
       ? sql`${searchCraftTemplates.title} LIKE ${likePattern} ESCAPE '\\'`
       : undefined;

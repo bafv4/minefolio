@@ -98,7 +98,7 @@ import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, ty
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeHistoryDescription } from "@/lib/history-description";
-import { PresetSelector } from "@/components/preset-selector";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
@@ -215,7 +215,7 @@ export function HydrateFallback() {
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-5 w-80 max-w-full" />
       </div>
-      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+      <PresetSelectorSkeleton />
       <div className="space-y-4 border-t border-foreground/15 pt-6">
       <Skeleton className="h-7 w-40" />
       <div className="rounded-xl border border-border/70 bg-background/80">

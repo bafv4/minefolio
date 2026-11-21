@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RelativeTime } from "@/components/relative-time";
+import { RelativeTime, useRelativeTimeFormatter } from "@/components/relative-time";
 
 vi.mock("@/hooks/use-locale", () => ({
   useT: () => (k: string, p?: { count: number }) => (p ? `${k}:${p.count}` : k),
@@ -51,6 +51,15 @@ describe("RelativeTime", () => {
     });
     expect(container.textContent).toBe(CALENDAR);
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("useRelativeTimeFormatter は SSR で経過日数、CSR 初回で暦日の文字列を返す", async () => {
+    const Probe = () => createElement("span", null, useRelativeTimeFormatter()(DATE, "date"));
+    expect(renderToString(createElement(Probe))).toContain(ELAPSED);
+    await act(async () => {
+      createRoot(container).render(createElement(Probe));
+    });
+    expect(container.textContent).toBe(CALENDAR);
   });
 
   it("createRoot は最初から暦日で描く", async () => {

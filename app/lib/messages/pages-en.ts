@@ -1259,7 +1259,6 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     justNow: "just now",
     minutesAgo: "{count}m ago",
     hoursAgo: "{count}h ago",
-    daysAgo: "{count}d ago",
   },
   /** MCSR Ranked / PaceMan / Speedrun.com stat cards (player-stats-cards.tsx, shared by the profile activity tab and /player/:slug/stats) */
   playerStatsCards: {

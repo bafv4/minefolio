@@ -33,6 +33,7 @@ import { Twitch } from "@/components/brand-icons";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { StreamingBadge } from "@/components/home/streaming-badge";
+import { LiveUpdatedAt } from "@/components/home/live-updated-at";
 import { useLiveFlip, useStageReachPulse } from "@/components/home/use-live-motion";
 
 export type McidMaps = McidUserMaps;
@@ -524,6 +525,43 @@ export type LiveRailEntry =
   | { kind: "ranked"; id: string; slug: string; match: RankedLiveMatch; ended?: boolean; result?: RankedLiveResult | null }
   | { kind: "twitch"; id: string; slug: string | undefined; item: HomeTwitchStream; ended?: undefined };
 
+/**
+ * ライブ0人の1行（「いないよ」＋最近のペースへの導線＋右端の更新時刻）。本物と読み込み中の骨組みで共有する。
+ * placeholder のときは invisible・aria-hidden で同じマークアップを置き（折り返しの行数が幅・ロケールで変わるため）、
+ * 呼び出し側が上に Skeleton を重ねる
+ */
+function LiveEmptyLine({ placeholder = false, updatedAt }: { placeholder?: boolean; updatedAt: ReactNode }) {
+  const t = useT();
+  const linkContent = (
+    <>
+      {t("home.liveEmptyPacesLink")}
+      <ArrowRight className="h-3 w-3" aria-hidden="true" />
+    </>
+  );
+  return (
+    <div
+      className={cn("flex flex-wrap items-center justify-between gap-x-3 gap-y-1", placeholder && "invisible")}
+      aria-hidden={placeholder || undefined}
+    >
+      <p className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 text-sm", !placeholder && "text-muted-foreground")}>
+        <span>{t("home.liveEmpty")}</span>
+        {placeholder ? (
+          <span className="-my-3 inline-flex items-center gap-0.5 py-3 font-medium">{linkContent}</span>
+        ) : (
+          <Link
+            to="/paces"
+            prefetch="intent"
+            className="-my-3 inline-flex items-center gap-0.5 rounded-sm py-3 font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {linkContent}
+          </Link>
+        )}
+      </p>
+      {updatedAt}
+    </div>
+  );
+}
+
 /** ライブ欄の本体（件数見出しは PageSection 側）。レール or 0件時の「いないよ」＋最近のペース */
 export function LiveRail({
   entries,
@@ -533,6 +571,7 @@ export function LiveRail({
   streamingSlugs,
   loading,
   expectEmpty = false,
+  expectRecentEmpty = false,
   error,
   hasData,
   onRetry,
@@ -543,8 +582,10 @@ export function LiveRail({
   emptyStrip,
   emptyUpdatedAt,
 }: {
-  /** サーバーの見込み: ライブ0人・最近のペース0件。読み込み中の骨組みを0人の形（1行）にして、確定したときに下の欄が飛ばないようにする。外れたら本物に合わせて伸びる */
+  /** 読み込み中の骨組みを0人の形（1行）にする（サーバーの見込みが「ライブ0人」で、初回の取得が終わるまで）。確定したときに下の欄が飛ばないようにする。外れたら本物に合わせて伸びる */
   expectEmpty?: boolean;
+  /** サーバーの見込みが「ライブ0人・最近のペース0件」のとき真。最近のペースを一度も取れていない間は骨組み・帯を出さない（0件だったとき下の欄が飛ぶため） */
+  expectRecentEmpty?: boolean;
   /** 0人のときだけ、0件の1文と導線の下に置く区間分布の帯（文言と導線を帯の上にするため） */
   emptyStrip?: ReactNode;
   /** 0人のときの「N秒前に更新」。0件の文と同じ行の右端へ収める（独立した行にしない） */
@@ -573,22 +614,13 @@ export function LiveRail({
     entries.map((e) => e.id),
   );
 
-  if (loading && expectEmpty && !hasData) {
+  if (loading && expectEmpty) {
     // 0人の形に合わせる。折り返しで高さが変わる（375px の ja は2行＋更新時刻の行）ので、固定の高さで描かず、
-    // 本物（0件の文・導線・更新時刻の行）と同じマークアップと文言を invisible で置き、その上に Skeleton を重ねる
+    // 本物と同じマークアップ・文言を invisible で置き、その上に Skeleton を重ねる
     return (
       <div className="space-y-3" aria-hidden="true">
         <div className="relative">
-          <div className="invisible flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              <span>{t("home.liveEmpty")}</span>
-              <span className="-my-3 inline-flex items-center gap-0.5 py-3 font-medium">
-                {t("home.liveEmptyPacesLink")}
-                <ArrowRight className="h-3 w-3" aria-hidden="true" />
-              </span>
-            </p>
-            <p className="min-h-4 text-right text-xs tabular-nums">{t("home.liveUpdatedSecondsAgo", { count: 10 })}</p>
-          </div>
+          <LiveEmptyLine placeholder updatedAt={<LiveUpdatedAt checkedAt={null} pending />} />
           <Skeleton className="absolute top-0 left-0 h-5 w-64 max-w-full" />
         </div>
       </div>
@@ -729,25 +761,12 @@ export function LiveRail({
       {/* 0件の1文の隣に次の行き先（最近のペース /paces）を置く。見出し右の「ペース一覧」と同じ行き先だが、
           ライブも注目の走者も空のときに上半分が空振りで終わらないよう、目に入る位置にも出す */}
       {!error && (
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-          <span>{t("home.liveEmpty")}</span>
-          <Link
-            to="/paces"
-            prefetch="intent"
-            className="-my-3 inline-flex items-center gap-0.5 rounded-sm py-3 font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {t("home.liveEmptyPacesLink")}
-            <ArrowRight className="h-3 w-3" aria-hidden="true" />
-          </Link>
-        </p>
-        {emptyUpdatedAt}
-        </div>
+        <LiveEmptyLine updatedAt={emptyUpdatedAt} />
       )}
       {/* ライブ0人で最近のペースも0件（読み込み済み）の日は、人数の無い空の7段の帯を出さない。読み込み中・失敗中は高さを保つため出す */}
-      {/* 0人の見込み（expectEmpty）のあいだは、最近のペースの読み込み中も帯・骨組みを出さない（0件だったとき下の欄が飛ぶため）。あれば伸びる */}
-      {((recentLoading && !expectEmpty) || recentError || recent.length > 0) && emptyStrip}
-      {recentLoading && !expectEmpty ? (
+      {/* 0人の見込み（expectRecentEmpty）のあいだは、最近のペースの読み込み中も帯・骨組みを出さない（0件だったとき下の欄が飛ぶため）。あれば伸びる */}
+      {((recentLoading && !expectRecentEmpty) || recentError || recent.length > 0) && emptyStrip}
+      {recentLoading && !expectRecentEmpty ? (
         // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
         // 多めに描くと、少なかったときに下の欄が大きく上へ動く。
         // 1枚の高さは RecentPaceCard（border 2 + p-4 の 32 + gap-3 の 2つ分 24 + 顔 36 + StateBand 40 + TIME_SLOT 56 = 190px。LinkRow は無い）に合わせる

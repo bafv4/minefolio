@@ -274,7 +274,7 @@ export async function loader({ request }: Route.LoaderArgs) {
             .limit(HERO_FACE_POOL),
     ),
     // ライブ欄・動画欄の読み込み中の骨組みの形を選ぶ見込み（キャッシュと DB の1行確認だけ。上流は呼ばない）
-    getHomeOutlooks(),
+    getHomeOutlooks(db),
   ]);
   const currentUser = account?.user ?? null;
   const isRegistered = currentUser != null;
@@ -566,6 +566,19 @@ async function fetchFeedJson<T>(url: string): Promise<T> {
 // ホームの YouTube 動画の表示本数（全件は /videos）
 const HOME_YOUTUBE_COUNT = 3;
 
+// 動画0件の1文（本物と、見込み「動画0件」の骨組みで共有。placeholder のときは invisible で同じ <p> を置く）
+function NoVideosNote({ placeholder = false }: { placeholder?: boolean }) {
+  const t = useT();
+  return (
+    // 面を重ねず muted の1文（導線は欄見出しの「すべて見る」が担う）
+    <p className={cn("text-sm", placeholder ? "invisible" : "text-muted-foreground")}>
+      {t("home.noVideos")}
+      {t("home.noVideosSeparator")}
+      {t("home.noVideosDescription")}
+    </p>
+  );
+}
+
 // 動画欄のローディングスケルトン（memo化）
 // expectEmpty: サーバーの見込みが「動画0件」のときは、本物の0件の文と同じ <p> を invisible で置く（折り返しの行数が幅・ロケールで変わるため。外れたら本物に合わせて伸びる）
 const VideosSkeleton = memo(function VideosSkeleton({ expectEmpty }: { expectEmpty: boolean }) {
@@ -573,11 +586,7 @@ const VideosSkeleton = memo(function VideosSkeleton({ expectEmpty }: { expectEmp
   if (expectEmpty) {
     return (
       <div className="relative" aria-hidden="true">
-        <p className="invisible text-sm">
-          {t("home.noVideos")}
-          {t("home.noVideosSeparator")}
-          {t("home.noVideosDescription")}
-        </p>
+        <NoVideosNote placeholder />
         <Skeleton className="absolute top-0 left-0 h-5 w-72 max-w-full" />
       </div>
     );
@@ -638,6 +647,8 @@ export default function HomePage() {
   // 「0人・最近のペース0件」の見込み。読み込み中の骨組みを0人の形にする（外れたら本物に合わせて伸びる）。
   // 初回の取得が成功する前だけ使う（一度でも取れたあとの再取得・再試行では、実際のカードを骨組みに差し替えない）
   const expectLiveEmpty = outlooks.live === "empty" && feed.liveRunsCheckedAt === null;
+  // 読み込み中の骨組みを0人の形にするか（見込みが empty で、初回の取得中）
+  const liveSkeletonEmpty = expectLiveEmpty && feed.loading.liveRuns;
 
   // お気に入りの並べ替え・ハート表示はクライアント側で適用する
   // （/api/home-feed のレスポンスはユーザー非依存でCDNキャッシュされるため）
@@ -984,12 +995,12 @@ export default function HomePage() {
           <FavoritesFirstNote>{t("home.liveFavoritesFirstNote")}</FavoritesFirstNote>
         )}
         {/* 0人の見込みで読み込み中のときは、0人の形（文＋右端の更新時刻）に合わせて独立した行を出さない */}
-        {!liveEmptySettled && !(expectLiveEmpty && feed.loading.liveRuns) && (
+        {!liveEmptySettled && !liveSkeletonEmpty && (
           <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
         )}
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
         {/* 0人のときは帯を弱め、0件の1文と導線の下（LiveRail 内）へ置く。人が居るとき・取得中は従来どおり先頭 */}
-        {((feed.loading.liveRuns && !expectLiveEmpty) || liveSettled) && !liveEmptySettled && (
+        {((feed.loading.liveRuns && !liveSkeletonEmpty) || liveSettled) && !liveEmptySettled && (
           <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
         )}
         <LiveRail
@@ -1007,7 +1018,8 @@ export default function HomePage() {
           favoriteSlugs={favoriteSlugSet}
           streamingSlugs={streamingSlugs}
           loading={feed.loading.liveRuns}
-          expectEmpty={expectLiveEmpty}
+          expectEmpty={liveSkeletonEmpty}
+          expectRecentEmpty={outlooks.live === "empty" && filteredRecentPaces.length === 0}
           error={feed.errors.liveRuns}
           hasData={feed.liveRunsCheckedAt !== null}
           onRetry={retryLiveRuns}
@@ -1030,12 +1042,7 @@ export default function HomePage() {
         ) : (feed.errors.videos || feed.errors.twitchVods) && noVideoData ? (
           <FeedErrorNotice message={t("home.videosFetchFailed")} onRetry={retryVideos} />
         ) : noVideoData ? (
-          // 面を重ねず muted の1文（導線は欄見出しの「すべて見る」が担う）
-          <p className="text-sm text-muted-foreground">
-            {t("home.noVideos")}
-            {t("home.noVideosSeparator")}
-            {t("home.noVideosDescription")}
-          </p>
+          <NoVideosNote />
         ) : (
           <div className="space-y-6">
             {youtubeVideos.length > 0 && (

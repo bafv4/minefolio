@@ -14,8 +14,7 @@ import { Trophy, Timer, Swords, Video, ExternalLink, Clock } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
-import { useHydrated } from "@/hooks/use-hydrated";
+import { useRelativeTimeFormatter } from "@/components/relative-time";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { createAuth } from "@/lib/auth";
@@ -25,9 +24,9 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
   loadRankingCategories,
   loadRankings,
-  parseRankingsParams,
   type RankingEntry,
 } from "@/lib/rankings-query.server";
+import { resolveRankingsParams } from "@/lib/rankings-params";
 import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
 import { EmptyState } from "@/components/empty-state";
 
@@ -54,15 +53,20 @@ const TABLE_COLUMN_COUNT: Record<RankingsTableKind, number> = {
   rankedElo: 5,
 };
 
-/**
- * URL の検索条件（tab / rankedType）から表の種類を決める（loader の parseRankingsParams と同じ既定: speedruncom。
- * ただし tab 無しでカテゴリが0件のときは loader が Ranked へ落とすので、hasCategories=false なら Ranked 扱い）
- */
-function tableKindFromSearch(search: string, hasCategories: boolean): RankingsTableKind {
-  const params = new URLSearchParams(search);
-  const tab = params.get("tab");
-  if (tab === "speedruncom" || (tab !== "ranked" && hasCategories)) return "speedruncom";
-  return params.get("rankedType") === "elo" ? "rankedElo" : "rankedPb";
+/** 表の種類（loader のデータ・遷移先の URL のどちらからでも同じ対応で決める） */
+function tableKindOf({ tab, rankedType }: { tab: "speedruncom" | "ranked"; rankedType: "pb" | "elo" }): RankingsTableKind {
+  return tab === "speedruncom" ? "speedruncom" : rankedType === "elo" ? "rankedElo" : "rankedPb";
+}
+
+/** 「集計: ○前」の1行。SSR は経過日数、水和後に端末の暦日へ切り替わる（docs/i18n.md）ので、水和の再描画をこの葉に閉じる */
+function RankingsUpdatedAt({ lastFetchedMs }: { lastFetchedMs: number }) {
+  const t = useT();
+  const formatRelative = useRelativeTimeFormatter();
+  return (
+    <p className="text-muted-foreground mt-1 text-xs" suppressHydrationWarning>
+      {t("rankings.updatedAt", { time: formatRelative(lastFetchedMs) })}
+    </p>
+  );
 }
 
 /** カテゴリ切替のボタン（選択中は aria-pressed で伝える。モバイルは 44px） */
@@ -153,7 +157,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       })
     : undefined;
   const url = new URL(request.url);
-  let args = parseRankingsParams(url.searchParams);
   // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
   const loadCategories = async () => {
     const cached = await getCached<Categories>(CATEGORIES_CACHE_KEY);
@@ -168,16 +171,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   let selectedCategory: LoadedRankings["selectedCategory"];
   let lastFetchedMs: LoadedRankings["lastFetchedMs"];
 
+  // tab が Ranked と明示されているときはカテゴリ一覧を先に要らない（下で並列に取得する）。それ以外は、カテゴリの有無で
+  // 既定のタブが決まり、選択カテゴリの id も要るので一覧が先（キャッシュ済みなら往復なし）
   let loadedCategories: Categories | undefined;
-  if (args.tab === "speedruncom") {
-    // 選択カテゴリの id が要るのでカテゴリ一覧が先（キャッシュ済みなら往復なし）
-    loadedCategories = await loadCategories();
-    // Speedrun.com のカテゴリが1件も無く、タブの指定も無い（既定）ときは、データのある Ranked PB を既定にする
-    const tabParam = url.searchParams.get("tab");
-    if (loadedCategories.length === 0 && tabParam !== "speedruncom") {
-      args = { ...args, tab: "ranked", rankedType: "pb" };
-    }
-  }
+  if (url.searchParams.get("tab") !== "ranked") loadedCategories = await loadCategories();
+  const args = resolveRankingsParams(url.searchParams, { hasCategories: (loadedCategories?.length ?? 1) > 0 });
 
   if (args.tab === "speedruncom") {
     speedruncomCategories = loadedCategories ?? (await loadCategories());
@@ -218,19 +216,20 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function RankingsPage() {
   const t = useT();
-  // SSR は経過日数、水和後に端末の暦日へ切り替える（docs/i18n.md）
-  const hydrated = useHydrated();
   const data = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   // /rankings 内の切替（カテゴリ・タブ）だけを再取得として扱う（走者のページへ移るときは表を薄くしない）
   const isLoading = navigation.state === "loading" && navigation.location?.pathname === "/rankings";
-  const currentKind: RankingsTableKind =
-    data.tab === "speedruncom" ? "speedruncom" : data.rankedType === "elo" ? "rankedElo" : "rankedPb";
+  const currentKind = tableKindOf(data);
   // 読み込み中に表が無い（空状態から切り替えた）ときのスケルトンは、遷移先の表の列数で描く
   const pendingKind =
     isLoading && navigation.location
-      ? tableKindFromSearch(navigation.location.search, data.categories.length > 0)
+      ? tableKindOf(
+          resolveRankingsParams(new URLSearchParams(navigation.location.search), {
+            hasCategories: data.categories.length > 0,
+          }),
+        )
       : currentKind;
 
   // /rankings は遅延読み込み無効。loader が全件返す。
@@ -280,11 +279,7 @@ export default function RankingsPage() {
           <span className="hidden sm:inline">{t("rankings.publicityNote")}</span>
         </p>
         {data.lastFetchedMs !== null && (
-          <p className="text-muted-foreground mt-1 text-xs" suppressHydrationWarning>
-            {t("rankings.updatedAt", {
-              time: formatRelativeTimeInMinutes(t, new Date(data.lastFetchedMs), { calendar: hydrated }),
-            })}
-          </p>
+          <RankingsUpdatedAt lastFetchedMs={data.lastFetchedMs} />
         )}
       </div>
 

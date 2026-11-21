@@ -177,7 +177,6 @@ export function GuideCardGrid({
    */
   pageViewsMode?: "additional" | "replace";
 }) {
-  const t = useT();
   // ログイン状態は LikesProvider が持つ（未ログインなら LikeButton が静的表示に落ちる）
   return (
     <div className={`grid gap-4 ${gridCols}`}>
@@ -291,7 +290,6 @@ export function GuideListView({
   /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
   titleLevel?: "h2" | "h3" | "h4";
 }) {
-  const t = useT();
   return (
     <div className="divide-y divide-border/60">
       {guides.map((guide) => {
@@ -362,24 +360,7 @@ export function GuideListView({
  * 同じ一覧の中の遷移と、ガイド一覧からのタブ切替の両方で使う
  */
 export function TemplateListSkeleton({ count = 6 }: { count?: number }) {
-  return (
-    <div className="divide-y divide-border/60" aria-hidden>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
-          <div className="min-w-0 flex-1">
-            <Skeleton className="h-5 w-48 max-w-full" />
-            <Skeleton className="mt-0.5 h-4 w-2/3" />
-            <div className="mt-1.5 flex items-center gap-3">
-              <Skeleton className="size-5 rounded-md" />
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-12" />
-              <Skeleton className="ml-auto h-4 w-16" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return <GuideListSkeleton viewMode="list" count={count} extraMetaChips={1} />;
 }
 
 /**
@@ -390,9 +371,12 @@ export function TemplateListSkeleton({ count = 6 }: { count?: number }) {
 export function GuideListSkeleton({
   viewMode,
   count = 6,
+  extraMetaChips = 0,
 }: {
   viewMode: "card" | "list";
   count?: number;
+  /** list のメタ行に足す短いチップの数（テンプレート行は件数のぶん1つ多い） */
+  extraMetaChips?: number;
 }) {
   if (viewMode === "card") {
     return (
@@ -423,6 +407,9 @@ export function GuideListSkeleton({
             <div className="mt-1.5 flex items-center gap-3">
               <Skeleton className="size-5 rounded-md" />
               <Skeleton className="h-4 w-24" />
+              {Array.from({ length: extraMetaChips }).map((_, j) => (
+                <Skeleton key={j} className="h-4 w-12" />
+              ))}
               <Skeleton className="ml-auto h-4 w-16" />
             </div>
           </div>

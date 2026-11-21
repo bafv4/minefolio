@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -37,6 +38,11 @@ interface PresetSelectorProps {
   /** プリセット切替（apply-preset の送信＋再検証）中かどうかを親へ通知する */
   onSwitchingChange?: (switching: boolean) => void;
   className?: string;
+}
+
+/** 読み込み中の PresetSelector の場所取り（行の高さを先に確保する） */
+export function PresetSelectorSkeleton() {
+  return <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />;
 }
 
 /**
@@ -209,7 +215,7 @@ export function PresetSelector({
           </Select>
         </div>
       <div className="ml-auto flex items-center gap-2">
-        {extraActions?.({ disabled: hasChanges || isSwitching, describedBy: hasChanges ? switchHintId : undefined })}
+        {extraActions?.({ disabled: copyDisabled, describedBy: hasChanges ? switchHintId : undefined })}
         {showCopyButton && (
           <Button
             variant="outline"

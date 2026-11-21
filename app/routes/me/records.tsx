@@ -65,7 +65,10 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-// （Speedrun.com の取得失敗の「再試行」は同じ URL への revalidate なので、formMethod の無い同一 URL の再検証も通す）
+// （Speedrun.com の取得失敗の「再試行」は同じ URL への revalidate で、サイドバーの同じリンクを押した遷移と区別が付かない。
+//   再試行ボタンが立てた目印（speedrunRetryRequested）があるときだけ通し、リンクのたびに外部呼び出しが走らないようにする）
+let speedrunRetryRequested = false;
+
 export function shouldRevalidate({
   actionResult,
   currentUrl,
@@ -76,7 +79,8 @@ export function shouldRevalidate({
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
-  if (!formMethod && currentUrl.href === nextUrl.href) {
+  if (speedrunRetryRequested && !formMethod && currentUrl.href === nextUrl.href) {
+    speedrunRetryRequested = false;
     return defaultShouldRevalidate;
   }
   return false;
@@ -447,10 +451,15 @@ export default function RecordsPage() {
   const speedrunRetried = useRef(false);
   const retrySpeedrun = () => {
     speedrunRetried.current = true;
+    speedrunRetryRequested = true;
     void revalidator.revalidate();
   };
   const speedrunFailed = !!speedruncomRecords?.error;
   useEffect(() => {
+    if (revalidator.state === "idle") {
+      // 再検証が中断されて shouldRevalidate が呼ばれなかった場合に目印が残らないよう、idle に戻ったら必ず下ろす
+      speedrunRetryRequested = false;
+    }
     if (speedrunRetried.current && revalidator.state === "idle" && !speedrunFailed) {
       speedrunRetried.current = false;
       document.getElementById("records-speedruncom-heading")?.focus();

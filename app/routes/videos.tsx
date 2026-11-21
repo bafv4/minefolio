@@ -38,7 +38,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { VIDEOS_PAGE_SIZE } from "./api/videos";
 import { cn } from "@/lib/utils";
 import { StatusPill } from "@/components/status-pill";
-import { normalizeDateParam } from "@/lib/date-param";
+import { isReversedPeriod, normalizeDateParam } from "@/lib/date-param";
 import { Play, Film, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
@@ -48,6 +48,9 @@ const FILTER_PARAM_KEYS = ["q", "platform", "from", "to"] as const;
 function normalizePlatform(value: string | null): "all" | "youtube" | "twitch" {
   return value === "youtube" || value === "twitch" ? value : "all";
 }
+
+// 配信元の名前（ブランド名なので翻訳しない）。SelectValue・SelectItem・適用中の条件の表示で共有する
+const PLATFORM_LABELS = { youtube: "YouTube", twitch: "Twitch" } as const;
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -205,11 +208,10 @@ export default function VideosPage() {
     Boolean(appliedTo);
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジとチップで状態を示す（/paces と同じ）
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [periodInvalid, setPeriodInvalid] = useState(false);
-  // 送信時の検証（periodInvalid）に加え、URL から入った逆順の期間（フォームの入力欄にも反映される）も同じ文言で知らせる。
+  // 入力欄の期間（URL から入った逆順もフォームに反映される）が逆順なら、送信前から同じ文言で知らせる。
   // サーバーは from <= date <= to で絞るので、逆順は必ず0件になる。条件としては効いている（絞り込みに数える）が、原因が分からないため
-  const periodError = periodInvalid || (Boolean(from && to) && from > to);
-  const appliedPeriodReversed = Boolean(appliedFrom && appliedTo) && (appliedFrom ?? "") > (appliedTo ?? "");
+  const periodError = isReversedPeriod(from, to);
+  const appliedPeriodReversed = isReversedPeriod(appliedFrom, appliedTo);
   // 畳んだモバイルでも原因が見えるよう、URL の逆順の期間は開いて示す
   useEffect(() => {
     if (appliedPeriodReversed) setFiltersOpen(true);
@@ -223,7 +225,7 @@ export default function VideosPage() {
   if (appliedPlatform !== "all") {
     appliedChips.push({
       key: "platform",
-      label: `${t("videos.filterPlatform")}: ${appliedPlatform === "youtube" ? "YouTube" : "Twitch"}`,
+      label: `${t("videos.filterPlatform")}: ${PLATFORM_LABELS[appliedPlatform]}`,
     });
   }
   if (appliedFrom || appliedTo) {
@@ -242,8 +244,7 @@ export default function VideosPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     // 開始日が終了日より後なら送らずに知らせる（YYYY-MM-DD なので文字列の比較で前後が分かる）
-    if (from && to && from > to) {
-      setPeriodInvalid(true);
+    if (periodError) {
       setFiltersOpen(true);
       return;
     }
@@ -256,7 +257,6 @@ export default function VideosPage() {
   };
 
   const handleClear = () => {
-    setPeriodInvalid(false);
     setSearchParams(new URLSearchParams(), { preventScrollReset: true });
   };
 
@@ -332,13 +332,16 @@ export default function VideosPage() {
                 <SelectTrigger id="video-filter-platform" className="w-full">
                   {/* Radix の SelectValue は SSR で選択中の項目を描けないため、中身を明示して渡す（/browse と同じ） */}
                   <SelectValue>
-                    {platform === "youtube" ? "YouTube" : platform === "twitch" ? "Twitch" : t("videos.platformAll")}
+                    {platform === "all" ? t("videos.platformAll") : PLATFORM_LABELS[platform]}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("videos.platformAll")}</SelectItem>
-                  <SelectItem value="youtube">YouTube</SelectItem>
-                  <SelectItem value="twitch">Twitch</SelectItem>
+                  {(Object.keys(PLATFORM_LABELS) as (keyof typeof PLATFORM_LABELS)[]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {PLATFORM_LABELS[key]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -357,10 +360,7 @@ export default function VideosPage() {
                     value={from}
                     min={dateRange.min}
                     max={dateRange.max}
-                    onChange={(e) => {
-                      setFrom(e.target.value);
-                      setPeriodInvalid(false);
-                    }}
+                    onChange={(e) => setFrom(e.target.value)}
                     aria-invalid={periodError || undefined}
                     aria-describedby={periodError ? "video-filter-period-error" : undefined}
                   />
@@ -377,10 +377,7 @@ export default function VideosPage() {
                     value={to}
                     min={dateRange.min}
                     max={dateRange.max}
-                    onChange={(e) => {
-                      setTo(e.target.value);
-                      setPeriodInvalid(false);
-                    }}
+                    onChange={(e) => setTo(e.target.value)}
                     aria-invalid={periodError || undefined}
                     aria-describedby={periodError ? "video-filter-period-error" : undefined}
                   />

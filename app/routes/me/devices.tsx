@@ -40,6 +40,7 @@ import {
   type ControllerSettings,
   DEFAULT_CONTROLLER_SETTINGS,
   KEYBOARD_LAYOUT_OPTIONS,
+  keyboardLayoutLabel,
 } from "@/lib/keybindings";
 import {
   fromSensitivityPercent,
@@ -67,7 +68,7 @@ import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeHistoryDescription } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
-import { PresetSelector } from "@/components/preset-selector";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
@@ -154,7 +155,7 @@ export function HydrateFallback() {
       </div>
 
       {/* プリセットセレクター（ラベル 16px ＋ gap 4px ＋ セレクト 36px、sm 未満は 44px） */}
-      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+      <PresetSelectorSkeleton />
 
       {/* 入力方法の欄（見出し 28px ＋ 現在値 20px ＋ 説明 20px） */}
       <div className="space-y-4 border-t border-foreground/15 pt-6">
@@ -927,14 +928,15 @@ export default function DevicesPage() {
                 >
                   <SelectTrigger id="keyboardLayout" className="w-full">
                     <SelectValue placeholder={t("meDevices.chooseLayout")}>
-                      {formValues.keyboardLayout ? formValues.keyboardLayout.replace("_", " ") : null}
+                      {formValues.keyboardLayout ? keyboardLayoutLabel(formValues.keyboardLayout) : null}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="US">US</SelectItem>
-                    <SelectItem value="JIS">JIS</SelectItem>
-                    <SelectItem value="US_TKL">US TKL</SelectItem>
-                    <SelectItem value="JIS_TKL">JIS TKL</SelectItem>
+                    {KEYBOARD_LAYOUT_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {keyboardLayoutLabel(option)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

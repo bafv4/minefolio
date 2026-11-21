@@ -1,6 +1,7 @@
 // キー配置のビュー切替（表 / ビジュアル / 統計）中に本体へ出すスケルトン。
 // ui.md 8 章「本物と同じ配置で描き、高さを先に確保する」に合わせ、遷移先ごとの形（行の高さ・列数・カードの余白）を
-// 本物のソースの値から写している（汎用の TabContentSkeleton は他の画面と共用なので使わない）。
+// 本物のソースの値から写している（`TabContentSkeleton` はマイガイドの行専用の骨組みなので、ここでは使わない）。
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export type KeybindingsViewSkeletonVariant = "table" | "visual" | "stats";
@@ -58,18 +59,17 @@ export function KeybindingsViewSkeleton({ variant }: { variant: KeybindingsViewS
   return (
     <div aria-hidden className="flex flex-col gap-4">
       {Array.from({ length: 2 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex flex-col gap-3 rounded-xl border bg-card py-5 shadow-sm"
-        >
-          <div className="flex items-center gap-2 px-5">
-            <Skeleton className="size-8 shrink-0 rounded-lg" />
-            <Skeleton className="h-5 w-32" />
-          </div>
-          <div className="px-5">
+        <Card key={i} className="gap-3 py-5">
+          <CardHeader className="px-5">
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-8 shrink-0 rounded-lg" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+          </CardHeader>
+          <CardContent className="px-5">
             <Skeleton className="aspect-[479/508] md:aspect-auto md:h-[550px]" />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

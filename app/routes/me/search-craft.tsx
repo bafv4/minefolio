@@ -56,7 +56,7 @@ import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } f
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeHistoryDescription } from "@/lib/history-description";
-import { PresetSelector } from "@/components/preset-selector";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
@@ -193,7 +193,7 @@ export function HydrateFallback() {
         <Skeleton className="h-5 w-72 max-w-full" />
       </div>
 
-      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+      <PresetSelectorSkeleton />
 
       {/* タイミングブロックカード */}
       <div className="space-y-4 border-t border-foreground/15 pt-6">
