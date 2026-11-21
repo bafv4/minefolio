@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
 import type { PaceTimelineEntry } from "@/lib/paceman-cache";
@@ -39,6 +40,8 @@ export function PaceTimelineModal({
 }) {
   const t = useT();
   const paceManUrl = `https://paceman.gg/stats/run/${runId}`;
+  // 再試行のたびに増やして、取得の effect をやり直す
+  const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{
     status: "idle" | "loading" | "done" | "error";
     entries: PaceTimelineEntry[];
@@ -72,7 +75,7 @@ export function PaceTimelineModal({
     return () => {
       cancelled = true;
     };
-  }, [open, mcid, runId]);
+  }, [open, mcid, runId, attempt]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,13 +86,14 @@ export function PaceTimelineModal({
         </DialogHeader>
 
         {state.status === "loading" && (
-          <div className="flex items-center justify-center py-8 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div role="status" aria-busy="true" className="flex items-center justify-center py-8 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            <span className="sr-only">{t("loading.page")}</span>
           </div>
         )}
 
         {state.status === "error" && (
-          <p className="py-4 text-center text-sm text-muted-foreground">{t("home.timelineError")}</p>
+          <FeedErrorNotice message={t("home.timelineError")} onRetry={() => setAttempt((n) => n + 1)} />
         )}
 
         {state.status === "done" && (
@@ -116,7 +120,7 @@ export function PaceTimelineModal({
                       )}
                     >
                       <span className="text-sm font-medium">{entry.timeline}</span>
-                      <span className="font-mono text-sm font-semibold">{formatClock(entry.rta)}</span>
+                      <span className="font-mono text-sm font-semibold tabular-nums">{formatClock(entry.rta)}</span>
                     </div>
                   </div>
                 );
@@ -129,7 +133,7 @@ export function PaceTimelineModal({
           <Link
             to={profileHref}
             prefetch="intent"
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 min-h-11 py-2 text-sm sm:min-h-0 text-primary hover:bg-secondary/50 transition-colors"
           >
             {t("playerProfile.viewProfile")}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -139,7 +143,7 @@ export function PaceTimelineModal({
           href={paceManUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 min-h-11 py-2 text-sm sm:min-h-0 text-primary hover:bg-secondary/50 transition-colors"
         >
           {t("home.viewOnPaceMan", { site: "PaceMan.gg" })}
           <ExternalLink className="h-3.5 w-3.5" />
