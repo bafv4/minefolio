@@ -353,6 +353,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
             variant="outline"
             size="sm"
             className="h-7 max-sm:min-h-11"
+            aria-label={t("meSearchCraft.addItemAria")}
             onClick={() => setIsItemDialogOpen(true)}
           >
             <Plus className="size-3 mr-1" />
@@ -773,7 +774,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   const showLoopSection = loops.length > 0 || isLoopDragging;
 
   return (
-    <div data-craft-block="" className="rounded-xl border border-border/70 bg-background/80">
+    <div data-craft-block={timing ?? "none"} className="rounded-xl border border-border/70 bg-background/80">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         {meta && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />}
         <h3 className="text-sm font-semibold">{label}</h3>
@@ -916,7 +917,13 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   createLoop,
   emptyState = false,
   deleteWithUndo = false,
+  collapseEmptyBlocks = false,
 }: {
+  /**
+   * true のとき、中身のある区間だけをブロックで出し、空の区間は「区間に追加」の1行のチップにまとめる。
+   * ドラッグ中だけ、ドロップ先として全区間のブロックを出す（/me/search-craft 用。既定は7区間を常時表示）
+   */
+  collapseEmptyBlocks?: boolean;
   /** true のとき、エントリの削除は確認ダイアログではなく「元に戻す」つきのトースト（Playground 用） */
   deleteWithUndo?: boolean;
   /**
@@ -1211,6 +1218,22 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     boardRef.current?.querySelector<HTMLInputElement>("input")?.focus();
   }, [totalCraftCount]);
 
+  // 「区間に追加」のチップに並べる、中身の無い区間
+  const emptyTimings = BLOCK_TIMINGS.filter(
+    (timing) =>
+      (craftsByBlock.get(timing)?.length ?? 0) === 0 && (loopsByBlock.get(timing)?.length ?? 0) === 0,
+  );
+  // チップから足すとそのチップが消える。フォーカスを、できた区間の最初の入力欄へ移す
+  const focusTimingRef = useRef<SearchCraftTiming | null | undefined>(undefined);
+  useEffect(() => {
+    if (focusTimingRef.current === undefined) return;
+    const timing = focusTimingRef.current;
+    focusTimingRef.current = undefined;
+    boardRef.current
+      ?.querySelector<HTMLInputElement>(`[data-craft-block="${timing ?? "none"}"] input`)
+      ?.focus();
+  }, [crafts]);
+
   if (emptyState && totalCraftCount === 0) {
     return (
       <EmptyState
@@ -1254,7 +1277,13 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
           {t("meSearchCraft.boardHint")}
           {totalCraftCount < 2 && ` ${t("meSearchCraft.loopNeedTwoEntries")}`}
         </p>
-        {BLOCK_TIMINGS.map((timing) => (
+        {BLOCK_TIMINGS.filter(
+          (timing) =>
+            !collapseEmptyBlocks ||
+            activeDrag !== null ||
+            (craftsByBlock.get(timing)?.length ?? 0) > 0 ||
+            (loopsByBlock.get(timing)?.length ?? 0) > 0,
+        ).map((timing) => (
           <TimingBlock
             key={timing ?? "__none"}
             timing={timing}
@@ -1274,6 +1303,36 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             onAddLoop={handleAddLoop}
           />
         ))}
+        {collapseEmptyBlocks && emptyTimings.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2" data-add-to-block="">
+            <span className="text-xs font-medium text-muted-foreground">{t("meSearchCraft.addToBlock")}</span>
+            {emptyTimings.map((timing) => {
+              const meta = timing ? TIMING_META.find((m) => m.id === timing) : undefined;
+              const label = meta ? timingLabel(t, meta) : t("meSearchCraft.timingNone");
+              return (
+                <Button
+                  key={timing ?? "__none"}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 sm:min-h-8"
+                  aria-label={t("meSearchCraft.addCraftAria", { timing: label })}
+                  onClick={() => {
+                    focusTimingRef.current = timing;
+                    handleAddCraft(timing);
+                  }}
+                >
+                  {meta ? (
+                    <span aria-hidden="true" className={cn("h-2 w-2 shrink-0 rounded-full", meta.dot)} />
+                  ) : (
+                    <Plus className="size-3" aria-hidden="true" />
+                  )}
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </DndContext>
     </DeleteWithUndoContext.Provider>

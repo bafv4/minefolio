@@ -711,6 +711,7 @@ export default function SearchCraftPage() {
         createCraft={createCraft}
         createLoop={createLoop}
         emptyState
+        collapseEmptyBlocks
       />
       </PageSection>
       </div>
