@@ -285,6 +285,9 @@ export default function PacesPage() {
   // 折りたたみバッジの件数は下のチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みの外なので数えない）
   const activeFilterCount = appliedChips.length;
 
+  // データが0件で条件も無いときは、絞る対象が無いので検索フォームを出さず空状態だけにする（条件ありで0件ならフォームは残す）
+  const showFilterForm = visibleTotal > 0 || hasActiveFilters;
+
   // 並び順は選んだ時点で反映（/browse と同じ即時反映）。他の入力中の下書きは送らず、URL上の適用済み条件に sort だけ足す
   const handleSortChange = (value: string) => {
     setSort(value);
@@ -348,6 +351,7 @@ export default function PacesPage() {
       </div>
       <p className="text-sm text-muted-foreground">{t("paces.description")}</p>
 
+      {showFilterForm && (
       <form
         onSubmit={handleSearch}
         className="rounded-xl border border-border/70 bg-card p-4 sm:p-5"
@@ -493,6 +497,7 @@ export default function PacesPage() {
         </div>
         </div>
       </form>
+      )}
 
       {/* 表示の設定: 並び順は絞り込みのフォームとは別で、選んだ時点で反映する（/browse と同じ即時反映） */}
       {visibleTotal > 0 && (

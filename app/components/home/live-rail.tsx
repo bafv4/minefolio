@@ -719,7 +719,8 @@ export function LiveRail({
         {emptyUpdatedAt}
         </div>
       )}
-      {emptyStrip}
+      {/* ライブ0人で最近のペースも0件（読み込み済み）の日は、人数の無い空の7段の帯を出さない。読み込み中・失敗中は高さを保つため出す */}
+      {(recentLoading || recentError || recent.length > 0) && emptyStrip}
       {recentLoading ? (
         // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
         // 多めに描くと、少なかったときに下の欄が大きく上へ動く。

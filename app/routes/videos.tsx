@@ -228,6 +228,9 @@ export default function VideosPage() {
   // 折りたたみバッジの件数は上のチップの数と同じ（/paces と同じ。開始日・終了日は「時期」の1件）
   const activeFilterCount = appliedChips.length;
 
+  // データが0件で条件も無いときは、絞る対象が無いので検索フォームを出さず空状態だけにする（条件ありで0件ならフォームは残す）
+  const showFilterForm = visibleTotal > 0 || hasActiveFilters;
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     // 開始日が終了日より後なら送らずに知らせる（YYYY-MM-DD なので文字列の比較で前後が分かる）
@@ -272,6 +275,7 @@ export default function VideosPage() {
       </div>
       <p className="text-sm text-muted-foreground">{t("videos.description")}</p>
 
+      {showFilterForm && (
       <form
         onSubmit={handleSearch}
         className="rounded-xl border border-border/70 bg-card p-4 sm:p-5"
@@ -392,6 +396,7 @@ export default function VideosPage() {
           </div>
         </div>
       </form>
+      )}
 
       {/* 絞り込みの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
       <div
