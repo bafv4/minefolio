@@ -198,7 +198,7 @@ function ItemSelectDialog({
               onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
             >
               <SelectTrigger className="w-40">
-                <SelectValue />
+                <SelectValue>{ITEM_CATEGORIES.find((c) => c.id === selectedCategory)?.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ITEM_CATEGORIES.map((cat) => (

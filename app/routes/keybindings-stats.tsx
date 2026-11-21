@@ -7,7 +7,10 @@ import { loadKeybindingsStats } from "@/lib/keybindings-stats.server";
 import { StatsView } from "@/components/keybindings/stats-view";
 import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import {
+  KeybindingsViewSkeleton,
+  skeletonVariantForPath,
+} from "@/components/keybindings/keybindings-view-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { useT } from "@/hooks/use-locale";
 import { createTranslator } from "@/lib/messages";
@@ -54,9 +57,7 @@ export default function KeybindingsStatsPage() {
         trailing={<ViewSwitcher />}
       />
       {isTabSwitching ? (
-        <TabContentSkeleton
-          variant={targetPathname === "/keybindings" ? "table" : "cards"}
-        />
+        <KeybindingsViewSkeleton variant={skeletonVariantForPath(targetPathname)} />
       ) : (
         <StatsView data={stats} />
       )}

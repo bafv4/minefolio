@@ -209,13 +209,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200" aria-hidden="true">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Skeleton className="h-8 w-32 mb-2" />
-          <Skeleton className="h-4 w-80" />
-        </div>
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物と同じ間隔・並び: 見出し（h1 32px ＋ 説明 20px）→ プリセット選択 → 欄（罫線 ＋ 見出し 28px ＋ 一覧） */}
+      <div>
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-5 w-80 max-w-full" />
       </div>
+      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+      <Skeleton className="h-7 w-40" />
       <div className="rounded-xl border border-border/70 bg-background/80">
         <div className="divide-y divide-border/60">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -242,6 +244,7 @@ export function HydrateFallback() {
         <div className="border-t border-border/60 px-4 py-3">
           <Skeleton className="h-8 w-32" />
         </div>
+      </div>
       </div>
     </div>
   );
@@ -438,7 +441,7 @@ function ItemSlotEditButton({
               onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
             >
               <SelectTrigger aria-label={t("meItems.categoryAria")} className="w-40">
-                <SelectValue />
+                <SelectValue>{getCategoryName(selectedCategory, langCode) ?? ITEM_CATEGORIES.find((c) => c.id === selectedCategory)?.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ITEM_CATEGORIES.map((cat) => (

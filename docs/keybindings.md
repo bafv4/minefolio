@@ -449,7 +449,7 @@ type ControllerSettings = {
 | `/keybindings/stats` | `routes/keybindings-stats.tsx` | 統計ビュー（`loadKeybindingsStats`） |
 
 - 表・ビジュアルは共有ローダー `loadKeybindingsListPlayers`（`lib/keybindings-list.server.ts`）で公開ユーザーを全件取得し、共有レイアウト `KeybindingsListLayout`（`mode="table" | "visual"`）で描画する。ユーザー絞り込み（`slugs`指定）なしの全件取得結果は60秒インメモリキャッシュされる
-- **件数と指定走者の注記（表）**: ツールバーの件数（`aria-live`）は表では「このタブ N人 / 全 M人」（`keybindings.countTabText`。N はいまのタブの行数、M は絞り込み後の全走者）。ビジュアルは絞り込み後の走者数のみ。統計などから `users=` で走者を指定して表へ移ったとき、指定した走者のうちそのタブに載らない人がいれば、ツールバーの下に「指定した N 人のうち、このタブに設定のある M 人を表示しています」（`keybindings.usersOnTabNote`、`role="status"`）を出す（黙って減らさない）。タブを替えるとき、移った先に無い列の並べ替え（`sort`）は外す（`sortKeyBelongsToTab`）
+- **件数と指定走者の注記（表）**: ツールバーの件数（`aria-live`）は表では「このタブ N人 / 全 M人」（`keybindings.countTabText`。N はいまのタブの行数、M は絞り込み後の全走者）。ビジュアルは絞り込み後の走者数のみ。統計などから `users=` で走者を指定して表へ移ったとき、指定した走者のうちそのタブに載らない人がいれば、ツールバーの下に「指定した N 人のうち、このタブに設定のある M 人を表示しています」（`keybindings.usersOnTabNote`、`role="status"`）を出す（黙って減らさない）。タブを替えるとき、移った先に無い列の並べ替え（`sort`）は外す（`sortKeyBelongsToTab`）。URL の `users` のうち一覧に存在しない走者（古い共有リンク等）はチップ・件数・注記・絞り込みのすべてで捨てる（`KnownRunnerSlugsContext`。layout が一覧の走者を提供）。`bind` は実在しない操作・キー（`KeyZZ` 等。`isKnownKeyCode`）も捨てる
 - ビュー切替（`ViewSwitcher`）は各ルートへの `<Link>`で、`nav`（`aria-label`）＋ `aria-current="page"`（`role="tablist"` / `tab` ではない。ui.md 11 章・`ContentTabs` と同じ）。表・ビジュアル間は現在の検索パラメータ（フィルタ・`tab`）を維持する。ルート遷移のため読み込み中は共通の `NavigationProgress` オーバーレイが表示される
 
 テーブルビュー（`view=table`）のサブタブ。操作系はプレイヤー画面（プロフィール）と同じ粒度（移動 / インベントリ / 戦闘・UI）で分割する:
@@ -524,10 +524,11 @@ type ControllerSettings = {
 
 - **統計は公開走者の全員が対象**（一覧の絞り込みは効かない）。概要に注記を出す。DPI の区分は幅がそろっていないので、棒の長さは人数の割合であることを欄の説明に添える
 - **キーの統計の「未割り当て」**: 集計は不使用（`UNBOUND_KEY`）の割り当ても 1 つのキーとして数える。その行は「-」というキーではなく「未割り当て」と表示する（F3 欄の未設定〔`UNASSIGNED_INPUT_KEY`〕と同じ `keybindingsStats.unassigned`）。Minus キーは「-」のまま。「未割り当て」の走者群から表へのリンクは `users` のみ（`bind` では絞れない）
+- **操作の統計の並びと区分見出し**: 並びは表のタブと同じ（移動 → インベントリ〔ホットバー 1〜9 を含む〕→ 戦闘・UI、`BIND_FILTER_ACTIONS` の順）。md 未満は区分が変わるときだけ小見出しを1回出し、F3 の入力キーは「リマップ」の小見出しで分ける（直前の区分の下に入れない）。ホットバー 1〜9 は9つの欄のまま（1欄にまとめると行ごとのダイアログ・表へのリンクの単位が崩れるため見送り）
 - 統計の見出しにアイコンは付けない（全欄そろえる）。統計のサブタブは md 未満で高さ 44px（`max-md:min-h-11`）
 - 統計の行ボタンのアクセシブルネームは「5位、2キー、1人、1%、走者を見る」のようなまとまった文（`keybindingsStats.rowAria` / `rangeRowAria`）。割合のバー（`Progress`）にも名前（行のラベル）と値（`aria-valuetext`＝見えている「N人 (P%)」）を付ける（旧 `/stats` の `StatBar` の書き方を引き継いだもの）。割合の表記は整数の %（`formatPercent`、四捨五入）にそろえる。走者一覧ダイアログには `DialogDescription`（人数と案内）を付ける
 - **行から表へ直接**: 統計の各行（キー・F3・マウスの区分・Raw Input など）は、走者一覧ダイアログを開くボタンの右に「表で見る」アイコンリンク（`RowTableLink`、`keybindingsStats.rowOpenInTable`、md 未満で 44px）を並べる。行き先は下の `tableHrefFor`（ダイアログの「この N 人を表で見る」と同じ。行き先が無い区分は出さない）。表は URL の `tab` / `users` / `bind` を受ける（nuqs）
-- **走者一覧ダイアログから表へ**: キー・F3・マウスの各区分の走者一覧ダイアログに「この N 人を表で見る」リンクを出す。行き先は `/keybindings?users=<slug,…>&tab=<その操作が載っているタブ>`（キーの操作は `tabForAction`、F3 は `remaps`、マウス系・Raw Input は `mouse`。`buildKeybindingsTableHref`）。`users` に載せるのは **100 人まで**（`MAX_USERS_IN_LINK`。URL が長くなりすぎるため）。超えたときは、キーの統計なら `users` の代わりに `bind=<操作>:<キー>` で同じ走者群を表で絞り込む。それ以外（マウスの区分）はリンクを出さない。F3 の区分は、リマップした走者（元のキーごとの区分）は `remaps` タブへリンクし、「F3 のまま」の区分（リマップ行を持たず表のリマップタブに出ない）はリンクを出さない。表の行数は、統計（ライブのテーブル）と一覧（メインプリセットのスナップショット・公開走者）の母集団の違いで、ダイアログの人数と一致しないことがある（マウスタブは DPI・感度・Windows 速度のある走者のみ。統計の「マウス設定の登録者」と Raw Input・マウス加速の ON/OFF 分布も同じ条件〔`hasMouseSettings`〕の走者だけを数える。Raw Input〔既定 ON〕とマウス加速〔既定 OFF〕は設定行ができた時点で値が入るため、これを根拠にすると何も入力していない走者まで分布に入り、「表で見る」の人数が表と合わなくなる。表のマウスタブをこの 2 項目まで広げると、設定行のある走者全員が載ってしまうので、統計側を表に揃えた）
+- **走者一覧ダイアログから表へ**: キー・F3・マウスの各区分の走者一覧ダイアログに「この N 人を表で見る」リンクを出す。行き先は `/keybindings?users=<slug,…>&tab=<その操作が載っているタブ>`（キーの操作は `tabForAction`、F3 は `remaps`、マウス系・Raw Input は `mouse`。`buildKeybindingsTableHref`）。`users` に載せるのは **100 人まで**（`MAX_USERS_IN_LINK`。URL が長くなりすぎるため）。操作＝キーの統計（キー → 操作・操作 → キー）は人数によらず `bind=<操作>:<キー>` だけを渡し、`users` は渡さない（表に「操作 = キー」のチップが残り、後から同じ設定にした走者も入る）。区分（マウス）・ON/OFF は条件で表せないので `users`（100 人超はリンクなし）。F3 の区分は、リマップした走者（元のキーごとの区分）は `remaps` タブへリンクし、「F3 のまま」の区分（リマップ行を持たず表のリマップタブに出ない）はリンクを出さない。表の行数は、統計（ライブのテーブル）と一覧（メインプリセットのスナップショット・公開走者）の母集団の違いで、ダイアログの人数と一致しないことがある（マウスタブは DPI・感度・Windows 速度のある走者のみ。統計の「マウス設定の登録者」と Raw Input・マウス加速の ON/OFF 分布も同じ条件〔`hasMouseSettings`〕の走者だけを数える。Raw Input〔既定 ON〕とマウス加速〔既定 OFF〕は設定行ができた時点で値が入るため、これを根拠にすると何も入力していない走者まで分布に入り、「表で見る」の人数が表と合わなくなる。表のマウスタブをこの 2 項目まで広げると、設定行のある走者全員が載ってしまうので、統計側を表に揃えた）
 - Raw Input の ON / OFF（統計・表）はどちらも同じ見た目（`Badge variant="secondary"`）で、文字だけで区別する。走者の設定値に優劣・多数派/少数派を思わせる装飾をしない
 - **キー → 操作タブ**（旧 `/stats` から移した）: キーを起点に、そのキーへ何の操作が割り当てられているかを見る。対象は `KEY_ACTION_STATS_KEYS`（`keybindings-stats-shared.ts`、E/Q/R/F/C/X/Z/G/V・Shift/Ctrl/Tab/CapsLock/Space・Mouse0〜4・数字 1〜9 の28個）で、元データは追跡対象外の操作も含む全操作（集計クエリは操作 → キーと共通の1本で、JS 側で分ける）。未割り当て（不使用）の行はキーとして数えない。`totalCount` はそのキーに何かを割り当てている走者数、各操作の割合の分母もそれ。1人が同じキーに複数の操作を置けるので割合の合計は100%を超えうる（タブ冒頭にその旨と、対象が上の28キーに限られること〔W/A/S/D などの移動キーは含まない。`keybindingsStats.keyActionScope`〕を添える）。上位5件、データの無いキーの欄は出さない（全部空なら `EmptyState`）。行を押すと走者ダイアログ（題は「キー名: 操作名」）、表リンクは `tabForAction`（表に無い操作はリンクなし）。キーコードの正規化はしない（DB の `key_code` はこの形式に統一されている）
 - **ON / OFF 分布**: Raw Input・マウス加速（マウスタブ）・ダッシュ切替（キーボードタブの「ダッシュ」の直後）は共通部品 `BooleanDistribution`。`BooleanSettingStats`（`mouseConfigs` 由来、null は母数に入れない）。マウス加速の表リンクは `mouse` タブ、ダッシュ切替は表に列が無いのでリンクなし。ON / OFF は同じ見た目
@@ -639,7 +640,7 @@ type ControllerSettings = {
 | `app/components/keybindings/card-view.tsx` | ビジュアルカードビュー（`VirtualKeyboard` を読み取り専用で再利用） |
 | `app/components/keybindings/filter-dialog.tsx` | 統合フィルタモーダル（ユーザー絞り込み + 操作＝キー + 数値範囲、適用で反映） |
 | `app/lib/keybindings-filter.ts` | キー名の表示ラベル・比較（並べ替え）と、操作＝キーの絞り込み判定（`rowMatchesBind`）の純粋ロジック |
-| `app/lib/keybindings-search-params.ts` | URL パラメータ定義（`bind` の parse / format、操作→タブの対応、統計→表のリンク組み立て） |
+| `app/lib/keybindings-search-params.ts` | URL パラメータ定義（`bind` の parse / format・キーの実在検証、操作→タブの対応、統計→表のリンク組み立て） |
 | `app/components/keybindings/user-filter.tsx` | ユーザー検索・選択リスト（`UserSelectList`）と選択チップ（`UserFilterChips`、`users` パラメータ） |
 | `app/components/keybindings/keybindings-empty-state.tsx` | 0件表示（表・カードビュー共通）。フィルタ起因なら理由 + クリアボタンを出す |
 | `app/components/sensitivity-warning.tsx` | 感度が有効範囲外のときの警告表示（値 + 警告アイコン + ヒント）。一覧・プロフィール共通 |

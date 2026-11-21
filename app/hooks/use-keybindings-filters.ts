@@ -1,12 +1,13 @@
 // /keybindings 配下の URL ↔ state を統合管理する facade フック。
 // nuqs の useQueryStates をラップし、フィルタの派生値とプレイヤー適用ヘルパーを提供する。
-import { useCallback, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import { useQueryStates } from "nuqs";
 import {
   keybindingsParsers,
   parseSort,
   formatSort,
   parseBindConditions,
+  resolveKnownUsers,
   upsertBindCondition,
   formatBindCondition,
   type BindCondition,
@@ -32,9 +33,23 @@ export type FilterablePlayer = {
   } | null;
 };
 
+/**
+ * 一覧に載る走者の slug 集合。layout が提供すると、URL の `users` から実在しない slug を捨てて扱う
+ * （チップ・件数・注記・絞り込みがそろう）。提供が無い場所では URL のまま。
+ */
+export const KnownRunnerSlugsContext = createContext<ReadonlySet<string> | null>(null);
+
 export function useKeybindingsFilters() {
   // フィルタ（数値範囲・ユーザー絞り込み）・サブタブはクライアント側で完結する。
-  const [params, setParams] = useQueryStates(keybindingsParsers);
+  const [rawParams, setParams] = useQueryStates(keybindingsParsers);
+  const knownSlugs = useContext(KnownRunnerSlugsContext);
+  const params = useMemo(
+    () =>
+      knownSlugs
+        ? { ...rawParams, users: resolveKnownUsers(rawParams.users, knownSlugs) }
+        : rawParams,
+    [rawParams, knownSlugs],
+  );
 
   // タブを替えるとき、移った先に無い列の並べ替えは外す（黙って効かない sort を残さない）
   const setTab = (tab: Tab) => {

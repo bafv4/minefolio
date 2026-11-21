@@ -178,37 +178,39 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  // 本物（下の default export）と同じ並び・高さ: 見出し（h1 32px ＋ 説明 20px）→ プリセット選択（ラベル 16px ＋ gap 4px ＋ セレクト 36px、
+  // sm 未満は 44px）→ キーボードの欄（罫線 ＋ 見出し 28px ＋ 説明 20px ＋ 凡例 ＋ キーボード）→ フォルダ型タブ（帯 42px、sm 未満 50px、
+  // 中身は p-4 sm:p-6、先頭の欄は罫線なし）
   return (
     <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-5 w-64" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-24" />
-          <Skeleton className="h-9 w-24" />
-        </div>
+      <div>
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="mt-0 h-5 w-64 max-w-full" />
       </div>
 
-      {/* キーボードの欄（上罫線＋見出し＋中身） */}
+      {/* プリセットセレクター */}
+      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+
+      {/* キーボードの欄（上罫線＋見出し＋説明＋凡例＋中身） */}
       <div className="space-y-4 border-t border-foreground/15 pt-6">
         <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-5 w-72 max-w-full" />
+        <Skeleton className="h-6 w-56 max-w-full" />
         <Skeleton className="h-80 w-full rounded-xl" />
       </div>
 
-      {/* タブ */}
-      <Skeleton className="h-10 w-96 max-w-full" />
-
-      {/* 内容 */}
-      <div className="space-y-4 border-t border-foreground/15 pt-6">
-        <Skeleton className="h-7 w-32" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
+      {/* タブ（帯 ＋ 内容は一体のカード） */}
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <Skeleton className="h-[42px] w-full rounded-none max-sm:h-[50px]" />
+        <div className="space-y-4 border-t p-4 sm:p-6">
+          <Skeleton className="h-7 w-32" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+          </div>
         </div>
       </div>
     </div>
@@ -1252,7 +1254,9 @@ function CustomActionRow({
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
           <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28">
-            <SelectValue />
+            <SelectValue>
+              {t(action.category === "macro" ? "meKeybindings.categoryMacro" : action.category === "tool" ? "meKeybindings.categoryTool" : "meKeybindings.categoryOther")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
@@ -1356,7 +1360,9 @@ function DialogCustomActionRow({
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
           <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28 h-8 max-sm:h-11 text-sm">
-            <SelectValue />
+            <SelectValue>
+              {t(action.category === "macro" ? "meKeybindings.categoryMacro" : action.category === "tool" ? "meKeybindings.categoryTool" : "meKeybindings.categoryOther")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
@@ -2711,7 +2717,7 @@ export default function KeybindingsPage() {
                             onValueChange={(value: "mouse" | "keyboard") => updateCustomKey(index, { category: value })}
                           >
                             <SelectTrigger aria-label={t("meKeybindings.customKeyCategoryAria")} className="w-full max-sm:h-11">
-                              <SelectValue />
+                              <SelectValue>{t(ck.category === "mouse" ? "meKeybindings.mouse" : "meKeybindings.keyboard")}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="keyboard">{t("meKeybindings.keyboard")}</SelectItem>
@@ -3087,7 +3093,17 @@ export default function KeybindingsPage() {
                 onValueChange={(value: "keybindings" | "remaps" | "fingers" | "all") => setCopyTarget(value)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {t(
+                      copyTarget === "keybindings"
+                        ? "meKeybindings.keybindingsOnly"
+                        : copyTarget === "remaps"
+                          ? "meKeybindings.remapsOnly"
+                          : copyTarget === "fingers"
+                            ? "meKeybindings.fingersOnly"
+                            : "meKeybindings.all",
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("meKeybindings.all")}</SelectItem>

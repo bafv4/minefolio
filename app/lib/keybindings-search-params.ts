@@ -7,6 +7,7 @@ import {
   parseAsString,
   parseAsStringEnum,
 } from "nuqs";
+import { KEY_CODE_LABELS, normalizeKeyCode, parseKeyCombination } from "@/lib/keybindings";
 
 /**
  * 表ビュー内のサブタブ。操作はプレイヤー画面と同じ粒度
@@ -120,16 +121,32 @@ export function formatSort(key: string, direction: "asc" | "desc"): string {
 /** 操作＝キーの絞り込み条件 1 件 */
 export type BindCondition = { action: string; keyCode: string };
 
+/** KEY_CODE_LABELS に無いが、KeyboardEvent.code として実在するキー（英数・テンキー数字・国際キーなど） */
+const KNOWN_KEY_CODE_PATTERN =
+  /^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Intl[A-Za-z]+|Lang[1-5]|NonConvert|Convert|KanaMode|ContextMenu|PrintScreen|ScrollLock|Pause|Mouse[0-9]+|Gamepad[A-Za-z0-9_]+)$/;
+
+/** 絞り込み条件に使えるキーか（`KeyZZ` のような実在しないキーは捨てる） */
+export function isKnownKeyCode(keyCode: string): boolean {
+  // "Ctrl+KeyA" のような修飾キー付きは、キー本体で判定する
+  const normalized = normalizeKeyCode(parseKeyCombination(keyCode).keyCode);
+  return Object.hasOwn(KEY_CODE_LABELS, normalized) || KNOWN_KEY_CODE_PATTERN.test(normalized);
+}
+
+/** URL の `users` から、実在する走者の slug だけを残す（存在しない slug はチップにも件数にも入れない） */
+export function resolveKnownUsers(users: readonly string[], knownSlugs: ReadonlySet<string>): string[] {
+  return users.filter((slug) => knownSlugs.has(slug));
+}
+
 /**
  * URL の `bind` の 1 要素（"sprint:ControlLeft"）を読む。最初の ":" で操作とキーに分ける。
- * 未知の操作・":" なし・キーが空のものは null（手書きの URL や古いリンクで落ちないよう捨てる）。
+ * 未知の操作・実在しないキー・":" なし・キーが空のものは null（手書きの URL や古いリンクで落ちないよう捨てる）。
  */
 export function parseBindCondition(raw: string): BindCondition | null {
   const i = raw.indexOf(":");
   if (i <= 0) return null;
   const action = raw.slice(0, i);
   const keyCode = raw.slice(i + 1);
-  if (!keyCode || !BIND_FILTER_ACTIONS.includes(action)) return null;
+  if (!keyCode || !BIND_FILTER_ACTIONS.includes(action) || !isKnownKeyCode(keyCode)) return null;
   return { action, keyCode };
 }
 

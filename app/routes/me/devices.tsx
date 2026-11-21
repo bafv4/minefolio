@@ -147,22 +147,20 @@ export async function loader({ request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-5 w-56" />
-        </div>
-        <Skeleton className="h-9 w-20" />
+      {/* Header（本物は h1 32px ＋ 説明 20px。右の操作は無い） */}
+      <div>
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="h-5 w-56 max-w-full" />
       </div>
 
-      {/* 欄（上罫線＋見出し＋中身） */}
+      {/* プリセットセレクター（ラベル 16px ＋ gap 4px ＋ セレクト 36px、sm 未満は 44px） */}
+      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
+
+      {/* 入力方法の欄（見出し 28px ＋ 現在値 20px ＋ 説明 20px） */}
       <div className="space-y-4 border-t border-foreground/15 pt-6">
         <Skeleton className="h-7 w-32" />
-        <div className="space-y-3">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-5 w-72 max-w-full" />
       </div>
       <div className="space-y-4 border-t border-foreground/15 pt-6">
         <Skeleton className="h-7 w-24" />
@@ -577,9 +575,10 @@ export default function DevicesPage() {
       return next;
     });
     requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       fieldRefs.current[error.field]?.scrollIntoView({
         block: "center",
-        behavior: "smooth",
+        behavior: reduceMotion ? "auto" : "smooth",
       });
     });
   }, []);
@@ -927,7 +926,9 @@ export default function DevicesPage() {
                   onValueChange={(value) => handleChange("keyboardLayout", value)}
                 >
                   <SelectTrigger id="keyboardLayout" className="w-full">
-                    <SelectValue placeholder={t("meDevices.chooseLayout")} />
+                    <SelectValue placeholder={t("meDevices.chooseLayout")}>
+                      {formValues.keyboardLayout ? formValues.keyboardLayout.replace("_", " ") : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="US">US</SelectItem>
@@ -1060,7 +1061,11 @@ export default function DevicesPage() {
                       errorFor("windowsSpeed") ? "windowsSpeed-error" : undefined
                     }
                   >
-                    <SelectValue placeholder={t("meDevices.select")} />
+                    <SelectValue placeholder={t("meDevices.select")}>
+                      {formValues.windowsSpeed
+                        ? `${formValues.windowsSpeed}/20${formValues.windowsSpeed === "11" ? ` ${t("meDevices.defaultSuffix")}` : ""}`
+                        : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => (

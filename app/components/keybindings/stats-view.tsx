@@ -24,7 +24,9 @@ import { getLocalizedDisplayName } from "@/lib/slug";
 // 値は非 .server モジュールから取る（.server はクライアントバンドルに入れられない）
 import { UNASSIGNED_INPUT_KEY } from "@/lib/keybindings-stats-shared";
 import {
+  BIND_FILTER_ACTIONS,
   buildKeybindingsTableHref,
+  isKnownKeyCode,
   MAX_USERS_IN_LINK,
   tabForAction,
   type BindCondition,
@@ -46,7 +48,7 @@ interface StatsViewProps {
 
 /**
  * 走者一覧ダイアログから開く表の行き先。tab はその操作が載っているタブ。
- * bind は、人数が多くて users を URL に載せられないときの代わり（その操作＝そのキーの走者を表で絞り込む）
+ * bind は、操作＝キーの統計で渡す条件（その操作＝そのキーの走者を表で絞り込む。表にチップ「操作 = キー」が出る）
  */
 type TableTarget = { tab: Tab; bind?: BindCondition };
 type PlayerClickHandler = (title: string, players: PlayerInfo[], target?: TableTarget) => void;
@@ -78,6 +80,15 @@ export function StatsView({ data }: StatsViewProps) {
     playersWithKeybindings,
     playersWithMouseSettings,
   } = data;
+
+  // 操作の統計は表のタブと同じ順（移動 → インベントリ → 戦闘・UI）に並べ、区分ごとに小見出しを1回だけ出す
+  const orderedKeybindingStats = [...keybindingStats].sort((a, b) => {
+    const rank = (action: string) => {
+      const i = BIND_FILTER_ACTIONS.indexOf(action);
+      return i < 0 ? BIND_FILTER_ACTIONS.length : i;
+    };
+    return rank(a.action) - rank(b.action);
+  });
 
   // 描画するのはデータのあるキーだけ
   const keysWithData = keyActionStats.filter((k) => k.totalCount > 0);
@@ -166,9 +177,10 @@ export function StatsView({ data }: StatsViewProps) {
         <TabsContent value="keyboard">
           <h2 className="sr-only">{t("keybindingsStats.keyboardTab")}</h2>
           <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
-            {keybindingStats.map((stat, index) => {
+            {orderedKeybindingStats.map((stat, index) => {
               const group = tabForAction(stat.action);
-              const prevGroup = index > 0 ? tabForAction(keybindingStats[index - 1].action) : null;
+              const prevGroup =
+                index > 0 ? tabForAction(orderedKeybindingStats[index - 1].action) : null;
               return (
               <Fragment key={stat.action}>
                 {/* 狭い画面では縦一本になるので、表のタブと同じ3群の小見出しで束ねる（並び順は変えない） */}
@@ -191,6 +203,10 @@ export function StatsView({ data }: StatsViewProps) {
               </Fragment>
               );
             })}
+            {/* F3 の入力キーはリマップの統計。直前の区分（戦闘・UI）の下に入らないよう、同じ小見出しで分ける */}
+            <p className="col-span-full text-sm font-medium text-muted-foreground md:hidden">
+              {t("keybindings.remapsTab")}
+            </p>
             <F3RemapStatCard stat={f3RemapStats} onPlayerClick={openPlayersDialog} />
           </div>
         </TabsContent>
@@ -374,15 +390,21 @@ const GROUP_LABEL_KEYS = {
 const StatTitleContext = createContext("");
 
 /**
- * この走者群を表で見るリンク。users にスラッグを載せるのは MAX_USERS_IN_LINK 人まで
- * （それ以上は URL が長くなりすぎるため）。超えたときは操作＝キーの条件があればそれで代える
+ * この走者群を表で見るリンク。操作＝キーの統計は、人数によらず条件（bind）だけを渡す
+ * （表に「何で選んだか」のチップが残り、後から同じ設定にした人も入る）。
+ * 区分（DPI・感度）や ON/OFF は条件で表せないので、users にスラッグを載せる（MAX_USERS_IN_LINK 人まで。
+ * それ以上は URL が長くなりすぎるのでリンクなし）
  */
 function tableHrefFor(players: PlayerInfo[], target?: TableTarget): string | null {
   if (!target || players.length === 0) return null;
+  // 許可リスト外のキー（parseBindCondition が捨てる）は bind にすると無絞り込みで開くので、users に戻す
+  if (target.bind && isKnownKeyCode(target.bind.keyCode)) {
+    return buildKeybindingsTableHref({ tab: target.tab, bind: [target.bind] });
+  }
   if (players.length <= MAX_USERS_IN_LINK) {
     return buildKeybindingsTableHref({ tab: target.tab, users: players.map((p) => p.slug) });
   }
-  return target.bind ? buildKeybindingsTableHref({ tab: target.tab, bind: [target.bind] }) : null;
+  return null;
 }
 
 /** 統計の 1 行の右に置く「表で見る」リンク（行そのものは走者一覧ダイアログのボタンなので、入れ子にせず並べる） */

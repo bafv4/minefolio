@@ -398,7 +398,7 @@ export function SearchCraftWorkbench({
         </Button>
         <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
           <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
-            <SelectValue />
+            <SelectValue>{layout.replace("_", " ")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {LAYOUT_OPTIONS.map((option) => (

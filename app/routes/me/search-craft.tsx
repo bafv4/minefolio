@@ -185,22 +185,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ブロックカード群）に合わせた骨組みにする（旧フラット行UIの骨組みは使わない）。
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200" aria-hidden="true">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Skeleton className="h-8 w-36 mb-2" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物と同じ間隔・並び: 見出し（h1 32px ＋ 説明 20px。右のテンプレート公開ボタンは保存済みがあるときだけなので描かない）
+          → プリセット選択（ラベル 16px ＋ gap 4px ＋ セレクト 36px、sm 未満は 44px）→ 欄（罫線 ＋ 見出し 28px ＋ ブロック） */}
+      <div>
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-5 w-72 max-w-full" />
       </div>
 
-      {/* PresetSelector 相当の帯 */}
-      <div className="rounded-lg border bg-card p-3 sm:p-4 shadow-sm">
-        <Skeleton className="h-10 w-full sm:w-80" />
-      </div>
+      <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />
 
       {/* タイミングブロックカード */}
-      <div className="space-y-4">
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+      <Skeleton className="h-7 w-40" />
         {Array.from({ length: 2 }).map((_, i) => (
           <div key={i} className="rounded-xl border border-border/70 bg-background/80">
             <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">

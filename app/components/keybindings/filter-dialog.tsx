@@ -168,7 +168,7 @@ export function FilterDialog({
           <SlidersHorizontal className="h-4 w-4" />
           {t("keybindings.filter")}
           {totalActive > 0 && (
-            <Badge variant="default" className="ml-1 h-4 min-w-4 px-1 text-[10px]">
+            <Badge variant="secondary" className="ml-1 h-4 min-w-4 px-1 text-[10px]">
               {totalActive}
             </Badge>
           )}

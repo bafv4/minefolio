@@ -17,14 +17,17 @@ import {
 import { FingerLegend, KEY_STATE_CLASS } from "@/components/virtual-keyboard";
 import { ViewSwitcher } from "./view-switcher";
 import { FilterDialog } from "./filter-dialog";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import {
+  KeybindingsViewSkeleton,
+  skeletonVariantForPath,
+} from "@/components/keybindings/keybindings-view-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { KeybindingsTable } from "./keybindings-table";
 import { CardView } from "./card-view";
 import { sortKeybindingsRows } from "./keybindings-columns";
 import { UserFilterChips } from "./user-filter";
 import type { KeybindingsRow, PresetKey } from "./keybindings-columns";
-import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
+import { KnownRunnerSlugsContext, useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
 import { hasKeyBindings, hasKeyboardContent, hasMouseSettings } from "@/lib/keybindings-filter";
 import {
   COMBAT_UI_ACTIONS,
@@ -100,7 +103,20 @@ function VisualLegend() {
   );
 }
 
-export function KeybindingsListLayout({
+export function KeybindingsListLayout(props: {
+  players: KeybindingsRow[];
+  mode: "table" | "visual";
+}) {
+  // URL の users から実在しない走者を捨てる（チップ・件数・注記・絞り込みをそろえる）ため、一覧の走者を共有する
+  const knownSlugs = useMemo(() => new Set(props.players.map((p) => p.slug)), [props.players]);
+  return (
+    <KnownRunnerSlugsContext.Provider value={knownSlugs}>
+      <KeybindingsListLayoutInner {...props} />
+    </KnownRunnerSlugsContext.Provider>
+  );
+}
+
+function KeybindingsListLayoutInner({
   players,
   mode,
 }: {
@@ -239,9 +255,7 @@ export function KeybindingsListLayout({
           </div>
         )}
         {isTabSwitching ? (
-          <TabContentSkeleton
-            variant={targetPathname === "/keybindings" ? "table" : "cards"}
-          />
+          <KeybindingsViewSkeleton variant={skeletonVariantForPath(targetPathname)} />
         ) : mode === "visual" ? (
           <CardView players={visualPlayers} />
         ) : (

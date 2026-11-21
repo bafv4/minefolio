@@ -4,6 +4,7 @@ import {
   BIND_FILTER_ACTIONS,
   buildKeybindingsTableHref,
   formatBindCondition,
+  isKnownKeyCode,
   keybindingsParsers,
   MAX_USERS_IN_LINK,
   parseBindCondition,
@@ -11,6 +12,7 @@ import {
   parseSort,
   formatSort,
   tabForAction,
+  resolveKnownUsers,
   upsertBindCondition,
 } from "../keybindings-search-params";
 
@@ -21,9 +23,22 @@ describe("bind（操作＝キー）の parse / format", () => {
     expect(parseBindCondition("sprint:ControlLeft")).toEqual(cond);
   });
 
-  it("最初の ':' だけで分ける（キー側に ':' や '+' があってもそのまま）", () => {
+  it("最初の ':' だけで分ける（キー側に '+' があってもそのまま。修飾キー付きはキー本体で判定）", () => {
     expect(parseBindCondition("sprint:Ctrl+KeyA")).toEqual({ action: "sprint", keyCode: "Ctrl+KeyA" });
-    expect(parseBindCondition("jump:a:b")).toEqual({ action: "jump", keyCode: "a:b" });
+    expect(parseBindCondition("jump:a:b")).toBeNull();
+  });
+
+  it("実在しないキーは null（KeyZZ など）", () => {
+    expect(parseBindCondition("forward:KeyZZ")).toBeNull();
+    expect(parseBindCondition("forward:KeyW")).toEqual({ action: "forward", keyCode: "KeyW" });
+    expect(parseBindCondition("hotbar1:Digit1")).toEqual({ action: "hotbar1", keyCode: "Digit1" });
+    expect(parseBindCondition("attack:Mouse0")).toEqual({ action: "attack", keyCode: "Mouse0" });
+    expect(parseBindCondition("sneak:ShiftLeft")).toEqual({ action: "sneak", keyCode: "ShiftLeft" });
+  });
+
+  it("users は実在する slug だけ残す", () => {
+    expect(resolveKnownUsers(["a", "nobody", "b"], new Set(["a", "b", "c"]))).toEqual(["a", "b"]);
+    expect(resolveKnownUsers(["nobody"], new Set(["a"]))).toEqual([]);
   });
 
   it("不正な値は null（未知の操作・':' なし・空のキー・空の操作）", () => {
@@ -58,6 +73,14 @@ describe("bind（操作＝キー）の parse / format", () => {
     const serialized = parser.serialize(raws);
     expect(serialized).toBe("sprint:ControlLeft,jump:Space");
     expect(parser.parse(serialized)).toEqual(raws);
+  });
+
+  it("Mouse5 などの追加ボタン・Gamepad のキーは許可し、継承プロパティ名や実在しないキーは捨てる", () => {
+    expect(parseBindCondition("attack:Mouse5")).toEqual({ action: "attack", keyCode: "Mouse5" });
+    expect(parseBindCondition("jump:Gamepad12")).toEqual({ action: "jump", keyCode: "Gamepad12" });
+    expect(isKnownKeyCode("constructor")).toBe(false);
+    expect(isKnownKeyCode("toString")).toBe(false);
+    expect(isKnownKeyCode("KeyZZ")).toBe(false);
   });
 
   it("選べる操作はすべて表のタブに対応する", () => {

@@ -95,7 +95,7 @@ function RemapTypeSelect({
   return (
     <Select value={value} onValueChange={(v: KeyRemapType) => onChange(v)}>
       <SelectTrigger aria-label={ariaLabel} className={cn("w-28 text-sm max-sm:h-11", heightClass)}>
-        <SelectValue />
+        <SelectValue>{t(`remapType.${value}`)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {KEY_REMAP_TYPES.map((type) => (
@@ -168,7 +168,9 @@ export function RemapRow({
           onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
           <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-9 max-sm:h-11 text-sm">
-            <SelectValue />
+            <SelectValue>
+              {t(selectedOutputType === "special" ? "meKeybindings.outputTypeCharacter" : selectedOutputType === "disabled" ? "meKeybindings.outputTypeDisabled" : "meKeybindings.outputTypeKey")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>
@@ -334,7 +336,9 @@ export function DialogRemapRow({
           onValueChange={(value: RemapOutputType) => handleOutputTypeChange(value)}
         >
           <SelectTrigger aria-label={t("meKeybindings.remapOutputTypeAria")} className="w-24 h-8 max-sm:h-11 text-sm">
-            <SelectValue />
+            <SelectValue>
+              {t(selectedOutputType === "special" ? "meKeybindings.outputTypeCharacter" : selectedOutputType === "disabled" ? "meKeybindings.outputTypeDisabled" : "meKeybindings.outputTypeKey")}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="keyboard">{t("meKeybindings.outputTypeKey")}</SelectItem>

@@ -350,7 +350,7 @@ export function normalizeKeyCode(keyCode: string): string {
   const lowerKeyCode = keyCode.toLowerCase();
 
   // 1. Minecraft形式の特殊キーマッピング
-  if (MINECRAFT_SPECIAL_KEYS[lowerKeyCode]) {
+  if (Object.hasOwn(MINECRAFT_SPECIAL_KEYS, lowerKeyCode)) {
     return MINECRAFT_SPECIAL_KEYS[lowerKeyCode];
   }
 
@@ -380,7 +380,7 @@ export function normalizeKeyCode(keyCode: string): string {
   }
 
   // 3. 特殊キーの正規化（大文字/小文字混在対応）
-  if (NORMALIZE_SPECIAL_KEYS[lowerKeyCode]) {
+  if (Object.hasOwn(NORMALIZE_SPECIAL_KEYS, lowerKeyCode)) {
     return NORMALIZE_SPECIAL_KEYS[lowerKeyCode];
   }
 
@@ -441,7 +441,7 @@ export function normalizeKeyCode(keyCode: string): string {
   }
 
   // Windows 仮想キーコードの16進表記（MCSRer Hotkeys 等の取り込み元に残るもの）
-  const vk = WINDOWS_VK_MOUSE_KEYS[lowerKeyCode];
+  const vk = Object.hasOwn(WINDOWS_VK_MOUSE_KEYS, lowerKeyCode) ? WINDOWS_VK_MOUSE_KEYS[lowerKeyCode] : undefined;
   if (vk) return vk;
 
   // 5. すでにPascalCase形式の場合はそのまま返す
