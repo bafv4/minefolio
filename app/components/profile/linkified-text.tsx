@@ -42,7 +42,7 @@ export function LinkifiedText({ text }: { text: string }) {
             target="_blank"
             rel="noopener noreferrer"
             title={part.url}
-            className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+            className="inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:text-primary/80"
           >
             {t("playerProfile.externalLinkLabel", { host: hostLabel(part.url) })}
             <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />

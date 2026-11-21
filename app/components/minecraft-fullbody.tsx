@@ -132,6 +132,8 @@ interface MinecraftFullBodyProps {
    * SSR とハイドレーション後で表示サイズが変わる（useMediaQuery 由来の寸法差）ことによるレイアウトの跳ねを避けるために使う
    */
   fluid?: boolean;
+  /** fluid の静止画が顔（2D アバター）の代替表示になったとき／戻ったときに呼ばれる。親が箱の寸法を合わせ直すために使う */
+  onFallbackChange?: (isFallback: boolean) => void;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
   /** マント画像のURL。省略時はマント無し。読み込みに失敗（404 等）した場合もマント無しで表示する */
@@ -219,6 +221,7 @@ const MinecraftFullBodyComponent = ({
   rotate = false,
   asImage = false,
   fluid = false,
+  onFallbackChange,
   slim = false,
   capeUrl,
   backEquipment = "cape",
@@ -474,6 +477,9 @@ const MinecraftFullBodyComponent = ({
   }, []);
 
   const fluidFallback = failedRequestKey === requestKey && effectiveAsImage && fluid;
+  useEffect(() => {
+    onFallbackChange?.(fluidFallback);
+  }, [fluidFallback, onFallbackChange]);
   useEffect(() => {
     const el = boxRef.current;
     if (!fluidFallback || !el || typeof ResizeObserver === "undefined") return;

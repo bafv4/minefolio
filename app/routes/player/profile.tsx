@@ -84,6 +84,8 @@ import { LinkifiedText } from "@/components/profile/linkified-text";
 const SKIN_VIEW_RENDER_SIZE = { width: 320, height: 380 } as const;
 // md 未満は身元帯の顔と重なり最初の画面を占めるので 128px に抑える（縦横比は 206:240 のまま）
 const SKIN_VIEW_BOX_CLASS = "h-32 w-[110px] md:h-[280px] md:w-[240px]";
+// スキン画像が読めず顔（2D アバター）の代替表示になったときの箱。全身の箱のままだと、顔の右に大きな余白が残る
+const SKIN_VIEW_FALLBACK_BOX_CLASS = "size-24";
 
 // ui.md 7章の kbd チップ（単発のキー表示）
 const KBD_CHIP_CLASS = "bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center";
@@ -677,6 +679,7 @@ export default function PlayerProfilePage() {
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  const [skinFallback, setSkinFallback] = useState(false);
   // 初期設定（/onboarding）が終わっていない本人。ページはまだ公開されていない
   const setupIncomplete = isOwner && !player.onboardingCompleted;
   const ageGroup = parseAgeGroup(player.ageGroup);
@@ -1106,6 +1109,13 @@ export default function PlayerProfilePage() {
   const hasDevicesData = hasKeyboardInfo || hasMouseInfo || hasInGameSettings;
 
   // 各タブの「中身あり」。パネルが EmptyState を出す条件と同じ真偽値を使い、ホットバーの空スロット表示と一致させる
+  // 概要は、最終更新・リアクション以外に描く物があるか
+  const hasOverviewData = !!(
+    player.uuid || player.customSkinUrl || player.bedrockMcid || displayShortBio ||
+    player.role || player.mainEdition || player.mainPlatform || player.inputMethod ||
+    player.location || player.pronouns || ageGroup || rtaCareer ||
+    player.socialLinks.length > 0 || displayBio || displayVideos.length > 0
+  );
   const hasKeybindingsData = player.keybindings.length > 0;
   const hasItemLayoutsData = player.itemLayouts.length > 0;
   const hasSearchCraftData = player.searchCrafts.length > 0;
@@ -1123,7 +1133,7 @@ export default function PlayerProfilePage() {
   // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
   const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
   const tabItems: ProfileHotbarItem[] = [
-    { value: "profile", icon: User, shortLabel: t("playerProfile.hotbarOverview"), label: t("playerProfile.hotbarOverview"), empty: false, group: "person" },
+    { value: "profile", icon: User, shortLabel: t("playerProfile.hotbarOverview"), label: t("playerProfile.hotbarOverview"), empty: !hasOverviewData, group: "person" },
     { value: "stats", icon: BarChart3, shortLabel: t("playerProfile.hotbarRecords"), label: t("playerProfile.activityAndStats"), empty: !hasStatsDataKnown, group: "person" },
     { value: "guides", icon: BookOpen, shortLabel: t("playerProfile.hotbarGuides"), label: t("playerProfile.guidesTab"), empty: !hasGuidesData, group: "person" },
     { value: "playstyle", icon: Gamepad2, shortLabel: t("playerProfile.hotbarStyle"), label: t("playerProfile.playstyleTab"), empty: !hasPlaystyleData, group: "setup" },
@@ -1349,7 +1359,7 @@ export default function PlayerProfilePage() {
       {setupIncomplete && (
         <NoticeBanner tone="warning" icon={Info}>
           <p>{t("playerProfile.setupIncompleteNotice")}</p>
-          <Link to="/onboarding" className="mt-1 inline-block min-h-6 font-medium text-primary underline-offset-4 hover:underline">
+          <Link to="/onboarding" className="mt-1 inline-block min-h-6 font-medium text-primary underline underline-offset-4 hover:text-primary/80">
             {t("playerProfile.setupIncompleteLink")}
           </Link>
         </NoticeBanner>
@@ -1463,7 +1473,9 @@ export default function PlayerProfilePage() {
         className={cn(
           "flex-1 min-w-0 space-y-6 relative",
           tabFade &&
-            "[&>[role=tabpanel]]:animate-in [&>[role=tabpanel]]:fade-in [&>[role=tabpanel]]:duration-150 [&>[role=tabpanel]]:ease-out",
+            // 退場するパネル（data-state=inactive）に animation-name を付けない。付けると Radix の Presence が
+            // 「退場アニメーションあり」と見なして animationend まで unmount を待ち、旧パネルが display:block のまま残る
+            "[&>[role=tabpanel][data-state=active]]:animate-in [&>[role=tabpanel][data-state=active]]:fade-in [&>[role=tabpanel][data-state=active]]:duration-150 [&>[role=tabpanel][data-state=active]]:ease-out",
         )}
       >
         {/* プリセット切替中のオーバーレイ（メインコンテンツ全体を覆う） */}
@@ -1483,12 +1495,24 @@ export default function PlayerProfilePage() {
         {/* Profile Tab */}
         <TabsContent value="profile" {...panelA11yProps("profile")} className={PANEL_CLASS}>
           <ProfileTabTitle value="profile" label={tabLabelOf("profile")} />
+          {/* 概要に描く物が最終更新・リアクションしか無い走者: 谷にならないよう、ほかのタブへの導線（訪問者）か編集への導線（本人）を添える。
+              意味の薄い日付とボタンより先に「何も無い」ことを伝えるので、ヘッダー（最終更新・リアクション）の上に置く */}
+          {!hasOverviewData && (
+            <EmptyState
+              size="compact"
+              icon={<User className="h-5 w-5" aria-hidden />}
+              title={t("playerProfile.noOverviewTitle")}
+              description={t(isOwner ? "playerProfile.noOverviewOwner" : "playerProfile.noOverview")}
+              action={isOwner ? <OwnerEditAction to="/me/edit" label={t("playerProfile.editLinkProfile")} /> : visitorEmptyAction}
+            />
+          )}
+
           {/* Header: Skin + Basic Info（箱にせず欄の先頭にそのまま置く） */}
           <div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+              <div className={cn("flex flex-col sm:flex-row gap-4 sm:gap-6", skinFallback ? "sm:items-start" : "sm:items-center")}>
                 {/* Info */}
                 <div className="contents sm:block sm:flex-1 sm:space-y-4">
-                  <div className="text-center sm:text-left">
+                  <div className="order-2 text-center sm:text-left">
                     {player.bedrockMcid && (
                       <p className="text-muted-foreground">
                         {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
@@ -1506,7 +1530,7 @@ export default function PlayerProfilePage() {
                     )}
                   </div>
 
-                  <div className="order-2 space-y-4">
+                  <div className="order-3 space-y-4">
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {player.role && (
@@ -1622,13 +1646,14 @@ export default function PlayerProfilePage() {
                             className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                            <div className={SKIN_VIEW_BOX_CLASS}>
+                            <div className={skinFallback ? SKIN_VIEW_FALLBACK_BOX_CLASS : SKIN_VIEW_BOX_CLASS}>
                               <MinecraftFullBody
                                 {...skinProps}
                                 width={SKIN_VIEW_RENDER_SIZE.width}
                                 height={SKIN_VIEW_RENDER_SIZE.height}
                                 asImage
                                 fluid
+                                onFallbackChange={setSkinFallback}
                               />
                             </div>
                             <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
@@ -1663,22 +1688,6 @@ export default function PlayerProfilePage() {
                 })() : null /* MCID もスキンも無い走者には、「?」の大きな枠を出さない */}
               </div>
           </div>
-
-          {/* 概要に描く物が最終更新・リアクションしか無い走者: 谷にならないよう、ほかのタブへの導線（訪問者）か編集への導線（本人）を添える */}
-          {!(
-            player.uuid || player.customSkinUrl || player.bedrockMcid || displayShortBio ||
-            player.role || player.mainEdition || player.mainPlatform || player.inputMethod ||
-            player.location || player.pronouns || ageGroup || rtaCareer ||
-            player.socialLinks.length > 0 || displayBio || displayVideos.length > 0
-          ) && (
-            <EmptyState
-              size="compact"
-              icon={<User className="h-5 w-5" aria-hidden />}
-              title={t("playerProfile.noOverviewTitle")}
-              description={t(isOwner ? "playerProfile.noOverviewOwner" : "playerProfile.noOverview")}
-              action={isOwner ? <OwnerEditAction to="/me/edit" label={t("playerProfile.editLinkProfile")} /> : visitorEmptyAction}
-            />
-          )}
 
           {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (

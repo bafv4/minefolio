@@ -133,7 +133,7 @@ export function ProfileHotbarTabs({ items, activeValue, onSelect, trailing, lead
         "group/bar max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:h-[var(--bottom-dock-height)] max-md:border-t max-md:border-border max-md:bg-background/95 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:backdrop-blur",
         // md 以上はヘッダー直下に追従（z はヘッダー z-50 より下）。貼り付き中は背景＋下罫線のコンパクトバー。
         // コンパクト時は高さが縮むぶん mb で埋め、フロー上の高さ（72px）を保って切替時に下の内容が跳ねないようにする
-        "md:sticky md:top-[64px] md:z-40 md:transition-colors",
+        "md:sticky md:top-[64px] md:z-40 md:transition-[border-color]",
         // trailing（lg 以上のみ表示）を右端に置くための横並び。折り返さない（折り返すと貼り付き前後でバーの高さが変わり、貼り付き判定が点滅する）
         "md:flex md:items-center md:justify-start md:gap-x-3",
         "md:data-[stuck=true]:mb-[15px] md:data-[stuck=true]:border-b md:data-[stuck=true]:border-border/70 md:data-[stuck=true]:bg-background md:data-[stuck=true]:py-2",
