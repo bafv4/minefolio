@@ -30,12 +30,9 @@ import {
 import { ScrollUpStickyHeader } from "@/components/scroll-up-sticky-header";
 import { EmptyState } from "@/components/empty-state";
 
-// 1・3位のメダル色（3テーブルで共通）。2位（銀）の色トークンは無く、muted だと4位以下（前景色）より
-// 淡く見えて順位が下がったように読めるため、2位は前景色のまま（4位以下と同じ）にする
+// 上位3位は太字だけで示す（3テーブルで共通）。金・銅は完走専用の色（ui.md 7章）で、2位の銀のトークンも無いため色は使わない
 function rankMedalClass(rank: number): string {
-  if (rank === 1) return "text-gold";
-  if (rank === 3) return "text-bronze";
-  return "";
+  return rank <= 3 ? "font-bold" : "";
 }
 
 /** 自分の行の id（「あなたは #N」のリンクの行き先） */
@@ -268,15 +265,15 @@ export default function RankingsPage() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{t("rankings.pageTitle")}</h1>
           </div>
-          {items.length > 0 && (
+          {rankedTotal > 0 && (
             <StatusPill icon={Trophy} className="ml-auto">
-              {t("rankings.count", { count: items.length })}
+              {t("rankings.count", { count: rankedTotal })}
             </StatusPill>
           )}
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
           {data.tab === "speedruncom" ? t("rankings.scopeSpeedruncom") : t("rankings.scopeRanked")}{" "}
-          {t("rankings.publicityNote")}
+          <span className="hidden sm:inline">{t("rankings.publicityNote")}</span>
         </p>
         {data.lastFetchedMs !== null && (
           <p className="text-muted-foreground mt-1 text-xs" suppressHydrationWarning>
@@ -647,13 +644,13 @@ function RankedEloTable({ rankings, selfUserId }: { rankings: RankingEntry[]; se
                   </div>
                 </Link>
               </TableCell>
-              <TableCell className="text-right font-mono">{entry.eloRate ?? "-"}</TableCell>
-              <TableCell className="text-right text-sm">
+              <TableCell className="text-right font-mono tabular-nums">{entry.eloRate ?? "-"}</TableCell>
+              <TableCell className="text-right text-sm tabular-nums">
                 <span className="text-success">{entry.wins ?? 0}W</span>
                 {" / "}
                 <span className="text-destructive">{entry.losses ?? 0}L</span>
               </TableCell>
-              <TableCell className="text-right">{entry.winRate ?? 0}%</TableCell>
+              <TableCell className="text-right tabular-nums">{entry.winRate ?? 0}%</TableCell>
             </TableRow>
             );
           })}

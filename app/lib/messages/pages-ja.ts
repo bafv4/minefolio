@@ -1853,7 +1853,7 @@ export const PAGES_JA = {
     title: "ランキング - Minefolio",
     description: "Minecraftスピードランのランキング。Minefolio に登録した走者の中での順位を表示します。",
     pageTitle: "ランキング",
-    count: "{count}件",
+    count: "{count}人",
     noCategories: "Speedrun.com のランキングはまだありません",
     noCategoriesHint: "MCSR Ranked のランキングは見られます。",
     openPbRanking: "PB ランキングを見る",
