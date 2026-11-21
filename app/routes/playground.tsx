@@ -790,97 +790,8 @@ export default function PlaygroundPage() {
             </Badge>
           )}
           <div className="flex flex-wrap items-center gap-2 ml-auto">
-            {templateData && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-11 sm:min-h-8"
-                onClick={() => {
-                  // 読み込んだままで未編集なら置き換える物が無い（下書きも上書きしない）
-                  if (isTemplatePristine) return;
-                  loadData(
-                    templateData,
-                    t("playground.loadedTemplate", { title: templateData.title }),
-                  );
-                }}
-              >
-                <RotateCcw className="mr-2 size-3.5" />
-                {t("playground.reloadTemplate")}
-              </Button>
-            )}
-
-            {isLoggedIn && myPresets.length > 0 && (
-              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
-                    <User className="mr-2 size-3.5" />
-                    {t("playground.loadMySettings")}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
-                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {myPresets.map((preset) => (
-                      <Button
-                        key={preset.id}
-                        variant="outline"
-                        className="w-full justify-start h-auto py-3"
-                        onClick={() => {
-                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
-                          setLoadDialogOpen(false);
-                        }}
-                      >
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium flex items-center gap-2">
-                            {preset.name}
-                            {preset.isActive && (
-                              <Badge variant="outline" className="text-xs">
-                                {t("mePresets.active")}
-                              </Badge>
-                            )}
-                          </span>
-                          <div className="flex gap-1 flex-wrap">
-                            <Badge variant="secondary" className="text-xs">
-                              {t("templates.craftCount", { count: preset.crafts.length })}
-                            </Badge>
-                            {preset.remaps.length > 0 && (
-                              <Badge variant="secondary" className="text-xs">
-                                {t("templates.remapCount", { count: preset.remaps.length })}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-11 sm:min-h-8"
-              onClick={() =>
-                replaceContent(() => {
-                  setRemaps([]);
-                  setCrafts([]);
-                  setLoops([]);
-                  setLoadedLabel(null);
-                }, t("playground.clearedToast"))
-              }
-            >
-              <X className="mr-2 size-3.5" />
-              {t("playground.clearAll")}
-            </Button>
-
             {isLoggedIn && (
               <>
-                {/* 折り返すモバイルでは行末に残るので出さない */}
-                <div aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="min-h-11 sm:min-h-8">
@@ -1044,8 +955,97 @@ export default function PlaygroundPage() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                {/* 折り返すモバイルでは行末に残るので出さない */}
+                <div aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
               </>
             )}
+
+            {templateData && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                onClick={() => {
+                  // 読み込んだままで未編集なら置き換える物が無い（下書きも上書きしない）
+                  if (isTemplatePristine) return;
+                  loadData(
+                    templateData,
+                    t("playground.loadedTemplate", { title: templateData.title }),
+                  );
+                }}
+              >
+                <RotateCcw className="mr-2 size-3.5" />
+                {t("playground.reloadTemplate")}
+              </Button>
+            )}
+
+            {isLoggedIn && myPresets.length > 0 && (
+              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
+                    <User className="mr-2 size-3.5" />
+                    {t("playground.loadMySettings")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
+                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {myPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => {
+                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
+                          setLoadDialogOpen(false);
+                        }}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium flex items-center gap-2">
+                            {preset.name}
+                            {preset.isActive && (
+                              <Badge variant="outline" className="text-xs">
+                                {t("mePresets.active")}
+                              </Badge>
+                            )}
+                          </span>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">
+                              {t("templates.craftCount", { count: preset.crafts.length })}
+                            </Badge>
+                            {preset.remaps.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {t("templates.remapCount", { count: preset.remaps.length })}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-8"
+              onClick={() =>
+                replaceContent(() => {
+                  setRemaps([]);
+                  setCrafts([]);
+                  setLoops([]);
+                  setLoadedLabel(null);
+                }, t("playground.clearedToast"))
+              }
+            >
+              <X className="mr-2 size-3.5" />
+              {t("playground.clearAll")}
+            </Button>
           </div>
         </div>
         {/* テンプレートを未編集で表示中は仮保存しない（上の案内と食い違うので出さない） */}
@@ -1071,31 +1071,31 @@ export default function PlaygroundPage() {
       />
 
       {/* 保存への導線 */}
-      <div className="rounded-lg border border-dashed bg-secondary/30 p-4 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {isLoggedIn ? (
           <>
             {t("playground.saveHintLoggedIn")}{" "}
-            <Link to="/me/keybindings" className="text-primary hover:underline">
+            <Link to="/me/keybindings" className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.goToKeybindings")}
             </Link>
             {" / "}
-            <Link to="/me/search-craft" className="text-primary hover:underline">
+            <Link to="/me/search-craft" className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.goToSearchCraft")}
             </Link>
           </>
         ) : (
           <>
             {t("playground.saveHintLoggedOut")}{" "}
-            <Link to={loginHref} className="text-primary hover:underline">
+            <Link to={loginHref} className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.loginLink")}
             </Link>
           </>
         )}
         {" · "}
-        <Link to="/guides/templates" className="text-primary hover:underline">
+        <Link to="/guides/templates" className="text-primary underline underline-offset-2 hover:text-primary/80">
           {t("playground.backToTemplates")}
         </Link>
-      </div>
+      </p>
     </div>
   );
 }
