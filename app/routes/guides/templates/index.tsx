@@ -373,6 +373,7 @@ export default function TemplatesIndexPage() {
           </div>
           <div className="w-full sm:w-64">
             <Combobox
+              aria-label={t("templates.languageFilterLabel")}
               options={languageOptions}
               value={langValue}
               onValueChange={handleLangChange}

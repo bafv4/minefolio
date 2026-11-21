@@ -34,6 +34,10 @@ interface ComboboxProps {
   className?: string
   /** trigger ボタンに付与する id（`<Label htmlFor>` と結ぶ用） */
   id?: string
+  /** trigger ボタンのアクセシブルネーム（見える Label が無いとき） */
+  "aria-label"?: string
+  /** trigger ボタンを名付ける要素の id */
+  "aria-labelledby"?: string
 }
 
 export function Combobox({
@@ -46,6 +50,8 @@ export function Combobox({
   allowCustomValue = false,
   className,
   id,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
 }: ComboboxProps) {
   // 既定値は本体で解決する（既定引数は useT() より先に評価されるため）
   const t = useT();
@@ -91,6 +97,8 @@ export function Combobox({
       <PopoverTrigger asChild>
         <Button
           id={id}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledby}
           variant="ghost"
           role="combobox"
           aria-expanded={open}

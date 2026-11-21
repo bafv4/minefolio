@@ -533,6 +533,7 @@ function SegmentNameInput({
       options={options}
       value={value}
       onValueChange={onChange}
+      aria-label={t("meItems.segmentLabel")}
       placeholder={t("meItems.segmentPlaceholder")}
       searchPlaceholder={t("meItems.segmentSearch")}
       emptyText={t("meItems.noPresetItems")}
