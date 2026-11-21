@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useLocale, useT } from "@/hooks/use-locale";
-import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
-import type { MessageKey } from "@/lib/messages";
+import { changelogCategoryLabelKey, unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,7 @@ const WhatsNewMarkdown = lazy(() =>
   import("./whats-new-markdown")
     .then((mod) => ({ default: mod.WhatsNewMarkdown }))
     .catch(() => ({
-      default: ({ markdown }: { markdown: string }) => (
+      default: ({ markdown }: { markdown: string; h3Label?: (text: string) => string }) => (
         <p className="whitespace-pre-wrap text-xs text-muted-foreground">{markdown}</p>
       ),
     })),
@@ -67,14 +66,6 @@ function normalizeHeading(text: string): string {
   return text.replace(/`/g, "").trim();
 }
 
-/**
- * カテゴリバッジの表示名の読み替え（changelog.md の見出しはリリース時の表記のまま残すので、表示だけナビの呼び名へそろえる）。
- * 本文の見出しへのスクロールは元の見出しの文字で突き合わせる
- */
-const CATEGORY_LABEL_KEYS: Record<string, MessageKey> = {
-  キー設定: "nav.keybindings",
-};
-
 /** 読み込み中のスケルトン。開いた後の本文（max-h-[min(55vh,320px)]）と同じ高さを先に確保する */
 function WhatsNewBodySkeleton() {
   return (
@@ -103,6 +94,10 @@ export function WhatsNew() {
   const openRef = useRef(false);
 
   const latest = entries?.[0] ?? null;
+  const categoryLabel = (category: string) => {
+    const key = changelogCategoryLabelKey(category);
+    return key ? t(key) : category;
+  };
 
   // SSRとの整合のため、entries読み込み・未読判定は初回マウントの useEffect に
   // 閉じ込める（cookie-consent.tsx と同じ隔離パターン。初期レンダは常に「未読なし」）
@@ -233,7 +228,7 @@ export function WhatsNew() {
                   onClick={() => scrollToCategory(category)}
                   className="inline-flex min-h-6 items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {CATEGORY_LABEL_KEYS[category] ? t(CATEGORY_LABEL_KEYS[category]) : category}
+                  {categoryLabel(category)}
                 </button>
               ))}
             </div>
@@ -282,7 +277,7 @@ export function WhatsNew() {
                       </span>
                     </div>
                   )}
-                  <WhatsNewMarkdown markdown={entry.body} />
+                  <WhatsNewMarkdown markdown={entry.body} h3Label={categoryLabel} />
                 </div>
               ))}
             </Suspense>

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseChangelog, unreadEntries, type ChangelogEntry } from "../changelog";
+import { changelogCategoryLabelKey, parseChangelog, unreadEntries, type ChangelogEntry } from "../changelog";
 
 const SAMPLE = `## v1.6.0（2026/07/04）
 
@@ -115,5 +115,14 @@ describe("実データ（app/content/changelog.md）", () => {
     // 先頭・中間どこかの見出しが崩れると件数が合わなくなり、ここで検知できる
     const headingCount = (md.match(/^## /gm) ?? []).length;
     expect(entries.length).toBe(headingCount);
+  });
+});
+
+describe("changelogCategoryLabelKey", () => {
+  it("「キー設定」はナビの呼び名のキーへ読み替える", () => {
+    expect(changelogCategoryLabelKey("キー設定")).toBe("nav.keybindings");
+  });
+  it("対応の無い見出しは undefined", () => {
+    expect(changelogCategoryLabelKey("プロフィール")).toBeUndefined();
   });
 });

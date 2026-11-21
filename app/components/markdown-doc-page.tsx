@@ -31,6 +31,8 @@ interface MarkdownDocPageProps {
   collapsedSections?: CollapsedDocSection[];
   /** 見出しの直後（本文の前）に置く通知帯など */
   notice?: ReactNode;
+  /** h3 の表示名の読み替え（元の文字を受け取り、表示する文字を返す。更新履歴の分類名用） */
+  h3Label?: (text: string) => string;
 }
 
 /** 横スクロールの器のキーボードフォーカス（--ring の 2px） */
@@ -111,12 +113,24 @@ function HeadingWithId({ node, ...props }: ComponentProps<"h2"> & ExtraProps) {
 }
 
 /** 本文の markdown（ページタイトルの `# ` は出さない。表・コードは横スクロールの器） */
-function DocMarkdown({ markdown }: { markdown: string }) {
+function DocMarkdown({ markdown, h3Label }: { markdown: string; h3Label?: (text: string) => string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeSanitize]}
-      components={{ h1: () => null, h2: HeadingWithId, table: ScrollableTable, pre: ScrollablePre }}
+      components={{
+        h1: () => null,
+        h2: HeadingWithId,
+        ...(h3Label && {
+          h3: ({ node, children, ...props }: ComponentProps<"h3"> & ExtraProps) => {
+            const raw = hastText(node);
+            const label = h3Label(raw);
+            return <h3 {...props}>{label !== raw ? label : children}</h3>;
+          },
+        }),
+        table: ScrollableTable,
+        pre: ScrollablePre,
+      }}
     >
       {markdown}
     </ReactMarkdown>
@@ -134,6 +148,7 @@ export function MarkdownDocPage({
   toc = false,
   collapsedSections,
   notice,
+  h3Label,
 }: MarkdownDocPageProps) {
   const t = useT();
   const tocHeadings = toc ? extractH2Headings(markdown) : [];
@@ -187,7 +202,7 @@ export function MarkdownDocPage({
         {/* ページタイトルは上の h1（アイコン付き）が担う。md 側の `# タイトル` は GitHub 等で
             単体閲覧するときのために残しているので、描画時には出力しない（二重表示の防止）。
             表・コードブロックは横スクロールの器にする（モバイルでページ全体が横に動かないように） */}
-        <DocMarkdown markdown={markdown} />
+        <DocMarkdown markdown={markdown} h3Label={h3Label} />
       </article>
 
       {collapsedSections && collapsedSections.length > 0 && (
@@ -209,7 +224,7 @@ export function MarkdownDocPage({
                 </h2>
               </summary>
               <article className={cn(ARTICLE_CLASS, "pb-4")}>
-                <DocMarkdown markdown={section.markdown} />
+                <DocMarkdown markdown={section.markdown} h3Label={h3Label} />
               </article>
             </details>
           ))}

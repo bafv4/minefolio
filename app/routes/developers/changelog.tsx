@@ -5,7 +5,7 @@ import { History } from "lucide-react";
 import { MarkdownDocPage, type CollapsedDocSection } from "@/components/markdown-doc-page";
 import { JaOnlyNotice } from "@/components/ja-only-notice";
 import changelogMd from "@/content/changelog.md?raw";
-import { parseChangelog } from "@/lib/changelog";
+import { changelogCategoryLabelKey, parseChangelog } from "@/lib/changelog";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { useT } from "@/hooks/use-locale";
@@ -45,8 +45,13 @@ const collapsedSections: CollapsedDocSection[] = changelogEntries
 
 export default function ChangelogPage() {
   const t = useT();
+  const h3Label = (text: string) => {
+    const key = changelogCategoryLabelKey(text);
+    return key ? t(key) : text;
+  };
   return (
     <MarkdownDocPage
+      h3Label={h3Label}
       icon={History}
       heading={t("developers.changelogTitle")}
       markdown={openMarkdown}
