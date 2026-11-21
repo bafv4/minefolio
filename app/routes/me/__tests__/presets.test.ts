@@ -1026,7 +1026,7 @@ describe("action - set-main / 未知の intent", () => {
 
     expect(res).toEqual({
       success: true, intent: "set-main",
-      message: "メインのプリセットを設定しました。プロフィールにはこのプリセットが表示されます",
+      message: "メインのプリセットを設定しました。プロフィールにはこのプリセットが表示されます。",
     });
     expect((await findPreset(main.id))?.isMain).toBe(false);
     expect((await findPreset(main.id))?.isActive).toBe(true);
@@ -1105,7 +1105,7 @@ describe("action - set-main / 未知の intent", () => {
   it("未知の intent はエラーを返す", async () => {
     await setupUser();
 
-    expect(await callAction({ intent: "bogus" })).toEqual({ error: "不明な操作です" });
+    expect(await callAction({ intent: "bogus" })).toEqual({ error: "不明な操作です。ページを再読み込みしてお試しください。" });
   });
 });
 

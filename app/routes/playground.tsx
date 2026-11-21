@@ -951,7 +951,7 @@ export default function PlaygroundPage() {
                         }
                       >
                         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {t("mePresets.save")}
+                        {t("playground.saveSubmit")}
                       </Button>
                     </DialogFooter>
                   </DialogContent>

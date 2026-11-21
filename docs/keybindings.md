@@ -429,7 +429,7 @@ type ControllerSettings = {
 - 離脱時の警告は `FloatingSaveBar` が内蔵する（`docs/me-common.md`）。画面側で `useUnsavedWarning` は持たない。
 - 行ごとの確定結果の読み上げは、ページに1つだけの `role="status" aria-live="polite"` 領域で行う（`KeybindingRow` の `onAnnounce`）。
 - **モバイル（md 未満）のキーボード**: 既定は左手側だけを大きく見せ、キーを押して編集できる（`KeyboardScaledPreview` の `crop={LEFT_HAND_CROP}` ＋ `interactive`。公開の `/keybindings/visual` と同じ切り出し）。右側・ナビゲーション・テンキーのキーは、下の「操作割り当て」から編集できる旨を1文で案内する。切り落とした範囲のキーは `KeyboardScaledPreview` が `inert` にし（`overflow-clip`。見えないキーへ Tab・矢印キーで移ってラッパーがスクロールしたまま戻らなくなるのを防ぐ。`useRovingKeyFocus` は inert のキーを矢印の移動先から外す）、中心が切り出し幅の内側のキーだけがフォーカスできる。「キーボード全体を横スクロールで見る」ボタンで従来の横スクロール表示（`HorizontalScrollArea`）へ切り替えられる。md 以上は常に横スクロール表示（2つの表示は CSS で出し分ける）。
-- **キー編集ダイアログ**は段階的に見せる（`components/keybindings/key-dialog-section.tsx` の `KeyDialogSection`、標準の `<details>`）。操作割り当ては常に開き、リマップ・指・カスタムアクションは中身（そのキーの件数）があるときだけ初期表示で開く。各段の見出し行に件数の要約を出す。操作割り当ての分類・並び順は、ページの「操作割り当て」一覧と同じ定義（`groupKeybindingsForDisplay`。キーボード/マウスはプロフィールと同じ3グループ・意味順、コントローラーは DB カテゴリ準拠）から出す。フッターに「「適用」はこの画面への反映。ページ下の保存で確定します」を示す（2段階の確定）。
+- **キー編集ダイアログ**は段階的に見せる（`components/keybindings/key-dialog-section.tsx` の `KeyDialogSection`、標準の `<details>`）。操作割り当ては常に開き、リマップ・指・カスタムアクションは中身（そのキーの件数）があるときだけ初期表示で開く。各段の見出し行に件数の要約を出す。操作割り当ての分類・並び順は、ページの「操作割り当て」一覧と同じ定義（`groupKeybindingsForDisplay`。キーボード/マウスはプロフィールと同じ3グループ・意味順、コントローラーは DB カテゴリ準拠）から出す。フッターに「「反映」はこの画面への反映。ページ下の保存で確定します」を示す（2段階の確定）。
 - **モバイルのキー押下**: `KeyInfoTrigger` は、キー自身が押下の操作を持つ（`onKeyClick` / `onButtonClick` があり、`interactive`）ときは、モバイルでも情報ダイアログの DialogTrigger で包まない（編集ダイアログと2枚同時に開くため）。閲覧（走者画面・一覧）は従来どおり、モバイルは Dialog・デスクトップは Tooltip。
 - **リマップの入力の名前**: `KeyCaptureButton` の `ariaLabel` で「変更元のキー: Q」のような名前にする。リマップ行の削除・出力種別・文字入力にも名前を付ける。
 - **キー上の操作名チップ**は `text-[10px] leading-snug`（`cn()` の tailwind-merge は `text-[10px]` が後ろの `leading-*` を落とすため、`leading-snug` を後ろに置く）。
@@ -484,7 +484,7 @@ type ControllerSettings = {
 - 件数表示は、いま見えている表の行数（タブごと）。**キーのタブ（移動・インベントリ・戦闘・UI）は、そのタブの列がすべて「未割り当て」の走者を載せず**（タブごとに判定。インベントリはホットバー 1〜9 を含む）、マウスタブも設定のある走者のみ（`hasKeyBindings` / `hasMouseSettings`、`lib/keybindings-filter.ts`）。ビジュアルは、キーボードに描くものが何もない走者（割り当て・リマップ・カスタムアクションのどれも無い。`hasKeyboardContent`）を除いた、絞り込み後の走者。件数は `aria-live="polite"` で変化を伝える（初回表示では読まれない）
 - アクション/ホットバー/**リマップ**列のキー表示は、各走者の `customKeys`（keyCode→keyName）を優先して**カスタムキー名**を表示する（`KeyBadge` および `getRemapSourceLabel`/`getRemapOutputLabel` の `customKeyNames` 引数）
 
-- **統合フィルタモーダル**（`FilterDialog`）: 走者の絞り込み・操作＝キー・数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「適用」を押すまで URL（クエリ）へ反映しない
+- **統合フィルタモーダル**（`FilterDialog`）: 走者の絞り込み・操作＝キー・数値範囲フィルタを1つのモーダルに統合。すべてドラフトとして編集し、「この条件で絞り込む」を押すまで URL（クエリ）へ反映しない
   - 走者の絞り込み（`users` パラメータ。ダイアログの見出しは「走者で絞り込み」）: 表示する走者を検索してリスト登録する横断フィルタ（値ではなくユーザーで絞る）。表・ビジュアル両ビューで適用され、選択中ユーザーはヘッダー下の `UserFilterChips` で表示
   - 効いている数値範囲は `UserFilterChips` の行に「DPI 400〜800 ×」のチップで出し、そこから外せる。「フィルタをクリア」はチップ行の 1 か所（ダイアログ内はフッターの 1 つ）
   - **操作＝キー**（`bind` パラメータ。例: `bind=sprint:ControlLeft,jump:Space`）: 「ダッシュ = 左Ctrl」のように、操作に割り当てているキーで絞る。表・ビジュアル両ビューで適用される
@@ -498,8 +498,8 @@ type ControllerSettings = {
   - 数値の絞り込みは**キーボードのタブにも効く**（DPI・感度・振り向きのいずれかを指定すると、マウス設定がある走者だけに絞られる。`dpiMin=400&dpiMax=800` で移動タブも該当者のみになる）。この挙動は保ち、ダイアログの数値の欄に注記する（`keybindings.numericFilterNote`）
   - 数値範囲フィルタ（`dpiMin/Max`, `sensMin/Max`, `cm360Min/Max`）: DPI・ゲーム内感度・振り向きで絞り込む。`sensMin/Max` は一覧の表示・CSVと同じ **0〜200%**（Minecraft準拠、内部値 `0..1` を `*200` 換算）基準で比較する（`app/hooks/use-keybindings-filters.ts`）
   - 各入力欄は number input の `min` / `max` 属性で有効範囲を示し（DPI: `min=1`、感度: `0〜200`、振り向き: `min=0`）、感度欄には有効範囲の補足テキスト（`keybindings.sensitivityRangeHint`）を常時表示する（`FilterRange` の `inputMin` / `inputMax` / `hint`）
-  - 範囲外の値（DPI が 1 未満、感度が 0〜200 の外、振り向きが 0 未満）は、その欄に `aria-invalid` を付け、欄の下にエラー文（`keybindings.rangeErrorBetween` / `rangeErrorMin`）を出して `aria-describedby` で結ぶ。フォームは `noValidate`（ブラウザの吹き出しは出さない）で、範囲外の欄があると「適用」しても閉じず、最初の範囲外の欄へフォーカスを移す
-  - 「適用」時に **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
+  - 範囲外の値（DPI が 1 未満、感度が 0〜200 の外、振り向きが 0 未満）は、その欄に `aria-invalid` を付け、欄の下にエラー文（`keybindings.rangeErrorBetween` / `rangeErrorMin`）を出して `aria-describedby` で結ぶ。フォームは `noValidate`（ブラウザの吹き出しは出さない）で、範囲外の欄があると「この条件で絞り込む」を押しても閉じず、最初の範囲外の欄へフォーカスを移す
+  - 「この条件で絞り込む」を押したとき **min > max（範囲の取り違え）は自動で入れ替えて**救済する（`orderedRange()`）。0件になって理由が分からないより、意図どおりの範囲で結果を返すほうが摩擦が少ないため
   - 絞り込みはすべてクライアント側で適用（loader 再走なし）。loader は常に全公開ユーザーを取得する
 - ソート機能（各カラム）
   - **アクション列（1 キーの列）はキー名で並べ替えられる**（`sort=action.<操作>:asc|desc`。例: `action.sprint:asc`）。並べ替えのキーは表示ラベル（カスタムキー名 → 組み合わせ → その走者の配列を考慮した `getKeyLabel`。`getBoundKeyLabel`）。比較は数値順（F2 < F10）で、ロケールを明示した `localeCompare`（`compareKeyLabels`）。**未割り当て・不使用は昇順・降順どちらでも末尾**。ホットバー列（9 キーの集約）は並べ替えない。ビジュアルの `sortKeybindingsRows(rows, sort, t, locale)` も同じ `sort` に対応する（URL を共有しているため）。1 つの操作を全員で見比べる手段は、並べ替え・操作＝キーの絞り込み・統計からの導線（中立な手段）に限る
@@ -573,7 +573,7 @@ type ControllerSettings = {
 - 上部に **PresetSelector** ドロップダウンを表示（詳細は [`docs/presets.md`](presets.md) 参照）
 - 保存（`save-keybindings` / `save-remaps` / `save-fingers` / `save-custom-actions` / `save-all`）の各 intent で `syncActivePresetSnapshot(db, userId, kinds)` を呼び、アクティブプリセットの該当 `*Data` JSON を最新化（書き込みスルー）
 - カスタムキー定義（`customKeys`）とカスタムアクション（`customActions`）もプリセットスナップショットの対象（`customKeysData` / `customActionsData` カラム）
-- **カスタムキーの保存は保存バー（`save-all`）に統合**されている。専用の保存ボタンと `save-custom-keys` intent は廃止。カスタムキーの変更（追加・編集・削除）は `hasUnsavedChanges` に含まれ、離脱確認・「保存して移動」・「取消」の対象になる。`save-all` の `customKeys`（JSON）は変更があるときだけ送り、他の変更と同じトランザクションで確定する（途中で失敗すると全体がロールバックされ、画面の下書きは残る）。変更履歴の「…を更新」には「カスタムキー」が加わる
+- **カスタムキーの保存は保存バー（`save-all`）に統合**されている。専用の保存ボタンと `save-custom-keys` intent は廃止。カスタムキーの変更（追加・編集・削除）は `hasUnsavedChanges` に含まれ、離脱確認・「保存して移動」・「破棄」の対象になる。`save-all` の `customKeys`（JSON）は変更があるときだけ送り、他の変更と同じトランザクションで確定する（途中で失敗すると全体がロールバックされ、画面の下書きは残る）。変更履歴の「…を更新」には「カスタムキー」が加わる
 - キーのダイアログのチェックボックスのラベルは、操作名と「割当済」「同じキーに他の操作もあります」の補足の間に sr-only の読点を挟む（「後退、S に割当済」の形に読まれる）
 - 保存リクエストにロード時の `presetId` を含め、別タブ等で切替済みなら `mePresets.staleSession` で拒否
 

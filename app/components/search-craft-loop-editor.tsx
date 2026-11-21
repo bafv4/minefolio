@@ -649,7 +649,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
               <AlertDialogFooter>
                 <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
                 <AlertDialogAction onClick={() => onDelete(loop.id)}>
-                  {t("meSearchCraft.delete")}
+                  {t("meSearchCraft.deleteLoopConfirm")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

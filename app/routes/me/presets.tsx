@@ -1572,7 +1572,7 @@ export default function PresetsPage() {
             </Button>
             <Button onClick={handleRenamePreset} disabled={isSubmitting || !renameTarget?.name.trim()}>
               {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              {t("mePresets.save")}
+              {t("mePresets.renameSave")}
             </Button>
           </DialogFooter>
         </DialogContent>

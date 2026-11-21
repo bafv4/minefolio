@@ -341,7 +341,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
               <span className="text-sm">{formatItemName(itemId)}</span>
               <button
                 type="button"
-                aria-label={t("meSearchCraft.removeItem")}
+                aria-label={t("meSearchCraft.removeItem", { item: formatItemName(itemId) })}
                 onClick={() => removeItem(itemIndex)}
                 className="p-1.5 rounded text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
               >
@@ -505,7 +505,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           <AlertDialogFooter>
             <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={() => onDelete(craft.id)}>
-              {t("meSearchCraft.delete")}
+              {t("meSearchCraft.deleteCraftConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -40,7 +40,7 @@ const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>
 const t = createTranslator("ja");
 const INVALID_LAYOUT_ERROR = t("meItems.invalidLayoutData");
 const PRESET_REQUIRED_ERROR = "アイテム配置を保存するには、先にプリセットを作成してください";
-const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください";
+const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください。";
 
 let db: TestDb;
 

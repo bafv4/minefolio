@@ -196,7 +196,7 @@ describe("action - save-remaps（一括削除→挿入）", () => {
     );
 
     expect(res).toEqual({
-      error: "同じ変更元キー・種別のリマップが重複しています: A(Trigger)",
+      error: "同じ変更元キー・種別のリマップが重複しています: A（Trigger）",
     });
     const rows = await findRemaps(user.id);
     expect(rows).toHaveLength(1);
@@ -266,7 +266,7 @@ describe("action - save-remaps（一括削除→挿入）", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect(res).toEqual({ error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" });
   });
 
   it("要素に null を含む配列は invalidPayload を返し、既存行を変更しない", async () => {
@@ -288,7 +288,7 @@ describe("action - save-remaps（一括削除→挿入）", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect(res).toEqual({ error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" });
     const rows = await findRemaps(user.id);
     expect(rows).toHaveLength(1);
     expect(rows[0].targetKey).toBe("KeyX");
@@ -320,7 +320,7 @@ describe("action - save-all の原子性", () => {
     );
 
     expect(res).toEqual({
-      error: "同じ変更元キー・種別のリマップが重複しています: A(Trigger)",
+      error: "同じ変更元キー・種別のリマップが重複しています: A（Trigger）",
     });
     // キーバインドは未適用
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
@@ -419,7 +419,7 @@ describe("action - save-all のカスタムキー", () => {
       formDataOf({ intent: "save-all", presetId: preset.id, customKeys: "not-json" }),
     );
 
-    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect(res).toEqual({ error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect(await db.query.customKeys.findMany({ where: eq(schema.customKeys.userId, user.id) })).toHaveLength(0);
   });
 });
@@ -464,7 +464,7 @@ describe("action - プリセットゲート", () => {
     );
 
     expect(res).toEqual({
-      error: "プリセットが切り替わっています。ページを再読み込みしてください",
+      error: "プリセットが切り替わっています。ページを再読み込みしてください。",
     });
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
   });
@@ -604,7 +604,7 @@ describe("action - save-keybindings の入力検証", () => {
       formDataOf({ intent: "save-keybindings", presetId: preset.id, keybindings: JSON.stringify(updates) }),
     );
 
-    expect(res).toEqual({ error: "送信データの形式が不正です。" });
+    expect(res).toEqual({ error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
   });
 
@@ -635,7 +635,7 @@ describe("action - save-keybindings の入力検証", () => {
 
     for (const intent of ["save-keybindings", "save-all"]) {
       const res = await callAction(formDataOf({ intent, presetId: preset.id, keybindings: payload }));
-      expect(res).toEqual({ error: "送信データの形式が不正です。" });
+      expect(res).toEqual({ error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" });
     }
     expect((await findKeybinding(keybinding.id))?.keyCode).toBe("KeyW");
   });
@@ -785,7 +785,7 @@ describe("action - 変更履歴の公開影響（preset_id）", () => {
 });
 
 describe("action - save-all の検証（不正値・上限）と履歴", () => {
-  const INVALID = { error: "送信データの形式が不正です。" };
+  const INVALID = { error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" };
 
   async function saveAll(presetId: string, fields: Record<string, unknown>) {
     const entries: Record<string, string> = { intent: "save-all", presetId };
@@ -955,7 +955,7 @@ describe("action - 保存済みの空のキーコードを持つカスタムキ�
       .insert(schema.customKeys)
       .values({ userId: user.id, keyCode: "Mouse4", keyName: "名前", category: "mouse" })
       .returning();
-    const invalid = { error: "送信データの形式が不正です。" };
+    const invalid = { error: "データを読み取れませんでした。ページを再読み込みしてお試しください。" };
 
     for (const edit of [{ keyCode: "" }, { keyName: "" }]) {
       const res = await callAction(

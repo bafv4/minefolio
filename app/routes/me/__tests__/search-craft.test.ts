@@ -330,7 +330,7 @@ describe("action - saveAll の入力検証", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "サーチクラフトのデータ形式が不正です" });
+    expect(res).toEqual({ error: "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect((await findCrafts(user.id)).map((craft) => craft.id)).toEqual(["craft-a", "craft-b"]);
     expect(await findLoops(user.id)).toHaveLength(1);
   });
@@ -346,7 +346,7 @@ describe("action - saveAll の入力検証", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "サーチクラフトのデータ形式が不正です" });
+    expect(res).toEqual({ error: "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect(await findCrafts(user.id)).toHaveLength(2);
   });
 
@@ -364,7 +364,7 @@ describe("action - saveAll の入力検証", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "サーチクラフトのデータ形式が不正です" });
+    expect(res).toEqual({ error: "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect(await findCrafts(user.id)).toHaveLength(2);
     expect(await findLoops(user.id)).toHaveLength(1);
   });
@@ -381,7 +381,7 @@ describe("action - saveAll の入力検証", () => {
       }),
     );
 
-    expect(res).toEqual({ error: "サーチクラフトのデータ形式が不正です" });
+    expect(res).toEqual({ error: "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。" });
     expect(await findLoops(user.id)).toHaveLength(1);
   });
 });
@@ -417,7 +417,7 @@ describe("action - プリセットゲート", () => {
     );
 
     expect(res).toEqual({
-      error: "プリセットが切り替わっています。ページを再読み込みしてください",
+      error: "プリセットが切り替わっています。ページを再読み込みしてください。",
     });
     expect(await findCrafts(user.id)).toHaveLength(2);
   });
@@ -451,7 +451,7 @@ describe("action - 変更履歴の公開影響（preset_id）", () => {
 });
 
 describe("action - saveAll の timing・上限・id の引き継ぎ", () => {
-  const INVALID_CRAFT_ERROR = "サーチクラフトのデータ形式が不正です";
+  const INVALID_CRAFT_ERROR = "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。";
   const craft = (id: string, extra: Record<string, unknown> = {}) => ({
     id,
     items: ["diamond"],
@@ -573,7 +573,7 @@ describe("action - saveAll の timing・上限・id の引き継ぎ", () => {
 });
 
 describe("action - saveAll は既に保存されている許可リスト外の値を通す", () => {
-  const INVALID_CRAFT_ERROR = "サーチクラフトのデータ形式が不正です";
+  const INVALID_CRAFT_ERROR = "サーチクラフトのデータを読み取れませんでした。ページを再読み込みしてお試しください。";
   const craft = (id: string, extra: Record<string, unknown> = {}) => ({
     id,
     items: ["diamond"],

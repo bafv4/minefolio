@@ -41,7 +41,7 @@ import { parseOptionsText, parseStandardSettings } from "@/lib/import-parser";
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
-const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください";
+const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください。";
 const INVALID_DATA_ERROR = "ファイルの形式が不正です。もう一度お試しください。";
 const TOO_MANY_ITEMS_ERROR = "項目が多すぎます。件数を減らしてお試しください。";
 
