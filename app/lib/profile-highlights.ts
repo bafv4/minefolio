@@ -169,16 +169,33 @@ export function speedrunComPbDisplayName<T extends LabelableSpeedrunComPb>(
   siblings: readonly T[],
   unknownLabel: string,
 ): string {
+  const { title, detail } = speedrunComPbNameParts(pb, siblings, unknownLabel);
+  return detail ? `${title} (${detail})` : title;
+}
+
+/**
+ * speedrunComPbDisplayName を「名前」と「見分けの語（バージョン・サブカテゴリ）」に分けたもの。
+ * カードでは title を名前に、detail を2行目の小さな文字に出して、末尾が切れて見分けられなくなるのを防ぐ
+ */
+export function speedrunComPbNameParts<T extends LabelableSpeedrunComPb>(
+  pb: T,
+  siblings: readonly T[],
+  unknownLabel: string,
+): { title: string; detail: string } {
   const name = pb.category?.data?.name ?? unknownLabel;
   const same = siblings.filter((o) => o.run.id !== pb.run.id && (o.category?.data?.name ?? unknownLabel) === name);
-  if (same.length === 0) return name;
+  if (same.length === 0) return { title: name, detail: "" };
   const edition = speedrunComEditionLabel(pb);
   const base = edition ? `${edition} · ${name}` : name;
   const sameEdition = same.some((o) => speedrunComEditionLabel(o) === edition);
-  if (!sameEdition) return base;
+  if (!sameEdition) return { title: base, detail: "" };
   // 版まで同じなら、バージョン名とサブカテゴリ（人数など）で見分ける
-  const detail = [pb.versionName, pb.subcategoryName].filter(Boolean).join(", ");
-  return detail ? `${base} (${detail})` : base;
+  return { title: base, detail: [pb.versionName, pb.subcategoryName].filter(Boolean).join(", ") };
+}
+
+/** 記録カードの「機種 / バージョン / サブカテゴリ（人数など）」の行。無ければ空文字。走者画面と /me/records で共有する */
+export function speedrunComPbMetaLine(pb: LabelableSpeedrunComPb): string {
+  return [pb.platformName, pb.versionName, pb.subcategoryName].filter(Boolean).join(" / ");
 }
 
 /** MCSR Ranked の自己ベスト判定に使う最小形（MCSRRankedStats の部分集合） */

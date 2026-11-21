@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { EloRateGraph } from "@/components/elo-rate-graph";
 import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
-import { speedrunComPbDisplayName, statsSrcCardId, visibleSpeedrunComPbs } from "@/lib/profile-highlights";
+import { speedrunComPbDisplayName, speedrunComPbMetaLine, speedrunComPbNameParts, statsSrcCardId, visibleSpeedrunComPbs } from "@/lib/profile-highlights";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
 import { PageSection } from "@/components/page-section";
 import { Swords, Timer, Trophy, ExternalLink, Flame, Clock, Pin, Loader2, RotateCw } from "lucide-react";
@@ -648,6 +648,9 @@ export function SpeedrunComCard({
             const videoEmbedUrl = showVideoEmbed ? getSpeedrunComVideoEmbedUrl(pb) : null;
             // 同名のカテゴリがほかにあるときだけ版を添える（Java / Bedrock の Any% Glitchless など）
             const displayName = speedrunComPbDisplayName(pb, nameSiblings, t("common.unknown"));
+            // 名前の末尾が切れて同名のカードを見分けられなくなるので、見分けの語は2行目（機種 / 版 / サブカテゴリ）に出す
+            const nameParts = speedrunComPbNameParts(pb, nameSiblings, t("common.unknown"));
+            const metaLine = speedrunComPbMetaLine(pb);
             const timeText = formatTime(pb.run.times.primary_t * 1000);
             const videoLabel = `${displayName} ${timeText}`;
             return (
@@ -663,13 +666,16 @@ export function SpeedrunComCard({
                   "p-3 bg-secondary/50 space-y-1 outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   tileRadius,
                   isPinned && "md:col-span-2",
-                  (isPinned || isRepresentative) && "border border-primary/40",
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm truncate flex items-center gap-1.5">
-                    {isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                    <span id={`${statsSrcCardId(pb.run.id)}-name`} className="truncate">{displayName}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-medium text-sm flex min-w-0 items-start gap-1.5">
+                    {isPinned && <Pin className="mt-0.5 h-3.5 w-3.5 text-primary shrink-0" />}
+                    <span id={`${statsSrcCardId(pb.run.id)}-name`} className="min-w-0 break-words leading-snug line-clamp-2">
+                      {nameParts.title}
+                      {/* 見えているのは2行目の行。読み上げの名前には見分けの語を含める */}
+                      {nameParts.detail && <span className="sr-only"> ({nameParts.detail})</span>}
+                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     {isRepresentative && (
@@ -685,11 +691,7 @@ export function SpeedrunComCard({
                 <p className="text-xs text-muted-foreground truncate">
                   {pb.game?.data?.names?.international ?? t("common.unknownGame")}
                 </p>
-                {(pb.platformName || pb.versionName) && (
-                  <p className="text-xs text-muted-foreground">
-                    {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                  </p>
-                )}
+                {metaLine && <p className="text-xs text-muted-foreground">{metaLine}</p>}
                 <p className={cn("font-mono font-bold", isPinned ? "text-3xl" : "text-xl")}>
                   {timeText}
                 </p>

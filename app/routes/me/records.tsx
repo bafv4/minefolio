@@ -13,6 +13,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats } from "@/lib/external-stats";
 import { parseRunIdList, parseRunIdListInput, sameRunIdSet, toggleRunId } from "@/lib/run-id-list";
+import { speedrunComPbMetaLine } from "@/lib/profile-highlights";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
@@ -794,7 +795,7 @@ export default function RecordsPage() {
                   .filter(Boolean)
                   .join(" ");
                 // 同じカテゴリでバージョン違いの記録が並んでも、ボタンの読み上げ名で区別できるようにする
-                const recordName = `${baseName} (${[pb.platformName, pb.versionName, timeText].filter(Boolean).join(" / ")})`;
+                const recordName = `${baseName} (${[speedrunComPbMetaLine(pb), timeText].filter(Boolean).join(" / ")})`;
                 return (
                   <div
                     key={pb.run.id}
@@ -807,7 +808,9 @@ export default function RecordsPage() {
                           {pb.category?.data?.name ?? "Unknown"}
                           {/* 同じカテゴリでバージョン違いの記録が並ぶと見出しが同名になるので、見出しにバージョンを含める
                               （見た目のバージョンは下の行に出ているので、見出しの中は読み上げ用だけ） */}
-                          {pb.versionName && <span className="sr-only"> ({pb.versionName})</span>}
+                          {[pb.versionName, pb.subcategoryName].filter(Boolean).length > 0 && (
+                            <span className="sr-only"> ({[pb.versionName, pb.subcategoryName].filter(Boolean).join(", ")})</span>
+                          )}
                         </h3>
                         <Badge variant="outline" className="shrink-0">
                           #{pb.place}
@@ -858,10 +861,8 @@ export default function RecordsPage() {
                       <p className="text-xs text-muted-foreground truncate">
                         {pb.game?.data?.names?.international ?? "Unknown Game"}
                       </p>
-                      {(pb.platformName || pb.versionName) && (
-                        <p className="text-xs text-muted-foreground">
-                          {[pb.platformName, pb.versionName].filter(Boolean).join(" / ")}
-                        </p>
+                      {speedrunComPbMetaLine(pb) && (
+                        <p className="text-xs text-muted-foreground">{speedrunComPbMetaLine(pb)}</p>
                       )}
                       <p className="text-lg font-mono font-bold">{timeText}</p>
                     </div>
