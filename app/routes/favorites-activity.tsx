@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FavoritesNav } from "@/components/favorites-nav";
 import { FavoritesCookieAlert, FavoritesEmptyState } from "@/components/favorites-shared";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
-import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
+import { FavoriteActivityRow, ActivityRowsSkeleton, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
 import { StatusPill } from "@/components/status-pill";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
@@ -144,20 +144,27 @@ export default function FavoritesActivityPage() {
   );
 }
 
+// 実物（日ごとの section: 見出し text-sm 20px + space-y-2 + 行 48px・行間 4px）と同じ段・高さで描く。
+// 行の件数はデータ次第なので、1日ぶん（見出し + 6行）を出す
 function ActivitySkeleton() {
   return (
-    <div className="space-y-2" aria-hidden="true">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Skeleton key={i} className="h-11 rounded-lg" />
-      ))}
+    <div className="space-y-6" aria-hidden="true">
+      <section className="space-y-2">
+        <Skeleton className="h-5 w-40" />
+        <ActivityRowsSkeleton count={6} />
+      </section>
     </div>
   );
 }
 
 export function HydrateFallback() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-10 w-72" />
+    <div className="space-y-6" aria-hidden="true">
+      {/* 見出し h1（32px）+ 説明（20px）+ space-y-1（4px） = 56px */}
+      <div className="space-y-1">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-5 w-72" />
+      </div>
       <Skeleton className="h-11 w-64 rounded-b-none sm:h-9" />
       <ActivitySkeleton />
     </div>

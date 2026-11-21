@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useLoaderData, useSearchParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useSearchParams, Link, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -295,6 +295,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
+
+  // 同じ走者どうしは比べられない（UI では選べない組み合わせ）。p2 を捨てて1人の表示（類似の走者）へ寄せる
+  if (p1 && p2 && p1 === p2) {
+    const params = new URLSearchParams(url.searchParams);
+    params.delete("p2");
+    throw redirect(`/compare?${params.toString()}`);
+  }
 
   // 走者一覧（選択用）: 一覧なので公開プロフィールのみ。
   // drizzle のクエリは await されるまで実行されないので、各分岐の Promise.all に渡して他クエリと並列に走らせる
@@ -1191,8 +1198,9 @@ function SimilarPlayersSection({
 export function HydrateFallback() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* 見出し h1（32px）+ 説明（20px）。実物は行間なし */}
       <div>
-        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-8 w-48" />
         <Skeleton className="h-5 w-72" />
       </div>
 

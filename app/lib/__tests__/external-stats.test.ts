@@ -104,7 +104,7 @@ describe("fetchMCSRRankedStats - 登録確認", () => {
   it.each([500, 429])("ユーザー取得が %i なら未登録ではなく error 付きで返す", async (status) => {
     stubRankedFetch({ user: undefined, userOk: false, userStatus: status });
     const result = await fetchMCSRRankedStats("someone");
-    expect(result.error).toBe("APIエラーが発生しました");
+    expect(result.error).toBe("apiError");
     expect(result.user).toBeNull();
   });
 
@@ -130,7 +130,7 @@ describe("fetchMCSRRankedStats - 登録確認", () => {
       seasonData: null,
       recentMatches: [],
       countryRank: null,
-      error: "APIエラーが発生しました",
+      error: "apiError",
     });
   });
 });
@@ -703,7 +703,7 @@ describe("fetchSpeedrunComStats - ユーザー・記録取得の失敗系", () =
   it.each([420, 429, 500])("ユーザー検索が %i なら error 付きで返す", async (status) => {
     stubSpeedrunFetch({ userOk: false, userStatus: status });
     const result = await fetchSpeedrunComStats("someone");
-    expect(result).toEqual({ user: null, personalBests: [], error: "APIエラーが発生しました" });
+    expect(result).toEqual({ user: null, personalBests: [], error: "apiError" });
   });
 
   it("ユーザーが0件なら未登録（error なし）として扱う", async () => {
@@ -716,7 +716,7 @@ describe("fetchSpeedrunComStats - ユーザー・記録取得の失敗系", () =
     const user = speedrunUser();
     stubSpeedrunFetch({ users: [user], pbOk: false });
     const result = await fetchSpeedrunComStats("runner");
-    expect(result).toEqual({ user, personalBests: [], error: "記録の取得に失敗しました" });
+    expect(result).toEqual({ user, personalBests: [], error: "recordsFetchFailed" });
   });
 
   it("PBが0件ならエラー無しで空配列を返す", async () => {
@@ -730,7 +730,7 @@ describe("fetchSpeedrunComStats - ユーザー・記録取得の失敗系", () =
     silenceConsole();
     stubSpeedrunFetch({ throwOnUserLookup: new Error("network down") });
     const result = await fetchSpeedrunComStats("runner");
-    expect(result).toEqual({ user: null, personalBests: [], error: "APIエラーが発生しました" });
+    expect(result).toEqual({ user: null, personalBests: [], error: "apiError" });
   });
 });
 

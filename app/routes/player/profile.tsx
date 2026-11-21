@@ -154,15 +154,22 @@ export function HydrateFallback() {
         <div className="flex items-center justify-between gap-3 md:gap-6">
           <div className="flex min-w-0 items-center gap-3 md:gap-4">
             <Skeleton className="size-10 shrink-0 rounded md:size-16" />
-            <div className="space-y-2">
+            {/* 名前 h1（32px・md 以上 36px）＋ @MCID の行（text-sm 20px）。実物は行間なし */}
+            <div>
               <Skeleton className="h-8 w-40 md:h-9" />
-              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-24" />
             </div>
           </div>
           <div className="flex shrink-0 gap-1 md:gap-2">
-            <Skeleton className="size-9 md:w-20" />
-            <Skeleton className="size-9 md:w-20" />
+            <Skeleton className="size-11 md:h-8 md:w-20" />
+            <Skeleton className="size-11 md:h-8 md:w-20" />
           </div>
+        </div>
+        {/* ハイライトのタイル（高さ 58px。md 以上は 4 列、md 未満は 1 行の横並び） */}
+        <div className="flex gap-2 pb-1 sm:gap-3 md:grid md:grid-cols-4 md:pb-0">
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
         </div>
       </div>
 
@@ -949,7 +956,7 @@ export default function PlayerProfilePage() {
                   {edition === "java" ? "Java" : "Bedrock"}
                 </span>
                 {keys.map((v) => (
-                  <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
+                  <Badge key={v} variant="secondary" className={cn(v === playstyleMainVersion && "font-bold")}>
                     {versionLabel(v)}
                     {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
                   </Badge>
@@ -967,7 +974,7 @@ export default function PlayerProfilePage() {
       value: (
         <div className="flex flex-wrap gap-2">
           {playstyleCategories.map((c) => (
-            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
+            <Badge key={c} variant="secondary" className={cn(c === playstyleMainCategory && "font-bold")}>
               {categoryLabel(t, c)}
               {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
             </Badge>
@@ -1538,7 +1545,7 @@ export default function PlayerProfilePage() {
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {player.role && (
-                      <Badge variant={player.role === "runner" ? "default" : "secondary"}>
+                      <Badge variant="secondary">
                         {player.role === "runner" ? t("common.runner") : t("common.viewer")}
                       </Badge>
                     )}
@@ -3156,6 +3163,24 @@ function StatsContent({
   const rankedCardShown = rankedDisplay === "card";
   const pacemanCardShown = pacemanDisplay === "card";
   const checkingExternal = rankedDisplay === "checking" || pacemanDisplay === "checking";
+  // 確認中の1行（下の checkingExternal）より前に描かれる欄があるか。無いと「直前の欄の下の余白へ引き上げる」置き方がタブ名に重なる
+  // 各欄を描く条件は、ここで1か所にまとめて sections と hasSectionAbove の両方から使う（書き写しだと条件を変えたときにずれる）
+  const rankedBodyShown = !!externalStats.ranked?.isRegistered && rankedShown && loadState.ranked !== "loading";
+  const speedruncomLoadingShown = !!player.speedruncomUsername && loadState.speedruncom !== "done";
+  const speedruncomBodyShown =
+    !!externalStats.speedruncom &&
+    !externalStats.speedruncom.error &&
+    externalStats.speedruncom.personalBests.length > 0 &&
+    loadState.speedruncom !== "loading";
+  const pendingShown = pendingSpeedrunRecords.length > 0;
+  const hasSectionAbove =
+    rankedCardShown ||
+    rankedBodyShown ||
+    pacemanCardShown ||
+    showPacemanSection ||
+    speedruncomLoadingShown ||
+    speedruncomBodyShown ||
+    pendingShown;
 
   const sections: Record<StatsSectionKey, ReactNode> = {
     ranked: (
@@ -3171,7 +3196,7 @@ function StatsContent({
             loadingClassName={minefolioEloRank ? STATS_RANKED_LOADING_CLASS : undefined}
           />
         )}
-        {externalStats.ranked?.isRegistered && rankedShown && loadState.ranked !== "loading" && (
+        {rankedBodyShown && externalStats.ranked && (
           <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
         )}
       </>
@@ -3212,7 +3237,7 @@ function StatsContent({
     ),
     speedruncom: (
       <>
-        {player.speedruncomUsername && loadState.speedruncom !== "done" && (
+        {speedruncomLoadingShown && (
           <StatsServiceLoadingCard
             framed={false}
             title="Speedrun.com"
@@ -3222,7 +3247,7 @@ function StatsContent({
             loadingClassName={STATS_SPEEDRUNCOM_LOADING_CLASS}
           />
         )}
-        {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
+        {speedruncomBodyShown && externalStats.speedruncom && (
           <SpeedrunComCard
             framed={false}
             speedruncom={externalStats.speedruncom}
@@ -3235,7 +3260,7 @@ function StatsContent({
         )}
 
         {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
-        {pendingSpeedrunRecords.length > 0 && (
+        {pendingShown && (
           <PendingSpeedrunRecordsCard
             framed={false}
             records={pendingSpeedrunRecords}
@@ -3254,17 +3279,48 @@ function StatsContent({
         <Fragment key={key}>{sections[key]}</Fragment>
       ))}
 
-      {checkingExternal && (
-        // 取得後に何も無くて消えると下の欄とページ末尾の導線が押し上がるので、流れに場所を取らない（absolute）。
-        // 静的な位置（直前の欄の下の余白の終わり）から余白の中へ引き上げて、次の欄に重ならないようにする
-        <p
-          role="status"
-          className="absolute flex h-5 -translate-y-[calc(100%+0.375rem)] items-center gap-2 text-sm text-muted-foreground"
-        >
-          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          {t("playerProfile.statsLoadingExternal")}
-        </p>
-      )}
+      {checkingExternal &&
+        (hasSectionAbove ? (
+          // 取得後に何も無くて消えると下の欄とページ末尾の導線が押し上がるので、流れに場所を取らない（absolute）。
+          // 静的な位置（直前の欄の下の余白の終わり）から余白の中へ引き上げて、次の欄に重ならないようにする
+          <p
+            role="status"
+            className="absolute flex h-5 -translate-y-[calc(100%+0.375rem)] items-center gap-2 text-sm text-muted-foreground"
+          >
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            {t("playerProfile.statsLoadingExternal")}
+          </p>
+        ) : player.categoryRecords.length === 0 ? (
+          // 直前に欄が1つも無い（上の引き上げ方だとタブ名に重なる）。取得後に出る空状態（EmptyState 既定の大きさ）と
+          // 同じ外枠・同じ段（アイコン 48px・題・説明1行・操作の分）で場所を取り、読み終わっても下の導線が跳ねないようにする
+          <div
+            role="status"
+            className="rounded-xl border border-dashed bg-card/50 px-4 py-12 text-center text-muted-foreground sm:px-6"
+          >
+            <div className="mb-4 flex justify-center opacity-50">
+              <Loader2 className="h-12 w-12 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-lg font-medium text-foreground">{t("playerProfile.statsLoadingExternal")}</p>
+              <p className="text-sm" aria-hidden="true">
+                &nbsp;
+              </p>
+            </div>
+            {/* 操作の分は、取得後の EmptyState と同じ物を見えない状態で置いて高さをそろえる
+                （本人は OwnerEditAction、訪問者は他タブへの導線。訪問者で導線が無いときは何も置かない） */}
+            {(isOwner || visitorEmptyAction) && (
+              <div className="invisible mt-4 max-sm:[&_a]:min-h-11 max-sm:[&_button]:min-h-11" aria-hidden="true" inert>
+                {isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
+              </div>
+            )}
+          </div>
+        ) : (
+          // カスタム記録だけがある走者: 流れの中の1行（取得後に消えても、続くカスタム記録が動くのは1行ぶんだけ）
+          <p role="status" className="flex h-5 items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            {t("playerProfile.statsLoadingExternal")}
+          </p>
+        ))}
 
       {/* カスタム記録（RecordCard は1件ずつの箱のまま） */}
       {player.categoryRecords.length > 0 && (

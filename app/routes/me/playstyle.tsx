@@ -132,13 +132,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物は h1 32px ＋ 説明 20px（行間なし） */}
       <div>
-        <Skeleton className="h-8 w-36 mb-2" />
-        <Skeleton className="h-4 w-72" />
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-5 w-72" />
       </div>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="space-y-4 border-t border-foreground/15 pt-6">
-          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-7 w-32" />
           <div className="space-y-3">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />

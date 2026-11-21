@@ -10,9 +10,9 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, playerConfigs, itemLayouts, searchCrafts, keyRemaps } from "@/lib/schema";
+import { users, keybindings, playerConfigs, itemLayouts, searchCrafts, keyRemaps, guides, searchCraftTemplates } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { deleteUserAccount } from "@/lib/content-cleanup.server";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
@@ -38,6 +38,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, AlertCircle, AlertTriangle, Download } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
@@ -90,8 +91,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const { hasExistingData: hasExistingDataRaw, ...userRow } = user;
 
+  // アカウント削除の確認に出す「公開中のものが消える」件数（ガイドとテンプレートはアカウント削除で cascade 削除される）
+  const [[guideRow], [templateRow]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(guides)
+      .where(and(eq(guides.authorId, user.id), eq(guides.isPublished, true))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(searchCraftTemplates)
+      .where(and(eq(searchCraftTemplates.userId, user.id), eq(searchCraftTemplates.isPublished, true))),
+  ]);
+
   return {
     user: userRow,
+    publishedGuideCount: Number(guideRow?.count ?? 0),
+    publishedTemplateCount: Number(templateRow?.count ?? 0),
     // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
     legacyApiUrl: env.LEGACY_API_URL,
     hasExistingData: Boolean(hasExistingDataRaw),
@@ -100,18 +115,26 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
+  // 本物と同じ並び: 見出し（h1 32px ＋ 説明 20px）→ 先頭の欄（罫線なし・見出し 28px ＋ ラベル付きセレクト 2つ）→
+  // 罫線つきの欄 2つ（見出し 28px ＋ 本文）。間隔は space-y-7 sm:space-y-8、欄の中は space-y-4
   return (
-    <div className="space-y-8 animate-in fade-in duration-200" aria-hidden="true">
-      <div className="space-y-2">
-        <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-        <div className="h-5 w-64 bg-muted rounded animate-pulse" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      <div>
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-5 w-64" />
       </div>
       <div className="space-y-4">
-        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-        <div className="h-10 w-full bg-muted rounded animate-pulse" />
-        <div className="h-10 w-full bg-muted rounded animate-pulse" />
-        <div className="h-24 w-full bg-muted rounded animate-pulse" />
+        <Skeleton className="h-7 w-40" />
+        {/* ラベル 14px ＋ gap 8px ＋ セレクト 36px（sm 未満は 44px） */}
+        <Skeleton className="h-[58px] w-full max-sm:h-[66px]" />
+        <Skeleton className="h-[58px] w-full max-sm:h-[66px]" />
       </div>
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} className="space-y-4 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -220,7 +243,8 @@ const DISPLAY_TOGGLES: readonly { key: DisplayToggleKey; labelKey: MessageKey }[
 
 export default function AccountPage() {
   const t = useT();
-  const { user, legacyApiUrl, hasExistingData } = useLoaderData<typeof loader>();
+  const { user, legacyApiUrl, hasExistingData, publishedGuideCount, publishedTemplateCount } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
@@ -486,6 +510,19 @@ export default function AccountPage() {
                   <div className="space-y-4 py-4">
                     <NoticeBanner tone="error" icon={AlertTriangle}>
                       {t("meEdit.cannotUndo")}
+                      {publishedGuideCount + publishedTemplateCount > 0 && (
+                        <>
+                          {" "}
+                          {publishedGuideCount > 0 && publishedTemplateCount > 0
+                            ? t("meEdit.deletePublishedNote", {
+                                guides: publishedGuideCount,
+                                templates: publishedTemplateCount,
+                              })
+                            : publishedGuideCount > 0
+                              ? t("meEdit.deletePublishedGuidesNote", { guides: publishedGuideCount })
+                              : t("meEdit.deletePublishedTemplatesNote", { templates: publishedTemplateCount })}
+                        </>
+                      )}
                       {hasChanges && <> {t("meEdit.deleteDiscardNote")}</>}
                     </NoticeBanner>
                     <div className="space-y-2">

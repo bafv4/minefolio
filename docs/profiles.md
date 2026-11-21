@@ -782,6 +782,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
   - **代表 PB（Speedrun.com 欄）**: 身元帯の代表 PB（`pickRepresentativePb`）はカードを「ピン留めの次」（無ければ先頭）に置き、「代表記録」の Badge（secondary）を付ける（枠は付けない。primary はリンクの色）。カードは `id="stats-src-<runId>"`（`tabIndex=-1`）。同名カテゴリがほかにあるときだけ、カード見出しと身元帯タイルのラベルに版に加えてサブカテゴリ（人数など。`subcategoryName`）も添える（`speedrunComPbDisplayName`、例「Java · Any% Glitchless」。カードでは名前の末尾が切れて見分けられなくならないよう、見えるカード名は版つきの名前（`speedrunComPbNameParts` の `title`、`line-clamp-2`）だけにし、見分けの語（バージョン・サブカテゴリ）は2行目の「機種 / バージョン / サブカテゴリ」の行（`speedrunComPbMetaLine`。`/me/records` と共有）に出す。読み上げの名前には見分けの語も含める。サブカテゴリは Speedrun.com の変数のうち `is-subcategory` が true のものの値だけで、`embed=category.variables` の同じ要求で取れる。版の変数は除く）。身元帯の PB タイルを押すと記録タブへ切り替え、そのカードへスクロール（`:root` の scroll-padding でホットバーを避ける）してフォーカスを移す（`profile-highlights.tsx` の `goToStatsCard`。カードが現れるまで最大5秒待つ）
   - **SRC の動画埋め込み**: 押してから読み込む（`youtube-click-embed.tsx`。サムネイル `i.ytimg.com`〔`getYouTubeThumbnailUrl`、feed-video-card と同じ送信先〕＋再生ボタン → 押すと `youtube-nocookie.com` の iframe〔autoplay=1〕）。ボタンの名前・iframe の title は「<版・カテゴリ> <記録時間>」
   - **身元帯タイルの取得失敗**: Ranked / SRC の結果に `error` があるとき、Elo・PB タイルを消さず値の位置に「取得できませんでした」（`text-muted-foreground`）を出す（押すと記録タブの再試行カードへ）。`error` なしの未登録・データなしは従来どおりタイルを出さない
+  - **取得失敗のコード化**: 外部統計（`fetchMCSRRankedStats` / `fetchSpeedrunComStats`）の `error` は表示文言ではなく種類のコード（`ExternalStatsError` = `apiError` / `recordsFetchFailed`、`app/lib/external-stats.ts`）。表示側が `t()` で訳す（`/me/records` は `meRecords.speedrunErrorApi` / `speedrunErrorRecords` を `FeedErrorNotice`〔role=status・再試行＝loader の revalidate・成功で欄見出しへフォーカス〕で出す）。固定の日本語文字列を返さない
   - **取得失敗の再試行**: MCSR Ranked / PaceMan / Speedrun.com の取得に失敗（関数が throw、または Ranked・SRC の結果に `error` あり。`error` なしの `isRegistered: false` や PB 0 件は「未登録・データなし」で欄ごと出さない）したら、失敗カード（`StatsServiceLoadingCard`）に「再試行」ボタン（`common.retry`、`RotateCw`、md 未満は高さ 44px 以上）を出す。押すとそのサービスだけ `loading` に戻して取り直す（`profile.tsx` の `StatsTabContent` がサービスごとの取得関数 `loadRanked` / `loadPaceman` / `loadSpeedruncom` を持つ。走者切替・アンマウントでは取得セッションを破棄し、古い結果は反映しない）。`onRetry` を渡さない利用箇所（`/player/:slug/stats` 等）は従来どおりボタン無し
   - 箱なしのとき MCSR Ranked の統計タイルは 3+3（狭い幅は 2 列）、Elo グラフの見出しは `h4`（差分に「この間の増減」ラベル）
   - カスタム記録も欄に入れ、`RecordCard` は 1 件ずつの箱のまま
@@ -935,6 +936,8 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
    - `users` 行の削除（cascade で大半の関連テーブルが消える）→ better-auth の `authSessions` / `authAccounts` / `authUsers` を削除
    - トランザクション化により、途中で失敗した場合は全体がロールバックされる（「他ユーザーが押した favorites 行だけ消えた」のような復元不能な部分状態を防ぐ）
 2. action 側はこの呼び出しの後に `/` へリダイレクトするだけ
+
+**確認ダイアログの文言**（`meEdit.deleteAccountDesc` / `confirmDeleteDesc`）は、cascade で実際に消えるものを列挙する（プロフィール・キー配置・記録・設定・ガイド〔翻訳を含む〕・サーチクラフトのテンプレート・アップロードしたスキンと画像。お気に入りされていた側の一覧からも外れる）。`/me/account` の loader が公開中のガイドとテンプレートの件数（`publishedGuideCount` / `publishedTemplateCount`）を数え、どちらかが 1 件以上なら確認ダイアログに「公開中のガイド N件と、公開中のテンプレート M件も削除され…」（`meEdit.deletePublishedNote`）を添える
 
 Vercel Blob 実体（`guides/<userId>/` と `skins/<userId>/` と `capes/<userId>/` の3 prefix 配下 = 著者の全ガイドの本文画像・カバー・ドラフト分とカスタムスキン・カスタムマント。`customSkinUrl` / `customCapeUrl` は規約前パスの保険として個別にも `del()` する）は、トランザクション成功後に `deleteUserAccount()` が内部で `runAfterResponse()` 経由で best-effort 削除をスケジュールする（`cleanupUserBlobs()`）。失敗してもアカウント削除自体は完了しており、消し残しは `scripts/audit-orphan-blobs.ts` / `delete-orphan-blobs.ts` が後から拾える（[guides.md](./guides.md#参照されなくなった-blob-の回収)参照）。ローカル開発など `BLOB_READ_WRITE_TOKEN` 未設定時は no-op。
 

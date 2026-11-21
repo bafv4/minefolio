@@ -1,6 +1,6 @@
 import { createTranslator, type Translator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/records";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
@@ -22,6 +22,7 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { PageSection } from "@/components/page-section";
 import { NoticeBanner } from "@/components/notice-banner";
 import { EmptyState } from "@/components/empty-state";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +65,18 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 };
 
 // 再検証を制御：actionの結果に応じてのみ再検証
-export function shouldRevalidate({ actionResult, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+// （Speedrun.com の取得失敗の「再試行」は同じ URL への revalidate なので、formMethod の無い同一 URL の再検証も通す）
+export function shouldRevalidate({
+  actionResult,
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
   if (actionResult !== undefined) {
+    return defaultShouldRevalidate;
+  }
+  if (!formMethod && currentUrl.href === nextUrl.href) {
     return defaultShouldRevalidate;
   }
   return false;
@@ -122,8 +133,9 @@ export function HydrateFallback() {
     <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <Skeleton className="h-8 w-24 mb-2" />
-          <Skeleton className="h-4 w-64" />
+          {/* 本物は h1 32px ＋ 説明 20px（行間なし） */}
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-5 w-64" />
         </div>
         <Skeleton className="h-11 sm:h-10 w-full sm:w-32" />
       </div>
@@ -430,6 +442,20 @@ export default function RecordsPage() {
     speedruncomUsername,
   } = useLoaderData<typeof loader>();
   const saveFetcher = useFetcher<typeof action>();
+  // Speedrun.com の取得失敗の再試行（loader を取り直す）。成功したら欄見出しへフォーカスを戻す
+  const revalidator = useRevalidator();
+  const speedrunRetried = useRef(false);
+  const retrySpeedrun = () => {
+    speedrunRetried.current = true;
+    void revalidator.revalidate();
+  };
+  const speedrunFailed = !!speedruncomRecords?.error;
+  useEffect(() => {
+    if (speedrunRetried.current && revalidator.state === "idle" && !speedrunFailed) {
+      speedrunRetried.current = false;
+      document.getElementById("records-speedruncom-heading")?.focus();
+    }
+  }, [revalidator.state, speedrunFailed]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
@@ -671,7 +697,8 @@ export default function RecordsPage() {
                   <Label htmlFor="categoryKey">{t("meRecords.categoryKey")}</Label>
                   <Select value={categoryKey} onValueChange={(v) => setCategoryKey(v as CategoryKey)}>
                     <SelectTrigger id="categoryKey" className="w-full">
-                      <SelectValue />
+                      {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、表示文字を明示して渡す */}
+                      <SelectValue>{categoryLabel(t, categoryKey)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {RECORD_CATEGORY_KEYS.map((key) => (
@@ -888,7 +915,12 @@ export default function RecordsPage() {
               })}
             </div>
           ) : speedruncomRecords?.error ? (
-            <p className="text-sm text-muted-foreground">{speedruncomRecords.error}</p>
+            // ui.md 8章の失敗の型（role=status・destructive の面・再試行。成功したら欄見出しへフォーカスを戻す）
+            <FeedErrorNotice
+              message={t(speedruncomRecords.error === "recordsFetchFailed" ? "meRecords.speedrunErrorRecords" : "meRecords.speedrunErrorApi")}
+              onRetry={retrySpeedrun}
+              retrying={revalidator.state !== "idle"}
+            />
           ) : speedruncomRecords && speedruncomRecords.user === null ? (
             // error なしで user が null ＝ speedrun.com にそのユーザー名が無い（ユーザー名の誤設定に気づけるようにする）
             <NoticeBanner tone="info" icon={AlertCircle}>

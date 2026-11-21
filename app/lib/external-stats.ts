@@ -72,10 +72,17 @@ export interface SpeedrunComPersonalBest {
   subcategoryName?: string;
 }
 
+/**
+ * 外部統計の取得失敗の種類（表示文言ではなくコード。表示側が `t()` で自分のロケールに訳す）。
+ * - apiError: 外部 API が非2xx（レート制限・5xx）／ネットワーク例外
+ * - recordsFetchFailed: ユーザーは取れたが記録（personal-bests）の取得に失敗
+ */
+export type ExternalStatsError = "apiError" | "recordsFetchFailed";
+
 export interface SpeedrunComStats {
   user: SpeedrunComUser | null;
   personalBests: SpeedrunComPersonalBest[];
-  error?: string;
+  error?: ExternalStatsError;
 }
 
 // PaceMan（登録確認のみ）
@@ -131,7 +138,7 @@ export interface MCSRRankedStats {
   recentMatches: MCSRRankedMatch[];
   /** 国内（`country === "jp"`）Eloランキングの順位。取得不可・非対象はnull */
   countryRank: number | null;
-  error?: string;
+  error?: ExternalStatsError;
 }
 
 export interface MCSRRankedMatch {
@@ -163,7 +170,7 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
       return { user: null, personalBests: [] };
     }
     if (!userRes.ok) {
-      return { user: null, personalBests: [], error: "APIエラーが発生しました" };
+      return { user: null, personalBests: [], error: "apiError" };
     }
     const userData = (await userRes.json()) as { data: SpeedrunComUser[] };
     const users = userData.data;
@@ -181,7 +188,7 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
       { signal: AbortSignal.timeout(30000) }
     );
     if (!pbRes.ok) {
-      return { user, personalBests: [], error: "記録の取得に失敗しました" };
+      return { user, personalBests: [], error: "recordsFetchFailed" };
     }
     const pbData = (await pbRes.json()) as { data?: SpeedrunComPersonalBest[] };
     const rawPersonalBests = pbData.data ?? [];
@@ -247,7 +254,7 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
     return { user, personalBests: minecraftPbs.length > 0 ? minecraftPbs : personalBests };
   } catch (error) {
     console.error("Speedrun.com API error:", error);
-    return { user: null, personalBests: [], error: "APIエラーが発生しました" };
+    return { user: null, personalBests: [], error: "apiError" };
   }
 }
 
@@ -337,7 +344,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
       return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
     }
     if (!userRes.ok) {
-      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "APIエラーが発生しました" };
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "apiError" };
     }
 
     const userData = (await userRes.json()) as RankedApiResponse | null;
@@ -476,7 +483,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     return { isRegistered: true, user, seasonData, recentMatches, countryRank };
   } catch (error) {
     console.error("MCSR Ranked API error:", error);
-    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "APIエラーが発生しました" };
+    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "apiError" };
   }
 }
 

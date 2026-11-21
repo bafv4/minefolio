@@ -213,19 +213,26 @@ export function ProfileFeedListItem({
   );
 }
 
-// ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）
+// ProfileFeedCard と同寸のスケルトン（rounded-xl / p-4 / アバター12x12 / フッター行）。
+// 中身の高さは実物（名前 24px + @mcid 16px + ひとこと mt-1 + 16px = 60px、フッター min-h-5 = 20px）に合わせる
 export function ProfileFeedCardSkeleton({ surface = "background" }: { surface?: "background" | "card" } = {}) {
   return (
     <div className={cn("rounded-xl border border-border/70 p-4", surface === "card" ? "bg-card" : "bg-background/80")}>
       <div className="flex items-start gap-3">
         <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-3.5 w-24" />
-          <Skeleton className="h-3 w-40" />
+        <div className="flex min-h-12 flex-1 flex-col justify-center">
+          <div className="flex h-6 items-center">
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex h-4 items-center">
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <div className="mt-1 flex h-4 items-center">
+            <Skeleton className="h-3 w-40" />
+          </div>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+      <div className="mt-3 flex min-h-5 items-center justify-between gap-2 border-t border-border/60 pt-3">
         <Skeleton className="h-5 w-16 rounded-full" />
         <Skeleton className="h-3 w-12" />
       </div>

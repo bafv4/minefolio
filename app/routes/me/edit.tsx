@@ -171,7 +171,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 export function HydrateFallback() {
   return (
     <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
-      <div className="space-y-2">
+      {/* 本物は h1 32px ＋ 説明 20px（行間なし） */}
+      <div>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-5 w-64" />
       </div>
@@ -398,7 +399,8 @@ function SocialLinkDialog({
             onValueChange={setSelectedPlatform}
           >
             <SelectTrigger id="platform" className="w-full">
-              <SelectValue />
+              {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、表示文字を明示して渡す */}
+              <SelectValue>{platformOptions.find((opt) => opt.value === selectedPlatform)?.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {platformOptions.map((opt) => (

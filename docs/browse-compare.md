@@ -57,11 +57,13 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 | パラメータ | 型 | 選択肢 |
 |-----------|-----|--------|
 | `role` | FilterRole | `runner` / `viewer`（`users.role` は NULL 許容で NULL＝未設定。**未設定は走者として扱う**: `runner` 絞り込みは NULL を含み、`role` 指定なしの既定一覧（視聴者除外）と件数が一致する） |
-| `edition` | FilterEdition | `java` / `bedrock` |
-| `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch` |
-| `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other` |
+| `edition` | FilterEdition | `java` / `bedrock`（**未設定は既定値として扱う**: `java` 絞り込みは `mainEdition` が NULL の人も含む） |
+| `input` | FilterInputMethod | `keyboard_mouse` / `controller` / `touch`（未設定は `keyboard_mouse` として扱う） |
+| `platform` | FilterPlatform | `pc_windows` / `pc_mac` / `pc_linux` / `switch` / `mobile` / `other`（未設定は `pc_windows` として扱う） |
 
 `input` フィルタの参照先は `users.inputMethod`（旧 `inputMethodBadge` は @deprecated・未使用。プロフィールのバッジ表示と同じ列に一本化されている。詳細は [`docs/profiles.md`](./profiles.md#プレイスタイル) の「プレイスタイル」参照）。URLパラメータ名・値は変更前と同じで既存URLと互換。
+
+エディション・プラットフォーム・入力方法の未設定（NULL）は、カード（`profile-feed-card.tsx`）が既定値（Java・Windows・キーボード＆マウス）を表示しないのと同じく既定値として扱う。既定値で絞るときは NULL も含め、一覧・件数（`countBrowse`）とも同じ `buildWhere` を通る。
 
 ロールフィルタで何も選択していない時のみ視聴者ロールが除外される（前述）。「視聴者」を選択した場合はそのまま表示される。
 
@@ -89,7 +91,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 ### お気に入り並べ替え
 
 - ログイン中ユーザーのお気に入りを `loader` で DB から取得し、リストの先頭に並び替える
-- 先頭に来たお気に入りには、カード・リスト行の右側（カードは名前行の右端、リスト行はタグ・時刻の手前）に「お気に入り」の小さなピル（塗りハート＋文言、地は `bg-favorite/10`、文字は前景色。表示専用の `FavoriteMark`）を表示する。ログイン中でお気に入りが1人以上いるときは、ページ上部（件数の下）に「ハートが付き先頭に表示される」旨の補足行（`browse.favoritesFirstNote`）を出す（`ProfileFeedCard` / `ProfileFeedListItem` の `isFavorite` prop。`browse.tsx` が `useFavorites().isFavorite(slug)` を渡す。他画面は渡さない。`ProfileFeedCard` は任意の `showFavoriteButton` でヘッダー右端に `FavoriteButton` を出せるが、ホームの推薦と `/favorites` で使い、/browse は使わない。`/favorites` では、ハートを外してもカードはその場に残り〈ハートが空になるだけ〉、一覧は再読み込みまで変わらない）
+- 先頭に来たお気に入りには、カード・リスト行の右側（カードは名前行の右端、リスト行はタグ・時刻の手前）に「お気に入り」の小さなピル（塗りハート＋文言、地は `bg-favorite/10`、文字は前景色。表示専用の `FavoriteMark`）を表示する。ログイン中でお気に入りが1人以上いて、**表示中の一覧にお気に入りが含まれるときだけ**、ページ上部（件数の下。md 未満は1行の `text-xs`）に「ハートが付き先頭に表示される」旨の補足行（`browse.favoritesFirstNote`）を出す（`ProfileFeedCard` / `ProfileFeedListItem` の `isFavorite` prop。`browse.tsx` が `useFavorites().isFavorite(slug)` を渡す。他画面は渡さない。`ProfileFeedCard` は任意の `showFavoriteButton` でヘッダー右端に `FavoriteButton` を出せるが、ホームの推薦と `/favorites` で使い、/browse は使わない。`/favorites` では、ハートを外してもカードはその場に残り〈ハートが空になるだけ〉、一覧は再読み込みまで変わらない）
 - 未ログイン時は SSR 時点でのお気に入り情報がないため、初期表示は通常順序のまま（クライアント側 hydrate 後に `useFavorites` フックの状態を参照）
 
 ### 表示コンポーネント
@@ -114,6 +116,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 - URLパラメータ `p1`, `p2` で比較対象の slug を指定
 - 例: `/compare?p1=player_a&p2=player_b`
+- `p1` と `p2` が同じ slug のときは、loader が `p2` を外して `/compare?p1=…` へリダイレクトする（同じ走者どうしは比べられない。UI では選べない組み合わせで、1人の表示＝類似の走者になる）
 - 画面上の選択欄から走者を選べる。選択欄は「走者 1」「走者 2」の見出し（`aria-labelledby` で結ぶ）＋検索付きのコンボボックス（`RunnerPicker`、`compare.tsx`。`Popover`＋`Command` で組み、見た目は `ui/combobox` と同じ）1つ。検索は表示名・アルファベット表記・MCID・slug に当たり（cmdk の `keywords`）、一致0件は「一致する走者が見つかりません」（`compare.noRunnerMatch`）。もう片方で選ばれている走者は候補から外す。選択中の名前とアバターは loader の一覧から引くので SSR の時点で出る。2つの選択欄の間に、走者 1 と 2 を入れ替えるボタン（`compare.swapRunners`。URL の `p1` / `p2` を入れ替える）を置く。選択欄は箱にしない
 - 指定した走者を表示できないとき（存在しない、または公開されていない。両者は区別しない）は、その走者の選択欄の下に警告の案内を出し、選択欄は未選択の表示にする。HTTP ステータスは 200 のままで、loader が `notFoundSlugs` を返す
 - URL で指定されて表示が許された走者が選択用の一覧（公開のみ・最大100人）に無いときは、その走者だけを選択肢に足す
@@ -231,3 +234,9 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 - `app/components/profile-feed-card.tsx` - プロフィールフィードカード（`/browse` `/favorites` 共通。カード/リスト表示切替対応）
 - `app/components/favorite-button.tsx` - お気に入りボタン（slug ベース）
 - `app/components/minecraft-avatar.tsx` - Minecraftアバター表示
+
+
+## URL の状態の取り扱い（/browse）
+
+- 表示切替（`?view=list`）・並び替え・検索・絞り込みはいずれも `random`（ランダムの該当者なしの知らせ）を消す
+- 空状態の「絞り込みを解除」は検索語と絞り込みだけを外し、表示形式（`view`）と並び順（`sort`）は引き継ぐ

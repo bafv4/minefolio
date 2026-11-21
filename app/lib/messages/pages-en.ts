@@ -1536,10 +1536,16 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     dangerZoneDesc: "This can't be undone.",
     deleteAccount: "Delete account",
     deleteAccountDesc:
-      "All of your data — profile, records, and settings — will be deleted",
+      "All of your data — profile, keybindings, records, search-crafts, guides, and templates — will be deleted",
     confirmDeleteTitle: "Delete your account?",
     confirmDeleteDesc:
-      "Your profile, keybindings, records, and settings will be permanently deleted.",
+      "Your profile, keybindings, records, settings, guides (including their translations), search-craft templates you created (including private ones), and uploaded skins and images will be permanently deleted. You will also be removed from other runners' favorites.",
+    deletePublishedNote:
+      "Your {guides, plural, one {# published guide} other {# published guides}} and {templates, plural, one {# published template} other {# published templates}} will also be deleted and disappear for everyone else.",
+    deletePublishedGuidesNote:
+      "Your {guides, plural, one {# published guide} other {# published guides}} will also be deleted and disappear for everyone else.",
+    deletePublishedTemplatesNote:
+      "Your {templates, plural, one {# published template} other {# published templates}} will also be deleted and disappear for everyone else.",
     cannotUndo: "Deleted data can't be recovered.",
     confirmInput: "To confirm, type {value}",
     deleting: "Deleting…",
@@ -2067,6 +2073,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     unpin: "Unpin",
     viewRecord: "View record",
     speedrunUserNotFound: "Couldn't find the user \"{username}\" on Speedrun.com. Please check your username setting.",
+    speedrunErrorApi: "Couldn't load your records from Speedrun.com. Please try again in a moment.",
+    speedrunErrorRecords: "Failed to load your Speedrun.com records. Please try again in a moment.",
     noSpeedrunRecords: "No Speedrun.com records yet.",
     noSpeedrunRecordsHint: "Records registered on Speedrun.com will appear here automatically",
     speedrunSectionTitle: "Speedrun.com records",

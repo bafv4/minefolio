@@ -120,17 +120,29 @@ function buildWhere(args: BrowseQueryArgs) {
   } else {
     conditions.push(excludeViewersCondition!);
   }
+  // 未設定（NULL）は既定値（Java・Windows・キーボード＆マウス）として扱う。
+  // カード（profile-feed-card.tsx）が既定値を出さないのと意味をそろえ、既定値で絞るときは NULL も含める
   if (args.editions.length > 0) {
-    conditions.push(or(...args.editions.map((e) => eq(users.mainEdition, e)))!);
+    conditions.push(
+      or(...args.editions.map((e) => (e === "java" ? or(isNull(users.mainEdition), eq(users.mainEdition, e))! : eq(users.mainEdition, e))))!,
+    );
   }
   if (args.inputMethods.length > 0) {
     conditions.push(
-      or(...args.inputMethods.map((i) => eq(users.inputMethod, i)))!,
+      or(
+        ...args.inputMethods.map((i) =>
+          i === "keyboard_mouse" ? or(isNull(users.inputMethod), eq(users.inputMethod, i))! : eq(users.inputMethod, i),
+        ),
+      )!,
     );
   }
   if (args.platforms.length > 0) {
     conditions.push(
-      or(...args.platforms.map((p) => eq(users.mainPlatform, p)))!,
+      or(
+        ...args.platforms.map((p) =>
+          p === "pc_windows" ? or(isNull(users.mainPlatform), eq(users.mainPlatform, p))! : eq(users.mainPlatform, p),
+        ),
+      )!,
     );
   }
   return and(...conditions);

@@ -254,8 +254,12 @@ export function MCSRRankedCard({
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <Badge
-                    variant={match.result === "win" ? "default" : match.result === "lose" ? "destructive" : "secondary"}
-                    className={cn("shrink-0 justify-center", framed ? "w-12" : "min-w-12 px-2 whitespace-nowrap")}
+                    variant={match.result === "win" ? "outline" : match.result === "lose" ? "destructive" : "secondary"}
+                    className={cn(
+                      "shrink-0 justify-center",
+                      match.result === "win" && "border-success/40 bg-success/10 text-success",
+                      framed ? "w-12" : "min-w-12 px-2 whitespace-nowrap",
+                    )}
                   >
                     {match.result === "win" ? "WIN" : match.result === "lose" ? "LOSE" : "DRAW"}
                   </Badge>

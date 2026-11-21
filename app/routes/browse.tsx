@@ -198,6 +198,8 @@ export default function BrowsePage() {
     } else {
       newParams.delete("view");
     }
+    // ほかの操作（並び替え・検索・絞り込み）と同じく、ランダムの「該当者なし」の知らせは次の操作で消す
+    newParams.delete("random");
     setSearchParams(newParams, { replace: true, preventScrollReset: true });
   };
 
@@ -261,6 +263,15 @@ export default function BrowsePage() {
   const countKey = isNarrowed
     ? ({ runner: "browse.matchedCountRunner", viewer: "browse.matchedCountViewer", all: "browse.matchedCountAll" } as const)[countRole]
     : ({ runner: "browse.totalCountRunner", viewer: "browse.totalCountViewer", all: "browse.totalCountAll" } as const)[countRole];
+
+  const showFavoritesNote =
+    isLoggedIn && favorites.length > 0 && infinite.items.some((p) => isFavorite(p.slug));
+  const sortLabels: Record<string, string> = {
+    updatedAt: t("browse.sortUpdatedAt"),
+    popular: t("browse.sortPopular"),
+    mcid: t("browse.sortMcid"),
+    displayName: t("browse.sortDisplayName"),
+  };
 
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -370,7 +381,7 @@ export default function BrowsePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* ヘッダー */}
       <div>
         <div className="flex items-center justify-between gap-x-4 gap-y-2">
@@ -395,15 +406,17 @@ export default function BrowsePage() {
           </p>
         )}
         {/* 並びの優先はログイン中だけに効く。お気に入りが1人以上いるときだけ理由を示す */}
-        {isLoggedIn && favorites.length > 0 && (
-          // 狭い画面で2行に折り返したときもハートは1行目に揃える（items-start + 行高 20px に対する 3px 下げ）
-          <FavoritesFirstNote className="mt-2">{t("browse.favoritesFirstNote")}</FavoritesFirstNote>
+        {/* 表示中の一覧にお気に入りがいるときだけ（いない結果で理由を示しても意味が無い）。md 未満は1行の text-xs */}
+        {showFavoritesNote && (
+          <FavoritesFirstNote compactOnMobile className="mt-1 sm:mt-2">
+            {t("browse.favoritesFirstNote")}
+          </FavoritesFirstNote>
         )}
       </div>
 
       {/* 検索・フィルタ・ソート */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-3 sm:gap-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
           <Form onSubmit={handleSearch} className="flex-1">
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -432,7 +445,8 @@ export default function BrowsePage() {
               <DialogTrigger asChild>
                 <Button variant="outline" className="min-h-11 gap-2 sm:min-h-9">
                   <Filter className="h-4 w-4" aria-hidden />
-                  {t("browse.filter")}
+                  {/* 375px では並び順の文言が切れないよう、アイコンだけにして文字は sr-only で残す */}
+                  <span className="max-sm:sr-only">{t("browse.filter")}</span>
                   {activeFilterCount > 0 && (
                     <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
                       {activeFilterCount}
@@ -563,7 +577,7 @@ export default function BrowsePage() {
             <ArrowUpDown className="hidden h-4 w-4 text-muted-foreground sm:block" aria-hidden />
             <Select value={sortBy} onValueChange={handleSortChange}>
               <SelectTrigger className="min-h-11 min-w-0 flex-1 sm:min-h-9 sm:w-[140px] sm:flex-none" aria-label={t("contentSort.label")}>
-                <SelectValue />
+                <SelectValue>{sortLabels[sortBy]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="updatedAt">{t("browse.sortUpdatedAt")}</SelectItem>
@@ -705,9 +719,13 @@ export default function BrowsePage() {
                 onClick={() => {
                   setInputValue("");
                   lastAppliedQuery.current = "";
+                  // 検索語・絞り込みだけを外す。表示形式（view）と並び順（sort）は引き継ぐ
                   const newParams = new URLSearchParams();
                   if (sortBy !== "updatedAt") {
                     newParams.set("sort", sortBy);
+                  }
+                  if (viewMode === "list") {
+                    newParams.set("view", "list");
                   }
                   setSearchParams(newParams);
                 }}

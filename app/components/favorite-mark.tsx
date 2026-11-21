@@ -27,10 +27,22 @@ export function FavoriteMark({ className }: { className?: string }) {
  * 「お気に入りを先頭に出している」補足行（/browse とホームのライブ欄で共有）。2行に折り返してもハートは1行目に揃える
  * （items-start + 行高 20px に対する 3px 下げ）。本文が意味を言うので FavoriteMark の sr-only は付けない
  */
-export function FavoritesFirstNote({ children, className }: { children: ReactNode; className?: string }) {
+export function FavoritesFirstNote({
+  children,
+  className,
+  compactOnMobile = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** true で md 未満を text-xs（1行）にする。縦を詰めたい一覧ページ向け（ハートの下げ幅も行高に合わせる） */
+  compactOnMobile?: boolean;
+}) {
   return (
-    <p className={cn("flex items-start gap-1.5 text-sm text-muted-foreground", className)}>
-      <Heart className="mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite" aria-hidden="true" />
+    <p className={cn("flex items-start gap-1.5 text-sm text-muted-foreground", compactOnMobile && "max-sm:text-xs", className)}>
+      <Heart
+        className={cn("mt-[3px] h-3.5 w-3.5 shrink-0 fill-favorite text-favorite", compactOnMobile && "max-sm:mt-px")}
+        aria-hidden="true"
+      />
       {children}
     </p>
   );

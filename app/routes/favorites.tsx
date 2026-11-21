@@ -233,7 +233,8 @@ export function HydrateFallback() {
     <div className="space-y-6" aria-hidden="true">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <Skeleton className="h-8 w-48 mb-2" />
+          {/* 見出し h1（32px）+ 件数の行 min-h-5（20px）。mb は付けない（実物は行間なし） */}
+          <Skeleton className="h-8 w-48" />
           <Skeleton className="h-5 w-64" />
         </div>
         <Skeleton className="h-11 w-28 self-start sm:h-8 sm:self-auto" />

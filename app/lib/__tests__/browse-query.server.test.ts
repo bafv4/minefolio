@@ -192,6 +192,27 @@ describe("loadBrowsePage - フィルタ", () => {
     ).toEqual(["other"]);
   });
 
+  it("既定値（Java / Windows / キーボード＆マウス）で絞るときは未設定（NULL）も含める。既定値以外は含めない", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "unset", mcid: "U", role: "runner", mainEdition: null, inputMethod: null, mainPlatform: null });
+    await seedUser(db, {
+      slug: "bedrock",
+      mcid: "B",
+      role: "runner",
+      mainEdition: "bedrock",
+      inputMethod: "controller",
+      mainPlatform: "switch",
+    });
+
+    const slugs = async (a: Partial<BrowseQueryArgs>) =>
+      (await loadBrowsePage(db, args(a), [])).players.map((p) => p.slug);
+    expect(await slugs({ editions: ["java"] })).toEqual(["unset"]);
+    expect(await slugs({ inputMethods: ["keyboard_mouse"] })).toEqual(["unset"]);
+    expect(await slugs({ platforms: ["pc_windows"] })).toEqual(["unset"]);
+    expect(await slugs({ editions: ["bedrock"] })).toEqual(["bedrock"]);
+    expect(await slugs({ platforms: ["pc_mac"] })).toEqual([]);
+  });
+
   it("?input= は users.inputMethod 列のみを見る（廃止済みの inputMethodBadge 由来では絞られない）", async () => {
     const db = await createTestDb();
     // inputMethod が controller のユーザーだけが対象。inputMethodBadge の値は無視される。
