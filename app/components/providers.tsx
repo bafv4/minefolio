@@ -22,7 +22,7 @@ export function Providers({ children, locale = DEFAULT_LOCALE }: ProvidersProps)
     >
       <ContrastSync />
       {children}
-      <Toaster position="top-right" />
+      <Toaster />
     </ThemeProvider>
     </LocaleProvider>
   );

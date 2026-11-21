@@ -111,7 +111,8 @@ export function FloatingSaveBar({
     const restore = onReset();
     if (typeof restore === "function") {
       undoToastIdRef.current = toast.success(t("common.changesDiscarded"), {
-        duration: 8000,
+        // 誤って取り消した人が気づいて押すまでの時間（WCAG 2.2.1）。8 秒では読んで動くには短い
+        duration: 10000,
         action: {
           label: t("common.undo"),
           onClick: () => {
