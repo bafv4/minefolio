@@ -19,7 +19,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug, getLocalizedDisplayName } from "@/lib/slug";
-import { sanitizeReturnTo } from "@/lib/return-to";
+import { sanitizeReturnTo, returnToPageKey } from "@/lib/return-to";
 import { claimSlug } from "@/lib/slug-history.server";
 import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
@@ -570,7 +570,13 @@ type OnboardingUser = NonNullable<LoaderData["user"]>;
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
 
-type Completion = { redirectTo: string; name: string };
+type Completion = {
+  /** 初期設定の前にいたページ（returnTo）。無ければ null */
+  returnTo: string | null;
+  /** 自分のプロフィール */
+  profileHref: string;
+  name: string;
+};
 
 /**
  * ステップごとの保存用 fetcher。action が `{ success }` を返し、続く loader の再検証まで
@@ -1149,7 +1155,8 @@ function VisibilityStep({
   // slug・表示名は保存後の値になっている）
   const { fetcher, isSubmitting, error } = useStepSubmit(() => {
     onComplete({
-      redirectTo: returnTo || `/player/${user.slug}`,
+      returnTo,
+      profileHref: `/player/${user.slug}`,
       name: getLocalizedDisplayName(user, locale),
     });
   });
@@ -1259,6 +1266,7 @@ function VisibilityStep({
 function CompleteScreen({ completion, focusTitle }: { completion: Completion; focusTitle: boolean }) {
   const t = useT();
   const titleRef = useFocusOnMount<HTMLHeadingElement>(focusTitle);
+  const returnPage = completion.returnTo ? returnToPageKey(completion.returnTo) : null;
 
   return (
     <>
@@ -1276,14 +1284,28 @@ function CompleteScreen({ completion, focusTitle }: { completion: Completion; fo
         <CardDescription>{t("onboarding.completeDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="px-4 sm:px-5">
-        {/* 主操作は「キー配置を登録する」1つ（製品の核へつなぐため）。副次の2つは2段目に並べる */}
+        {/* 主操作は1つ。元のページ（returnTo）があるときは、そこへ戻る（ログインした目的を続ける）。
+            無いときは「キー配置を登録する」（製品の核へつなぐため）。ほかは2段目の副次に並べる */}
         <div className="flex flex-col gap-2 sm:items-center">
           <Button asChild size="lg" className="min-h-11">
-            <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
+            {completion.returnTo ? (
+              <Link to={completion.returnTo}>
+                {returnPage
+                  ? t("onboarding.backToPage", { page: t(returnPage) })
+                  : t("onboarding.backToPrevious")}
+              </Link>
+            ) : (
+              <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
+            )}
           </Button>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+            {completion.returnTo && (
+              <Button asChild size="lg" variant="outline" className="min-h-11">
+                <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
+              </Button>
+            )}
             <Button asChild size="lg" variant="outline" className="min-h-11">
-              <Link to={completion.redirectTo}>{t("onboarding.viewProfile")}</Link>
+              <Link to={completion.profileHref}>{t("onboarding.viewProfile")}</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="min-h-11">
               <Link to="/me/edit">{t("onboarding.moreSettings")}</Link>

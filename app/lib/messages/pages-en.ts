@@ -1771,6 +1771,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     viewProfile: "View profile",
     moreSettings: "Set up more details",
     registerKeybindings: "Register your key bindings",
+    backToPage: "Back to {page}",
+    backToPrevious: "Back to the page you were on",
     errorInvalidRequest: "Invalid request. Please start over.",
     errorInvalidAction: "Invalid action. Please reload the page and try again.",
     errorAlreadyRegistered: "You're already registered. Please reload the page.",

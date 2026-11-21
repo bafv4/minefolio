@@ -1786,6 +1786,9 @@ export const PAGES_JA = {
     viewProfile: "プロフィールを見る",
     moreSettings: "さらに詳しく設定する",
     registerKeybindings: "キー配置を登録する",
+    /** 初期設定の前にいたページがあるときの主ボタン（page はページ名） */
+    backToPage: "「{page}」に戻る",
+    backToPrevious: "元のページに戻る",
     // エラー
     errorInvalidRequest: "無効なリクエストです。最初からやり直してください。",
     errorInvalidAction: "無効な操作です。ページを再読み込みしてお試しください。",

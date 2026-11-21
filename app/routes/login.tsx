@@ -1,4 +1,4 @@
-import { createTranslator, type MessageKey } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
 import { Link, redirect } from "react-router";
 import type { Route } from "./+types/login";
 import { createDb } from "@/lib/db";
@@ -8,7 +8,7 @@ import { getEnv, isDevAuthEnabled } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { authClient } from "@/lib/auth-client";
-import { sanitizeReturnTo, encodeReturnToForCallback } from "@/lib/return-to";
+import { sanitizeReturnTo, encodeReturnToForCallback, returnToPageKey } from "@/lib/return-to";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -184,21 +184,6 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
       </Card>
     </div>
   );
-}
-
-/**
- * returnTo（sanitize 済みの同一オリジンのパス）から、戻り先のページ名の翻訳キーを返す。
- * 名前で言える行き先だけ。分からないパスは null（汎用の文を出す）
- */
-function returnToPageKey(returnTo: string): MessageKey | null {
-  const path = returnTo.split(/[?#]/)[0].replace(/\/+$/, "");
-  const startsWith = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
-  if (startsWith("/me")) return "login.returnToSettings";
-  if (startsWith("/my-guides")) return "nav.myGuides";
-  if (startsWith("/feedback")) return "nav.feedback";
-  if (startsWith("/favorites")) return "nav.favorites";
-  if (startsWith("/playground")) return "nav.playground";
-  return null;
 }
 
 function DiscordIcon({ className }: { className?: string }) {

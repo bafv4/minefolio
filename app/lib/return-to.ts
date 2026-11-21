@@ -4,6 +4,8 @@
 // <Link to> に流さない。オープンリダイレクト対策として同一オリジンの相対パスのみ許可し、
 // ループ・無意味な遷移になる /login・/dev/login・/onboarding・/api/* は既定へフォールバックさせる。
 
+import type { MessageKey } from "@/lib/messages";
+
 const BLOCKED_PREFIXES = ["/login", "/dev/login", "/onboarding", "/api/"];
 
 // 改行・タブ等の制御文字（コードポイント 0x1f 以下）を含むか。
@@ -98,4 +100,20 @@ export function encodeReturnToForCallback(returnTo: string): string {
 export function buildLoginHref(pathname: string, search = ""): string {
   const returnTo = sanitizeReturnTo(`${pathname}${search}`);
   return returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login";
+}
+
+/**
+ * returnTo（sanitize 済みの同一オリジンのパス）から、戻り先のページ名の翻訳キーを返す。
+ * 名前で言える行き先だけ。分からないパスは null（汎用の文を出す）。
+ * ログイン画面（「ログインすると〜に戻ります」）と初期設定の完了画面（「〜に戻る」）で共有する
+ */
+export function returnToPageKey(returnTo: string): MessageKey | null {
+  const path = returnTo.split(/[?#]/)[0].replace(/\/+$/, "");
+  const startsWith = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
+  if (startsWith("/me")) return "login.returnToSettings";
+  if (startsWith("/my-guides")) return "nav.myGuides";
+  if (startsWith("/feedback")) return "nav.feedback";
+  if (startsWith("/favorites")) return "nav.favorites";
+  if (startsWith("/playground")) return "nav.playground";
+  return null;
 }

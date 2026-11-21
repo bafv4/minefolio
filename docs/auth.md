@@ -90,7 +90,7 @@ identify, email
 - `/dev/login` の loader（セッション済み時の `/login` へのリダイレクト）・action（ログイン成功後の
   `/login` へのリダイレクト。フォームの hidden input 経由で受け渡す）
 - `/onboarding` の loader（登録済み＝`onboardingCompleted === true` なら `returnTo` へ即リダイレクト）・
-  action（最終ステップ `save_visibility` が完了画面の「プロフィールを見る」の遷移先として
+  action（最終ステップ `save_visibility` が完了画面の遷移先（主ボタン）として
   `returnTo`（無ければ `/player/{slug}`）を返す。フォームの hidden input 経由で受け渡す。
   新規ユーザーであっても、元々アクセスしようとしていたページへ自然に戻せるため意図的に対応している）
 
@@ -266,8 +266,8 @@ Minecraft・連携ステップで入力が保存済みの値から変わって�
 ### 完了画面
 
 - 「設定が完了しました」＋「ようこそ、{保存済みの表示名}さん！」（英語ロケールでは `displayNameAlphabet ?? displayName`）
-- CTA は3つ。主ボタン（1段目、既定の brand）は「キー配置を登録する」（`/me/keybindings`。製品の核へつなぐため）。
-  副次（2段目、`outline`、sm 以上は横並びで折り返し可）は「プロフィールを見る」（`returnTo` があればそこ、無ければ `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
+- 主ボタン（1段目、既定の brand）は1つ。`returnTo` があるときは「{ページ名}に戻る」（ページ名は `returnToPageKey`〔`app/lib/return-to.ts`。ログイン画面の「ログインすると〜に戻ります」と共有〕。名前で言えない行き先は「元のページに戻る」）。無いときは「キー配置を登録する」（`/me/keybindings`。製品の核へつなぐため）。
+  副次（2段目、`outline`、sm 以上は横並びで折り返し可）は「キー配置を登録する」（`returnTo` があるときだけ。無いときは主ボタン）・「プロフィールを見る」（常に `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
 - 遷移先と表示名はクライアントが loader の値（`returnTo` と `user`。各ステップの保存後に再検証済み）から組む
 
 > 旧サイト (mchotkeys) からのデータ引き継ぎボタンは登録フローから削除済み。
