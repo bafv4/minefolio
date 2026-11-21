@@ -1,8 +1,9 @@
-// 英語の文言。日本語（pages-ja.ts）の**部分集合**でよい。
+// 英語の文言。日本語（pages-ja.ts）と**全キーを一致**させる（新キーは ja/en 同時に追加）。
 //
-// 未翻訳のキーは messages/index.ts の t() が日本語へフォールバックするため、
-// ここに無いキーがあっても画面が壊れることはない。英語化は主要導線から
-// 段階的に広げる方針（docs/i18n.md 参照）。
+// app/lib/__tests__/locale.test.ts の翻訳カバレッジが、英訳の漏れと英語側だけに残ったキーの
+// 両方で落ちる。型（PartialMessages）と messages/index.ts の t() の日本語フォールバックが
+// 部分集合を許すのは取りこぼし時の安全網で、英訳を省いてよいという意味ではない
+// （docs/i18n.md 参照）。
 //
 // 追加するときは pages-ja.ts のキー構造に合わせること。型
 // （PartialMessages<typeof PAGES_JA>）がキー名の打ち間違いを検出する。
@@ -75,7 +76,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   combobox: {
     placeholder: "Select…",
     searchPlaceholder: "Search…",
-    empty: "Not found",
+    empty: "No results found",
     useRaw: 'Use "{value}"',
   },
   actionLabels: {
@@ -213,7 +214,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   developers: {
     jaOnlyNotice: "The content of this page is available in Japanese only.",
-    githubRepository: "GitHub Repository",
+    githubRepository: "GitHub repository",
     title: "Developers - Minefolio",
     metaDescription:
       "Developer resources for Minefolio — API documentation, changelog, and data export",
@@ -227,10 +228,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     changelogMetaTitle: "Changelog - Developers - Minefolio",
     exportTitle: "Data export",
     exportDescription:
-      "Export the controls, remaps, custom actions, and mouse settings of runners with public profiles as CSV",
+      "Export the keybindings, remaps, custom actions, and mouse settings of runners with public profiles as CSV",
     exportMetaTitle: "Data export - Developers - Minefolio",
     exportMetaDescription:
-      "Download the controls, remaps, custom actions, and mouse settings of all runners with public profiles, or of selected runners, as CSV",
+      "Download the keybindings, remaps, custom actions, and mouse settings of all runners with public profiles, or of selected runners, as CSV",
     relatedLinks: "Related links",
     relatedLinksDescription: "External services and contact",
     exportLead:
@@ -240,22 +241,23 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       "Selecting several sections produces a single CSV with each table laid out in order.",
     exportSelectAll: "Select all",
     exportDeselectAll: "Deselect all",
-    exportTargets: "Target users",
+    exportTargets: "Target runners",
     exportTargetsHint:
-      "With nothing selected, all {count} users are exported. To export specific users, pick them from the list below.",
+      "With nothing selected, {count, plural, one {the only runner is} other {all # runners are}} exported. To export specific runners, pick them from the list below.",
     exportClearSelection: "Clear selection",
     exportSearchPlaceholder: "Search by name or MCID…",
-    exportNoUsers: "No matching users found",
+    exportNoUsers: "No matching runners found",
     exportNote:
       "Note: only runners whose profile visibility is set to Public are included (unlisted and private profiles are not). Some software, such as Excel, may need the CSV opened as UTF-8 with BOM.",
     exportPickSections: "Select at least one section",
-    exportSummary: "{sections} sections × {users} users",
-    exportAllUsersSuffix: " (all users)",
+    exportSummary:
+      "{sections, plural, one {# section} other {# sections}} × {users, plural, one {# runner} other {# runners}}",
+    exportAllUsersSuffix: " (all runners)",
     exportDownload: "Download CSV",
-    sectionActions: "Controls",
+    sectionActions: "Keybindings",
     sectionActionsDescription:
       "The keys bound to each Minecraft action (walk forwards, attack, inventory, and so on).",
-    sectionRemaps: "Key remaps",
+    sectionRemaps: "Remaps",
     sectionRemapsDescription:
       "Key remaps configured in external software (source key → target key).",
     sectionCustomActions: "Custom actions",
@@ -336,9 +338,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   errorPage: {
     notFoundTitle: "Page not found",
-    title: "Oops!",
-    errorTitle: "Error",
-    genericDetails: "An unexpected error occurred.",
+    title: "Couldn't show this page",
+    errorTitle: "Something went wrong",
+    genericDetails: "An unexpected error occurred. Reload the page or go back to the home page.",
     notFoundDetails: "We couldn't find the page you were looking for.",
     notFoundHint: "The URL may be wrong, or the page may not be public. Check the URL.",
   },
@@ -350,9 +352,9 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     rangeSeparator: "–",
     listSeparator: ", ",
     listSeparatorComma: ", ",
-    loadFailed: "Failed to load",
+    loadFailed: "Couldn't load",
     retry: "Retry",
-    serviceLoadFailed: "Failed to load {name}",
+    serviceLoadFailed: "Couldn't load {name}",
     serviceRetry: "Retry {name}",
     loadComplete: "Loaded",
     backToHome: "Back to home",
@@ -360,7 +362,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     complete: "Done",
     clear: "Clear",
     clearAll: "Clear all",
-    resetFilters: "Reset filters",
+    resetFilters: "Clear filters",
     search: "Search",
     save: "Save",
     saving: "Saving",
@@ -676,7 +678,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     returnToSettings: "Profile settings",
     feedbackAlt: "If you'd rather not log in, you can also reach us on",
     feedbackAltLink: "GitHub Issues (external site)",
-    authFailed: "Could not sign you in. Please try again.",
+    authFailed: "Couldn't log you in. Please try again.",
     discordDataNote: "We receive your Discord ID, username, avatar, and email address from Discord. Your email address is never shown on the site and is used only for logging in.",
   },
   guides: {
@@ -733,7 +735,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     jaOnlyNotice: "The update notes are available in Japanese only.",
     title: "What's new",
     unreadCount: "{count} unread",
-    hiddenCount: "{count} more updates",
+    hiddenCount: "{count, plural, one {# more update} other {# more updates}}",
     viewChangelog: "View full changelog",
     empty: "Could not load the updates. Please check the changelog.",
   },
@@ -1652,7 +1654,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     account: "Visibility & account",
     playstyle: "Playstyle",
     records: "Records",
-    keybindings: "Controls",
+    keybindings: "Keybindings",
     devices: "Devices",
     itemLayouts: "Item layouts",
     searchCraft: "Search-craft",
@@ -1673,41 +1675,43 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       finish: "Done",
       sidebar: {
         title: "Settings live here",
-        body: "Use the menu on the left to open each settings page: profile, records, controls, devices and more.",
-        bodyMobile: "Open this menu to reach each settings page: profile, records, controls, devices and more.",
+        body: "Use the menu on the left to open each settings page: profile, records, keybindings, devices and more.",
+        bodyMobile: "Open this menu to reach each settings page: profile, records, keybindings, devices and more.",
       },
       edit: {
         title: "Your profile content",
-        body: "Set your runner name, bio, social links, skin and the rest of what appears at the top of your runner page.",
+        body: "Set your runner name, bio, social links, skin and the rest of what appears at the top of your profile.",
       },
       preset: {
         title: "The preset you are editing",
-        body: "Each setting is saved to the preset you are editing. Your player page shows the main preset. You can switch on the presets page.",
+        body: "Each setting is saved to the preset you are editing. Your profile shows the main preset. You can switch presets on the presets page.",
       },
       save: {
         title: "Confirm changes with the save bar",
-        body: "Changes to your key layout, devices and so on are confirmed with the save bar at the bottom of the screen.",
+        body: "Changes to your keybindings, devices and so on are confirmed with the save bar at the bottom of the screen.",
       },
       player: {
         title: "What others see",
-        body: "What you set here appears on your runner page. Use the share button to copy its URL.",
+        body: "What you set here appears on your profile. Use the share button to copy its URL.",
       },
     },
     checklist: {
       title: "Getting started",
-      description: "{total} steps to fill out your runner page. Finished steps are marked.",
+      description:
+        "{total, plural, one {# step} other {# steps}} to fill out your profile. Finished steps are marked.",
       progress: "{done} / {total} done",
       progressLabel: "Steps completed",
       close: "Dismiss",
       done: "Done",
       todo: "Not done",
-      achieved: "Advancement made! Your runner page is all set",
-      achievedDescription: "All {total} steps are done. Take a look at how others see your page.",
-      viewPlayer: "View my runner page",
+      achieved: "Advancement made! Your profile is all set.",
+      achievedDescription:
+        "{total, plural, one {The step is done.} other {All # steps are done.}} Take a look at how others see your profile.",
+      viewPlayer: "View my profile",
       steps: {
         mcid: "Set your MCID (Java or Bedrock)",
         bio: "Write your bio",
-        keybindings: "Add your key bindings",
+        keybindings: "Add your keybindings",
         devices: "Add your devices",
         records: "Add a record or Speedrun.com",
         playstyle: "Fill in your playstyle",
@@ -1715,7 +1719,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
       criteria: {
         mcid: "Done once a Java MCID or a Bedrock MCID (gamertag) is registered",
         bio: "Done once your bio is filled in",
-        keybindings: "Done once at least one key binding is registered",
+        keybindings: "Done once at least one keybinding is registered",
         devices: "Done once any of keyboard, mouse, sensitivity or controller settings is registered",
         records: "Done once you have at least one record or a Speedrun.com username is registered",
         playstyle: "Done once any of versions, categories or hotbar switching is filled in",
@@ -1725,15 +1729,15 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   devLogin: {
     title: "Dev login",
     description:
-      "A simple login for local development. Sign in with just a username (disabled in production).",
+      "A simple login for local development. Log in with just a username (disabled in production).",
     usernameLabel: "Username",
     usernamePlaceholder: "dev",
     usernameHint:
-      "Lowercase letters, numbers, and hyphens (1–20 characters). The same name signs you back into the same account.",
+      "Lowercase letters, numbers, and hyphens (1–20 characters). Using the same name logs you back in to the same account.",
     submit: "Log in",
     invalidUsername:
       "Username must be 1–20 lowercase letters, numbers, or hyphens",
-    failed: "Login failed",
+    failed: "Couldn't log you in. Please try again.",
   },
   onboarding: {
     resumeNotice: "You have not finished the initial setup.",
@@ -1744,14 +1748,14 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     description: "Set up your Minefolio profile",
     welcomeTitle: "Welcome, {name}!",
     welcomeDescription: "Let's set up your profile in a few steps. You can change everything later.",
-    connectedViaDiscord: "Connected via Discord",
+    connectedViaDiscord: "Logged in with Discord",
     getStarted: "Get started",
     stepIndicator: "Step {current} of {total}",
     back: "Back",
     skip: "Skip",
     next: "Next",
     profileTitle: "Profile",
-    profileDescription: "Basic info shown to other users. You can leave these blank.",
+    profileDescription: "Basic info shown to other people. You can leave these blank.",
     displayNameHint: "If left blank, your Discord display name ({name}) is used",
     minecraftTitle: "Minecraft",
     minecraftDescription: "Register your Minecraft IDs. Both are optional.",
@@ -1760,7 +1764,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     mcidHint: "We check that it exists as a Minecraft account. Once set, your profile URL uses your MCID.",
     skinTitle: "Skin",
     skinDescription: "The skin shown on your profile. If you registered a Java Edition MCID, its skin is used.",
-    linksTitle: "Connections",
+    linksTitle: "Links",
     linksDescription: "Show your streaming, video, and speedrun accounts on your profile. You can leave these blank.",
     linkFieldError: "{platform}: {message}",
     linkPlaceholder: "e.g. {example}",
@@ -1774,10 +1778,10 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     finish: "Finish setup",
     completeTitle: "You're all set",
     completeWelcome: "Welcome, {name}!",
-    completeDescription: "Your profile is ready. You can add controls, devices, and more at any time.",
+    completeDescription: "Your profile is ready. You can add keybindings, devices, and more at any time.",
     viewProfile: "View profile",
     moreSettings: "Set up more details",
-    registerKeybindings: "Register your key bindings",
+    registerKeybindings: "Register your keybindings",
     backToPage: "Back to {page}",
     backToPrevious: "Back to the page you were on",
     errorInvalidRequest: "Invalid request. Please start over.",
@@ -1823,13 +1827,13 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     messagePlaceholder: "Tell us the details",
     messageHint: "Between 10 and 2000 characters ({count}/2000)",
     sending: "Sending…",
-    submit: "Send",
+    submit: "Send feedback",
     sentToast: "Feedback sent",
     sentTitle: "Feedback sent",
     sentDescription: "Thank you for taking the time to share your thoughts.",
     sendAnother: "Send more feedback",
     notConfigured: "Feedback can't be sent right now (it hasn't been set up on our side).",
-    sendFailed: "Failed to send. Please try again in a little while.",
+    sendFailed: "Couldn't send your feedback. Please try again in a little while.",
     userNotFound: "User not found",
     createIssueLabel: "Post this feedback as a GitHub Issue",
     createIssueHint1:
@@ -1837,7 +1841,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     createIssueHint2: "Recommended for bug reports and feature requests.",
     viewIssue: "View the created issue",
     issueCreateFailedToast:
-      "Your feedback was sent, but creating the GitHub Issue failed.",
+      "Your feedback was sent, but creating the GitHub Issue failed. If you need an Issue, create one on GitHub.",
   },
   rankings: {
     title: "Rankings - Minefolio",
@@ -1932,8 +1936,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     targetPresetNone: "No preset yet. Importing will create a new one.",
   },
   meErrorBoundary: {
-    title: "Something went wrong",
-    description: "An error occurred while loading the page. Please reload.",
+    title: "Couldn't show this page",
+    description: "An error occurred while loading the page. Reload the page. If it keeps happening, try again later.",
     reload: "Reload page",
   },
   meDevices: {

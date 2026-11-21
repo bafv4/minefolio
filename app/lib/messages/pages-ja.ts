@@ -78,7 +78,7 @@ export const PAGES_JA = {
   combobox: {
     placeholder: "選択...",
     searchPlaceholder: "検索...",
-    empty: "見つかりません",
+    empty: "該当する項目がありません",
     useRaw: "「{value}」を使用",
   },
   /** Minecraft の操作名（lib/keybindings.ts の ACTION_LABELS） */
@@ -222,7 +222,7 @@ export const PAGES_JA = {
   /** 読み込み中の表示（navigation-progress / 無限スクロール / プロフィールの外部統計） */
   loading: {
     page: "読み込み中...",
-    more: "追加読み込み中…",
+    more: "追加読み込み中...",
     moreLoaded: "{count}件を追加で読み込みました",
     rankedStats: "レート・対戦統計を読み込み中",
     pacemanStats: "登録状態とペース情報を読み込み中",
@@ -256,24 +256,24 @@ export const PAGES_JA = {
     exportSelectAll: "すべて選択",
     exportDeselectAll: "すべて解除",
     exportTargets: "対象の走者",
-    exportTargetsHint: "何も選択していない場合は全 {count} 人がエクスポート対象になります。特定の走者だけ出力したい場合は下のリストから選択してください。",
-    exportClearSelection: "選択をクリア",
+    exportTargetsHint: "何も選択していない場合は、全{count}人がエクスポート対象になります。特定の走者だけ出力したい場合は、下のリストから選択してください。",
+    exportClearSelection: "選択を解除",
     exportSearchPlaceholder: "走者名・MCID で検索...",
     exportNoUsers: "該当する走者が見つかりませんでした",
     exportNote: "※ プロフィールの公開範囲を「公開」にしている走者だけが対象です（限定公開・非公開の走者は含みません）。Excel など一部のソフトでは UTF-8 BOM 付き CSV として開く必要がある場合があります。",
     exportPickSections: "項目を選択してください",
-    exportSummary: "{sections} 項目 × {users} 人",
+    exportSummary: "{sections}項目 × {users}人",
     exportAllUsersSuffix: "（全走者）",
     exportDownload: "CSV をダウンロード",
     // CSV セクション定義
     sectionActions: "キー配置",
     sectionActionsDescription: "Minecraft の各操作（前進・攻撃・インベントリ等）に割り当てたキーの一覧。",
-    sectionRemaps: "キーリマップ",
+    sectionRemaps: "リマップ",
     sectionRemapsDescription: "外部ソフトウェア等で行うキーリマップ設定（ソースキー → ターゲットキー）。",
     sectionCustomActions: "カスタムアクション",
     sectionCustomActionsDescription: "マクロ・ツール起動など、走者が定義したアクションとトリガーキー。",
     sectionMouse: "マウス設定",
-    sectionMouseDescription: "DPI・ゲーム感度・Raw Input・Windows 速度設定など、マウス周りの数値。",
+    sectionMouseDescription: "DPI・ゲーム感度・Raw Input・Windows ポインター速度など、マウス周りの数値。",
     // CSV の列名（バッジ表示）
     colCategory: "カテゴリ",
     colAction: "操作",
@@ -349,9 +349,9 @@ export const PAGES_JA = {
   /** ルートのエラーバウンダリ（app/root.tsx） */
   errorPage: {
     notFoundTitle: "ページが見つかりません",
-    title: "おっと！",
-    errorTitle: "エラー",
-    genericDetails: "予期しないエラーが発生しました。",
+    title: "ページを表示できませんでした",
+    errorTitle: "エラーが発生しました",
+    genericDetails: "予期しないエラーが起きました。ページを再読み込みするか、ホームに戻ってください。",
     notFoundDetails: "お探しのページが見つかりませんでした。",
     /** loader が「〇〇が見つかりません」を載せた 404 の説明（走者・テンプレート・ユーザーなど、どの 404 にも合う文） */
     notFoundHint: "URL が間違っているか、公開されていない可能性があります。URL を確認してください。",
@@ -380,7 +380,7 @@ export const PAGES_JA = {
     complete: "完了",
     clear: "クリア",
     clearAll: "すべてクリア",
-    resetFilters: "条件をリセット",
+    resetFilters: "絞り込みを解除",
     search: "検索",
     save: "保存",
     saving: "保存中",
@@ -395,9 +395,9 @@ export const PAGES_JA = {
     savingAndLeaving: "保存して移動中",
     savingInProgress: "保存中です",
     saveChanges: "変更を保存",
-    discardChanges: "変更を取り消す",
-    discard: "取消",
-    changesDiscarded: "変更を取り消しました",
+    discardChanges: "変更を破棄",
+    discard: "破棄",
+    changesDiscarded: "変更を破棄しました",
     undo: "元に戻す",
     changesRestored: "変更を元に戻しました",
     undoUnavailable: "保存内容が更新されたため、元に戻せません",
@@ -407,8 +407,8 @@ export const PAGES_JA = {
     pageViews7dShort: "{days}日",
     runner: "走者",
     viewer: "視聴者",
-    on: "ON",
-    off: "OFF",
+    on: "オン",
+    off: "オフ",
     unknown: "不明",
     unknownGame: "不明なゲーム",
     pinned: "ピン留め",
@@ -1662,33 +1662,33 @@ export const PAGES_JA = {
       },
       edit: {
         title: "プロフィールの中身",
-        body: "走者名・自己紹介・SNS・スキンなど、走者画面の上部に出る内容をここで整えます。",
+        body: "走者名・自己紹介・SNS・スキンなど、プロフィールの上部に出る内容をここで整えます。",
       },
       preset: {
         title: "編集中のプリセット",
-        body: "各設定は編集中のプリセットに保存されます。走者画面に出るのはメインのプリセットです。プリセット画面で切り替えられます。",
+        body: "各設定は編集中のプリセットに保存されます。プロフィールに出るのはメインのプリセットです。プリセットの画面で切り替えられます。",
       },
       save: {
         title: "変更は保存バーで確定",
         body: "キー配置・デバイスなどの変更は、画面下の保存バーで確定します。",
       },
       player: {
-        title: "走者画面で見える",
-        body: "ここで設定した内容は、あなたの走者画面に表示されます。共有ボタンで走者画面のURLをコピーできます。",
+        title: "プロフィールで見える",
+        body: "ここで設定した内容は、あなたのプロフィールに表示されます。共有ボタンでプロフィールのURLをコピーできます。",
       },
     },
     checklist: {
       title: "はじめに",
-      description: "走者画面を充実させる{total}つの手順です。済んだものには印が付きます。",
+      description: "プロフィールを充実させる{total}つの手順です。済んだものには印が付きます。",
       progress: "{done} / {total} 完了",
       progressLabel: "完了した手順",
       close: "閉じる",
       done: "完了",
       todo: "未完了",
       /** 全手順が済んだときの達成表示 */
-      achieved: "進捗を達成しました: 走者画面がひととおりそろいました",
+      achieved: "進捗を達成しました: プロフィールがひととおりそろいました",
       achievedDescription: "{total}つの手順がすべて済みました。ほかの人からどう見えるかを確かめてみましょう。",
-      viewPlayer: "自分の走者画面を見る",
+      viewPlayer: "自分のプロフィールを見る",
       steps: {
         mcid: "MCID を登録する（Java 版か Bedrock 版）",
         bio: "自己紹介を入力する",
@@ -1721,7 +1721,7 @@ export const PAGES_JA = {
     /** /me/* へ戻るときのページ名 */
     returnToSettings: "プロフィールの設定",
     /** フィードバックから来たときの、ログインせずに伝える手段 */
-    feedbackAlt: "ログインせずに伝えたいときは、",
+    feedbackAlt: "ログインせずに伝えたいときは",
     feedbackAltLink: "GitHub の Issues へ（外部サイト）",
     /** Discord から受け取る情報（privacy.md「1. (1)」と auth.ts の scope に合わせる） */
     /** Discord の認証が失敗・取り消しになって /login へ戻ったとき（理由の文字列は出さない） */
@@ -1737,7 +1737,7 @@ export const PAGES_JA = {
     usernameHint: "半角英小文字・数字・ハイフン（1〜20文字）。同じ名前で同じアカウントに再ログインできます。",
     submit: "ログイン",
     invalidUsername: "ユーザー名は半角英小文字・数字・ハイフン1〜20文字で入力してください",
-    failed: "ログインに失敗しました",
+    failed: "ログインできませんでした。もう一度お試しください。",
   },
   onboarding: {
     /** 初期設定を途中で離れた人に、共通レイアウトで出す案内 */
@@ -1751,7 +1751,7 @@ export const PAGES_JA = {
     // ようこそ（ステップ0）
     welcomeTitle: "ようこそ、{name}さん",
     welcomeDescription: "数ステップでプロフィールを整えましょう。すべて後から変更できます。",
-    connectedViaDiscord: "Discord経由で接続済み",
+    connectedViaDiscord: "Discordでログインしています",
     getStarted: "はじめる",
     // 共通
     stepIndicator: "ステップ {current} / {total}",
@@ -1760,7 +1760,7 @@ export const PAGES_JA = {
     next: "次へ",
     // ステップ1: プロフィール
     profileTitle: "プロフィール",
-    profileDescription: "ほかのユーザーに表示される基本情報です。空欄のままでも進めます。",
+    profileDescription: "ほかの人に表示される基本情報です。空欄のままでも進めます。",
     displayNameHint: "未入力の場合はDiscordの表示名（{name}）が使われます",
     // ステップ2: Minecraft
     minecraftTitle: "Minecraft",
@@ -1772,17 +1772,17 @@ export const PAGES_JA = {
     skinTitle: "スキン",
     skinDescription: "プロフィールに表示されるスキンです。Java版MCIDを登録していればそのスキンが使われます。",
     // ステップ4: 連携
-    linksTitle: "連携",
+    linksTitle: "リンク",
     linksDescription: "配信・動画・記録のアカウントをプロフィールに表示します。空欄のままでも進めます。",
     linkFieldError: "{platform}: {message}",
     linkPlaceholder: "例: {example}",
     // ステップ5: 公開設定
-    visibilityTitle: "公開設定",
+    visibilityTitle: "公開範囲",
     visibilityDescription: "最後に、プロフィールを誰に見せるかを選んでください。下の表示設定では、あなたのペース・配信・動画をホームに出すかどうかも選べます（既定はオン）。",
     /** 畳んだ表示設定の要約（count はオンの数） */
     displaySummaryAllOn: "すべてオン（あとで変更できます）",
     displaySummaryAllOff: "すべてオフ（あとで変更できます）",
-    displaySummarySome: "{total} 件中 {count} 件がオン（あとで変更できます）",
+    displaySummarySome: "{total}件中{count}件がオン（あとで変更できます）",
     visibilityChoiceLabel: "プロフィールの公開範囲",
     visibilityChoiceHint: "選択すると設定を完了できます",
     finish: "設定を完了",
@@ -1839,7 +1839,7 @@ export const PAGES_JA = {
     messagePlaceholder: "詳しい内容をお書きください",
     messageHint: "10〜2000文字で入力してください（{count}/2000）",
     sending: "送信中...",
-    submit: "送信する",
+    submit: "フィードバックを送信",
     sentToast: "フィードバックを送信しました",
     sentTitle: "フィードバックを送信しました",
     sentDescription: "貴重なご意見をありがとうございます。",
@@ -1851,7 +1851,7 @@ export const PAGES_JA = {
     createIssueHint1: "件名と内容が、そのまま公開リポジトリのIssueとして投稿されます。",
     createIssueHint2: "バグ報告や機能リクエストの場合は、Issueの発行をおすすめします。",
     viewIssue: "作成されたIssueを見る",
-    issueCreateFailedToast: "フィードバックは送信されましたが、Issueの作成に失敗しました",
+    issueCreateFailedToast: "フィードバックは送信されましたが、Issueの作成に失敗しました。Issueが必要な場合は、GitHubから作成してください。",
   },
   rankings: {
     title: "ランキング - Minefolio",
@@ -1946,9 +1946,9 @@ export const PAGES_JA = {
     targetPresetNone: "取り込み先: プリセットがまだありません。取り込むと新しいプリセットが作られます。",
   },
   meErrorBoundary: {
-    title: "エラーが発生しました",
-    description: "ページの読み込み中にエラーが発生しました。ページをリロードしてください。",
-    reload: "ページをリロード",
+    title: "このページを表示できませんでした",
+    description: "ページの読み込み中にエラーが発生しました。ページを再読み込みしてください。直らない場合は、時間をおいてお試しください。",
+    reload: "ページを再読み込み",
   },
   meDevices: {
     title: "デバイス - Minefolio",
@@ -3215,7 +3215,7 @@ export const PAGES_JA = {
     jaOnlyNotice: "お知らせの本文は日本語のみで提供しています。",
     title: "新機能",
     unreadCount: "未読 {count}件",
-    hiddenCount: "ほか {count} 件の更新があります",
+    hiddenCount: "ほか{count}件の更新があります",
     viewChangelog: "すべての更新履歴を見る",
     empty: "更新情報を読み込めませんでした。更新履歴をご確認ください。",
   },
