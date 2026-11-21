@@ -155,9 +155,12 @@ export function GuideCardGrid({
   surface = "default",
   titleLevel: TitleHeading = "h3",
   tagHref,
+  linkState,
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
+  /** 記事へのリンクに載せる location.state（記事の「ガイド一覧」が、来たときの絞り込みへ戻るのに使う） */
+  linkState?: unknown;
   /** タグの行き先。省略時は `/guides?tag=`。/guides の一覧は検索語・並び順を引き継ぐものを渡す */
   tagHref?: (tag: string) => string;
   gridCols?: string;
@@ -221,6 +224,7 @@ export function GuideCardGrid({
                   <span className="min-w-0 flex-1 line-clamp-2">
                     <Link
                       to={linkFn(guide)}
+                      state={linkState}
                       prefetch="intent"
                       data-guide-link
                       className={OVERLAY_LINK_CLASS_CARD}
@@ -283,11 +287,14 @@ export function GuideListView({
   linkFn,
   titleLevel: TitleHeading = "h3",
   tagHref,
+  linkState,
 }: {
   guides: GuideItem[];
   linkFn: (guide: GuideItem) => string;
   /** タグの行き先（GuideCardGrid と同じ） */
   tagHref?: (tag: string) => string;
+  /** 記事へのリンクに載せる location.state（GuideCardGrid と同じ） */
+  linkState?: unknown;
   /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
   titleLevel?: "h2" | "h3" | "h4";
 }) {
@@ -316,6 +323,7 @@ export function GuideListView({
                 <span className="min-w-0 flex-1 line-clamp-1">
                   <Link
                     to={linkFn(guide)}
+                    state={linkState}
                     prefetch="intent"
                     data-guide-link
                     className={OVERLAY_LINK_CLASS_LIST}
@@ -363,7 +371,8 @@ export function GuideListView({
 
 /**
  * 一覧の読み込み中スケルトン（`GuideCardGrid` / `GuideListView` と同じ配置・同じ高さの目安）。
- * 読み込みの前後でレイアウトが跳ねないようにし、読み上げには出さない（aria-hidden。ui.md 8 章）
+ * 読み込みの前後でレイアウトが跳ねないようにし、読み上げには出さない（aria-hidden。ui.md 8 章）。
+ * 表紙画像の無いガイドが多数派なので、表紙の帯・サムネイルは描かない（常に描くと、本物より背が高くなる）
  */
 export function GuideListSkeleton({
   viewMode,
@@ -377,7 +386,6 @@ export function GuideListSkeleton({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80">
-            <Skeleton className="h-36 w-full rounded-none" />
             <div className="p-4">
               <Skeleton className="h-[22px] w-3/4" />
               <Skeleton className="mt-1.5 h-4 w-1/2" />
@@ -396,7 +404,6 @@ export function GuideListSkeleton({
     <div className="divide-y divide-border/60" aria-hidden>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
-          <Skeleton className="h-14 w-20 shrink-0 rounded-md" />
           <div className="min-w-0 flex-1">
             <Skeleton className="h-5 w-48 max-w-full" />
             <Skeleton className="mt-1.5 h-4 w-2/3" />

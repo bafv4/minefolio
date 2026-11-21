@@ -2,7 +2,7 @@ import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
 import { useState, useEffect } from "react";
-import { useLoaderData, Link, Form, useSearchParams, useNavigation, type LoaderFunctionArgs } from "react-router";
+import { useLoaderData, Link, Form, useSearchParams, useNavigation, useLocation, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -11,6 +11,7 @@ import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, asc, desc, sql, isNotNull } from "drizzle-orm";
 import { templateLikeCountSql } from "@/lib/likes.server";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import {
   ContentSortSelect,
   parseContentSort,
@@ -24,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/empty-state";
-import { LayoutTemplate, Search, Keyboard, Download, FlaskConical, Languages, X } from "lucide-react";
+import { LayoutTemplate, Search, ListOrdered, Keyboard, Download, FlaskConical, Languages, X } from "lucide-react";
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
@@ -230,8 +231,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function TemplatesIndexPage() {
   const t = useT();
   const locale = useLocale();
-  const { templates, q, lang, author, authorFilterName, languageCounts, sort } =
+  const { templates, q, lang, author, authorFilterName, languageCounts, sort, isLoggedIn } =
     useLoaderData<typeof loader>();
+  const loginHref = useLoginHref();
   const [langValue, setLangValue] = useState(lang || "__all");
   const [searchParams, setSearchParams] = useSearchParams();
   const hasFilters = !!q || !!lang || !!author;
@@ -239,7 +241,10 @@ export default function TemplatesIndexPage() {
   const { isTabSwitching } = useTabNavigation();
   // 検索・絞り込み・並び替え等でのナビゲーション中は一覧をスケルトンに差し替える（guides/index.tsx と同型）
   const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
+  const location = useLocation();
+  // 同じ一覧の中の遷移だけをスケルトンにする（詳細へ移る遷移では差し替えない）
+  const isNavigating =
+    navigation.state === "loading" && navigation.location?.pathname === location.pathname;
 
   const handleSortChange = (value: ContentSort) => {
     setSearchParams(
@@ -372,8 +377,8 @@ export default function TemplatesIndexPage() {
               value={langValue}
               onValueChange={handleLangChange}
               placeholder={t("templates.allLanguages")}
-              searchPlaceholder={t("meDevices.search")}
-              emptyText={t("meDevices.notFound")}
+              searchPlaceholder={t("templates.languageSearchPlaceholder")}
+              emptyText={t("templates.languageNotFound")}
               className="h-11 sm:h-9"
             />
           </div>
@@ -387,10 +392,23 @@ export default function TemplatesIndexPage() {
           </Button>
         </Form>
 
-        {/* 件数（左）と並び替え（右）。aria-live は件数だけ。絞り込み中は解除の導線を件数の隣に出す */}
+        {/* スキップリンク: 検索・言語・並び替えを飛ばして一覧の先頭へ（フォーカス時だけ見える。ガイド一覧と同じ） */}
+        <a
+          href="#template-results"
+          className="sr-only rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-20 focus:z-50"
+        >
+          {t("templates.skipToResults")}
+        </a>
+        {/* 件数（左）と並び替え（右）。aria-live は件数だけ。絞り込み中は解除の導線を件数の隣に出す。
+            件数は一覧の先頭の目印にもなる（スキップリンクの飛び先） */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3">
-            <p aria-live="polite" className="min-w-0 text-sm text-muted-foreground">
+            <p
+              id="template-results"
+              tabIndex={-1}
+              aria-live="polite"
+              className="min-w-0 text-sm text-muted-foreground outline-none"
+            >
               {resultCountText}
             </p>
             {/* 作成者の絞り込みは入力欄が無いので、件数の隣の丸ピルから外す（押せる範囲は ::after で広げる） */}
@@ -497,7 +515,7 @@ export default function TemplatesIndexPage() {
                     <span className="truncate">{template.authorName}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <Search className="h-3 w-3" aria-hidden />
+                    <ListOrdered className="h-3 w-3" aria-hidden />
                     {t("templates.craftCount", { count: template.craftCount })}
                   </span>
                   {template.hasRemaps && (
@@ -550,7 +568,11 @@ export default function TemplatesIndexPage() {
           description={t("templates.emptyDescriptionSuffix")}
           action={
             <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-9">
-              <Link to="/my-guides/templates">{t("templates.emptyDescriptionLink")}</Link>
+              {isLoggedIn ? (
+                <Link to="/my-guides/templates">{t("templates.emptyDescriptionLink")}</Link>
+              ) : (
+                <Link to={loginHref}>{t("templates.emptyLoginToCreate")}</Link>
+              )}
             </Button>
           }
         />

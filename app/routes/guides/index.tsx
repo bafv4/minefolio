@@ -238,7 +238,11 @@ export default function GuidesIndexPage() {
   // 表示形式の切替だけのナビゲーション（このルートの loader は再実行しない。親のレイアウトは再検証される）では
   // 一覧をスケルトンに差し替えない
   const isViewOnlyNavigation = !!navigation.location && isViewToggle(location, navigation.location);
-  const isNavigating = navigation.state === "loading" && !isViewOnlyNavigation;
+  // 同じ一覧の中の遷移（検索・絞り込み・並び替え）だけをスケルトンにする。記事へ移る遷移では差し替えない
+  const isNavigating =
+    navigation.state === "loading" &&
+    !isViewOnlyNavigation &&
+    navigation.location?.pathname === location.pathname;
   const { isTabSwitching } = useTabNavigation();
   // 表示形式は URL の ?view=list に保持する（既定のカードはパラメータなし。/browse と同じ形）。
   // 戻る・再読み込みでも保たれる。切替は履歴を積まない replace で行う
@@ -275,8 +279,9 @@ export default function GuidesIndexPage() {
     ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid, authorUuid, authorCustomSkinUrl }) => ({
       ...guide,
       likeCount: Number(likeCount),
-      // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）
-      pageViews7d: sort === "popular" ? Number(pageViews7d) : undefined,
+      // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）。
+      // 集計がまだ無い間は注記と食い違う「7日 0」を出さない
+      pageViews7d: sort === "popular" && hasPageViewData ? Number(pageViews7d) : undefined,
       isOwn: !!viewerId && authorId === viewerId,
       authorName:
         pickDisplayName(
@@ -488,6 +493,11 @@ export default function GuidesIndexPage() {
               <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
                 <Link to={clearFiltersHref}>{t("guides.clearFilters")}</Link>
               </Button>
+            ) : viewerId ? (
+              // 絞り込みなしの空は、書く側への導線を出す（テンプレート一覧と同じ）
+              <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
+                <Link to="/my-guides/new">{t("guides.createGuide")}</Link>
+              </Button>
             ) : undefined
           }
         />
@@ -501,6 +511,8 @@ export default function GuidesIndexPage() {
           titleLevel="h2"
           // カードのタグも絞り込みチップと同じ行き先（検索語・並び順・表示形式を引き継ぐ）
           tagHref={tagHref}
+          // 記事の「ガイド一覧」が、この絞り込み（検索語・タグ・並び順・表示形式）へ戻れるようにする
+          linkState={{ guideListSearch: location.search }}
         />
       )}
       </>

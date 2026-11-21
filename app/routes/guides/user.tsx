@@ -8,10 +8,12 @@ import {
   useLoaderData,
   Link,
   useNavigation,
+  useLocation,
+  useSearchParams,
   redirect,
   type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useState } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -154,15 +156,48 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   return { author, guides: translatedGuides, templateCount, appUrl };
 }
 
+/** 表示形式（?view=list）だけが変わる遷移か。サーバーデータは同一なので再取得もスケルトンもしない（/guides と同じ） */
+function isViewToggle(
+  current: { pathname: string; search: string },
+  next: { pathname: string; search: string },
+): boolean {
+  return (
+    current.pathname === next.pathname &&
+    new URLSearchParams(current.search).get("view") !== new URLSearchParams(next.search).get("view")
+  );
+}
+
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (isViewToggle(currentUrl, nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
 
 export default function UserGuidesPage() {
   const t = useT();
   const locale = useLocale();
   const { author, guides: authorGuides, templateCount } = useLoaderData<typeof loader>();
   const authorName = getLocalizedDisplayName(author, locale);
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  // 表示形式は URL の ?view=list に保持する（/guides と同じ。戻る・再読み込みでも保たれ、履歴は積まない）
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewMode: "card" | "list" = searchParams.get("view") === "list" ? "list" : "card";
+  const setViewMode = (mode: "card" | "list") => {
+    setSearchParams(
+      (prev) => {
+        if (mode === "list") prev.set("view", "list");
+        else prev.delete("view");
+        return prev;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  };
   const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
+  const location = useLocation();
+  // 同じ一覧の中の遷移（再検証など）だけをスケルトンにする。表示形式の切替や、記事へ移る遷移では差し替えない
+  const isNavigating =
+    navigation.state === "loading" &&
+    !!navigation.location &&
+    navigation.location.pathname === location.pathname &&
+    !isViewToggle(location, navigation.location);
 
   const linkFn = (guide: GuideItem) => `/guides/${author.slug}/${guide.slug}`;
 

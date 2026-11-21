@@ -7,6 +7,7 @@ import {
   useLoaderData,
   Link,
   useSearchParams,
+  useLocation,
   redirect,
   data,
   isRouteErrorResponse,
@@ -453,6 +454,10 @@ export default function GuideViewPage() {
   const showShare = !previewingDraft && !unpublished;
   const showLike = !unpublished;
   const [searchParams] = useSearchParams();
+  // 一覧から来たときは、一覧の絞り込み（?tag= など）へ戻る。直接開いたときは素の /guides
+  const location = useLocation();
+  const stateSearch = (location.state as { guideListSearch?: unknown } | null)?.guideListSearch;
+  const guideListSearch = typeof stateSearch === "string" && stateSearch.startsWith("?") ? stateSearch : "";
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
     const next = new URLSearchParams(searchParams);
@@ -508,7 +513,7 @@ export default function GuideViewPage() {
       {/* Back button + Owner edit button */}
       <div className="mb-6 flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
-          <Link to="/guides">
+          <Link to={`/guides${guideListSearch}`}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("guides.guideList")}
           </Link>
@@ -678,35 +683,38 @@ export default function GuideViewPage() {
           ) : undefined
         }
       >
-        <Link
-          to={`/player/${author.slug}`}
-          className="group flex min-h-11 items-center gap-2.5"
-        >
-          <MinecraftAvatar
-            uuid={author.uuid ?? undefined}
-            skinUrl={author.customSkinUrl}
-            size={36}
-            alt=""
-            className="shrink-0 rounded-lg"
-          />
-          <span className="min-w-0">
-            <span className="block truncate font-medium transition-colors group-hover:text-primary">
-              {authorName}
-            </span>
-            {author.mcid && (
-              <span className="block truncate text-sm text-muted-foreground">@{author.mcid}</span>
-            )}
-          </span>
-        </Link>
-        {otherGuides.length === 0 && (
-          // ほかのガイドが無くても、筆者のガイドページ（作者のテンプレートへの導線もそこにある）へ行けるようにする
+        {/* 主は筆者（顔と名前。走者画面へ）。ガイドページへのリンクは同じ行の右に添える副の導線にする */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4">
           <Link
-            to={`/guides/${author.slug}`}
-            className="flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+            to={`/player/${author.slug}`}
+            className="group flex min-h-11 items-center gap-2.5"
           >
-            {t("guideView.authorGuidesPage")}
+            <MinecraftAvatar
+              uuid={author.uuid ?? undefined}
+              skinUrl={author.customSkinUrl}
+              size={36}
+              alt=""
+              className="shrink-0 rounded-lg"
+            />
+            <span className="min-w-0">
+              <span className="block truncate font-medium transition-colors group-hover:text-primary">
+                {authorName}
+              </span>
+              {author.mcid && (
+                <span className="block truncate text-sm text-muted-foreground">@{author.mcid}</span>
+              )}
+            </span>
           </Link>
-        )}
+          {otherGuides.length === 0 && (
+            // ほかのガイドが無くても、筆者のガイドページ（作者のテンプレートへの導線もそこにある）へ行けるようにする
+            <Link
+              to={`/guides/${author.slug}`}
+              className="flex min-h-11 items-center text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {t("guideView.authorGuidesPage")}
+            </Link>
+          )}
+        </div>
         {otherGuides.length > 0 && (
           <GuideCardGrid
             guides={otherGuides.map((g): GuideItem => ({ ...g, isOwn: isOwner }))}

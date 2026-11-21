@@ -679,6 +679,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     discordDataNote: "We receive your Discord ID, username, avatar, and email address from Discord. Your email address is never shown on the site and is used only for logging in.",
   },
   guides: {
+    createGuide: "Write a guide",
     autoTranslatedMark: "Title and summary are auto-translated",
     guidesCount: "{count} guides",
     guideList: "All guides",
@@ -1160,7 +1161,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     searchLabel: "Search:",
     inputKeysLabel: "Input keys:",
     timingOther: "Other",
-    timingUnspecified: "Unspecified",
+    timingUnspecified: "No split set",
     searchCraftExpandAll: "Expand all",
     searchCraftItemNamesIn: "Show item names in {language}",
     searchCraftNoItemDictionary: "Item names are shown in English because item-name data isn't available for this language.",

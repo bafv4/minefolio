@@ -84,9 +84,9 @@ import {
   FlaskConical,
   Keyboard,
   Languages,
+  ListOrdered,
   Loader2,
   LogIn,
-  Search,
   Settings,
 } from "lucide-react";
 import { getGameLanguageName, normalizeGameLanguage } from "@/lib/game-languages";
@@ -231,7 +231,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       isPublished: template.isPublished,
       applyCount: template.applyCount,
       likeCount,
-      createdAt: template.createdAt.toISOString(),
+      // 一覧と同じ基準（初めて公開した日時。未公開の下書きや旧データは作成日時）
+      createdAt: (template.publishedAt ?? template.createdAt).toISOString(),
       updatedAt: template.updatedAt.toISOString(),
     },
     crafts,
@@ -580,7 +581,7 @@ export default function TemplateViewPage() {
           </span>
           <span aria-hidden>·</span>
           <span className="inline-flex items-center gap-1">
-            <Search className="h-3 w-3" aria-hidden />
+            <ListOrdered className="h-3 w-3" aria-hidden />
             {t("templates.craftCount", { count: crafts.length })}
           </span>
           {remaps.length > 0 && (
