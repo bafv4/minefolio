@@ -2961,6 +2961,13 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     noCraftsInEditor: "Add at least one search-craft",
   },
   templates: {
+    applyTargetHeading: "Apply to",
+    applyNoPresets: "No presets yet",
+    applyLanguageUnset: "The target game language is not set. This template assumes item names in \"{templateLang}\".",
+    skipToResults: "Skip to results",
+    languageSearchPlaceholder: "Search languages…",
+    languageNotFound: "No matching languages",
+    emptyLoginToCreate: "Log in to create",
     title: "Search-craft templates - Minefolio",
     pageTitle: "Search-craft templates",
     pageDesc:
@@ -3006,6 +3013,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     applyDialogDescription: "Choose where to apply the template",
     applyLanguageMismatch:
       "This template assumes item names in \"{templateLang}\". The target's game language is \"{myLang}\". Even if you apply it, some items won't be found by the in-game search.",
+    applyLanguageMismatchCurrent:
+      "This template assumes item names in \"{templateLang}\". The game language of the preset you're currently editing is \"{myLang}\". Even if you apply it, some items won't be found by the in-game search.",
     applyTargetNew: "Save as a new preset (your current settings stay as they are)",
     applyTargetExisting: "Apply to an existing preset",
     applyTargetPresetLabel: "Target preset",

@@ -407,14 +407,20 @@ export default function TemplateViewPage() {
   const selectedTargetPreset = myPresets.find((p) => p.id === targetPresetId);
   // 反映先のゲーム言語（未設定は null）。
   // 既存: 編集中ならライブ、それ以外はスナップショット。新規: 元プリセットのスナップショット（「なし」は言語が決まらない）
+  // 新規で元が「なし」のときは保存先に言語が無いので、閲覧者の編集中プリセットの言語（ライブ）と比べる
+  const viewerLiveLang = myPresets.find((p) => p.isActive)?.liveGameLanguage ?? null;
   const applyTargetLang =
     applyTarget === "existing"
       ? ((selectedTargetPreset?.isActive
           ? selectedTargetPreset.liveGameLanguage
           : selectedTargetPreset?.snapshotGameLanguage) ?? null)
-      : (myPresets.find((p) => p.id === basePresetId)?.snapshotGameLanguage ?? null);
+      : basePresetId === "__none"
+        ? viewerLiveLang
+        : (myPresets.find((p) => p.id === basePresetId)?.snapshotGameLanguage ?? null);
   const templateLang = (template.gameLanguage || "ja_jp").toLowerCase();
   const languageMismatch = !!applyTargetLang && applyTargetLang !== templateLang;
+  // 既存プリセットを選ぶ前は比べる相手が決まらないので、言語の知らせは出さない
+  const languageUnset = !applyTargetLang && (applyTarget === "new" || !!selectedTargetPreset);
 
   // 別テンプレートへ直接遷移した場合に選択状態をリセット
   useEffect(() => {
@@ -626,35 +632,68 @@ export default function TemplateViewPage() {
                 <DialogDescription>{t("templates.applyDialogDescription")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
-                {/* 反映先の選択 */}
-                <RadioGroup
-                  value={applyTarget}
-                  onValueChange={(v) => setApplyTarget(v as "new" | "existing")}
-                  className="space-y-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="new" id="apply-target-new" />
-                    <Label htmlFor="apply-target-new" className="cursor-pointer font-normal">
+                {/* 反映先の選択。行全体を label にして押せる範囲を広げる（モバイル 44px、sm 以上 32px） */}
+                <div className="space-y-2">
+                  <p id="apply-target-heading" className="text-sm font-medium">
+                    {t("templates.applyTargetHeading")}
+                  </p>
+                  <RadioGroup
+                    value={applyTarget}
+                    onValueChange={(v) => setApplyTarget(v as "new" | "existing")}
+                    aria-labelledby="apply-target-heading"
+                    className="gap-1"
+                  >
+                    <Label
+                      htmlFor="apply-target-new"
+                      className="min-h-11 cursor-pointer gap-2 font-normal sm:min-h-8"
+                    >
+                      <RadioGroupItem value="new" id="apply-target-new" />
                       {t("templates.applyTargetNew")}
                     </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem
-                      value="existing"
-                      id="apply-target-existing"
-                      disabled={myPresets.length === 0}
-                    />
                     <Label
                       htmlFor="apply-target-existing"
                       className={cn(
-                        "cursor-pointer font-normal",
-                        myPresets.length === 0 && "text-muted-foreground",
+                        "min-h-11 gap-2 font-normal sm:min-h-8",
+                        myPresets.length === 0
+                          ? "cursor-not-allowed text-muted-foreground"
+                          : "cursor-pointer",
                       )}
                     >
+                      <RadioGroupItem
+                        value="existing"
+                        id="apply-target-existing"
+                        disabled={myPresets.length === 0}
+                      />
                       {t("templates.applyTargetExisting")}
                     </Label>
-                  </div>
-                </RadioGroup>
+                  </RadioGroup>
+                  {myPresets.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("templates.applyNoPresets")}
+                    </p>
+                  )}
+                  {/* ゲーム言語の知らせは、反映先を選んだ直後（判断の直下）に置く */}
+                  {languageMismatch && applyTargetLang && (
+                    <NoticeBanner tone="warning" className="px-3 py-2">
+                      {t(
+                        applyTarget === "new" && basePresetId === "__none"
+                          ? "templates.applyLanguageMismatchCurrent"
+                          : "templates.applyLanguageMismatch",
+                        {
+                          templateLang: getGameLanguageName(t, locale, templateLang),
+                          myLang: getGameLanguageName(t, locale, applyTargetLang),
+                        },
+                      )}
+                    </NoticeBanner>
+                  )}
+                  {languageUnset && (
+                    <NoticeBanner tone="info" className="px-3 py-2">
+                      {t("templates.applyLanguageUnset", {
+                        templateLang: getGameLanguageName(t, locale, templateLang),
+                      })}
+                    </NoticeBanner>
+                  )}
+                </div>
 
                 {applyTarget === "new" ? (
                   <>
@@ -749,21 +788,17 @@ export default function TemplateViewPage() {
                     </div>
                   </div>
                 )}
-
-                {languageMismatch && applyTargetLang && (
-                  <NoticeBanner tone="warning" className="px-3 py-2">
-                    {t("templates.applyLanguageMismatch", {
-                      templateLang: getGameLanguageName(t, locale, templateLang),
-                      myLang: getGameLanguageName(t, locale, applyTargetLang),
-                    })}
-                  </NoticeBanner>
-                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setApplyDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={() => setApplyDialogOpen(false)}
+                >
                   {t("templates.cancel")}
                 </Button>
                 <Button
+                  className="min-h-11 sm:min-h-9"
                   onClick={handleApply}
                   disabled={
                     isSubmitting ||
@@ -822,7 +857,10 @@ export default function TemplateViewPage() {
           {activatedPreset && activatedPreset.id === fetcher.data.presetId ? (
             <>
               {t("templates.activatedHint", { name: activatedPreset.name })}{" "}
-              <Link to="/me/search-craft" className="text-primary hover:underline">
+              <Link
+                to="/me/search-craft"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
                 {t("templates.goToMySearchCraft")}
               </Link>
             </>
@@ -830,7 +868,10 @@ export default function TemplateViewPage() {
             // 編集中のプリセットへ反映した場合は現在の設定が変わっている
             <>
               {t("templates.appliedHint")}{" "}
-              <Link to="/me/search-craft" className="text-primary hover:underline">
+              <Link
+                to="/me/search-craft"
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
                 {t("templates.goToMySearchCraft")}
               </Link>
             </>

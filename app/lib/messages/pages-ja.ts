@@ -3025,6 +3025,13 @@ export const PAGES_JA = {
     noCraftsInEditor: "サーチクラフトを1件以上追加してください",
   },
   templates: {
+    applyTargetHeading: "反映先",
+    applyNoPresets: "プリセットがまだありません",
+    applyLanguageUnset: "保存先のゲーム言語は未設定です。このテンプレートは「{templateLang}」のアイテム名で打つ前提です。",
+    skipToResults: "一覧へ移動",
+    languageSearchPlaceholder: "言語を検索...",
+    languageNotFound: "一致する言語がありません",
+    emptyLoginToCreate: "ログインして作成",
     title: "サーチクラフトテンプレート - Minefolio",
     pageTitle: "サーチクラフトテンプレート",
     pageDesc: "走者が公開しているサーチクラフト設定のテンプレート集。自分の設定に反映したり、Playgroundで試したりできます。",
@@ -3075,6 +3082,8 @@ export const PAGES_JA = {
     applyDialogDescription: "テンプレートの反映先を選んでください",
     applyLanguageMismatch:
       "このテンプレートは「{templateLang}」のアイテム名で打つ前提です。反映先のゲーム言語は「{myLang}」です。反映しても、ゲーム内の検索で見つからないアイテムがあります。",
+    applyLanguageMismatchCurrent:
+      "このテンプレートは「{templateLang}」のアイテム名で打つ前提です。いま編集中のプリセットのゲーム言語は「{myLang}」です。反映しても、ゲーム内の検索で見つからないアイテムがあります。",
     applyTargetNew: "新しいプリセットとして保存（今の設定は変わりません）",
     applyTargetExisting: "既存のプリセットに反映",
     applyTargetPresetLabel: "反映先プリセット",
