@@ -70,6 +70,10 @@ body {
   --color-ghost-hover: var(--ghost-hover);
   --color-destructive-fill: var(--destructive-fill);
   --color-destructive-tint: var(--destructive-tint);
+  --color-live: var(--live);
+  --color-live-fill: var(--live-fill);
+  --color-live-on-fill: var(--live-on-fill);
+  --color-live-tint: var(--live-tint);
   --color-switch-track-off: var(--switch-track-off);
   --color-switch-thumb-off: var(--switch-thumb-off);
   --color-switch-thumb-on: var(--switch-thumb-on);
@@ -138,6 +142,11 @@ body {
   --ghost-hover: var(--accent); /* ghost ボタンのホバー面 */
   --destructive-fill: var(--destructive); /* destructive の塗り（ボタン・バッジ） */
   --destructive-tint: color-mix(in oklab, var(--destructive) 10%, transparent); /* destructive メニュー項目のフォーカス面 */
+  /* ライブ中（PaceMan のライブ・配信中）の印。意味色の destructive とは別（失敗の帯と同じ赤を並べない）。点・文字は --live、塗りのバッジは --live-fill に --live-on-fill の文字 */
+  --live: oklch(0.55 0.2 42); /* 白 5.3:1 */
+  --live-fill: var(--live);
+  --live-on-fill: oklch(1 0 0);
+  --live-tint: color-mix(in oklab, var(--live) 10%, transparent);
   --switch-track-off: var(--input);
   --switch-thumb-off: var(--background);
   --switch-thumb-on: var(--background);
@@ -266,6 +275,10 @@ body {
   --ghost-hover: color-mix(in oklab, var(--accent) 50%, transparent);
   --destructive-fill: color-mix(in oklab, var(--destructive) 60%, transparent);
   --destructive-tint: color-mix(in oklab, var(--destructive) 20%, transparent);
+  --live: oklch(0.76 0.17 45); /* background 8.6:1・card 7.6:1 */
+  --live-fill: oklch(0.55 0.2 42); /* 明るい --live の上に白は載らないので塗りは別の値（白 5.3:1） */
+  --live-on-fill: oklch(1 0 0);
+  --live-tint: color-mix(in oklab, var(--live) 20%, transparent);
   --switch-track-off: color-mix(in oklab, var(--input) 80%, transparent);
   --switch-thumb-off: var(--foreground);
   --switch-thumb-on: var(--primary-foreground);
@@ -433,6 +446,7 @@ body {
   --accent: oklch(0.955 0.007 247.9);
   --accent-foreground: oklch(0.2 0.05 265.8);
   --destructive: oklch(0.43 0.19 27.3);
+  --live: oklch(0.45 0.17 42); /* 白 8.0:1 */
   --border: oklch(0.2 0.03 260);
   --page-grid-line: oklch(0 0 0 / 0);
   --input: oklch(0.955 0.007 247.9);
@@ -485,6 +499,9 @@ body {
   --muted-foreground: oklch(0.88 0.03 256.8);
   --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.84 0.14 22.2);
+  --live: oklch(0.84 0.15 45); /* 色相は通常の dark と同じ 45。background 10.8:1（ultra-dark 11.0:1）。塗りも同じ値で、文字は background */
+  --live-fill: var(--live);
+  --live-on-fill: var(--background);
   --border: oklch(0.85 0.02 260);
   --page-grid-line: oklch(1 0 0 / 0);
   --ring: oklch(0.8 0.15 162);

@@ -15,7 +15,7 @@ export function LiveTeaser({ count, href }: { count: number; href: string }) {
       to={href}
       className="flex min-h-11 items-center gap-2 rounded-xl border border-border/70 bg-card px-4 text-sm font-medium transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-fit lg:pr-5"
     >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+      <span className="h-2 w-2 shrink-0 rounded-full bg-live" aria-hidden="true" />
       <span className="min-w-0 truncate">{t("home.liveTeaser", { count })}</span>
       <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </Link>

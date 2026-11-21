@@ -2747,7 +2747,7 @@ function SocialLinkRichCard({
           </span>
           <span className="truncate text-sm text-muted-foreground">{link.identifier}</span>
           {isLive && (
-            <Badge variant="destructive" className="px-1.5">
+            <Badge className="border-transparent bg-live-fill px-1.5 text-live-on-fill">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none" />
               {t("playerProfile.liveNow")}
             </Badge>

@@ -71,7 +71,7 @@ export function WelcomeBar({
             to={liveHref}
             className="mt-1 inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mt-0.5"
           >
-            <span className="h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true" />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-live" aria-hidden="true" />
             <span className="truncate">{t("home.welcomeLiveChip", { count: liveCount })}</span>
             {liveSplit && <PaceManSplitMark timeline={liveSplit} size={16} withLabel={false} className="shrink-0" />}
           </Link>
