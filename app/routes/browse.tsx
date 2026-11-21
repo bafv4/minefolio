@@ -265,6 +265,7 @@ export default function BrowsePage() {
   const handleSortChange = (value: string) => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set("sort", value);
+    newParams.delete("random");
     newParams.delete("page");
     setSearchParams(newParams);
   };
@@ -281,6 +282,7 @@ export default function BrowsePage() {
         } else {
           newParams.delete("q");
         }
+        newParams.delete("random");
         newParams.delete("page");
         return newParams;
       },
@@ -328,6 +330,7 @@ export default function BrowsePage() {
       currentValues.filter(v => v !== value).forEach(v => newParams.append(key, v));
     }
 
+    newParams.delete("random");
     newParams.delete("page");
     setSearchParams(newParams);
   };
@@ -355,6 +358,7 @@ export default function BrowsePage() {
     draftFilters.editions.forEach((v) => newParams.append("edition", v));
     draftFilters.inputMethods.forEach((v) => newParams.append("input", v));
     draftFilters.platforms.forEach((v) => newParams.append("platform", v));
+    newParams.delete("random");
     newParams.delete("page");
     setSearchParams(newParams);
     setIsFilterDialogOpen(false);
@@ -520,10 +524,10 @@ export default function BrowsePage() {
                   {(draftFilters.roles.length + draftFilters.editions.length + draftFilters.inputMethods.length + draftFilters.platforms.length) > 0 && (
                     <Button
                       variant="outline"
-                      className="w-full sm:w-auto"
+                      className="min-h-11 w-full sm:min-h-9 sm:w-auto"
                       onClick={clearDraftFilters}
                     >
-                      <X className="h-4 w-4 mr-2" />
+                      <X className="h-4 w-4 mr-2" aria-hidden />
                       {t("common.clearAll")}
                     </Button>
                   )}

@@ -641,7 +641,7 @@ export const PAGES_JA = {
     roleViewer: "視聴者",
     emptyFiltered: "条件に一致する走者が見つかりません",
     emptyFilteredHint: "検索条件や絞り込みを変えて再度お試しください",
-    emptyAll: "まだプロフィールがありません",
+    emptyAll: "プロフィールがまだありません",
     emptyAllHint: "プロフィールが登録されるとここに表示されます",
     searchPlaceholder: "MCID・名前で検索...",
     platformOther: "その他",
