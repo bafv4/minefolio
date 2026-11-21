@@ -36,7 +36,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   theme: {
     toggle: "Display settings (theme and high contrast)",
     system: "System",
-    systemShort: "Auto",
+    systemShort: "System",
     light: "Light",
     dark: "Dark",
     ultraDark: "Ultra dark",
@@ -726,6 +726,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   whatsNew: {
     ariaLabel: "What's new",
     ariaLabelUnread: "What's new (unread)",
+    jaOnlyNotice: "The update notes are available in Japanese only.",
     title: "What's new",
     unreadCount: "{count} unread",
     hiddenCount: "{count} more updates",

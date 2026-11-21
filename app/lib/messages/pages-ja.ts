@@ -33,7 +33,7 @@ export const PAGES_JA = {
     toggle: "表示設定（テーマ・ハイコントラスト）",
     /** OS の設定に従う */
     system: "システム",
-    systemShort: "自動",
+    systemShort: "システム",
     light: "ライト",
     dark: "ダーク",
     ultraDark: "ウルトラダーク",
@@ -3177,6 +3177,7 @@ export const PAGES_JA = {
   whatsNew: {
     ariaLabel: "新機能のお知らせ",
     ariaLabelUnread: "新機能のお知らせ（未読あり）",
+    jaOnlyNotice: "お知らせの本文は日本語のみで提供しています。",
     title: "新機能",
     unreadCount: "未読 {count}件",
     hiddenCount: "ほか {count} 件の更新があります",

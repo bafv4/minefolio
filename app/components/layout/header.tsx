@@ -144,14 +144,11 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
             {/* Desktop Navigation（ロゴ＋ナビ＋右側の操作が1行に収まるのは約900px以上。md〈768px〉の
                 container では幅が足りず各項目が折り返すため、横並びは lg から。未満はハンバーガーメニュー） */}
             <div className="hidden lg:flex lg:items-center lg:space-x-1">
-              {navigation.map((item, index) => {
+              {navigation.map((item) => {
                 const Icon = item.icon;
                 const active = item.href === activeHref;
                 return (
                   <div key={item.key} className="flex items-center">
-                    {index > 0 && (
-                      <div className="h-4 w-px bg-border mx-2" />
-                    )}
                     <Link
                       to={item.href}
                       aria-current={active ? "page" : undefined}
@@ -226,15 +223,17 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
-                      <Link to="/playground">
-                        <FlaskConical className="mr-2 h-4 w-4" />
-                        {t("nav.playground")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link to="/favorites">
                         <Heart className="mr-2 h-4 w-4" />
                         {t("nav.favorites")}
+                      </Link>
+                    </DropdownMenuItem>
+                    {/* 自分の物（上）と、道具・連絡（下）の区切り */}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link to="/playground">
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        {t("nav.playground")}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer">
@@ -352,10 +351,11 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                           { href: `/player/${user.slug}`, icon: User, label: t("nav.myProfile") },
                           { href: settingsLink.href, icon: Settings, label: settingsLink.label },
                           { href: "/my-guides", icon: NotebookPen, label: t("nav.myGuides") },
-                          { href: "/playground", icon: FlaskConical, label: t("nav.playground") },
                           { href: "/favorites", icon: Heart, label: t("nav.favorites") },
+                          // 自分の物（上）と、道具・連絡（下）の区切り
+                          { href: "/playground", icon: FlaskConical, label: t("nav.playground"), separated: true },
                           { href: "/feedback", icon: MessageSquare, label: t("nav.feedback") },
-                        ].map(({ href, icon: Icon, label }) => (
+                        ].map(({ href, icon: Icon, label, separated }) => (
                           <Link
                             key={href}
                             to={href}
@@ -363,6 +363,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                             className={cn(
                               "flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-foreground/80 hover:bg-accent hover:text-accent-foreground transition-colors touch-manipulation",
                               NAV_FOCUS_CLASS,
+                              separated && "mt-1.5 border-t border-border/60 rounded-t-none pt-3",
                             )}
                           >
                             <Icon className="h-5 w-5 shrink-0" />

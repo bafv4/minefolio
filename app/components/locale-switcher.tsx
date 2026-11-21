@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocale, useT, useSetLocale } from "@/hooks/use-locale";
 import { SUPPORTED_LOCALES, LOCALE_NAMES, type Locale } from "@/lib/locale";
 
@@ -23,11 +24,16 @@ export function LocaleSwitcher() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("nav.changeLanguage")}>
-          <Languages aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={t("nav.changeLanguage")}>
+              <Languages aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={6}>{t("nav.changeLanguage")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end">
         {/* 選択肢はラジオ項目（role=menuitemradio・aria-checked で現在の言語が読み上げられる）。
             右端のチェックは飾り（aria-hidden） */}

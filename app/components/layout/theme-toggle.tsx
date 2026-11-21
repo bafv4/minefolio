@@ -4,6 +4,7 @@ import type { MessageKey } from "@/lib/messages";
 import { useTheme } from "next-themes";
 import { useContrast } from "@/hooks/use-contrast";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -35,13 +36,18 @@ export function ThemeToggle() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("theme.toggle")}>
-          {/* 現在のテーマに依らない 1 つの印（dark: での出し分けはしない。選択中はメニューのチェックが示す） */}
-          <SunMoon aria-hidden />
-          <span className="sr-only">{t("theme.toggle")}</span>
-        </Button>
-      </DropdownMenuTrigger>
+      {/* アイコンだけのボタンなので、見える名前をツールチップで出す（名前は aria-label が担う） */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={t("theme.toggle")}>
+              {/* 現在のテーマに依らない 1 つの印（dark: での出し分けはしない。選択中はメニューのチェックが示す） */}
+              <SunMoon aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={6}>{t("theme.toggle")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end">
         {/* 選択肢はラジオ項目（role=menuitemradio・aria-checked で現在のテーマが読み上げられる）。
             見た目は従来の項目のまま: 左の丸印（基底の先頭 span）を隠し、余白・アイコン色を DropdownMenuItem に合わせ、

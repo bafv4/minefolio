@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useT } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import type { MessageKey } from "@/lib/messages";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 // markdown 描画（react-markdown 一式）はポップオーバーを開いた時にだけロードする。
@@ -89,6 +90,7 @@ function WhatsNewBodySkeleton() {
 
 export function WhatsNew() {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   // changelog.md 全文＋パース処理を含む ./whats-new-data はアイドル時に
   // 動的 import する（共通レイアウトの初期チャンクから分離するため）。
@@ -182,23 +184,28 @@ export function WhatsNew() {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative size-11 md:size-9"
-          aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
-        >
-          {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
-          <Sparkles aria-hidden />
-          {hasUnread && (
-            <span
-              className="absolute top-2.5 right-2.5 md:top-1.5 md:right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
-              aria-hidden
-            />
-          )}
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative size-11 md:size-9"
+              aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
+            >
+              {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
+              <Sparkles aria-hidden />
+              {hasUnread && (
+                <span
+                  className="absolute top-2.5 right-2.5 md:top-1.5 md:right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
+                  aria-hidden
+                />
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={6}>{t("whatsNew.ariaLabel")}</TooltipContent>
+      </Tooltip>
       <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
@@ -238,6 +245,10 @@ export function WhatsNew() {
               <Skeleton className="h-6 w-14 rounded-full" />
               <Skeleton className="h-6 w-12 rounded-full" />
             </div>
+          )}
+          {/* 本文は日本語の changelog。ja 以外の人には先に知らせる */}
+          {locale !== "ja" && (
+            <p className="mt-2 text-xs text-muted-foreground">{t("whatsNew.jaOnlyNotice")}</p>
           )}
         </div>
 
@@ -289,7 +300,7 @@ export function WhatsNew() {
           <Link
             to="/developers/changelog"
             onClick={() => setOpen(false)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-link hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-brand-link hover:underline sm:min-h-0"
           >
             {t("whatsNew.viewChangelog")}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
