@@ -1,5 +1,7 @@
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
+import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   useLoaderData,
   useFetcher,
@@ -67,6 +69,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
@@ -85,12 +88,19 @@ export async function action({ request }: ActionFunctionArgs) {
     const guide = await db.query.guides.findFirst({
       where: and(eq(guides.id, guideId), eq(guides.authorId, user.id)),
     });
-    if (guide) {
+    if (!guide) {
+      return { error: t("meGuides.deleteFailed"), action: "delete" };
+    }
+    try {
       // 翻訳キャッシュ削除 + guides 行削除を単一トランザクションで原子化する
       // （app/lib/content-cleanup.server.ts）。Vercel Blob 実体の削除は内部で
       // runAfterResponse 経由でレスポンス後にスケジュールされる。
       await deleteGuide(db, guide);
+    } catch (error) {
+      console.error("Guide delete error:", error);
+      return { error: t("meGuides.deleteFailed"), action: "delete" };
     }
+    return { success: true, action: "delete" };
   }
 
   // プロフィールのガイドタブでのピン留め切替
@@ -117,7 +127,17 @@ export default function MyGuidesPage() {
   const t = useT();
   const locale = useLocale();
   const { guides: userGuides, user } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<typeof action>();
+  // 削除の結果をトーストで知らせる（テンプレートの削除と同じ形）
+  const prevDataRef = useRef<typeof fetcher.data>(undefined);
+  useEffect(() => {
+    const data = fetcher.data;
+    if (!data || data === prevDataRef.current) return;
+    prevDataRef.current = data;
+    if (data.action !== "delete") return;
+    if ("success" in data && data.success) toast.success(t("meGuides.deleteSuccess"));
+    else if ("error" in data && data.error) toast.error(data.error);
+  }, [fetcher.data]);
   // タブ切替（→ /my-guides/templates）中は一覧をスケルトンに差し替える
   const { isTabSwitching } = useTabNavigation();
 
@@ -137,14 +157,14 @@ export default function MyGuidesPage() {
         <div>
           <h1 className="text-2xl font-bold">{t("meGuides.pageTitle")}</h1>
           <p className="text-muted-foreground text-sm">
-            {t("meGuides.pageDesc")}
+            {t("meGuides.pageDesc")}{" "}
             {/* 書き方の手引き（公式ガイド）。新しいタブで開き、そのことを読み上げでも伝える。
                 押せる高さは負のマージン＋同じ量の padding で広げる（モバイル 44px、sm 以上 28px。行の高さは変えない） */}
             <Link
               to={GUIDE_WRITING_GUIDE_PATH}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-2 -my-3 inline-flex items-center gap-1 py-3 text-primary hover:underline sm:-my-1 sm:py-1"
+              className="-my-3 inline-flex items-center gap-1 py-3 text-primary underline underline-offset-2 hover:text-primary/80 sm:-my-1 sm:py-1"
             >
               {t("meGuides.writingGuide")}
               <ExternalLink className="h-3 w-3" aria-hidden />
@@ -188,7 +208,8 @@ export default function MyGuidesPage() {
                 key={guide.id}
                 className="relative py-0 transition-colors hover:border-primary/40"
               >
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
+                {/* 操作は狭い画面でも右端に置き（メタ行の下に独立した段を作らない）、タイトルの段と並べる */}
+                <CardContent className="flex items-start gap-3 p-4 sm:items-center sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {/* 行き先は公開状態に依らず常に編集（公開ページは右の操作から別に開く） */}

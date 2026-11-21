@@ -2511,12 +2511,15 @@ export const PAGES_JA = {
     customCapeActive: "カスタムマントが有効です。Mojangのマントより優先されます。",
   },
   meGuides: {
+    contentTabsLabel: "マイガイドの種類",
+    deleteSuccess: "ガイドを削除しました",
+    deleteFailed: "ガイドを削除できませんでした",
     /** 新規作成ページ・エディタの「戻る」リンク（/my-guides へ。戻り先の見出し pageTitle の名前で呼ぶ） */
-    backToManagement: "ガイドに戻る",
+    backToManagement: "マイガイドに戻る",
     /** 一覧の行の更新日時（{time} は「4か月前」などの相対時刻） */
     updatedAgo: "{time}に更新",
-    title: "ガイド - Minefolio",
-    pageTitle: "ガイド",
+    title: "マイガイド - Minefolio",
+    pageTitle: "マイガイド",
     pageDesc: "攻略法や設定のガイドを作成・公開できます",
     /** 公式ガイド「ガイドのガイド」へのリンク（マイガイドの説明の隣・エディタのツールバー） */
     writingGuide: "書き方の手引き",
@@ -2525,7 +2528,7 @@ export const PAGES_JA = {
     tabGuides: "ガイド",
     tabTemplates: "サーチクラフトテンプレート",
     newGuide: "新規作成",
-    noGuidesTitle: "ガイドがありません",
+    noGuidesTitle: "ガイドがまだありません",
     noGuides: "ガイドがまだありません。最初のガイドを作成してみましょう。",
     deleteTitle: "ガイドを削除",
     deleteDescription: "「{title}」を削除しますか？この操作は取り消せません。",
@@ -2733,6 +2736,8 @@ export const PAGES_JA = {
       publishLabel: "公開する",
       /** 「公開…」から開いたとき: 主ボタンが適用と公開の保存を一度に行う */
       publishNow: "公開する",
+      /** 「公開…」から開いたダイアログの題（公開前の確認。通常の設定ダイアログは toolbar.settings） */
+      publishTitle: "公開の確認",
       publishDesc: "内容を確認して「公開する」を押すと、保存してすぐ読者に公開されます。",
       publishToggleHint: "オフにすると、公開せずに設定だけ変更します",
       /** 公開スイッチの説明。オン/オフと、いま公開中か（Live）・公開版が無いか（New）で出し分ける */
@@ -2958,6 +2963,8 @@ export const PAGES_JA = {
     hintText: "ドラッグで回転 / 右ドラッグで移動 / ホイール・ピンチで拡縮",
   },
   meTemplates: {
+    createSubmitHint: "作成後、編集画面で公開できます",
+    toList: "一覧へ",
     /** 新規作成の確定ボタン。作成したテンプレートは非公開で、公開は編集画面の保存（公開スイッチ）で行う */
     createSubmit: "作成",
     /** 編集画面: 公開スイッチ・下書き保存・未公開の変更の帯（ガイドの guideEditor.ui と同じ作り。文言は「テンプレート」） */
@@ -2973,7 +2980,7 @@ export const PAGES_JA = {
     revertSuccess: "下書きを破棄して公開版に戻しました",
     /** 一覧: 非公開のテンプレートの行の補足 */
     unpublishedHint: "編集画面で「公開する」をオンにして保存すると公開されます。",
-    title: "サーチクラフトテンプレート - Minefolio",
+    title: "マイテンプレート - Minefolio",
     userNotFound: "ユーザーが見つかりません",
     unknownAction: "不明な操作です",
     templateNotFound: "テンプレートが見つかりません",
@@ -2984,7 +2991,7 @@ export const PAGES_JA = {
     createSuccess: "テンプレートを作成しました（非公開）。編集画面で公開できます",
     updateSuccess: "テンプレートを更新しました",
     deleteSuccess: "テンプレートを削除しました",
-    pageTitle: "サーチクラフトテンプレート",
+    pageTitle: "マイテンプレート",
     pageDescription: "サーチクラフト設定をテンプレートとして公開・管理できます。",
     create: "テンプレートを作成",
     hint: "公開したテンプレートはほかの走者が閲覧し、自分の設定に反映できます。",
@@ -3003,7 +3010,7 @@ export const PAGES_JA = {
     descriptionPlaceholder: "このテンプレートの説明、想定するカテゴリやリマップの前提など...",
     deleteTitle: "テンプレートを削除",
     deleteDescription: "「{name}」を削除しますか？この操作は取り消せません。",
-    emptyTitle: "テンプレートがありません",
+    emptyTitle: "テンプレートがまだありません",
     emptyDescription: "最初のテンプレートを作成しましょう。作成後は非公開で、編集画面で公開できます",
     cancel: "キャンセル",
     delete: "削除",
@@ -3013,7 +3020,7 @@ export const PAGES_JA = {
     editorNewDescription: "サーチクラフトとリマップを自由に編集してテンプレートを作成します。作成すると非公開で、編集画面で公開できます",
     editorEditTitle: "テンプレートを編集",
     /** 作成・編集ページの「戻る」リンク（/my-guides/templates へ。戻り先の見出し pageTitle の名前で呼ぶ） */
-    backToManagement: "サーチクラフトテンプレートに戻る",
+    backToManagement: "マイテンプレートに戻る",
     basicInfo: "基本情報",
     languageLabel: "ゲーム内言語",
     languageHint: "サーチ文字列が想定するゲーム内言語（任意）",

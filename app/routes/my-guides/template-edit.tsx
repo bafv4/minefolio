@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-edit";
 import { createDb } from "@/lib/db";
@@ -217,19 +217,27 @@ export default function TemplateEditPage() {
     prevDataRef.current = data;
 
     if ("success" in data && data.success) {
-      toast.success(
+      const message =
         data.action === "draft"
           ? t("meTemplates.draftSaved")
           : data.action === "discard"
             ? t("meTemplates.revertSuccess")
-            : t("meTemplates.updateSuccess"),
-      );
+            : t("meTemplates.updateSuccess");
+      // 公開版への保存は編集画面にとどまる（ガイドと同じ）。一覧へはトーストのボタンから行ける
+      if (data.action === "publish") {
+        toast.success(message, {
+          action: {
+            label: t("meTemplates.toList"),
+            onClick: () => navigate("/my-guides/templates"),
+          },
+        });
+      } else {
+        toast.success(message);
+      }
     } else if ("error" in data && data.error) {
       toast.error(data.error);
     }
   }, [fetcher.data]);
-
-  const handleSaved = useCallback(() => navigate("/my-guides/templates"), [navigate]);
 
   return (
     <div className="space-y-6">
@@ -278,7 +286,6 @@ export default function TemplateEditPage() {
           !!fetcher.data.success &&
           fetcher.data.action !== "discard"
         }
-        onSaved={handleSaved}
         onSubmit={(data, mode, isPublished) => {
           const formData = new FormData();
           formData.set("_action", mode);

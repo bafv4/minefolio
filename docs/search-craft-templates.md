@@ -82,15 +82,15 @@ type TemplateLoop = {
   - サーチクラフト＋繋ぎ方（Loop）編集部は **`SearchCraftTimingBoard`**（`app/components/search-craft-editor.tsx`）によるタイミングブロック型UI（「指定なし」+ 6種のタイミング、計7ブロックを常時表示。timing の変更はブロック間D&D）。クラフト行はアイテムチップ + サーチ文字列 + 「Shiftを押しながら」チェックボックス + コメント常時表示。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」を参照。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
   - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。検証は下書き保存と公開（保存）の両方に掛ける。
-  - **作成**: 作成すると**非公開**（`isPublished: false`・`publishedAt: null`）。確定ボタンは「作成」で、成功すると編集画面（`/my-guides/templates/:id/edit`）へ移る（ガイドの新規作成と同じ）。公開は編集画面の保存で行う。
+  - **作成**: 作成すると**非公開**（`isPublished: false`・`publishedAt: null`）。確定ボタンは「作成」で、成功すると編集画面（`/my-guides/templates/:id/edit`）へ移る（ガイドの新規作成と同じ）。公開は編集画面の保存で行う。確定ボタンの下に「作成後、編集画面で公開できます」の補足（`submitHint`）を出す。
   - **保存の経路（ガイドと同じ。公開版と下書きを分ける）**: 編集画面の action は `_action` の allowlist（`draft` / `publish` / `discard`。未知の値は拒否）で判定する。他人のテンプレートへの操作は拒否する。
     - `draft`（**公開中のテンプレートだけ**。非公開に送ると拒否）: 下書き列だけを書き `draftUpdatedAt` を更新する。公開版の列・`isPublished`・`updatedAt`・`publishedAt` は変えない。成功は `{ success: true, action: "draft" }`（編集を続けるので遷移しない）。
-    - `publish`: 送信された値を公開版へ書き、`isPublished`（フォームの公開スイッチ `isPublished=true|false`）と `updatedAt` を更新し、初回の公開なら `publishedAt` を入れ、下書き列をすべて null にする。未公開のままの「保存」もこの経路。成功は `{ success: true, action: "publish" }`（保存後は `/my-guides/templates` へ移る）。
+    - `publish`: 送信された値を公開版へ書き、`isPublished`（フォームの公開スイッチ `isPublished=true|false`）と `updatedAt` を更新し、初回の公開なら `publishedAt` を入れ、下書き列をすべて null にする。未公開のままの「保存」もこの経路。成功は `{ success: true, action: "publish" }`（保存後は編集画面にとどまる。ガイドと同じ）。
     - `discard`: 下書き列をすべて null にする（「公開版に戻す」。確認ダイアログつき）。成功は `{ success: true, action: "discard" }`。
   - **編集画面の表示**: loader は下書きがあれば下書きの内容、なければ公開版を返し、`isPublished`・`hasDraft`・`draftUpdatedAt` も返す（フォームは `key` に `draftUpdatedAt` を含め、破棄・保存の後に中身が入れ替わる）。操作バーに「公開する」スイッチを置き、未保存の判定に含める。送信ボタンは、公開中は「下書き保存」（outline）＋主ボタン（スイッチがオンなら「更新を公開」、オフなら「非公開にする」）、未公開は主ボタン1つ（スイッチがオフなら「保存」、オンなら「公開」。`getPublishAction` / `hasDraftSave`＝ガイドと共有）。下書きがあるときは上部に `NoticeBanner` で「未公開の変更があります」と「公開版に戻す」を出す。
   - **公開側は下書き列を読まない**: 詳細 loader・「反映」action（`guides/templates/view.tsx`）と `/playground?template=` は `columns` で下書き列を除く。一覧・ガイド埋め込み・`api/guides/templates-search`・いいね・作者ページは列を明示して読むので下書き列は入らない。本人向けの下書きプレビューは無い。
   - **離脱確認**: 名前・説明・ゲーム内言語・サーチクラフト・リマップ・Loop のいずれかが、開いたときの値（保存に成功した後は、その送信内容）と違う間は未保存として扱う。キーボード配列の表示切替は数えない。未保存のままアプリ内で遷移しようとすると確認ダイアログ（「編集を続ける」「保存せず離れる」）を出し、タブを閉じる・再読み込みではブラウザの警告を出す（`useUnsavedWarning` / `UnsavedChangesDialog`）。
-  - **保存後の遷移**: 保存に成功したら未保存を解消してから `/my-guides/templates` へ移る（離脱確認は出ない）。失敗したときは入力を残し、遷移しない。
+  - **保存後**: 編集画面（新規作成は作成後に編集画面）にとどまり、保存に成功したら未保存を解消する。公開版への保存のトーストには「一覧へ」のボタン（`/my-guides/templates`）を付ける。失敗したときは入力を残す。「公開版に戻す」の確定ボタンは destructive（取り消せない破棄）。
   - **送信ボタン**: 上端の操作バーと文書の末尾の両方に同じボタンを置く（文書が長いので、上へ戻らずに送れるように）。
   - **検証エラー**: クライアントの検証（テンプレート名・サーチクラフト0件・アイテム未選択・サーチ文字列未入力・Loop のステップ不足・Loop の未選択）はトーストに加えて画面にも出す。テンプレート名は欄に `aria-invalid` と欄の下の文（`aria-describedby`）。サーチクラフト・Loop の誤りはワークベンチの中の個々の欄までは指せないので、ワークベンチの直前に文を出す。最初の誤り（文書順でテンプレート名が先）へフォーカスを移す。直すと消える
   - **見出しの段**: ページの h1 の下の欄名（基本情報・ワークベンチの3つの欄）は h2（ワークベンチは `sectionHeadingLevel="h2"`）。

@@ -38,7 +38,8 @@ import {
   Globe,
   Lock,
   LayoutTemplate,
-  Search,
+  ListOrdered,
+  Loader2,
   Keyboard,
   Download,
   Languages,
@@ -157,6 +158,8 @@ export default function MyTemplatesPage() {
     }
   }, [fetcher.data]);
 
+  const firstUnpublishedId = templates.find((template) => !template.isPublished)?.id;
+
   const submitAction = (fields: Record<string, string>) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(fields)) {
@@ -179,8 +182,16 @@ export default function MyTemplatesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meTemplates.pageTitle")}</h1>
+          {/* 説明・ヒント・一覧へのリンクは1つの段にまとめる（ガイド一覧と同じ組み方） */}
           <p className="text-sm text-muted-foreground">
-            {t("meTemplates.pageDescription")}
+            {t("meTemplates.pageDescription")} {t("meTemplates.hint")}{" "}
+            {/* 同じタブで開く内部リンクなので、外部リンクのアイコンは付けない */}
+            <Link
+              to="/guides/templates"
+              className="text-primary underline underline-offset-2 hover:text-primary/80"
+            >
+              {t("meTemplates.viewGallery")}
+            </Link>
           </p>
         </div>
         {/* 0 件のときは空状態の action に同じボタンがあるので出さない */}
@@ -193,14 +204,6 @@ export default function MyTemplatesPage() {
           </Button>
         )}
       </div>
-
-      <p className="text-sm text-muted-foreground">
-        {t("meTemplates.hint")}{" "}
-        {/* 同じタブで開く内部リンクなので、外部リンクのアイコンは付けない */}
-        <Link to="/guides/templates" className="text-primary hover:underline">
-          {t("meTemplates.viewGallery")}
-        </Link>
-      </p>
 
       {templates.length > 0 ? (
         <div className="space-y-3">
@@ -238,14 +241,15 @@ export default function MyTemplatesPage() {
                       </p>
                     )}
                     {/* 非公開のテンプレートは、編集画面の保存（公開スイッチ）で公開できることを示す */}
-                    {!template.isPublished && (
+                    {/* 同じ文を行ごとに繰り返さない。最初の非公開の行にだけ出す */}
+                    {!template.isPublished && template.id === firstUnpublishedId && (
                       <p className="text-xs text-muted-foreground">
                         {t("meTemplates.unpublishedHint")}
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
-                        <Search className="h-3 w-3" aria-hidden />
+                        <ListOrdered className="h-3 w-3" aria-hidden />
                         {t("meTemplates.craftCount", { count: template.craftCount })}
                       </span>
                       {template.gameLanguage && (
@@ -301,7 +305,14 @@ export default function MyTemplatesPage() {
                           aria-label={t("meTemplates.delete")}
                           title={t("meTemplates.delete")}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
+                          {/* 回すのはこのテンプレートの削除中だけ（マイガイドの行と同じ） */}
+                          {fetcher.state !== "idle" &&
+                          fetcher.formData?.get("_action") === "delete" &&
+                          fetcher.formData?.get("templateId") === template.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          ) : (
+                            <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
+                          )}
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>

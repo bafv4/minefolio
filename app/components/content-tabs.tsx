@@ -76,7 +76,7 @@ export function MyContentTabs({ active }: { active: "guides" | "templates" }) {
   return (
     <ContentTabs
       active={active}
-      label={t("guides.contentTabsLabel")}
+      label={t("meGuides.contentTabsLabel")}
       tabs={[
         { key: "guides", to: "/my-guides", label: t("meGuides.tabGuides"), icon: BookOpen },
         { key: "templates", to: "/my-guides/templates", label: t("meGuides.tabTemplates"), icon: LayoutTemplate },

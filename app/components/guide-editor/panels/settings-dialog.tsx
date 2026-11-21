@@ -149,7 +149,10 @@ export function SettingsDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
+          {/* 「公開…」から開いたときは、ボタンと対応する題にする */}
+          <DialogTitle>
+            {publishPrimary ? t("guideEditor.ui.publishTitle") : t("guideEditor.toolbar.settings")}
+          </DialogTitle>
           <DialogDescription>
             {publishPrimary
               ? t("guideEditor.ui.publishDesc")

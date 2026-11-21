@@ -155,6 +155,7 @@ export default function TemplateNewPage() {
         saveSucceeded={!!fetcher.data && "success" in fetcher.data && !!fetcher.data.success}
         onSaved={handleSaved}
         submitLabel={t("meTemplates.createSubmit")}
+        submitHint={t("meTemplates.createSubmitHint")}
         onSubmit={(data) => {
           const formData = new FormData();
           formData.set("title", data.title);

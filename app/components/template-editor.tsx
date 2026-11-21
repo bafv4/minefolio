@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { PageSection } from "@/components/page-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,6 +82,7 @@ export function TemplateEditorForm({
   publishState,
   initialPublished = false,
   submitLabel,
+  submitHint,
   saveResult,
   saveSucceeded,
   onSaved,
@@ -101,6 +102,8 @@ export function TemplateEditorForm({
   initialPublished?: boolean;
   /** 確定ボタンの文言（省略時は「保存」） */
   submitLabel?: string;
+  /** 確定ボタンの下に添える補足（新規作成の「作成後に公開できる」など） */
+  submitHint?: string;
   /** 直近の保存結果（fetcher.data をそのまま渡す。送信のたびに新しい参照になる） */
   saveResult?: unknown;
   /** saveResult が成功を表すか */
@@ -260,6 +263,7 @@ export function TemplateEditorForm({
   const showDraftSave = !!publishState && hasDraftSave(publishState.livePublished);
   const busy = isSubmitting || !!publishState?.isDiscarding;
   const submitButton = (
+    <div className="flex flex-col items-end gap-1">
     <div className="flex flex-wrap items-center gap-2">
       {showDraftSave && (
         <Button
@@ -283,6 +287,8 @@ export function TemplateEditorForm({
         {publishAction ? publishLabels[publishAction] : (submitLabel ?? t("meTemplates.save"))}
       </Button>
     </div>
+    {submitHint && <p className="text-xs text-muted-foreground">{submitHint}</p>}
+    </div>
   );
 
   return (
@@ -294,7 +300,7 @@ export function TemplateEditorForm({
           <span>{t("meTemplates.draftBanner", { action: publishAction ? publishLabels[publishAction] : t("meTemplates.save") })}</span>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" disabled={busy}>
+              <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={busy}>
                 <Undo2 className="mr-2 h-4 w-4" aria-hidden />
                 {t("meTemplates.revertToPublished")}
               </Button>
@@ -308,7 +314,11 @@ export function TemplateEditorForm({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
-                <AlertDialogAction onClick={publishState.onDiscard}>
+                {/* 取り消せない破棄の確定は、ガイド・テンプレートの削除と同じ destructive */}
+                <AlertDialogAction
+                  className={buttonVariants({ variant: "destructive" })}
+                  onClick={publishState.onDiscard}
+                >
                   {t("meTemplates.revertToPublished")}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -355,7 +365,7 @@ export function TemplateEditorForm({
 
       {/* 基本情報（欄名はページの h1 の下の h2。ワークベンチの欄名も同じ段） */}
       <PageSection id="template-basic-info" title={t("meTemplates.basicInfo")}>
-          <div className="space-y-2">
+          <div className="max-w-2xl space-y-2">
             <Label htmlFor="template-title">
               {t("meTemplates.templateName")}
               <span className="font-normal text-muted-foreground">{t("meTemplates.requiredMark")}</span>
@@ -380,7 +390,7 @@ export function TemplateEditorForm({
               </p>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="max-w-2xl space-y-2">
             <Label htmlFor="template-description">{t("meTemplates.descriptionOptional")}</Label>
             <Textarea
               id="template-description"
@@ -408,7 +418,7 @@ export function TemplateEditorForm({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-9 w-9 p-0 shrink-0"
+                  className="size-11 shrink-0 p-0 sm:size-9"
                   aria-label={t("meTemplates.languageClear")}
                   title={t("meTemplates.languageClear")}
                   onClick={() => setGameLanguage("")}
