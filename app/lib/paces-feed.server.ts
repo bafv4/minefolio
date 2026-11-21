@@ -4,7 +4,7 @@ import { createAuth } from "./auth";
 import { users } from "./schema";
 import { getOptionalSession } from "./session";
 import { getPaceFeedEntries } from "./paceman-cache";
-import { PACE_FEED_SPLITS } from "./pace-splits";
+import { PACE_FEED_SPLITS, getTimelineProgress } from "./pace-splits";
 import { getCached, setCached } from "./cache";
 import { getUserData, type UserDataCache } from "./home-user-data.server";
 
@@ -37,7 +37,7 @@ export interface PaceSearchFilters {
   sort?: PaceSort; // 並び順（未指定は新しい順）
 }
 
-/** /paces の並び順。"time" は表示タイム（RTA）の昇順。未指定・不正値は新しい順 */
+/** /paces の並び順。"time" は進んだ区間ほど上、同じ区間の中は IGT の昇順。未指定・不正値は新しい順 */
 export const PACE_SORTS = ["time"] as const;
 export type PaceSort = (typeof PACE_SORTS)[number];
 
@@ -64,6 +64,20 @@ function parseTimeParamToMs(value: string | null): number | undefined {
 }
 
 /**
+ * 「進んだ区間ほど上、同じ区間の中は IGT の速い順」の比較関数（sort=time）。
+ * 区間をまたいで IGT を比べない（早く終わったランが速いとして上に来ないため）。
+ * 同順位は新しい順→ランIDで決定的にし、offset ページングを安定させる
+ */
+export function comparePaceByProgress(a: PaceFeedItem, b: PaceFeedItem): number {
+  return (
+    getTimelineProgress(b.timeline) - getTimelineProgress(a.timeline) ||
+    a.rta - b.rta ||
+    b.time - a.time ||
+    b.pacemanRunId - a.pacemanRunId
+  );
+}
+
+/**
  * URLクエリパラメータから /paces の検索条件を解析する
  * 不正な値は無視される（条件なし扱い）
  */
@@ -73,10 +87,10 @@ export function parsePaceSearchParams(searchParams: URLSearchParams): PaceSearch
   const player = searchParams.get("q")?.trim().toLowerCase();
   if (player) filters.player = player;
 
-  const split = searchParams.get("split");
-  if (split && (PACE_FEED_SPLITS as readonly string[]).includes(split)) {
-    filters.timeline = split;
-  }
+  // 区間は大文字小文字を無視して正規名へ（古いブックマーク等の "bastion" も効かせる）
+  const split = searchParams.get("split")?.toLowerCase();
+  const matchedSplit = split ? PACE_FEED_SPLITS.find((s) => s.toLowerCase() === split) : undefined;
+  if (matchedSplit) filters.timeline = matchedSplit;
 
   filters.from = parseDateParam(searchParams.get("from"), false);
   filters.to = parseDateParam(searchParams.get("to"), true);
@@ -191,7 +205,7 @@ export async function getPublicPaceFeed(
     items = items.filter((p) => p.time <= toSec);
   }
 
-  // タイム上限（表示される区間のRTAに対して適用）
+  // タイム上限（各ランの表示される区間＝区間未指定なら到達区間の IGT に対して適用）
   if (filters.maxRta !== undefined) {
     const maxRta = filters.maxRta;
     items = items.filter((p) => p.rta <= maxRta);
@@ -208,12 +222,10 @@ export async function getPublicPaceFeed(
     });
   }
 
-  // タイム順（RTA昇順）。同タイムは新しい順（ランIDで決定的にタイブレークし、offsetページングを安定させる）。
+  // タイム順（進んだ区間ほど上、同じ区間の中は IGT 昇順）。
   // base の items を破壊しないようコピーしてからソートする（キャッシュ共有のため）
   if (filters.sort === "time") {
-    items = [...items].sort(
-      (a, b) => a.rta - b.rta || b.time - a.time || b.pacemanRunId - a.pacemanRunId,
-    );
+    items = [...items].sort(comparePaceByProgress);
   }
 
   return { items, userData };

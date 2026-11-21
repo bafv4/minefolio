@@ -64,6 +64,24 @@ export function getSplitOrder(eventId: string): number {
   return SPLIT_ORDER[eventId] || 0;
 }
 
+// フィード項目の timeline（正規タイムライン名）の進行順位。Bastion / Fortress はどちらが先でもよいので同順位
+const TIMELINE_PROGRESS: Record<string, number> = {
+  "Enter Nether": 1,
+  Bastion: 2,
+  Fortress: 2,
+  "Obtain Blaze Rods": 3,
+  "First Portal": 4,
+  "Second Portal": 5,
+  "Enter Stronghold": 6,
+  "Enter End": 7,
+  Finish: 8,
+};
+
+/** 正規タイムライン名の進行順位（大きいほど進んでいる。未知の名前は 0） */
+export function getTimelineProgress(timeline: string): number {
+  return TIMELINE_PROGRESS[timeline] ?? 0;
+}
+
 /**
  * ライブペースの最新スプリットを取得
  */

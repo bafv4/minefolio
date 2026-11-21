@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
+  comparePaceByProgress,
   getPublicPaceFeed,
   paceFeedCacheKey,
   parsePaceSearchParams,
@@ -200,5 +201,32 @@ describe("parsePaceSearchParams", () => {
     expect(filters.from).toBeInstanceOf(Date);
     expect(filters.to).toBeInstanceOf(Date);
     expect(filters.maxRta).toBeUndefined();
+  });
+});
+
+describe("comparePaceByProgress（sort=time）", () => {
+  const mk = (timeline: string, rta: number, runId: number, time = 1) => ({
+    mcid: "a",
+    nickname: "a",
+    timeline,
+    rta,
+    pacemanRunId: runId,
+    time,
+  });
+
+  it("進んだ区間ほど上、同じ区間の中は IGT の速い順", () => {
+    const items = [
+      mk("Bastion", 150_000, 1),
+      mk("Finish", 700_000, 2),
+      mk("Enter End", 500_000, 3),
+      mk("Finish", 600_000, 4),
+      mk("Enter End", 450_000, 5),
+    ];
+    expect([...items].sort(comparePaceByProgress).map((i) => i.pacemanRunId)).toEqual([4, 2, 5, 3, 1]);
+  });
+
+  it("同区間・同IGTは新しい順→ランIDで決定的", () => {
+    const items = [mk("Finish", 600_000, 1, 10), mk("Finish", 600_000, 2, 20), mk("Finish", 600_000, 3, 20)];
+    expect([...items].sort(comparePaceByProgress).map((i) => i.pacemanRunId)).toEqual([3, 2, 1]);
   });
 });

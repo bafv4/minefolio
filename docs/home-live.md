@@ -320,8 +320,8 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 | `q` | プレイヤー | MCID・表示名の部分一致（大文字小文字無視） |
 | `split` | 区間 | `PACE_FEED_SPLITS`（`app/lib/pace-splits.ts`）のいずれか。指定時はその区間のIGTで表示・絞り込み |
 | `from` / `to` | 時期 | `YYYY-MM-DD`（JSTとして解釈、`to` はその日の終わりまで） |
-| `maxTime` | タイム上限 | `m:ss` 形式。表示される区間のIGTに対して適用 |
-| `sort` | 並び順 | `time`＝表示タイム（IGT）の昇順（同タイムは新しい順）。未指定・不正値は新しい順。`split` と併用すると区間別最速になる。キャッシュ済みベースのコピーに対して `getPublicPaceFeed` 内でソートする |
+| `maxTime` | タイム上限 | `m:ss` 形式。各ランの表示される区間のIGTに対して適用（`split` 未指定なら、そのランが到達した区間のIGT） |
+| `sort` | 並び順 | `time`＝進んだ区間ほど上、同じ区間の中はIGTの昇順（Finish の速い順 → Enter End の速い順 …。`comparePaceByProgress`・`getTimelineProgress`。同順位は新しい順→ランID）。区間をまたいで IGT を比べない。未指定・不正値は新しい順。`split` と併用すると区間別最速になる。`split` は大文字小文字を無視して正規名へ解釈し、不正値は条件として数えない（適用中の件数・チップ・リセットの対象外）。キャッシュ済みベースのコピーに対して `getPublicPaceFeed` 内でソートする |
 
 検索 UI の挙動（`app/routes/paces.tsx`）:
 
