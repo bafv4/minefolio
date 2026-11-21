@@ -119,6 +119,33 @@ export function KeyboardScaledPreview({
     };
   }, [cropWidth, cropMedia]);
 
+  // 操作できる切り出し表示（編集画面）では、切り落とした範囲のキーを inert にする。見えないキーに
+  // Tab・矢印キーで移ると、overflow のラッパーがスクロールして戻らなくなるため（移動先から外す）。
+  // 右端が切り出し幅を超える（全体が見えていない）キーを対象にする。切り出しが変わるとき（計測・幅・操作可否）と、
+  // キーの増減（子要素の追加・削除）のときだけ付け直す
+  const measuredScale = measured?.scale;
+  const measuredCropped = measured?.cropped === true;
+  useIsomorphicLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content || cropWidth == null) return;
+    if (!(interactive && measuredCropped && measuredScale != null)) {
+      for (const key of content.querySelectorAll<HTMLElement>("[data-roving-key][inert]")) key.removeAttribute("inert");
+      return;
+    }
+    const apply = () => {
+      const origin = content.getBoundingClientRect().left;
+      for (const key of content.querySelectorAll<HTMLElement>("[data-roving-key]")) {
+        const r = key.getBoundingClientRect();
+        if ((r.right - origin) / measuredScale > cropWidth + 0.5) key.setAttribute("inert", "");
+        else key.removeAttribute("inert");
+      }
+    };
+    apply();
+    const mo = new MutationObserver(apply);
+    mo.observe(content, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [measuredScale, measuredCropped, cropWidth, interactive]);
+
   // 縮小しているとき・切り出しているときだけ、拡大の操作（ボタン・印）を出して中身を inert にする
   // （切り出し中は scale が 1 でも右側が見えないので、拡大で全体を見られるようにし、見えないキーに Tab を止めない）
   const scaled = !interactive && (measured == null || measured.scale < 1 || measured.cropped);
@@ -129,7 +156,7 @@ export function KeyboardScaledPreview({
     <Dialog open={open} onOpenChange={setOpen}>
       <div
         ref={wrapperRef}
-        className={cn("relative w-full overflow-hidden", className, !measured && unmeasuredClassName)}
+        className={cn("relative w-full overflow-clip", className, !measured && unmeasuredClassName)}
         style={{ height: measured ? measured.height : wrapperWidth * FALLBACK_ASPECT || undefined, minHeight: measured ? undefined : 96 }}
       >
         <div

@@ -21,6 +21,7 @@ export type RovingItemProps = {
  * - 現在のキーは最後にフォーカスしたキー。初期値（SSR の HTML を含む）は DOM 順で最初のキー
  * - 現在のキーが描画から消えたら、描画前（layout effect）に最初のキーへ戻す
  * - フォーカスできるキーが0個なら Tab 停止点を持たない
+ * - 矢印キーの移動先は、`inert` の中のキー（切り出し表示で見えない範囲など）を除く
  */
 export function useRovingKeyFocus<T extends HTMLElement = HTMLDivElement>() {
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -58,7 +59,10 @@ export function useRovingKeyFocus<T extends HTMLElement = HTMLDivElement>() {
     if (!root || !(target instanceof HTMLElement)) return;
     const currentEl = target.closest<HTMLElement>(`[${KEY_ATTR}]`);
     if (!currentEl || !root.contains(currentEl)) return;
-    const elements = Array.from(root.querySelectorAll<HTMLElement>(`[${KEY_ATTR}]`));
+    // inert のキー（縮小表示で切り落とされ、見えない範囲のキー）へは移らない
+    const elements = Array.from(root.querySelectorAll<HTMLElement>(`[${KEY_ATTR}]`)).filter(
+      (el) => !el.closest("[inert]"),
+    );
     const items: KeyGridItem[] = elements.map((el) => {
       const r = el.getBoundingClientRect();
       return {
