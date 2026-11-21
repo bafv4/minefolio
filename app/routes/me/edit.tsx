@@ -1705,7 +1705,7 @@ export default function EditProfilePage() {
               </div>
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="ageGroupPublic" className="text-sm font-normal cursor-pointer">
+                  <Label htmlFor="ageGroupPublic" className="flex min-h-11 items-center text-sm font-normal cursor-pointer sm:min-h-0">
                     {t("meEdit.ageGroupPublic")}
                   </Label>
                   <p className="text-xs text-muted-foreground">{t("meEdit.ageGroupPublicHint")}</p>
