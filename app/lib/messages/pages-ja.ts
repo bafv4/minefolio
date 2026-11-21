@@ -2734,12 +2734,12 @@ export const PAGES_JA = {
       tagsLabel: "タグ",
       removeTag: "{tag} を削除",
       /** 説明文はボタンの位置ではなく、いまのボタンの文言（{draft} / {save}）で指す */
-      settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{draft}」か「{save}」で保存します）。",
-      /** 設定モーダル下部の固定の注記（適用は保存ではない） */
-      applyNote: "「適用」は編集中の内容に入るだけです。確定するには、ツールバーの「{draft}」か「{save}」を押してください。",
-      applyNoteSingle: "「適用」は編集中の内容に入るだけです。確定するには、ツールバーの「{save}」を押してください。",
+      settingsDesc: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{draft}」か「{save}」で保存します）。",
+      /** 設定モーダル下部の固定の注記（反映は保存ではない） */
+      applyNote: "「反映」は編集中の内容に入るだけです。確定するには、ツールバーの「{draft}」か「{save}」を押してください。",
+      applyNoteSingle: "「反映」は編集中の内容に入るだけです。確定するには、ツールバーの「{save}」を押してください。",
       /** 公開版が無いガイド（保存ボタンが1つ） */
-      settingsDescSingle: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「適用」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{save}」で保存します）。",
+      settingsDescSingle: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{save}」で保存します）。",
       /** 公開スイッチの見えるラベル兼アクセシブルネーム（オン/オフは switch の状態で伝える） */
       publishLabel: "公開する",
       /** 「公開…」から開いたとき: 主ボタンが適用と公開の保存を一度に行う */
@@ -2757,7 +2757,7 @@ export const PAGES_JA = {
       allowAutoTranslationHint:
         "オンにすると、公開したガイドを閲覧者の言語に合わせて自動翻訳して表示します（原文への切り替えもできます）。翻訳には外部サービス（Anthropic）を使います。オフにすると既存の翻訳も削除されます。この設定は、どの保存ボタンで保存しても反映されます。",
       cancel: "キャンセル",
-      apply: "適用",
+      apply: "反映",
       /** 本文の上のタイトル・概要（押すと設定モーダルが開く） */
       titleEmpty: "タイトルが未設定です（押して設定）",
       editInSettings: "ガイド設定で編集",
@@ -2869,8 +2869,8 @@ export const PAGES_JA = {
     /** サーチクラフト／テンプレート埋め込みの「押すキーの表示」スイッチ（オフなら記事にキーバッジ・キー入力順を出さない） */
     embedShowKeys: "押すキーを表示",
     embedShowKeysHint: "オフにすると、記事にはアイテムとサーチ文字列だけが表示されます",
-    embedApply: "適用",
-    embedApplyAnyway: "このまま適用",
+    embedApply: "反映",
+    embedApplyAnyway: "このまま反映",
     embedKeybindEditTitle: "リマップの埋め込みを変更",
     embedSearchCraftEditTitle: "サーチクラフトの埋め込みを変更",
     embedTemplateEditTitle: "テンプレートの埋め込みを変更",
@@ -2892,13 +2892,13 @@ export const PAGES_JA = {
     embedTemplateUnpublishedBadge: "非公開",
     // 画像のトリミング
     cropTitle: "画像をトリミング",
-    cropDesc: "枠をドラッグして切り出す範囲を決めます。適用すると新しい画像として保存されます。",
+    cropDesc: "枠をドラッグして切り出す範囲を決めます。反映すると新しい画像として保存されます。",
     cropAspectFree: "自由",
     cropSize: "{width} × {height} px",
     cropLoading: "画像を読み込み中...",
     cropReset: "全体に戻す",
     cropCancel: "キャンセル",
-    cropApply: "適用",
+    cropApply: "反映",
     cropLoadError: "画像を読み込めませんでした。時間をおいて再度お試しください。",
     cropFailed: "画像のトリミングに失敗しました",
     cropGifTooLarge: "トリミング後のGIFが大きすぎます（{size}MB / 上限 {max}MB）。切り出す範囲を狭めてください。",
@@ -3013,7 +3013,7 @@ export const PAGES_JA = {
     unpublishConfirmAction: "非公開にする",
     craftCount: "サーチクラフト {count}件",
     includesRemaps: "リマップ設定を含む",
-    applyCount: "適用 {count}回",
+    applyCount: "反映 {count}回",
     templateName: "テンプレート名",
     requiredMark: "（必須）",
     templateNamePlaceholder: "例: スウェーデン語Steveセットアップ",
@@ -3058,7 +3058,7 @@ export const PAGES_JA = {
     openPlayground: "Playgroundで試す",
     craftCount: "サーチクラフト {count}件",
     remapCount: "リマップ {count}件",
-    applyCount: "適用 {count}回",
+    applyCount: "反映 {count}回",
     includesRemaps: "リマップ設定を含む",
     emptyTitle: "公開されているテンプレートはまだありません",
     emptyDescriptionLink: "テンプレート管理",

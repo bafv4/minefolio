@@ -525,7 +525,7 @@ export default function TemplatesIndexPage() {
                       {t("templates.includesRemaps")}
                     </span>
                   )}
-                  {/* 適用数は数字だけにせず「適用 n回」と見える文で出す（アイコンと数字だけでは何の数か分からないため。
+                  {/* 反映数は数字だけにせず「反映 n回」と見える文で出す（アイコンと数字だけでは何の数か分からないため。
                       行はオーバーレイのリンクに覆われていて title のツールチップが出ないので、見える文にする） */}
                   <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" aria-hidden />
