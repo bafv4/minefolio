@@ -567,12 +567,12 @@ export const PAGES_JA = {
   paces: {
     title: "最近のペース",
     metaTitle: "最近のペース - Minefolio",
-    description: "登録走者の過去2か月のペース一覧です。",
+    description: "登録走者の直近2か月のペース一覧です。",
     count: "{count}件",
     empty: "表示できるペースがありません",
     emptyFiltered: "条件に一致するペースが見つかりません",
     emptyHint:
-      "MCID を登録して公開プロフィールにした走者の、PaceMan に記録された過去2か月のペースが載ります。",
+      "MCID を登録して公開プロフィールにした走者の、PaceMan に記録された直近2か月のペースが載ります。",
     emptyAction: "プロフィールを編集する",
     emptyFilteredHint: "検索条件を変えるか、条件をリセットしてください",
     filterToggle: "検索条件",

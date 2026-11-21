@@ -738,12 +738,12 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   paces: {
     title: "Recent paces",
     metaTitle: "Recent paces - Minefolio",
-    description: "Paces from registered runners over the past two months.",
+    description: "Paces from registered runners over the last two months.",
     count: "{count}",
     empty: "No paces to show",
     emptyFiltered: "No paces match these filters",
     emptyHint:
-      "Paces recorded on PaceMan in the past two months appear here for runners who registered an MCID and made their profile public.",
+      "Paces recorded on PaceMan in the last two months appear here for runners who registered an MCID and made their profile public.",
     emptyAction: "Edit your profile",
     emptyFilteredHint: "Try changing the filters or reset them",
     filterToggle: "Filters",

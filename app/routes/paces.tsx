@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 import { Link, useLoaderData, useNavigation, useSearchParams } from "react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Route } from "./+types/paces";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -45,6 +45,13 @@ const FILTER_PARAM_KEYS = ["q", "split", "from", "to", "maxTime", "sort"] as con
 
 // タイム上限の入力形式（サーバー側 parseTimeParamToMs と同じ m:ss）
 const MAX_TIME_PATTERN = /^\d{1,3}:[0-5]?\d$/;
+
+// URL の split を PACE_FEED_SPLITS の正規名へ（大文字小文字は無視。該当なしは undefined＝サーバーも条件なし扱い）
+function normalizeSplit(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const lower = value.toLowerCase();
+  return PACE_FEED_SPLITS.find((s) => s.toLowerCase() === lower);
+}
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -129,8 +136,16 @@ function PacesList({
 
   // 「ホームに自分のペースを表示しない」設定時、自分のペースを除外（ホームと同じ挙動）
   // レスポンス自体はユーザー非依存（CDNキャッシュ対象）のため、フィルタはクライアント側で適用する
+  // 追加読み込みでページ間に同じランが重なりうる（CDN の s-maxage と offset の組み合わせ）ので、pacemanRunId で重複を除く
   const visiblePaces = useMemo(
-    () => filterOwnPaces(infinite.items, viewerPrefs),
+    () => {
+      const seen = new Set<string | number>();
+      return filterOwnPaces(infinite.items, viewerPrefs).filter((run) => {
+        if (seen.has(run.pacemanRunId)) return false;
+        seen.add(run.pacemanRunId);
+        return true;
+      });
+    },
     [infinite.items, viewerPrefs]
   );
 
@@ -192,7 +207,7 @@ export default function PacesPage() {
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
-  const [split, setSplit] = useState(searchParams.get("split") ?? "all");
+  const [split, setSplit] = useState(normalizeSplit(searchParams.get("split")) ?? "all");
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
   const [maxTime, setMaxTime] = useState(searchParams.get("maxTime") ?? "");
@@ -210,7 +225,7 @@ export default function PacesPage() {
     prevNonSortRef.current = nonSort;
     if (changed) {
       setPlayer(searchParams.get("q") ?? "");
-      setSplit(searchParams.get("split") ?? "all");
+      setSplit(normalizeSplit(searchParams.get("split")) ?? "all");
       setFrom(searchParams.get("from") ?? "");
       setTo(searchParams.get("to") ?? "");
       setMaxTime(searchParams.get("maxTime") ?? "");
@@ -218,19 +233,32 @@ export default function PacesPage() {
     setSort(searchParams.get("sort") === "time" ? "time" : "recent");
   }, [searchParams]);
 
-  // 並び順（sort）は絞り込みではなく表示の設定なので、適用中・リセットの対象に含めない
-  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => key !== "sort" && searchParams.get(key));
+  // 並び順（sort）は絞り込みではなく表示の設定なので、適用中・リセットの対象に含めない。
+  // 不正な split（効いていない値）は条件として数えない
+  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) =>
+    key === "sort" ? false : key === "split" ? Boolean(normalizeSplit(searchParams.get(key))) : searchParams.get(key),
+  );
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
   const [periodInvalid, setPeriodInvalid] = useState(false);
 
   // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
-  const appliedChips: { key: string; label: string }[] = [];
+  const appliedChips: { key: string; label: ReactNode }[] = [];
   const appliedQ = searchParams.get("q");
   if (appliedQ) appliedChips.push({ key: "q", label: `${t("paces.filterPlayer")}: ${appliedQ}` });
-  const appliedSplit = searchParams.get("split");
-  if (appliedSplit) appliedChips.push({ key: "split", label: `${t("paces.filterSplit")}: ${appliedSplit}` });
+  const appliedSplit = normalizeSplit(searchParams.get("split"));
+  if (appliedSplit) {
+    appliedChips.push({
+      key: "split",
+      label: (
+        <span className="inline-flex items-center gap-1">
+          {t("paces.filterSplit")}:
+          <PaceManSplitMark timeline={appliedSplit} size={14} labelClassName="leading-normal" />
+        </span>
+      ),
+    });
+  }
   const appliedFrom = searchParams.get("from");
   const appliedTo = searchParams.get("to");
   if (appliedFrom || appliedTo) {
@@ -372,7 +400,7 @@ export default function PacesPage() {
             <span className="flex text-sm font-medium leading-none">{t("paces.filterPeriod")}</span>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
               <div className="space-y-1">
-                <Label htmlFor="pace-filter-from" className="sm:sr-only">
+                <Label htmlFor="pace-filter-from" className="text-xs text-muted-foreground sm:sr-only">
                   {t("paces.filterPeriodFrom")}
                 </Label>
                 <Input
@@ -392,7 +420,7 @@ export default function PacesPage() {
               </div>
               <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
               <div className="space-y-1">
-                <Label htmlFor="pace-filter-to" className="sm:sr-only">
+                <Label htmlFor="pace-filter-to" className="text-xs text-muted-foreground sm:sr-only">
                   {t("paces.filterPeriodTo")}
                 </Label>
                 <Input
@@ -457,22 +485,24 @@ export default function PacesPage() {
       </form>
 
       {/* 表示の設定: 並び順は絞り込みのフォームとは別で、選んだ時点で反映する（/browse と同じ即時反映） */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="pace-filter-sort" className="text-sm">
-            {t("paces.filterSort")}
-          </Label>
-          <Select value={sort} onValueChange={handleSortChange}>
-            <SelectTrigger id="pace-filter-sort" className="min-h-11 w-40 sm:min-h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>
-              <SelectItem value="time">{t("paces.sortTime")}</SelectItem>
-            </SelectContent>
-          </Select>
+      {visibleTotal > 0 && (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="pace-filter-sort" className="text-sm">
+              {t("paces.filterSort")}
+            </Label>
+            <Select value={sort} onValueChange={handleSortChange}>
+              <SelectTrigger id="pace-filter-sort" className="min-h-11 w-56 sm:min-h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>
+                <SelectItem value="time">{t("paces.sortTime")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 絞り込み・並び替えの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
       <div
@@ -493,8 +523,8 @@ export default function PacesPage() {
             description={hasActiveFilters ? t("paces.emptyFilteredHint") : t("paces.emptyHint")}
             action={
               hasActiveFilters ? (
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/paces">{t("common.resetFilters")}</Link>
+                <Button type="button" variant="outline" size="sm" onClick={handleClear}>
+                  {t("common.resetFilters")}
                 </Button>
               ) : signedIn ? (
                 <Button asChild variant="outline" size="sm">

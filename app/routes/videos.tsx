@@ -121,10 +121,16 @@ function VideosList({
   });
 
   // 「ホームに自分の動画を表示しない」設定時、自分の動画/VODを除外（ホームと共通の filterOwnVideos）
-  const visibleVideos = useMemo(
-    () => filterOwnVideos(infinite.items, viewerPrefs),
-    [infinite.items, viewerPrefs]
-  );
+  // 追加読み込みでページ間に同じ動画が重なりうる（CDN の s-maxage と offset の組み合わせ）ので、key で重複を除く
+  const visibleVideos = useMemo(() => {
+    const seen = new Set<string>();
+    return filterOwnVideos(infinite.items, viewerPrefs).filter((video) => {
+      const key = feedVideoKey(video);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [infinite.items, viewerPrefs]);
 
   return (
     <>
