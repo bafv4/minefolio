@@ -55,7 +55,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Plus, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
+import { Save, Layers, Trash2, Plus, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { RelativeTime } from "@/components/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -1473,7 +1473,7 @@ export default function PresetsPage() {
             </div>
           ) : (
             <EmptyState
-              icon={<Save className="h-12 w-12" />}
+              icon={<Layers className="h-12 w-12" />}
               title={t("mePresets.emptyTitle")}
               description={t("mePresets.emptyDescription")}
             />

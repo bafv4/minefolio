@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { useFetcher, useRevalidator, Link } from "react-router";
 import { toast } from "sonner";
 import { Settings, Copy, Check, Loader2, AlertCircle, Info, Star } from "lucide-react";
@@ -29,6 +29,11 @@ interface PresetSelectorProps {
   activePresetId: string | null;
   hasChanges: boolean;
   onCopyFromOther?: () => void;
+  /**
+   * 行の右側（コピーの左）に足す操作（キー配置画面のインポートなど）。
+   * disabled は未保存の変更があるとき（コピーと同じ。理由の文は describedBy の要素）。プリセットが 0 件のときは警告帯の中にも出す
+   */
+  extraActions?: (state: { disabled: boolean; describedBy?: string }) => ReactNode;
   /** プリセット切替（apply-preset の送信＋再検証）中かどうかを親へ通知する */
   onSwitchingChange?: (switching: boolean) => void;
   className?: string;
@@ -49,6 +54,7 @@ export function PresetSelector({
   activePresetId,
   hasChanges,
   onCopyFromOther,
+  extraActions,
   onSwitchingChange,
   className,
 }: PresetSelectorProps) {
@@ -115,9 +121,12 @@ export function PresetSelector({
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm">{t("mePresets.noPresetWarning")}</span>
-          <Button asChild size="sm" className="shrink-0 w-full sm:w-auto max-sm:min-h-11">
-            <Link to="/me/presets">{t("mePresets.createPreset")}</Link>
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {extraActions?.({ disabled: false })}
+            <Button asChild size="sm" className="w-full sm:w-auto max-sm:min-h-11">
+              <Link to="/me/presets">{t("mePresets.createPreset")}</Link>
+            </Button>
+          </div>
         </AlertDescription>
       </Alert>
     );
@@ -200,6 +209,7 @@ export function PresetSelector({
           </Select>
         </div>
       <div className="ml-auto flex items-center gap-2">
+        {extraActions?.({ disabled: hasChanges || isSwitching, describedBy: hasChanges ? switchHintId : undefined })}
         {showCopyButton && (
           <Button
             variant="outline"

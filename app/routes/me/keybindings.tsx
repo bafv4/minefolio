@@ -2,7 +2,7 @@ import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { flushSync } from "react-dom";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -39,7 +39,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, TriangleAlert } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, FileInput, Check, Loader2, AlertCircle, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { PageSection } from "@/components/page-section";
@@ -75,6 +75,7 @@ import { validateFingerAssignmentsJson } from "@/lib/finger-assignments";
 import { SAVE_LIMITS, formString } from "@/lib/save-limits";
 import { isValidRemapInputs, isValidCustomKeyInputs, isValidCustomActionInputs } from "@/lib/keybindings-payload";
 import { PresetSelector } from "@/components/preset-selector";
+import { ImportDialog } from "@/components/import-dialog";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
@@ -86,12 +87,13 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 // 再検証を制御：actionの結果に応じてのみ再検証
 export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
-  // 自ルートのアクション結果がある場合はデフォルトの動作に従う
+  // action の結果がある場合はデフォルトの動作に従う（/me/presets・/me/import の action は常に値を返すので、
+  // プリセット切替・作成・削除と、プリセット行のインポート後の再検証はここで1回だけ走る）
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
-  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
-  if (formAction === "/me/presets") {
+  // 結果を返さない /me/presets・/me/import への送信の保険
+  if (formAction === "/me/presets" || formAction === "/me/import") {
     return true;
   }
   // フォーム送信を伴わない同一 URL の再検証（useRevalidator 起点）はデフォルトに従う。
@@ -1407,6 +1409,31 @@ export default function KeybindingsPage() {
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
+  // プリセット行のインポートダイアログ。旧 URL /me/import は ?import=1 付きでここへ転送され、開いた状態で始まる
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [importDialogOpen, setImportDialogOpen] = useState(searchParams.get("import") === "1");
+  // 閉じたあとのフォーカスの戻り先。0件の警告帯と通常の行のどちらの位置でも同じ ref を付ける
+  const importTriggerRef = useRef<HTMLButtonElement>(null);
+  // クライアント遷移で ?import=1 が付いたときも開く
+  useEffect(() => {
+    if (searchParams.get("import") === "1") setImportDialogOpen(true);
+  }, [searchParams]);
+  const handleImportDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setImportDialogOpen(open);
+      if (!open && searchParams.has("import")) {
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("import");
+            return next;
+          },
+          { replace: true, preventScrollReset: true },
+        );
+      }
+    },
+    [searchParams, setSearchParams],
+  );
   // リマップ・カスタムキー・カスタムアクションはプリセットに紐づくため、
   // アクティブなプリセットが無い間は閲覧のみ（サーバー側でも同じ判定で拒否する）
   const canEditPresetData = !!activePreset;
@@ -2320,7 +2347,7 @@ export default function KeybindingsPage() {
             {t("meKeybindings.pageDescription")}
           </p>
         </div>
-        {/* 開発用デバッグボタン */}
+        {/* 開発用デバッグボタン（旧 API からの取り込み。プリセット行の「インポート」＝ファイルからの取り込みとは別物） */}
         {import.meta.env.DEV && (
           <div className="flex gap-2">
             <Button
@@ -2331,7 +2358,7 @@ export default function KeybindingsPage() {
               disabled={revalidator.state === "loading"}
               className="max-sm:min-h-11"
             >
-              Reload
+              Reload (dev)
             </Button>
             <Button
               type="button"
@@ -2342,7 +2369,7 @@ export default function KeybindingsPage() {
               className="max-sm:min-h-11"
             >
               <Download className={cn("mr-1 h-4 w-4", importFetcher.state !== "idle" && "animate-pulse")} />
-              Import
+              Legacy API import (dev)
             </Button>
           </div>
         )}
@@ -2354,10 +2381,33 @@ export default function KeybindingsPage() {
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasUnsavedChanges}
         onSwitchingChange={setPresetSwitching}
+        extraActions={({ disabled, describedBy }) => (
+          // ダイアログ本体は下で1回だけ置く。ここはトリガーのボタンだけ（0件の警告帯と通常の行で位置が変わっても、ダイアログは再マウントされない）
+          <Button
+            ref={importTriggerRef}
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            aria-describedby={disabled ? describedBy : undefined}
+            onClick={() => handleImportDialogOpenChange(true)}
+            className="max-sm:min-h-11"
+          >
+            <FileInput className="h-4 w-4 sm:mr-2" aria-hidden />
+            <span>{t("meImport.importButton")}</span>
+          </Button>
+        )}
         onCopyFromOther={presets.length > 1 ? () => {
           setCopyTarget("all");
           setCopyDialogOpen(true);
         } : undefined}
+      />
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={handleImportDialogOpenChange}
+        returnFocusRef={importTriggerRef}
+        targetPresetName={activePreset?.name ?? null}
+        targetPresetId={activePreset?.id ?? null}
+        // 取り込み後の再検証は shouldRevalidate が /me/import の action 結果で行うので、ここでは呼ばない
       />
 
       {/* プリセット切替中はキーボードビュー・入力欄をロックする */}

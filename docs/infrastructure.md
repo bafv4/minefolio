@@ -220,26 +220,38 @@ md 内の `[フィードバックフォーム](/feedback)` のような相対リ
 
 ---
 
-## レガシーインポート
+## 設定インポート（ファイル、/me/import の action）
 
-### /me/import
-
-MCSRer Hotkeys（旧サービス）からのデータインポート機能。
+キー配置画面（`/me/keybindings`）のプリセット行にある「インポート」ボタン（`FileInput` アイコン。`PresetSelector` の `extraActions`）から開く `ImportDialog`（`app/components/import-dialog.tsx`）で、外部ファイルから設定を取り込む。
 
 | ファイル | 説明 |
 |---------|------|
 | `app/lib/import-parser.ts` | インポートデータのパーサー |
+| `app/routes/me/import.tsx` | 書き込みの action（`import-remaps` / `import-minecraft`）と旧 URL の転送 loader だけを持つリソースルート（ページ本体は無い） |
+
+#### ダイアログの構成
+
+- 手順は「取り込み元を選ぶ → ファイル選択（形式の説明つき）→ プレビュー → 完了」。取り込み元は**リマップ（AutoHotkey）**と**ゲーム内設定（Minecraft の `options.txt` / `standardsettings.json`）**の2つ。後者はキー配置に加えて**ゲーム内設定**（ダッシュ・スニーク切替、自動ジャンプ、FOV、GUI スケール、Raw Input、ゲーム言語。デバイス画面の項目）も書き込む（プレビューのチェックで個別に外せる）。
+- 取り込み先は編集中のプリセット（プリセット名をダイアログに示す。無いときは取り込みで新規作成される旨）。上書きの注意文（同じキー/アクションの既存設定は上書きされる）を最初の2手順に出す。
+- 送信は `fetcher.submit(..., { method: "post", action: "/me/import" })`。成功後はキー配置画面の loader を再検証する（action は常に結果を返すので、`keybindings.tsx` の `shouldRevalidate` の `actionResult` の分岐で既定の再検証が1回走る。`formAction === "/me/import"` の分岐は結果を返さない場合の保険）。
+- **未保存の編集があるとき**はボタンを非活性にする（コピーと同じ。理由は `PresetSelector` の「未保存の変更があります」の文を `aria-describedby` で結ぶ）。取り込み後の再検証でローカルの編集と食い違わせないため。
+- 旧 URL `/me/import` は `/me/keybindings?import=1` へ転送し、ダイアログが開いた状態で始まる（閉じると `import` パラメータを外す）。サイドバーに項目は無い。
+- 注意文・完了・エラーは `NoticeBanner`。ダイアログの閉じる×は `showCloseButton={false}` と自前の `DialogClose`（md 未満 44px）。
+
+---
+
+## レガシーインポート（旧 API。/me/account と開発用の import-legacy）
+
+旧サービス（MCSRer Hotkeys）のデータを旧 API から取り込む。ファイルの設定インポートとは別物。
+
+| ファイル | 説明 |
+|---------|------|
 | `app/lib/legacy-import.ts` | レガシーデータの変換・取り込みロジック |
 
+- 本番の入口は `/me/account` の「MCSRer Hotkeysからデータをインポート」（`import_legacy`）
+- `/me/keybindings` の開発用ボタン（`import.meta.env.DEV` の「Reload (dev)」「Legacy API import (dev)」。`import-legacy`）も同じ取り込みを呼ぶ
 - `users.hasImported` フラグでインポート済みかどうかを管理
 - `LEGACY_API_URL` 環境変数で旧APIのURLを指定
-
-#### ページ（`/me/import`）の構成
-
-- 取り込み元（リマップ＝AutoHotkey／Minecraft 設定）の選択は**ページの2つの欄（`PageSection`）だけ**で行う。各欄の「インポート」ボタンが、その取り込み元専用の `ImportDialog`（`source` 引数）を開く。ダイアログ内にタブは持たない（ページとの重複を避けるため）。
-- 注意文・完了・エラーは `NoticeBanner`（shadcn `Alert` は使わない）。
-- 取り込み先（編集中のプリセット名。無いときは取り込みで新規作成される旨）をページとダイアログに示す（loader の `activePresetName`）。
-- ダイアログの閉じる×は、`showCloseButton={false}` と自前の `DialogClose`（md 未満 44px）で押せる範囲を広げている（共有の `ui/dialog.tsx` は変えない）。
 
 ---
 

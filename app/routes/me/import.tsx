@@ -1,70 +1,24 @@
 import { createTranslator, type Translator } from "@/lib/messages";
-import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, useRevalidator } from "react-router";
+import { resolveLocale } from "@/lib/locale";
+import { redirect } from "react-router";
 import type { Route } from "./+types/import";
 import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
-import { and, eq, sql } from "drizzle-orm";
-import { ImportDialog } from "@/components/import-dialog";
-import { PageSection } from "@/components/page-section";
-import { NoticeBanner } from "@/components/notice-banner";
-import { Badge } from "@/components/ui/badge";
-import { Info } from "lucide-react";
+import { eq, sql } from "drizzle-orm";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { createPresetFromImport, syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
 import { normalizeGameLanguage } from "@/lib/game-languages";
-import { useT } from "@/hooks/use-locale";
-import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
-export const meta: Route.MetaFunction = ({ matches }) => {
-  const t = createTranslator(localeFromMatches(matches));
-  return [
-    { title: t("meImport.title") },
-    { name: "description", content: t("meImport.description") },
-  ];
-};
-
-export async function loader({ request }: Route.LoaderArgs) {
-  const env = getEnv();
-  const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
-
-  if (!user) {
-    throw new Response("Not Found", { status: 404 });
-  }
-
-  // 現在のリマップ数とキーバインド数を取得
-  const remapCount = await db.query.keyRemaps.findMany({
-    where: eq(keyRemaps.userId, user.id),
-  });
-
-  const keybindingCount = await db.query.keybindings.findMany({
-    where: eq(keybindings.userId, user.id),
-  });
-
-  // 取り込み先（編集中のプリセット）。プリセットが無いときは取り込みで新規作成される
-  const activePreset = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-    columns: { id: true, name: true },
-  });
-
-  return {
-    remapCount: remapCount.length,
-    keybindingCount: keybindingCount.length,
-    activePresetName: activePreset?.name ?? null,
-    // 取り込み先の確認用。ダイアログが送り返し、action が現在の編集先と一致するか検証する
-    activePresetId: activePreset?.id ?? null,
-  };
+// 設定のインポートは /me/keybindings のプリセット行の「インポート」ダイアログから行う（ImportDialog）。
+// このルートは書き込み先の action（ダイアログが fetcher で POST する）と、旧 URL（ブックマーク・docs・ガイドの
+// リンク）をダイアログが開いたキー配置画面へ転送する loader だけを持つリソースルート。ページ本体は持たない。
+export function loader() {
+  return redirect("/me/keybindings?import=1");
 }
 
 /**
@@ -401,81 +355,4 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   return { success: false, error: t("meImport.unknownIntent") };
-}
-
-export default function ImportPage() {
-  const t = useT();
-  const { remapCount, keybindingCount, activePresetName, activePresetId } = useLoaderData<typeof loader>();
-  const revalidator = useRevalidator();
-  const refresh = () => revalidator.revalidate();
-
-  return (
-    <div className="space-y-7 sm:space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">{t("meImport.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("meImport.pageDescription")}
-        </p>
-      </div>
-
-      <NoticeBanner tone="info" icon={Info}>
-        <p className="font-medium">{t("meImport.importInfoTitle")}</p>
-        <p>{t("meImport.importInfoDescription")}</p>
-        <p className="mt-1">
-          {activePresetName
-            ? t("meImport.targetPreset", { name: activePresetName })
-            : t("meImport.targetPresetNone")}
-        </p>
-      </NoticeBanner>
-
-      {/* 取り込み元の選択はここだけ（ダイアログは選んだ取り込み元のファイル選択と確認だけ） */}
-      <div className="space-y-7 sm:space-y-8">
-        <PageSection
-          id="import-remap"
-          first
-          title={t("meImport.remapTitle")}
-        >
-          <p className="text-sm text-muted-foreground">{t("meImport.remapDescription")}</p>
-          <div className="text-sm">
-            <p className="text-muted-foreground mb-2">{t("meImport.supportedFormat")}</p>
-            <div className="bg-muted p-2 rounded font-mono text-xs">
-              CapsLock::Ctrl<br />
-              a::b<br />
-              XButton1::e ; {t("meImport.ahkCommentExample")}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">
-              {t("meImport.currentCountLabel")} <Badge variant="secondary">{remapCount}{t("meImport.countUnit")}</Badge>
-            </span>
-            <ImportDialog source="remap" targetPresetName={activePresetName} targetPresetId={activePresetId} onSuccess={refresh} />
-          </div>
-        </PageSection>
-
-        <PageSection
-          id="import-minecraft"
-          title={t("meImport.minecraftTitle")}
-        >
-          <p className="text-sm text-muted-foreground">{t("meImport.minecraftDescription")}</p>
-          <div className="text-sm">
-            <p className="text-muted-foreground mb-2">{t("meImport.supportedFiles")}</p>
-            <ul className="list-disc list-inside text-xs space-y-1">
-              <li><code className="bg-muted px-1 rounded">options.txt</code> - {t("meImport.minecraftFolder")}</li>
-              <li><code className="bg-muted px-1 rounded">standardsettings.json</code> - StandardSettings Mod</li>
-            </ul>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">
-              {t("meImport.currentCountLabel")} <Badge variant="secondary">{keybindingCount}{t("meImport.countUnit")}</Badge>
-            </span>
-            <ImportDialog source="minecraft" targetPresetName={activePresetName} targetPresetId={activePresetId} onSuccess={refresh} />
-          </div>
-        </PageSection>
-      </div>
-    </div>
-  );
-}
-
-export function ErrorBoundary() {
-  return <MeErrorBoundary />;
 }

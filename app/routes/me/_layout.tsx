@@ -15,8 +15,7 @@ import {
   Package,
   Search,
   Loader2,
-  Save,
-  Upload,
+  Layers,
   UserCog,
   ChevronDown,
 } from "lucide-react";
@@ -72,9 +71,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return { user, appUrl, checklist };
 }
 
-// ナビゲーションの3群（見出し付き）。並び順は従来どおりで、群の境目を「プリセットに保存されるか」で引く。
-// 2群目は編集中のプリセットに保存される画面（各画面にプリセットの選択がある。ツアーの「編集中のプリセット」の手順と同じ4画面）。
-// プレイスタイルはプリセットに属さない（users 側に保存）ので1群目。3群目は補助（プリセット管理・インポート・アカウント）
+// ナビゲーションの3群（見出し付き）。群の境目は「プリセットに保存されるか」で引く。
+// 1群目: プロフィール（プレイスタイルはプリセットに属さない＝users 側に保存）。2群目: 管理（公開とアカウント・プリセット管理）。
+// 3群目: 編集中のプリセットに保存される画面（各画面にプリセットの選択がある。ツアーの「編集中のプリセット」の手順と同じ4画面。
+// 設定のインポートはキー配置画面のプリセット行から開く）
 const navGroups = [
   {
     key: "profile",
@@ -86,6 +86,14 @@ const navGroups = [
     ],
   },
   {
+    key: "manage",
+    labelKey: "meLayout.groupManage" as const,
+    items: [
+      { to: "/me/account", labelKey: "meLayout.account" as const, icon: UserCog },
+      { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Layers },
+    ],
+  },
+  {
     key: "preset",
     labelKey: "meLayout.groupPreset" as const,
     items: [
@@ -93,15 +101,6 @@ const navGroups = [
       { to: "/me/devices", labelKey: "meLayout.devices" as const, icon: Mouse },
       { to: "/me/items", labelKey: "meLayout.itemLayouts" as const, icon: Package },
       { to: "/me/search-craft", labelKey: "meLayout.searchCraft" as const, icon: Search },
-    ],
-  },
-  {
-    key: "manage",
-    labelKey: "meLayout.groupManage" as const,
-    items: [
-      { to: "/me/presets", labelKey: "meLayout.presets" as const, icon: Save },
-      { to: "/me/import", labelKey: "meLayout.import" as const, icon: Upload },
-      { to: "/me/account", labelKey: "meLayout.account" as const, icon: UserCog },
     ],
   },
 ];
