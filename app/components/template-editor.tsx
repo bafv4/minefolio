@@ -121,6 +121,7 @@ export function TemplateEditorForm({
   const [remaps, setRemaps] = useState<TemplateRemapDraft[]>(initial.remaps);
   const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(initial.loops);
   const [publishSetting, setPublishSetting] = useState(initialPublished);
+  const publishSwitchId = useId();
   // バーチャルキーボードの表示レイアウト（初期値はユーザーの設定）
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() =>
     normalizeLayout(keyboardLayout),
@@ -276,16 +277,56 @@ export function TemplateEditorForm({
           {t("meTemplates.saveDraft")}
         </Button>
       )}
-      <Button onClick={() => handleSave("publish")} disabled={busy} className="h-11 sm:h-9">
-        {isSubmitting ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : publishAction && publishAction !== "saveUnpublished" ? (
-          <Send className="mr-2 h-4 w-4" aria-hidden />
-        ) : (
-          <Save className="mr-2 h-4 w-4" aria-hidden />
-        )}
-        {publishAction ? publishLabels[publishAction] : (submitLabel ?? t("meTemplates.save"))}
-      </Button>
+      {publishAction === "unpublish" ? (
+        // 公開中のテンプレートを非公開にする操作だけ確認する（公開ページが見られなくなるため）
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" disabled={busy} className="h-11 sm:h-9">
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" aria-hidden />
+              )}
+              {publishLabels.unpublish}
+            </Button>
+          </AlertDialogTrigger>
+          {/* 確定すると分岐が切り替わって引き金のボタンが消えるので、フォーカスは公開スイッチへ送る */}
+          <AlertDialogContent
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              document.getElementById(publishSwitchId)?.focus();
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("meTemplates.unpublishConfirmTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("meTemplates.unpublishConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
+              {/* 取り消せる操作なので destructive にはせず、主操作の brand とも区別する */}
+              <AlertDialogAction
+                className={buttonVariants({ variant: "secondary" })}
+                onClick={() => handleSave("publish")}
+              >
+                {t("meTemplates.unpublishConfirmAction")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : (
+        <Button onClick={() => handleSave("publish")} disabled={busy} className="h-11 sm:h-9">
+          {isSubmitting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : publishAction && publishAction !== "saveUnpublished" ? (
+            <Send className="mr-2 h-4 w-4" aria-hidden />
+          ) : (
+            <Save className="mr-2 h-4 w-4" aria-hidden />
+          )}
+          {publishAction ? publishLabels[publishAction] : (submitLabel ?? t("meTemplates.save"))}
+        </Button>
+      )}
     </div>
     {submitHint && <p className="text-xs text-muted-foreground">{submitHint}</p>}
     </div>
@@ -356,7 +397,7 @@ export function TemplateEditorForm({
         )}
         {publishState && (
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm sm:min-h-9">
-            <Switch checked={publishSetting} onCheckedChange={setPublishSetting} />
+            <Switch id={publishSwitchId} checked={publishSetting} onCheckedChange={setPublishSetting} />
             {t("meTemplates.publishSwitch")}
           </label>
         )}

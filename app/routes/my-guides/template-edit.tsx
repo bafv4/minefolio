@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
+import { redirect, useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -45,7 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   });
 
   if (!user) {
-    throw new Response(t("meTemplates.userNotFound"), { status: 404 });
+    return redirect("/onboarding");
   }
 
   const template = await db.query.searchCraftTemplates.findFirst({
