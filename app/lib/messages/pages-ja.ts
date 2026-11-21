@@ -1063,6 +1063,7 @@ export const PAGES_JA = {
     edit: "編集",
     emptySuggestTabs: "この走者のほかの情報",
     exploreTitle: "ほかの走者と比べる",
+    exploreTitleEmpty: "ほかの走者を探す",
     exploreCompare: "比較・似た走者を探す",
     exploreCompareWithMe: "自分と比較する",
     exploreBrowse: "ほかの走者を見る",

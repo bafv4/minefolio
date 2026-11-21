@@ -137,16 +137,20 @@ function HighlightTile({
   icon,
   label,
   onClick,
+  title,
   children,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  /** ラベルが切れても全文を読めるようにする（省略時は付けない） */
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
+      title={title}
       onClick={onClick}
       className={cn(
         TILE_HEIGHT_CLASS,
@@ -303,7 +307,9 @@ export function ProfileHighlights({
       ) : representative ? (
         <HighlightTile
           icon={<Timer className="h-4 w-4" />}
-          label={`${representativeName} ${t("playerProfile.pb")}`}
+          // 「PB」を先頭に置く。末尾（版・サブカテゴリ）が切れても title で全文を読める
+          label={`${t("playerProfile.pb")} · ${representativeName}`}
+          title={`${t("playerProfile.pb")} · ${representativeName}`}
           onClick={selectPb}
         >
           {/* 手入力・Ranked はミリ秒、speedrun.com は秒（formatTime はミリ秒。player-stats-cards.tsx と同じ） */}

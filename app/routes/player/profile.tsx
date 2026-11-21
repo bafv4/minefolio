@@ -1145,6 +1145,8 @@ export default function PlayerProfilePage() {
       : [{ value: "searchcraft", icon: Search, shortLabel: t("playerProfile.hotbarSearch"), label: t("playerProfile.searchCraftTab"), empty: !hasSearchCraftData, group: "setup" as const }]),
   ];
 
+  const allTabsEmpty = tabItems.every((i) => i.empty);
+
   // 有効なタブ値のリスト
   const validTabs = tabItems.map((i) => i.value);
 
@@ -2392,15 +2394,18 @@ export default function PlayerProfilePage() {
 
         {/* 各タブの末尾の導線（全タブ共通。TabsContent の外・後ろに1つだけ置く） */}
         <div className="mt-7 sm:mt-8">
-          <PageSection id="profile-explore" title={t("playerProfile.exploreTitle")}>
+          <PageSection id="profile-explore" title={t(allTabsEmpty ? "playerProfile.exploreTitleEmpty" : "playerProfile.exploreTitle")}>
             <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11">
-              <Button asChild variant="outline" size="sm">
-                <Link to={`/compare?p1=${player.slug}`}>
-                  <GitCompare className="h-4 w-4 mr-2" />
-                  {t("playerProfile.exploreCompare")}
-                </Link>
-              </Button>
-              {compareToViewerHref && (
+              {/* 全タブが空の走者は、比べる中身が無いので比較の導線を出さず、探す導線だけにする */}
+              {!allTabsEmpty && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to={`/compare?p1=${player.slug}`}>
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    {t("playerProfile.exploreCompare")}
+                  </Link>
+                </Button>
+              )}
+              {!allTabsEmpty && compareToViewerHref && (
                 <Button asChild variant="outline" size="sm">
                   <Link to={compareToViewerHref}>
                     <GitCompare className="h-4 w-4 mr-2" />
@@ -2408,7 +2413,7 @@ export default function PlayerProfilePage() {
                   </Link>
                 </Button>
               )}
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant={allTabsEmpty ? "default" : "outline"} size="sm">
                 <Link to="/browse">
                   <Users className="h-4 w-4 mr-2" />
                   {t("playerProfile.exploreBrowse")}

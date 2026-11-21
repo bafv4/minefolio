@@ -1071,6 +1071,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     edit: "Edit",
     emptySuggestTabs: "Other info on this runner",
     exploreTitle: "Compare with other runners",
+    exploreTitleEmpty: "Find other runners",
     exploreCompare: "Compare / find similar runners",
     exploreCompareWithMe: "Compare with me",
     exploreBrowse: "Browse other runners",
