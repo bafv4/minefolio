@@ -38,7 +38,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, Gamepad2, TriangleAlert } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Check, Loader2, AlertCircle, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { PageSection } from "@/components/page-section";
@@ -2361,7 +2361,6 @@ export default function KeybindingsPage() {
       {isControllerMode ? (
         <PageSection
           id="controller-view"
-          icon={<Gamepad2 className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meKeybindings.controllerView")}
         >
             <p className="text-sm text-muted-foreground">{t("meKeybindings.controllerViewDesc")}</p>

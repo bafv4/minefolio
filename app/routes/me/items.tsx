@@ -57,7 +57,7 @@ import {
   Package,
   Plus,
   Trash2,
-  Edit,
+  StickyNote,
   AlertCircle,
   Copy,
   GripVertical,
@@ -587,7 +587,7 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
               size="sm"
               onClick={() => onDuplicate(layoutId)}
               aria-label={t("meItems.duplicateAria", { name: layoutName })}
-              className="max-sm:size-11"
+              className="max-md:size-11"
             >
               <Copy className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -599,9 +599,9 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
           size="sm"
           onClick={onToggleExpanded}
           aria-label={t("meItems.toggleNotesAria", { name: layoutName })}
-          className="max-sm:size-11"
+          className="max-md:size-11"
         >
-          <Edit className="h-4 w-4" aria-hidden="true" />
+          <StickyNote className="h-4 w-4" aria-hidden="true" />
         </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -609,7 +609,7 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
               variant="ghost"
               size="sm"
               aria-label={t("meItems.deleteLayoutAria", { name: layoutName })}
-              className="max-sm:size-11"
+              className="max-md:size-11"
             >
               <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
             </Button>
@@ -991,7 +991,6 @@ export default function ItemLayoutsPage() {
       <div inert={!hasPresets}>
       <PageSection
         id="item-layouts"
-        icon={<Package className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("meItems.layoutListHeading")}
         className={cn(!hasPresets && "pointer-events-none opacity-50")}
       >
@@ -1023,6 +1022,7 @@ export default function ItemLayoutsPage() {
               type="button"
               variant="outline"
               size="sm"
+              className="min-h-11 sm:min-h-8"
               onClick={handleAddLayout}
               disabled={!hasPresets}
             >

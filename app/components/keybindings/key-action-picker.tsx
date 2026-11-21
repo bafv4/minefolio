@@ -83,7 +83,7 @@ export function KeyActionPicker<KB extends PickerBinding>({
         {visibleGroups.length === 0 ? t("meKeybindings.noActionMatches") : ""}
       </p>
       {visibleGroups.length === 0 ? null : (
-        <div className="space-y-2">
+        <div className="divide-y divide-border/60 border-t border-border/60">
           {visibleGroups.map((group) => {
             const assignedInGroup = group.bindings.filter((kb) => kb.keyCode === editingKeyCode).length;
             return (
@@ -91,6 +91,7 @@ export function KeyActionPicker<KB extends PickerBinding>({
                 // 検索の開始・終了で開閉の初期値を取り直す（入力のたびには作り直さない）
                 key={`${group.key}-${searching ? "search" : "browse"}`}
                 defaultOpen={searching || assignedInGroup > 0}
+                nested
                 title={group.label}
                 summary={
                   assignedInGroup > 0 ? t("meKeybindings.sectionCount", { count: assignedInGroup }) : undefined

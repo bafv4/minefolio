@@ -13,6 +13,7 @@ export function KeyDialogSection({
   title,
   summary,
   defaultOpen = false,
+  nested = false,
   className,
   children,
 }: {
@@ -20,6 +21,8 @@ export function KeyDialogSection({
   /** 見出し行の右に出す短い要約（例: 「2件」）。 */
   summary?: string;
   defaultOpen?: boolean;
+  /** 別の段の中に置くとき true。箱を二重にせず、枠を外す（段どうしの区切りは呼び出し側の divide で付ける） */
+  nested?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -28,7 +31,7 @@ export function KeyDialogSection({
     <details
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
-      className={cn("group rounded-lg border border-border/70", className)}
+      className={cn("group", !nested && "rounded-lg border border-border/70", className)}
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <ChevronRight
@@ -38,7 +41,7 @@ export function KeyDialogSection({
         <span>{title}</span>
         {summary && <span className="ml-auto text-xs font-normal text-muted-foreground">{summary}</span>}
       </summary>
-      <div className="space-y-3 border-t border-border/60 p-3">{children}</div>
+      <div className={cn("space-y-3 p-3", nested ? "pt-0" : "border-t border-border/60")}>{children}</div>
     </details>
   );
 }

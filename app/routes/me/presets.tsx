@@ -54,7 +54,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Plus, History, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
+import { Save, Trash2, Plus, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { formatRelativeDate } from "@/lib/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -1475,7 +1475,6 @@ export default function PresetsPage() {
       {/* 変更履歴 */}
       <PageSection
         id="presets-history"
-        icon={<History className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("mePresets.historyTitle")}
       >
           <p className="text-sm text-muted-foreground">{t("mePresets.historyDescription")}</p>

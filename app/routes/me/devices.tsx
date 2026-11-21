@@ -850,7 +850,6 @@ export default function DevicesPage() {
         {formValues.inputMethod === "controller" && (
           <PageSection
             id="devices-controller"
-            icon={<Gamepad2 className="h-5 w-5 text-primary" aria-hidden="true" />}
             title={t("meDevices.controller")}
           >
             <div className="space-y-4">
@@ -906,7 +905,6 @@ export default function DevicesPage() {
         {/* Keyboard */}
         <PageSection
           id="devices-keyboard"
-          icon={<Keyboard className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meDevices.keyboard")}
         >
           <div className="space-y-4">
@@ -945,7 +943,6 @@ export default function DevicesPage() {
         {/* Mouse */}
         <PageSection
           id="devices-mouse"
-          icon={<Mouse className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meDevices.mouse")}
         >
           <div className="space-y-4">
@@ -1037,6 +1034,7 @@ export default function DevicesPage() {
                     <p id="gameSensitivityPercent-range" className="text-xs text-muted-foreground mt-1">{t("meDevices.rangeHint", { min: "0", max: "200%" })}</p>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">{t("meDevices.sensitivityLinkedHint")}</p>
                 <FieldErrorText
                   id="gameSensitivity-error"
                   message={errorFor("gameSensitivity")}

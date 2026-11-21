@@ -12,7 +12,7 @@ import { ImportDialog } from "@/components/import-dialog";
 import { PageSection } from "@/components/page-section";
 import { NoticeBanner } from "@/components/notice-banner";
 import { Badge } from "@/components/ui/badge";
-import { Keyboard, Settings, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { createPresetFromImport, syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
@@ -433,7 +433,6 @@ export default function ImportPage() {
         <PageSection
           id="import-remap"
           first
-          icon={<Keyboard className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meImport.remapTitle")}
         >
           <p className="text-sm text-muted-foreground">{t("meImport.remapDescription")}</p>
@@ -455,7 +454,6 @@ export default function ImportPage() {
 
         <PageSection
           id="import-minecraft"
-          icon={<Settings className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meImport.minecraftTitle")}
         >
           <p className="text-sm text-muted-foreground">{t("meImport.minecraftDescription")}</p>
