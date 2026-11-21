@@ -194,7 +194,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
           <h2 className="min-w-0 flex-1 text-base font-semibold">
             <Link
               to={`/player/${player.slug}`}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
+              className="group flex items-center gap-2 min-w-0"
             >
               <MinecraftAvatar
                 uuid={player.uuid}
@@ -203,7 +203,7 @@ const RunnerKeyboardCard = memo(function RunnerKeyboardCard({
                 alt=""
                 className="rounded-lg shrink-0"
               />
-              <span className="truncate">{name}</span>
+              <span className="truncate underline-offset-2 group-hover:underline">{name}</span>
             </Link>
           </h2>
           <Badge variant="outline" className="text-[10px] shrink-0">

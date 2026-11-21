@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { Keyboard, Mouse, Users, Table2 } from "lucide-react";
@@ -128,7 +128,7 @@ export function StatsView({ data }: StatsViewProps) {
           />
         </dl>
         <details className="mt-2 text-xs text-muted-foreground">
-          <summary className="cursor-pointer rounded py-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:inline-flex max-md:min-h-11 max-md:items-center">
+          <summary className="cursor-pointer rounded py-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:py-3.5">
             {t("keybindingsStats.overviewNotesSummary")}
           </summary>
           <ul className="mt-1 list-disc space-y-1 pl-5">
@@ -166,8 +166,17 @@ export function StatsView({ data }: StatsViewProps) {
         <TabsContent value="keyboard">
           <h2 className="sr-only">{t("keybindingsStats.keyboardTab")}</h2>
           <div className="grid gap-x-8 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
-            {keybindingStats.map((stat) => (
+            {keybindingStats.map((stat, index) => {
+              const group = tabForAction(stat.action);
+              const prevGroup = index > 0 ? tabForAction(keybindingStats[index - 1].action) : null;
+              return (
               <Fragment key={stat.action}>
+                {/* 狭い画面では縦一本になるので、表のタブと同じ3群の小見出しで束ねる（並び順は変えない） */}
+                {group && group !== prevGroup && group in GROUP_LABEL_KEYS && (
+                  <p className="col-span-full text-sm font-medium text-muted-foreground md:hidden">
+                    {t(GROUP_LABEL_KEYS[group as keyof typeof GROUP_LABEL_KEYS])}
+                  </p>
+                )}
                 <KeybindingStatCard stat={stat} onPlayerClick={openPlayersDialog} />
                 {/* ダッシュ切替は「ダッシュ」の欄のすぐ後ろ */}
                 {stat.action === "sprint" && (
@@ -180,7 +189,8 @@ export function StatsView({ data }: StatsViewProps) {
                   />
                 )}
               </Fragment>
-            ))}
+              );
+            })}
             <F3RemapStatCard stat={f3RemapStats} onPlayerClick={openPlayersDialog} />
           </div>
         </TabsContent>
@@ -353,6 +363,16 @@ export function StatsView({ data }: StatsViewProps) {
   );
 }
 
+/** 狭い画面で操作の統計を束ねる区分の見出し（表のタブ名と同じ） */
+const GROUP_LABEL_KEYS = {
+  movement: "keybindings.movementTab",
+  inventory: "keybindings.inventoryTab",
+  "combat-ui": "keybindings.combatUiTab",
+} as const;
+
+/** 行のリンクの読み上げ名に添える、いま見ている欄（操作名・キー名）の見出し */
+const StatTitleContext = createContext("");
+
 /**
  * この走者群を表で見るリンク。users にスラッグを載せるのは MAX_USERS_IN_LINK 人まで
  * （それ以上は URL が長くなりすぎるため）。超えたときは操作＝キーの条件があればそれで代える
@@ -368,15 +388,21 @@ function tableHrefFor(players: PlayerInfo[], target?: TableTarget): string | nul
 /** 統計の 1 行の右に置く「表で見る」リンク（行そのものは走者一覧ダイアログのボタンなので、入れ子にせず並べる） */
 function RowTableLink({ href, label }: { href: string | null; label: string }) {
   const t = useT();
+  const title = useContext(StatTitleContext);
   if (!href) return null;
   return (
-    <Link
-      to={href}
-      aria-label={t("keybindingsStats.rowOpenInTable", { label })}
-      className="flex shrink-0 items-center justify-center self-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:size-11 size-8"
-    >
-      <Table2 className="h-4 w-4" aria-hidden />
-    </Link>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          to={href}
+          aria-label={t("keybindingsStats.rowOpenInTable", { title, label })}
+          className="flex shrink-0 items-center justify-center self-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none max-md:size-11 size-8"
+        >
+          <Table2 className="h-4 w-4" aria-hidden />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>{t("keybindingsStats.rowTableTip")}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -416,6 +442,7 @@ function StatBlock({
   id,
   icon,
   title,
+  titleNode,
   description,
   note,
   children,
@@ -423,6 +450,8 @@ function StatBlock({
   id: string;
   icon?: ReactNode;
   title: string;
+  /** 見出しの表示を title の文字から差し替える（キー名をキーチップで出すとき）。読み上げ・行のリンクの名前は title を使う */
+  titleNode?: ReactNode;
   description?: string;
   note?: string;
   children?: ReactNode;
@@ -432,12 +461,12 @@ function StatBlock({
       <div className="space-y-0.5">
         <h3 id={`${id}-heading`} className="flex items-center gap-2 text-base font-semibold">
           {icon}
-          {title}
+          {titleNode ?? title}
         </h3>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
         {note && <p className="text-xs text-muted-foreground">{note}</p>}
       </div>
-      {children}
+      <StatTitleContext.Provider value={title}>{children}</StatTitleContext.Provider>
     </section>
   );
 }
@@ -604,6 +633,16 @@ function KeyActionStatCard({
     <StatBlock
       id={`kb-stat-key-${stat.keyCode}`}
       title={title}
+      titleNode={
+        <span
+          className={cn(
+            "inline-flex min-w-0 max-w-full items-center rounded bg-secondary/80 px-2.5 py-0.5 font-mono text-sm",
+            isMouseKey(stat.keyCode) && MOUSE_KEY_BADGE_CLASS,
+          )}
+        >
+          <span className="truncate">{title}</span>
+        </span>
+      }
       description={t("keybindingsStats.dataCount", { count: stat.totalCount })}
     >
       <div className="space-y-2">

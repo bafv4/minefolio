@@ -132,7 +132,7 @@ function actionColumn(t: Translator, locale: Locale, action: string): Keybinding
       ),
     size: 104,
     minSize: 56,
-    // md 未満は約 56px（1 キーのバッジが収まる幅）。余りは比例配分で広げる
+    // md 未満は約 68px（1 キーのバッジが収まる幅）。余りは比例配分で広げる
     meta: { align: "center" as const, widthVar: "--kb-action-col" },
   };
 }
@@ -385,7 +385,7 @@ const mouseColumns = (t: Translator): KeybindingsColumnDef[] => [
     cell: ({ row }) => <CursorSpeedCell config={row.original.playerConfig} />,
     enableSorting: true,
     sortUndefined: "last",
-    size: 120,
+    size: 140,
     meta: { align: "center" as const, hint: t("keybindings.hintCursorSpeed") },
   },
   {

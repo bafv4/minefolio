@@ -87,7 +87,7 @@ export function RunnerCell({ player }: { player: PlayerSummary }) {
   return (
     <Link
       to={`/player/${player.slug}`}
-      className="flex w-full min-w-0 items-center gap-2 text-left transition-opacity hover:opacity-80"
+      className="group flex w-full min-w-0 items-center gap-2 text-left"
     >
       <MinecraftAvatar
         uuid={player.uuid}
@@ -96,7 +96,7 @@ export function RunnerCell({ player }: { player: PlayerSummary }) {
         alt=""
         className="shrink-0 rounded-lg"
       />
-      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-snug md:text-sm">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-snug underline-offset-2 group-hover:underline md:text-sm">
         {name}
       </span>
     </Link>

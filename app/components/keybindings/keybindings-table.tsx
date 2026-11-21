@@ -59,7 +59,7 @@ interface KeybindingsTableProps {
  * - fill: リマップ / カスタムアクション列。md 未満は下限なし（残りの幅に収めてチップを折り返す）
  */
 const COLUMN_WIDTHS =
-  "[--kb-runner-col:128px] md:[--kb-runner-col:224px] [--kb-action-col:56px] md:[--kb-action-col:104px] [--kb-hotbar-col:240px] md:[--kb-hotbar-col:360px] [--kb-fill-col:0px] md:[--kb-fill-col:600px]";
+  "[--kb-runner-col:128px] md:[--kb-runner-col:224px] [--kb-action-col:68px] md:[--kb-action-col:104px] [--kb-hotbar-col:240px] md:[--kb-hotbar-col:360px] [--kb-fill-col:0px] md:[--kb-fill-col:600px]";
 
 type ColumnMeta = {
   align?: string;
@@ -277,7 +277,7 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
                       className="inline-flex min-w-0 items-center gap-1 rounded text-inherit transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-6 max-md:min-h-11 max-md:flex-col max-md:justify-center max-md:gap-0.5"
                     >
                       {/* 省略せず折り返して全文を読めるようにする */}
-                      <span id={`${idBase}-${header.id}`} className="min-w-0 break-words leading-snug">
+                      <span id={`${idBase}-${header.id}`} className="min-w-0 break-words leading-snug [word-break:keep-all]">
                         {flexRender(
                           header.column.columnDef.header,
                           header.getContext(),
@@ -292,7 +292,7 @@ export function KeybindingsTable({ rows, preset, label, noTabData }: Keybindings
                       )}
                     </button>
                   ) : (
-                    <span id={`${idBase}-${header.id}`} className="min-w-0 break-words leading-snug">
+                    <span id={`${idBase}-${header.id}`} className="min-w-0 break-words leading-snug [word-break:keep-all]">
                       {flexRender(header.column.columnDef.header, header.getContext())}
                     </span>
                   )}
