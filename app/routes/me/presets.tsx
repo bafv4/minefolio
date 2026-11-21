@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/env.server";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions } from "@/lib/schema";
 import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
 import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { encodeHistoryDescription, parseHistoryDescription, describeHistory, historyGroupKey } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
 import { setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
@@ -271,7 +272,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     }),
   ]);
 
-  return { userId: user.id, presets, history };
+  // 履歴の文言は表示時に翻訳する。保存された文字列（トークン・旧文言）の読み替えはサーバーで行う
+  // （旧文言の照合に全ロケールの文言が要るが、クライアントは表示言語の分しか読み込まない）
+  const historyRows = history.map((entry) => ({
+    ...entry,
+    parsed: parseHistoryDescription(entry.changeDescription),
+  }));
+
+  return { userId: user.id, presets, history: historyRows };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -716,8 +724,8 @@ export async function action({ request }: Route.ActionArgs) {
 
       // 履歴記録
       const description = sourcePreset
-        ? t("mePresets.copiedAndApplied", { source: sourcePreset.name, name: trimmedName })
-        : t("mePresets.createdFromCurrentAndApplied", { name: trimmedName });
+        ? encodeHistoryDescription("preset.copy", { source: sourcePreset.name, name: trimmedName })
+        : encodeHistoryDescription("preset.createFromCurrent", { name: trimmedName });
       await tx.insert(configHistory).values({
         id: createId(),
         userId: user.id,
@@ -781,7 +789,7 @@ export async function action({ request }: Route.ActionArgs) {
           id: createId(),
           userId: user.id,
           changeType: "preset_switch",
-          changeDescription: t("mePresets.deleteHistoryDescription", { name: preset.name }),
+          changeDescription: encodeHistoryDescription("preset.delete", { name: preset.name }),
           createdAt: now,
         });
       });
@@ -798,7 +806,7 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: t("mePresets.deleteHistoryDescription", { name: preset.name }),
+      changeDescription: encodeHistoryDescription("preset.delete", { name: preset.name }),
       createdAt: now,
     });
 
@@ -828,7 +836,7 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: t("mePresets.setMainHistoryDescription", { name: preset.name }),
+      changeDescription: encodeHistoryDescription("preset.setMain", { name: preset.name }),
       presetId,
       createdAt: now,
     });
@@ -881,8 +889,8 @@ export async function action({ request }: Route.ActionArgs) {
         userId: user.id,
         changeType: "preset_switch",
         changeDescription: nameChanged
-          ? t("mePresets.renameHistoryDescription", { oldName: preset.name, name: trimmedName })
-          : t("mePresets.descriptionHistoryDescription", { name: trimmedName }),
+          ? encodeHistoryDescription("preset.rename", { oldName: preset.name, name: trimmedName })
+          : encodeHistoryDescription("preset.describe", { name: trimmedName }),
         presetId: null,
         createdAt: now,
       });
@@ -1143,7 +1151,7 @@ export default function PresetsPage() {
     if (
       last &&
       last.changeType === entry.changeType &&
-      last.changeDescription === entry.changeDescription &&
+      historyGroupKey(last.changeDescription, last.parsed) === historyGroupKey(entry.changeDescription, entry.parsed) &&
       (last.preset?.name ?? null) === (entry.preset?.name ?? null)
     ) {
       last.count += 1;
@@ -1488,7 +1496,7 @@ export default function PresetsPage() {
                   <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm">
-                      {entry.changeDescription}
+                      {describeHistory(t, entry.changeDescription, entry.parsed)}
                       {entry.count > 1 && (
                         <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
                           {t("mePresets.historyRepeat", { count: entry.count })}
@@ -1496,7 +1504,7 @@ export default function PresetsPage() {
                       )}
                     </p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                      {entry.preset?.name && !entry.changeDescription.includes(entry.preset.name) && (
+                      {entry.preset?.name && !describeHistory(t, entry.changeDescription, entry.parsed).includes(entry.preset.name) && (
                         <span className="text-xs text-muted-foreground">
                           {t("mePresets.historyPreset", { name: entry.preset.name })}
                         </span>

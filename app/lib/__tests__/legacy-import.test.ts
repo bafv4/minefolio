@@ -9,6 +9,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { importFromLegacy } from "../legacy-import";
 import { createTranslator } from "../messages";
+import { describeHistory, parseHistoryDescription, encodeHistoryDescription } from "../history-description";
 import {
   createTransactionalTestDb,
   seedUser,
@@ -262,7 +263,11 @@ describe("importFromLegacy - プリセット", () => {
     expect(presets[0].isActive).toBe(true);
     expect(presets[0].name).toMatch(/^Initial setup \(\d{4}\/\d{2}\/\d{2}\)$/);
     const history = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
-    expect(history[0].changeDescription).toBe(`Created preset "${presets[0].name}" as the initial setup`);
+    // 履歴は種類のトークンで保存し、表示時に翻訳する
+    expect(history[0].changeDescription).toBe(encodeHistoryDescription("preset.createOnboarding", { name: presets[0].name }));
+    expect(describeHistory(createTranslator("en"), history[0].changeDescription, parseHistoryDescription(history[0].changeDescription))).toBe(
+      `Created preset "${presets[0].name}" as the initial setup`,
+    );
     expect(history[0].changeDescription).not.toMatch(/^Applied preset ".*"$/);
   });
 });

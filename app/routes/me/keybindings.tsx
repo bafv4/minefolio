@@ -9,6 +9,7 @@ import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeKeybindingUpdate, type KeybindingChangeId } from "@/lib/history-description";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -747,12 +748,12 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // 変更履歴の内容
-    const changes: string[] = [];
-    if (keybindingsJson) changes.push(t("meKeybindings.tabActions"));
-    if (remapsJson) changes.push(t("meKeybindings.tabRemaps"));
-    if (fingerAssignmentsJson) changes.push(t("meKeybindings.tabFingers"));
-    if (customActionsJson) changes.push(t("meKeybindings.tabCustomActions"));
-    if (customKeysJson) changes.push(t("meKeybindings.tabCustomKeys"));
+    const changes: KeybindingChangeId[] = [];
+    if (keybindingsJson) changes.push("actions");
+    if (remapsJson) changes.push("remaps");
+    if (fingerAssignmentsJson) changes.push("fingers");
+    if (customActionsJson) changes.push("customActions");
+    if (customKeysJson) changes.push("customKeys");
 
     // persist 系すべて + 変更履歴の挿入を単一トランザクションで実行し、
     // 途中で失敗（UNIQUE 制約違反等）した場合に部分適用状態にならないようにする
@@ -795,7 +796,7 @@ export async function action({ request }: Route.ActionArgs) {
             id: createId(),
             userId: user.id,
             changeType: "keybinding",
-            changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join(t("common.listSeparator")) }),
+            changeDescription: encodeKeybindingUpdate(changes),
             // クライアントの生ペイロードは保存しない（読む側が無く、保存のたびに DB が膨らむため）
             presetId: await resolveActivePublicPresetId(tx, user.id),
             createdAt: now,

@@ -55,6 +55,7 @@ import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-sy
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
@@ -435,7 +436,7 @@ export async function action({ request }: Route.ActionArgs) {
         id: createId(),
         userId: user.id,
         changeType: "game_setting",
-        changeDescription: t("meSearchCraft.searchCraftChangeHistory"),
+        changeDescription: encodeHistoryDescription("searchCraft.update"),
         presetId: await resolveActivePublicPresetId(db, user.id),
         createdAt: now,
       });

@@ -19,6 +19,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 
+import { encodeKeybindingUpdate } from "@/lib/history-description";
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
   getSession: vi.fn(),
@@ -371,7 +372,7 @@ describe("action - save-all の原子性", () => {
 
     const history = await findKeybindingHistory(user.id);
     expect(history).toHaveLength(1);
-    expect(history[0].changeDescription).toBe("操作割り当て・リマップ・指割り当てを更新");
+    expect(history[0].changeDescription).toBe(encodeKeybindingUpdate(["actions", "remaps", "fingers"]));
   });
 });
 
@@ -408,7 +409,7 @@ describe("action - save-all のカスタムキー", () => {
     ]);
     const history = await findKeybindingHistory(user.id);
     expect(history).toHaveLength(1);
-    expect(history[0].changeDescription).toContain("カスタムキー");
+    expect(history[0].changeDescription).toBe(encodeKeybindingUpdate(["remaps", "customKeys"]));
   });
 
   it("customKeys の payload が不正なら何も書かずにエラーを返す", async () => {

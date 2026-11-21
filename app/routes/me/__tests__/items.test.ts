@@ -32,6 +32,7 @@ vi.mock("@/lib/session", () => sessionMocks);
 import { action } from "../items";
 import { SAVE_LIMITS } from "@/lib/save-limits";
 import { createTranslator } from "@/lib/messages";
+import { encodeHistoryDescription } from "@/lib/history-description";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -252,7 +253,7 @@ describe("action - saveAll の正常系", () => {
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
       changeType: "game_setting",
-      changeDescription: "アイテム配置を更新",
+      changeDescription: encodeHistoryDescription("items.update"),
     });
   });
 });

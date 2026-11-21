@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { and, asc, eq } from "drizzle-orm";
 import type { Translator } from "@/lib/messages";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import type { Database } from "./db";
 import {
   configPresets,
@@ -576,9 +577,9 @@ export async function createPreset(
 
   // 変更履歴の説明文
   const changeDescriptions = {
-    manual: t("mePresets.autoCreatedManualHistory", { name }),
-    import: t("mePresets.autoCreatedFromImportHistory", { name }),
-    onboarding: t("mePresets.autoCreatedOnboardingHistory", { name }),
+    manual: encodeHistoryDescription("preset.createManual", { name }),
+    import: encodeHistoryDescription("preset.createFromImport", { name }),
+    onboarding: encodeHistoryDescription("preset.createOnboarding", { name }),
   } satisfies Record<NonNullable<CreatePresetOptions["source"]>, string>;
 
   // 非アクティブ化＋挿入＋履歴記録を単一トランザクションで実行

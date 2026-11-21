@@ -65,6 +65,7 @@ import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
@@ -402,7 +403,7 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "device",
-      changeDescription: t("meDevices.deviceChangeHistory"),
+      changeDescription: encodeHistoryDescription("devices.update"),
       presetId: await resolveActivePublicPresetId(tx, user.id),
       createdAt: new Date(),
     });

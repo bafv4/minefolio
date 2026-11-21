@@ -223,7 +223,7 @@
 | `id` | text (PK) | CUID2 |
 | `userId` | text (FK → users) | ユーザーID |
 | `changeType` | enum | `keybinding` / `device` / `game_setting` / `remap` / `preset_switch` |
-| `changeDescription` | text | 変更内容の説明（必須） |
+| `changeDescription` | text | 変更内容。**種類のトークン**（`@h:<kind>` または `@h:<kind>|<JSON パラメータ>`）で保存し、表示時に翻訳する（下記「変更履歴の文言」）。トークン導入前の行は旧文言（ja / en）のまま（必須） |
 | `previousData` | text (JSON) | 変更前のデータ |
 | `newData` | text (JSON) | 変更後のデータ（現在はどの保存経路も書かない。クライアントの生ペイロードを残さない方針。[`docs/keybindings.md`](keybindings.md)「保存の検証と上限」） |
 | `presetId` | text (FK → configPresets) | **公開面に影響する変更のときだけ**そのメインプリセットの id（それ以外は null。下記「公開影響の記録規約」。ON DELETE SET NULL） |
@@ -232,6 +232,14 @@
 ### /me/presets の変更履歴の表示
 
 履歴は各保存の1回ごとに1行（二重 insert はしていない。同じ内容が数秒おきに並ぶのは、保存を繰り返した結果）。表示では、種別・文言・プリセットが同じ連続した行を1行にまとめて「×N」と最新の時刻を出し、行の `presetId` から引いたプリセット名（`with: { preset }`。削除済みは null で出さない）を添える。
+
+### 変更履歴の文言（`app/lib/history-description.ts`）
+
+文言は保存時のロケールで固めず、種類（`HistoryKind`: `devices.update` / `items.update` / `searchCraft.update` / `keybindings.update` / `preset.*` / `playground.*` / `template.apply`）とパラメータ（プリセット名など）を `encodeHistoryDescription()` で `changeDescription` に入れる（スキーマ変更なし）。表示は `describeHistory(t, …)` が表示ロケールの翻訳キーで組む。
+
+- 既存の行（トークン導入前の日本語・英語の文言、旧文言「デバイス・設定を更新」「プリセット「…」をコピーして「…」を作成・適用」など）は `parseHistoryDescription()` が現行・旧文言のテンプレートから種類とパラメータへ読み替える（`/me/presets` の loader で行う。旧文言の照合に全ロケールの文言が要るため）。読み替えできない行は文言のまま表示する
+- 「×N」のまとめは `historyGroupKey()`（種類＋パラメータ）で判定するので、新旧・言語違いの行が同じ操作としてまとまる
+- 新しい履歴を書くときは `HISTORY_KINDS` に種類と翻訳キーを足し、`t()` の結果を直接保存しない
 
 ### 公開影響の記録規約（お気に入り走者の動き用）
 
@@ -360,7 +368,7 @@
 
 ## 履歴文・自動作成されるプリセット名の言語
 
-自動作成プリセットの名前・説明・変更履歴の文言（`preset-utils.ts` の `createPreset` / `createPresetFromImport` / `createPresetFromOnboarding` / `generateInitialPresetName`）は、呼び出し側の `Translator` を引数（`t`）で受け取り、`mePresets.autoCreated*` / `initialName*` / `initialDescription*` の翻訳キーで作る（保存時のロケールで DB に入る）。新しい履歴文言は `LEGACY_APPLY_HISTORY_PATTERNS`（`プリセット「%」を適用しました` / `Applied preset "%"`）に一致しない形にする（一致すると履歴の一覧から消える）。既に保存済みの過去の文言は書き換えない。
+自動作成プリセットの名前・説明の文言と、変更履歴（トークン。上記「変更履歴の文言」）（`preset-utils.ts` の `createPreset` / `createPresetFromImport` / `createPresetFromOnboarding` / `generateInitialPresetName`）は、呼び出し側の `Translator` を引数（`t`）で受け取り、`mePresets.autoCreated*` / `initialName*` / `initialDescription*` の翻訳キーで作る（名前・説明は保存時のロケールで DB に入る。履歴は種類で保存し表示時に翻訳する）。新しい履歴文言は `LEGACY_APPLY_HISTORY_PATTERNS`（`プリセット「%」を適用しました` / `Applied preset "%"`）に一致しない形にする（一致すると履歴の一覧から消える）。既に保存済みの過去の文言は書き換えない。
 
 ## 既知の制限（フォローアップ予定）
 

@@ -30,6 +30,7 @@ import {
   PresetMismatchError,
 } from "../preset-utils";
 import { createTranslator } from "../messages";
+import { encodeHistoryDescription } from "../history-description";
 
 let db: TestDb;
 
@@ -348,7 +349,7 @@ describe("createPresetFromImport", () => {
     });
     expect(history).toHaveLength(1);
     expect(history[0].changeType).toBe("preset_switch");
-    expect(history[0].changeDescription).toBe(`プリセット「${preset.name}」をインポートから作成`);
+    expect(history[0].changeDescription).toBe(encodeHistoryDescription("preset.createFromImport", { name: preset.name }));
     expect(history[0].presetId).toBe(preset.id);
   });
 

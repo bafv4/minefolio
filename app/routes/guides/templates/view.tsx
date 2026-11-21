@@ -6,6 +6,7 @@ import { useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/view";
 import { createDb } from "@/lib/db";
 import { resolvePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import { createAuth } from "@/lib/auth";
 import { getSession, getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -351,7 +352,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "game_setting",
-      changeDescription: t("templates.applyChangeHistoryToPreset", {
+      changeDescription: encodeHistoryDescription("template.apply", {
         title: template.title,
         name: presetName,
       }),

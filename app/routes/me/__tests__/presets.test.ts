@@ -22,6 +22,7 @@ import {
 } from "@/lib/__tests__/helpers/test-db";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
+import { encodeHistoryDescription } from "@/lib/history-description";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -716,7 +717,7 @@ describe("action - delete-preset の不変条件", () => {
     const history = await db.query.configHistory.findMany({
       where: eq(schema.configHistory.userId, user.id),
     });
-    expect(history.some((h) => h.changeDescription === "プリセット「その他」を削除")).toBe(true);
+    expect(history.some((h) => h.changeDescription === encodeHistoryDescription("preset.delete", { name: "その他" }))).toBe(true);
   });
 
   it("唯一のプリセットは（メインかつ編集中でも）削除でき、ライブテーブルも全ワイプされる", async () => {
@@ -1060,7 +1061,7 @@ describe("action - set-main / 未知の intent", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       changeType: "preset_switch",
-      changeDescription: "プリセット「旧名」の名前を「新名」に変更",
+      changeDescription: encodeHistoryDescription("preset.rename", { oldName: "旧名", name: "新名" }),
       presetId: null,
     });
   });
@@ -1074,7 +1075,7 @@ describe("action - set-main / 未知の intent", () => {
     expect((await findPreset(preset.id))?.description).toBeNull();
     let rows = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
     expect(rows).toHaveLength(1);
-    expect(rows[0].changeDescription).toBe("プリセット「名前」の説明を変更");
+    expect(rows[0].changeDescription).toBe(encodeHistoryDescription("preset.describe", { name: "名前" }));
 
     const res = await callAction({ intent: "update-preset", presetId: preset.id, name: "名前", description: "" });
     expect(res.success).toBe(true);
