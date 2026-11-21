@@ -1,9 +1,7 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/empty-state";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { PageSection } from "@/components/page-section";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
 import { cn } from "@/lib/utils";
@@ -13,7 +11,7 @@ import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { formatClock } from "@/lib/home-format";
 import type { FeaturedReason, FeaturedRunner } from "@/lib/home-featured";
 import { toast } from "sonner";
-import { ArrowRight, Search, Sparkles, Shuffle, Trophy, Video, TrendingUp } from "lucide-react";
+import { ArrowRight, Sparkles, Shuffle, Trophy, Video, TrendingUp } from "lucide-react";
 
 /** 主要操作・ホットバーのキーチップの見た目（クラス共通化はしない。見た目は ui.md「キーバッジ」と同系統） */
 const KEY_CHIP_CLASS =
@@ -323,33 +321,8 @@ export function FeaturedRunnerCard({
   const { current, loading, announce, handleClick } = useFeaturedRotation(candidates, initial);
   const nextButton = <FeaturedNextButton onClick={handleClick} loading={loading} />;
 
-  if (!current) {
-    // 候補も日替わりも無い（揃った公開プロフィールが無い）: 大型パネルにせず、ほかの欄と同じ欄枠＋控えめな空状態。
-    // 「別の走者」は取得できる人がいないので出さず、走者を探す（/browse）への導線にする。
-    // 見出しはカスタマイズのダイアログ（home-sections の featured）と同じ「注目の走者」
-    return (
-      <PageSection
-        id="home-featured"
-        icon={<Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />}
-        title={t("home.featuredTitle")}
-      >
-        <EmptyState
-          size="compact"
-          icon={<Sparkles className="h-5 w-5" />}
-          title={t("home.featuredEmptyTitle")}
-          description={t("home.featuredEmptyDescription")}
-          action={
-            <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-8">
-              <Link to="/browse" prefetch="intent">
-                <Search className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                {t("home.ctaBrowse")}
-              </Link>
-            </Button>
-          }
-        />
-      </PageSection>
-    );
-  }
+  // 候補も日替わりも無い日は、呼び出し側（home.tsx の featuredEmpty）が欄ごと出さない。念のため何も描かない
+  if (!current) return null;
 
   const name = getLocalizedDisplayName(current, locale);
 
