@@ -174,14 +174,14 @@ export function HomeSettingsDialog({
                   <label
                     htmlFor={`home-settings-show-${id}`}
                     className={cn(
-                      "min-w-0 flex-1 cursor-pointer truncate py-2.5 text-sm font-medium",
+                      "min-w-0 flex-1 cursor-pointer break-words py-2.5 text-sm font-medium",
                       !visible && "text-muted-foreground",
                       lastVisible && "cursor-default",
                     )}
                   >
                     {name}
                     {visible && emptySections.includes(id) && (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">{t("home.settingsEmptyToday")}</span>
+                      <span className="block text-xs font-normal text-muted-foreground">{t("home.settingsEmptyToday")}</span>
                     )}
                   </label>
                   <Button
