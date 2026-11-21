@@ -38,6 +38,7 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { PACES_PAGE_SIZE } from "./api/paces";
 import { cn } from "@/lib/utils";
 import { StatusPill } from "@/components/status-pill";
+import { normalizeDateParam } from "@/lib/date-param";
 import { History, Activity, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
@@ -51,6 +52,12 @@ function normalizeSplit(value: string | null): string | undefined {
   if (!value) return undefined;
   const lower = value.toLowerCase();
   return PACE_FEED_SPLITS.find((s) => s.toLowerCase() === lower);
+}
+
+// URL の maxTime を m:ss 形式の値だけに（サーバーの parseTimeParamToMs が捨てる値は条件なし扱い）
+function normalizeMaxTime(value: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && MAX_TIME_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -208,9 +215,9 @@ export default function PacesPage() {
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
   const [split, setSplit] = useState(normalizeSplit(searchParams.get("split")) ?? "all");
-  const [from, setFrom] = useState(searchParams.get("from") ?? "");
-  const [to, setTo] = useState(searchParams.get("to") ?? "");
-  const [maxTime, setMaxTime] = useState(searchParams.get("maxTime") ?? "");
+  const [from, setFrom] = useState(normalizeDateParam(searchParams.get("from")) ?? "");
+  const [to, setTo] = useState(normalizeDateParam(searchParams.get("to")) ?? "");
+  const [maxTime, setMaxTime] = useState(normalizeMaxTime(searchParams.get("maxTime")) ?? "");
   // 並び順（"recent"=新しい順 / "time"=タイム順。URLには "time" のみ載せる）
   const [sort, setSort] = useState(searchParams.get("sort") === "time" ? "time" : "recent");
 
@@ -226,18 +233,24 @@ export default function PacesPage() {
     if (changed) {
       setPlayer(searchParams.get("q") ?? "");
       setSplit(normalizeSplit(searchParams.get("split")) ?? "all");
-      setFrom(searchParams.get("from") ?? "");
-      setTo(searchParams.get("to") ?? "");
-      setMaxTime(searchParams.get("maxTime") ?? "");
+      setFrom(normalizeDateParam(searchParams.get("from")) ?? "");
+      setTo(normalizeDateParam(searchParams.get("to")) ?? "");
+      setMaxTime(normalizeMaxTime(searchParams.get("maxTime")) ?? "");
     }
     setSort(searchParams.get("sort") === "time" ? "time" : "recent");
   }, [searchParams]);
 
   // 並び順（sort）は絞り込みではなく表示の設定なので、適用中・リセットの対象に含めない。
   // 不正な split（効いていない値）は条件として数えない
-  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) =>
-    key === "sort" ? false : key === "split" ? Boolean(normalizeSplit(searchParams.get(key))) : searchParams.get(key),
-  );
+  const appliedFrom = normalizeDateParam(searchParams.get("from"));
+  const appliedTo = normalizeDateParam(searchParams.get("to"));
+  const appliedMaxTime = normalizeMaxTime(searchParams.get("maxTime"));
+  const hasActiveFilters =
+    Boolean(searchParams.get("q")) ||
+    Boolean(normalizeSplit(searchParams.get("split"))) ||
+    Boolean(appliedFrom) ||
+    Boolean(appliedTo) ||
+    Boolean(appliedMaxTime);
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジで状態を示す
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
@@ -259,15 +272,12 @@ export default function PacesPage() {
       ),
     });
   }
-  const appliedFrom = searchParams.get("from");
-  const appliedTo = searchParams.get("to");
   if (appliedFrom || appliedTo) {
     appliedChips.push({
       key: "period",
       label: `${t("paces.filterPeriod")}: ${appliedFrom ?? ""}${t("common.rangeSeparator")}${appliedTo ?? ""}`,
     });
   }
-  const appliedMaxTime = searchParams.get("maxTime");
   if (appliedMaxTime) {
     appliedChips.push({ key: "maxTime", label: `${t("paces.filterMaxTime")}: ${appliedMaxTime}` });
   }

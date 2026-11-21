@@ -333,6 +333,7 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 - 折りたたみバッジ「N件適用中」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みではないので数えない）
 - 絞り込み・並び替えの再取得中（`useNavigation` が `/paces` 内の `loading`）は、一覧（または空状態）を差し替えず `opacity-50` ＋ `aria-busy` で残す（`/rankings` と同じ。`navigation-progress.tsx` は同一パス内の遷移では何も出さないため）
 - 絞り込みの無い空状態は「どうすれば載るか」を説明する（`paces.emptyHint`: MCID を登録して公開プロフィールにした走者の、PaceMan に記録された過去2か月のペース。`getUserData` の条件に対応）。ログイン中の人には `/me/edit` への `action`（loader の `signedIn`）。未ログインは説明だけ
+- 不正な URL 値（`maxTime` が m:ss でない・`from` / `to` がサーバーの `parseDateParam` に捨てられる）は、チップ・件数・`hasActiveFilters` に数えない（`split` と同じ）。データが0件で条件も無いときは検索フォームを出さず空状態だけにする（条件ありで0件ならフォームは残す）。`/videos` も同じ（不正な `platform` は「すべて」に正規化）
 
 区間名（セレクトの選択肢・カード・バッジ）は日本語ロケールでも **PaceMan の英語正規名**（Bastion / Fortress / Enter Stronghold 等）のまま表示する（ユーザー判断。`app/lib/paceman.ts` の `getSplitTimeline` / `PaceManSplitMark` が語彙の基準）。
 

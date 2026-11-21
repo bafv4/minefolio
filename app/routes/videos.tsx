@@ -38,10 +38,16 @@ import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { VIDEOS_PAGE_SIZE } from "./api/videos";
 import { cn } from "@/lib/utils";
 import { StatusPill } from "@/components/status-pill";
+import { normalizeDateParam } from "@/lib/date-param";
 import { Play, Film, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "platform", "from", "to"] as const;
+
+// URL の platform を youtube / twitch / all に正規化する（それ以外の値は「すべて」扱い。サーバーも同じ値だけを使う）
+function normalizePlatform(value: string | null): "all" | "youtube" | "twitch" {
+  return value === "youtube" || value === "twitch" ? value : "all";
+}
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -179,18 +185,24 @@ export default function VideosPage() {
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
-  const [platform, setPlatform] = useState(searchParams.get("platform") ?? "all");
-  const [from, setFrom] = useState(searchParams.get("from") ?? "");
-  const [to, setTo] = useState(searchParams.get("to") ?? "");
+  const [platform, setPlatform] = useState(normalizePlatform(searchParams.get("platform")));
+  const [from, setFrom] = useState(normalizeDateParam(searchParams.get("from")) ?? "");
+  const [to, setTo] = useState(normalizeDateParam(searchParams.get("to")) ?? "");
 
   useEffect(() => {
     setPlayer(searchParams.get("q") ?? "");
-    setPlatform(searchParams.get("platform") ?? "all");
-    setFrom(searchParams.get("from") ?? "");
-    setTo(searchParams.get("to") ?? "");
+    setPlatform(normalizePlatform(searchParams.get("platform")));
+    setFrom(normalizeDateParam(searchParams.get("from")) ?? "");
+    setTo(normalizeDateParam(searchParams.get("to")) ?? "");
   }, [searchParams]);
 
-  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
+  const appliedFrom = normalizeDateParam(searchParams.get("from"));
+  const appliedTo = normalizeDateParam(searchParams.get("to"));
+  const hasActiveFilters =
+    Boolean(searchParams.get("q")) ||
+    normalizePlatform(searchParams.get("platform")) !== "all" ||
+    Boolean(appliedFrom) ||
+    Boolean(appliedTo);
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジとチップで状態を示す（/paces と同じ）
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [periodInvalid, setPeriodInvalid] = useState(false);
@@ -199,15 +211,13 @@ export default function VideosPage() {
   const appliedChips: { key: string; label: string }[] = [];
   const appliedQ = searchParams.get("q");
   if (appliedQ) appliedChips.push({ key: "q", label: `${t("videos.filterPlayer")}: ${appliedQ}` });
-  const appliedPlatform = searchParams.get("platform");
-  if (appliedPlatform === "youtube" || appliedPlatform === "twitch") {
+  const appliedPlatform = normalizePlatform(searchParams.get("platform"));
+  if (appliedPlatform !== "all") {
     appliedChips.push({
       key: "platform",
       label: `${t("videos.filterPlatform")}: ${appliedPlatform === "youtube" ? "YouTube" : "Twitch"}`,
     });
   }
-  const appliedFrom = searchParams.get("from");
-  const appliedTo = searchParams.get("to");
   if (appliedFrom || appliedTo) {
     appliedChips.push({
       key: "period",
@@ -306,7 +316,7 @@ export default function VideosPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="video-filter-platform">{t("videos.filterPlatform")}</Label>
-              <Select value={platform} onValueChange={setPlatform}>
+              <Select value={platform} onValueChange={(v) => setPlatform(normalizePlatform(v))}>
                 <SelectTrigger id="video-filter-platform" className="w-full">
                   <SelectValue />
                 </SelectTrigger>

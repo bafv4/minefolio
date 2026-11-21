@@ -6,6 +6,7 @@ import { getOptionalSession } from "./session";
 import { getPaceFeedEntries } from "./paceman-cache";
 import { PACE_FEED_SPLITS, getTimelineProgress } from "./pace-splits";
 import { getCached, setCached } from "./cache";
+import { normalizeDateParam } from "./date-param";
 import { getUserData, type UserDataCache } from "./home-user-data.server";
 
 // フィード全体（区間キー毎）のキャッシュTTL
@@ -44,7 +45,7 @@ export type PaceSort = (typeof PACE_SORTS)[number];
 // 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（アプリは日本語圏向け）。
 // /videos の検索条件（videos-feed.server.ts）も同じ規約を共有する
 export function parseDateParam(value: string | null, endOfDay: boolean): Date | undefined {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  if (!normalizeDateParam(value)) return undefined;
   const time = endOfDay ? "23:59:59.999" : "00:00:00.000";
   const date = new Date(`${value}T${time}+09:00`);
   return Number.isNaN(date.getTime()) ? undefined : date;
