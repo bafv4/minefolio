@@ -297,7 +297,7 @@ export const PAGES_JA = {
     yesterday: "昨日",
     daysAgo: "{count}日前",
     weeksAgo: "{count}週間前",
-    monthsAgo: "{count}ヶ月前",
+    monthsAgo: "{count}か月前",
     yearsAgo: "{count}年前",
   },
   /** 読み込み画面のヒント（navigation-progress.tsx）。

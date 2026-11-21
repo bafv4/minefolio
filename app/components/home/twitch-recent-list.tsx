@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { formatClockSeconds, formatStreamDuration } from "@/lib/home-format";
-import { formatRelativeTimeInHours } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { pickDisplayName } from "@/lib/slug";
 import { twitchChannelUrl, type HomeTwitchStream } from "@/lib/home-live";
 import { getFeedVideoUrl } from "@/components/feed-video-card";
@@ -110,9 +110,11 @@ export function TwitchRecentList({ streams, vods }: { streams: HomeTwitchStream[
             <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
               <span className="text-right" suppressHydrationWarning>
                 <span className="block">
-                  {r.live
-                    ? formatStreamDuration(t, Math.max(0, Date.now() - new Date(r.at).getTime()))
-                    : formatRelativeTimeInHours(t, r.at)}
+                  {r.live ? (
+                    formatStreamDuration(t, Math.max(0, Date.now() - new Date(r.at).getTime()))
+                  ) : (
+                    <RelativeTime date={r.at} unit="hours" />
+                  )}
                 </span>
                 {!r.live && r.durationSeconds ? (
                   <span className="block font-mono">{formatClockSeconds(r.durationSeconds)}</span>

@@ -292,7 +292,7 @@
   - 唯一のプリセットを削除する場合は、プリセット対象のライブテーブル（現在の設定）も全削除される。確認ダイアログにその旨を明示した上で実行する。
 - プリセットの複製
 - プリセットは 1 ユーザー 50 個まで（`create-preset` で、コピーも数える。超過は `tooManyPresets`）。上限の一覧は [`docs/keybindings.md`](keybindings.md)「保存の検証と上限」
-- 変更履歴の表示（直近20件。種別ラベルは行ごとの種別が1種類だけのとき〔全行「プリセット」など〕出さない。何が変わったか〔説明〕・種別・日時の絶対表記＋相対表記を並べる。相対表記は `app/lib/relative-time.ts` の `formatRelativeDate`、時刻は `suppressHydrationWarning`）
+- 変更履歴の表示（直近20件。種別ラベルは行ごとの種別が1種類だけのとき〔全行「プリセット」など〕出さない。何が変わったか〔説明〕・種別・日時の絶対表記＋相対表記を並べる。相対表記は `<RelativeTime unit="date">`〔`app/components/relative-time.tsx`。SSR と水和のずれは部品が吸収する。詳細は `docs/i18n.md`〕）
 - 画面は `PageSection`（h2）の欄区切り。一覧の見出し・履歴の見出しがともに h2
 
 ### インポート（/me/import）の取り込み先の確認

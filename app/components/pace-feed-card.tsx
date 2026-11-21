@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { Badge } from "@/components/ui/badge";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
@@ -96,8 +96,7 @@ export function PaceFeedCard({
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
-            {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}
-            <span suppressHydrationWarning>{formatRelativeTimeInMinutes(t, new Date(run.time * 1000))}</span>
+            <RelativeTime date={run.time * 1000} />
           </span>
         </div>
       </div>

@@ -261,7 +261,8 @@
 
 ### 時間・数値
 - 時間は `font-mono tabular-nums`。整形は既存の関数を使い、その場で整形しない: 記録・走者画面は `formatTime`（`app/lib/time-utils.ts`）、ホームのライブ・配信は `formatClock` / `formatClockSeconds`（`app/lib/home-format.ts`）、相対時刻は `app/lib/relative-time.ts`
-- 時刻・相対時刻のようにサーバーとクライアントで変わる文字には `suppressHydrationWarning` を付ける
+- 相対時刻は `<RelativeTime>`（`app/components/relative-time.tsx`）で描く。`t()` に埋め込むときは `useHydrated()`（`app/hooks/use-hydrated.ts`）の値を `{ calendar: hydrated }` で渡す。詳細は `docs/i18n.md`
+- 時計など、それ以外でサーバーとクライアントで変わる文字には `suppressHydrationWarning` を付ける
 
 ## 8. 状態（空・読み込み・失敗）
 

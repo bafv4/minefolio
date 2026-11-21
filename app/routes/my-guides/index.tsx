@@ -40,9 +40,9 @@ import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { PinnedBadge } from "@/components/pinned-badge";
 import { BookOpen, ExternalLink, Plus, PencilLine, Trash2, Globe, Lock, Loader2, Eye, Pin, PinOff } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
-import { useT, useLocale } from "@/hooks/use-locale";
+import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { useHydrated } from "@/hooks/use-hydrated";
+import { useT } from "@/hooks/use-locale";
 
 export const meta = ({ matches }: { matches: ReadonlyArray<{ id: string; loaderData?: unknown }> }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -125,7 +125,7 @@ const ROW_ACTION_CLASS = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
 
 export default function MyGuidesPage() {
   const t = useT();
-  const locale = useLocale();
+  const hydrated = useHydrated();
   const { guides: userGuides, user } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   // 削除の結果をトーストで知らせる（テンプレートの削除と同じ形）
@@ -238,10 +238,7 @@ export default function MyGuidesPage() {
                       {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
                       <span suppressHydrationWarning>
                         {t("meGuides.updatedAgo", {
-                          time: formatDistanceToNow(guide.updatedAt, {
-                            addSuffix: true,
-                            locale: dateFnsLocale(locale),
-                          }),
+                          time: formatRelativeTimeInMinutes(t, guide.updatedAt, { calendar: hydrated }),
                         })}
                       </span>
                       {guide.isPublished && (

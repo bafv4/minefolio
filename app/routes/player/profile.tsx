@@ -33,9 +33,11 @@ import { parseAgeGroup, publicAgeGroup } from "@/lib/age-group";
 import { platformLabel } from "@/lib/platform-label";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
+import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import { dateFnsLocale, dateFormatPattern, intlLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useHydrated } from "@/hooks/use-hydrated";
 import type { Translator } from "@/lib/messages";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
 import { getGameLanguageName, hasItemNameDictionary } from "@/lib/game-languages";
@@ -2708,6 +2710,8 @@ function SocialLinkRichCard({
 }) {
   const t = useT();
   const locale = useLocale();
+  // 暦日はタイムゾーン依存。SSR（サーバー UTC）と水和は経過日数で描き、水和後に端末の暦日へ切り替える
+  const calendar = useHydrated();
   const statParts: string[] = [];
   let isLive = false;
 
@@ -2723,7 +2727,7 @@ function SocialLinkRichCard({
       if (yt.latestVideoAt) {
         statParts.push(
           t("playerProfile.latestVideoAgo", {
-            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
+            time: formatRelativeTimeInMinutes(t, new Date(yt.latestVideoAt), { calendar }),
           }),
         );
       }
@@ -2739,7 +2743,7 @@ function SocialLinkRichCard({
       if (!tw.isLive && tw.lastStreamAt) {
         statParts.push(
           t("playerProfile.lastStreamAgo", {
-            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
+            time: formatRelativeTimeInMinutes(t, new Date(tw.lastStreamAt), { calendar }),
           }),
         );
       }

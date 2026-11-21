@@ -9,8 +9,7 @@ import { Eye, Languages, Pin } from "lucide-react";
 import { LikeButton } from "@/components/like-button";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PageViews7dMeta } from "@/components/page-views-meta";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { RelativeTime } from "@/components/relative-time";
 
 export type GuideItem = {
   id: string;
@@ -264,13 +263,7 @@ export function GuideCardGrid({
                     isOwn={guide.isOwn}
                     className="shrink-0"
                   />
-                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
-                  <span className="ml-auto shrink-0" suppressHydrationWarning>
-                    {formatDistanceToNow(guide.updatedAt, {
-                      addSuffix: true,
-                      locale: dateFnsLocale(locale),
-                    })}
-                  </span>
+                  <RelativeTime date={guide.updatedAt} className="ml-auto shrink-0" />
                 </div>
               </div>
             </div>
@@ -354,12 +347,7 @@ export function GuideListView({
                   likeCount={guide.likeCount}
                   isOwn={guide.isOwn}
                 />
-                <span className="ml-auto shrink-0" suppressHydrationWarning>
-                  {formatDistanceToNow(guide.updatedAt, {
-                    addSuffix: true,
-                    locale: dateFnsLocale(locale),
-                  })}
-                </span>
+                <RelativeTime date={guide.updatedAt} className="ml-auto shrink-0" />
               </div>
             </div>
           </div>

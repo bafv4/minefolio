@@ -3,12 +3,13 @@ import { Link } from "react-router";
 import { PaceTimelineModal } from "@/components/pace-timeline-modal";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { DAY_MS } from "@/lib/home-favorite-activity-shared";
 import { cn } from "@/lib/utils";
 import type { Translator } from "@/lib/messages";
 import { formatClock } from "@/lib/home-format";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { formatRelativeDate, formatRelativeTimeInMinutes } from "@/lib/relative-time";
 import type { FavoriteActivityItem } from "@/lib/home-favorite-activity.server";
 import { BookOpen, History, Keyboard, Layers, Mouse, Package, Play, Send, TrendingUp, Trophy, UserRound } from "lucide-react";
 
@@ -30,12 +31,10 @@ const SETTINGS_ICON = {
   preset_switch: Layers,
 } as const;
 
-/** 日付だけの出来事の相対表記（UTC 日単位: 今日 / 昨日 / N日前） */
-function dateOnlyRelative(t: Translator, at: number): string {
-  const days = Math.max(0, Math.floor(Date.now() / DAY_MS) - Math.floor(at / DAY_MS));
-  if (days === 0) return t("relativeDate.today");
-  if (days === 1) return t("relativeDate.yesterday");
-  return t("relativeDate.daysAgo", { count: days });
+/** 日付だけの出来事の相対表記。UTC の暦日をそのまま端末の暦日に置いて、他の画面と同じ暦日表記（formatRelativeDate）で出す */
+function dateOnlyRelative(t: Translator, at: number, calendar: boolean): string {
+  const d = new Date(at);
+  return formatRelativeDate(t, new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()), { calendar });
 }
 
 /** 文中の結果の値（タイム・ティア）の前後に置く目印（制御文字なので文言には現れない） */
@@ -169,6 +168,8 @@ export function FavoriteActivityRow({
 }) {
   const t = useT();
   const locale = useLocale();
+  // 暦日はタイムゾーン依存。SSR（サーバー UTC）と水和は経過日数で描き、水和後に端末の暦日へ切り替える
+  const calendar = useHydrated();
   const [open, setOpen] = useState(false);
   const name = getLocalizedDisplayName(item, locale);
   const parts = favoriteActivityParts(t, name, item);
@@ -184,10 +185,10 @@ export function FavoriteActivityRow({
   const timeText = item.dateOnly
     ? time === "clock"
       ? " " // 日付のみの出来事は時刻を出さない（行の高さ・揃えは保つ）
-      : dateOnlyRelative(t, item.at)
+      : dateOnlyRelative(t, item.at, calendar)
     : time === "clock"
       ? at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
-      : formatRelativeTimeInMinutes(t, at);
+      : formatRelativeTimeInMinutes(t, at, { calendar });
   // 名前は隣の文（ActivitySentence）にあるので、アバターの alt は空にする（同じ名前を2回読ませない）
   const avatar = (
     <MinecraftAvatar uuid={item.uuid} skinUrl={item.customSkinUrl} mcid={item.mcid} size={36} alt="" className="rounded-lg" />

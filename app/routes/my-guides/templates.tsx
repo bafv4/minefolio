@@ -44,8 +44,8 @@ import {
   Download,
   Languages,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -138,6 +138,7 @@ const ROW_ACTION_CLASS = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8";
 export default function MyTemplatesPage() {
   const t = useT();
   const locale = useLocale();
+  const hydrated = useHydrated();
   const { templates } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
@@ -271,10 +272,7 @@ export default function MyTemplatesPage() {
                       {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
                       <span suppressHydrationWarning>
                         {t("meGuides.updatedAgo", {
-                          time: formatDistanceToNow(new Date(template.updatedAt), {
-                            addSuffix: true,
-                            locale: dateFnsLocale(locale),
-                          }),
+                          time: formatRelativeTimeInMinutes(t, new Date(template.updatedAt), { calendar: hydrated }),
                         })}
                       </span>
                     </div>

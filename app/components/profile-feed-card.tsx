@@ -6,7 +6,7 @@ import { PageViews7dMeta } from "@/components/page-views-meta";
 import { FavoriteMark } from "@/components/favorite-mark";
 import { FavoriteButton } from "@/components/favorite-button";
 import { Clock3 } from "lucide-react";
-import { formatRelativeDate } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { platformLabel } from "@/lib/platform-label";
@@ -154,7 +154,7 @@ export function ProfileFeedCard({
         </div>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           <Clock3 className="h-3 w-3" aria-hidden />
-          <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
+          <RelativeTime date={player.updatedAt} unit="date" />
         </span>
       </div>
     </div>
@@ -196,7 +196,7 @@ export function ProfileFeedListItem({
           {player.shortBio && <p className="min-w-0 flex-1 truncate">{player.shortBio}</p>}
           <span className="inline-flex shrink-0 items-center gap-1 md:hidden">
             <Clock3 className="h-3 w-3" aria-hidden />
-            <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
+            <RelativeTime date={player.updatedAt} unit="date" />
           </span>
         </div>
       </div>
@@ -206,7 +206,7 @@ export function ProfileFeedListItem({
         <FeedCardTags player={player} mobileMax={1} />
         <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground max-md:hidden">
           <Clock3 className="h-3 w-3" aria-hidden />
-          <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
+          <RelativeTime date={player.updatedAt} unit="date" />
         </span>
       </div>
     </Link>

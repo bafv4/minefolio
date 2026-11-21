@@ -57,7 +57,7 @@ import {
 import { toast } from "sonner";
 import { Save, Trash2, Plus, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
-import { formatRelativeDate } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { intlLocale } from "@/lib/date-locale";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
@@ -1370,9 +1370,9 @@ export default function PresetsPage() {
                           )}
                         </div>
 
-                        {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制（pace-feed-card と同じ対処） */}
-                        <p className="text-xs text-muted-foreground mt-2" suppressHydrationWarning>
-                          {t("mePresets.updatedPrefix")} {formatRelativeDate(t, new Date(preset.updatedAt))}
+                        {/* 相対時刻は SSR と水和で暦日がずれるので <RelativeTime> に任せる */}
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {t("mePresets.updatedPrefix")} <RelativeTime date={preset.updatedAt} unit="date" />
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -1525,7 +1525,7 @@ export default function PresetsPage() {
                             {" · "}
                           </>
                         )}
-                        {formatRelativeDate(t, new Date(entry.createdAt))}
+                        <RelativeTime date={entry.createdAt} unit="date" />
                       </time>
                     </div>
                   </div>

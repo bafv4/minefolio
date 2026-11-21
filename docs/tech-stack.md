@@ -130,7 +130,7 @@ Minefolio で利用している**外部サービス**と、依存している**�
 
 | ライブラリ | 用途 |
 |---|---|
-| **date-fns** | 日付フォーマット・相対時刻 |
+| **date-fns** | 日付フォーマット（相対時刻は `app/lib/relative-time.ts` に集約。date-fns の `formatDistanceToNow` は使わない） |
 
 ### 開発・テスト
 

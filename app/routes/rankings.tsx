@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { createAuth } from "@/lib/auth";
@@ -216,6 +217,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function RankingsPage() {
   const t = useT();
+  // SSR は経過日数、水和後に端末の暦日へ切り替える（docs/i18n.md）
+  const hydrated = useHydrated();
   const data = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -278,7 +281,7 @@ export default function RankingsPage() {
         {data.lastFetchedMs !== null && (
           <p className="text-muted-foreground mt-1 text-xs" suppressHydrationWarning>
             {t("rankings.updatedAt", {
-              time: formatRelativeTimeInMinutes(t, new Date(data.lastFetchedMs)),
+              time: formatRelativeTimeInMinutes(t, new Date(data.lastFetchedMs), { calendar: hydrated }),
             })}
           </p>
         )}

@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/time-utils";
-import { formatRelativeTimeInHours, formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { getSpeedrunComVideoEmbedUrl } from "@/lib/external-stats";
 import type { MCSRRankedStats, SpeedrunComStats } from "@/lib/external-stats";
 import { getRankTier, type RankTierKey } from "@/lib/mcsr-ranked-tiers";
@@ -277,9 +277,11 @@ export function MCSRRankedCard({
                   </span>
                 </div>
                 {match.date > 0 && (
-                  <span className="w-full text-xs text-muted-foreground">
-                    {formatRelativeTimeInHours(t, new Date(match.date * 1000))}
-                  </span>
+                  <RelativeTime
+                    date={match.date * 1000}
+                    unit="hours"
+                    className="w-full text-xs text-muted-foreground"
+                  />
                 )}
               </div>
             ))}
@@ -459,7 +461,9 @@ function PaceRow({ pace }: { pace: GroupedPaceEntry }) {
     >
       <div className="min-w-0">
         <PaceManSplitMark timeline={pace.latestSplit.timeline} className="font-medium" />
-        <p className="text-xs text-muted-foreground">{formatRelativeTimeInMinutes(t, pace.date)}</p>
+        <p className="text-xs text-muted-foreground">
+          <RelativeTime date={pace.date} />
+        </p>
       </div>
       <div className="flex items-center gap-2">
         {pace.splits.length > 1 ? (

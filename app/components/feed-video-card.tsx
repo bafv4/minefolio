@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { formatClockSeconds } from "@/lib/home-format";
-import { formatRelativeTimeInHours } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
 import { Play, ExternalLink } from "lucide-react";
 import { Youtube, Twitch } from "@/components/brand-icons";
@@ -156,7 +156,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="min-w-0 truncate">{showName}</span>
           )}
           <span className="ml-auto flex shrink-0 items-center gap-2">
-            <span suppressHydrationWarning>{formatRelativeTimeInHours(t, video.publishedAt)}</span>
+            <RelativeTime date={video.publishedAt} unit="hours" />
             {/* タイトルのリンクと同じ URL なので Tab 停止点・読み上げからは外す（クリックだけ受ける） */}
             <a
               href={watchUrl}

@@ -29,9 +29,8 @@ import { LayoutTemplate, Search, ListOrdered, Keyboard, Download, FlaskConical, 
 import { GuidesContentTabs } from "@/components/content-tabs";
 import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
-import { getGameLanguageName, gameLanguageOptions } from "@/lib/game-languages";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { getGameLanguageName, gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
+import { RelativeTime } from "@/components/relative-time";
 
 export const meta = ({
   matches,
@@ -538,14 +537,8 @@ export default function TemplatesIndexPage() {
                     likeCount={template.likeCount}
                     isOwn={template.isOwn}
                   />
-                  {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制。ガイド系一覧と
-                      同様に右端固定（ml-auto shrink-0）にする */}
-                  <span className="ml-auto shrink-0" suppressHydrationWarning>
-                    {formatDistanceToNow(new Date(template.publishedAt), {
-                      addSuffix: true,
-                      locale: dateFnsLocale(locale),
-                    })}
-                  </span>
+                  {/* ガイド系一覧と同様に右端固定（ml-auto shrink-0）にする */}
+                  <RelativeTime date={template.publishedAt} className="ml-auto shrink-0" />
                 </div>
               </div>
             </div>

@@ -4,7 +4,7 @@ import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { getEmbedUrl, getFeedVideoThumbnailUrl, getFeedVideoUrl } from "@/components/feed-video-card";
 import { Youtube } from "@/components/brand-icons";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { formatRelativeTimeInHours } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { pickDisplayName } from "@/lib/slug";
 import type { FeedVideo } from "@/lib/feed-video";
 import { ExternalLink, Play } from "lucide-react";
@@ -93,9 +93,7 @@ export function HomeVideoCard({ video }: { video: FeedVideo }) {
               <span className="truncate">{showName}</span>
             </span>
           )}
-          <span className="ml-auto shrink-0" suppressHydrationWarning>
-            {formatRelativeTimeInHours(t, video.publishedAt)}
-          </span>
+          <RelativeTime date={video.publishedAt} unit="hours" className="ml-auto shrink-0" />
         </div>
       </div>
     </div>

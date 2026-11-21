@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { categoryLabel, isCategoryKey } from "@/lib/playstyle";
-import { formatRelativeDate } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import type { ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { Clock3, TrendingUp } from "lucide-react";
 
@@ -52,7 +52,7 @@ export function CompactProfileList({
                 ) : (
                   <>
                     <Clock3 className="h-3 w-3" aria-hidden="true" />
-                    <span suppressHydrationWarning>{formatRelativeDate(t, p.updatedAt)}</span>
+                    <RelativeTime date={p.updatedAt} unit="date" />
                   </>
                 )}
               </span>

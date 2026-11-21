@@ -77,7 +77,9 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 - Discordアバター同期: ログイン時にDiscordアバターを最新に更新
 - ナビゲーション: ホーム、走者一覧、ランキング、統計など
 - 未マッチのパス（`app/routes.ts` のキャッチオール `*`、`routes/not-found.tsx`）はこのレイアウトの子ルート
-- **エラー画面**: 404 と、このレイアウト配下のルートの loader・描画のエラーは、`_layout.tsx` の `ErrorBoundary` がヘッダー・フッターの内側に `ErrorView`（`app/components/layout/error-view.tsx`）を描く。HTTP ステータスは変わらない。`<title>` は「ページが見つかりません - Minefolio」など。404 の出口はホーム・探す・ガイドの3つ
+- **エラー画面**: 404 と、このレイアウト配下のルートの loader・描画のエラーは、`_layout.tsx` の `ErrorBoundary` がヘッダー・フッターの内側に `ErrorView`（`app/components/layout/error-view.tsx`）を描く。HTTP ステータスは変わらない。`<title>` は「ページが見つかりません - Minefolio」など。404 の出口はホーム・探す・ガイドの3つ。走者の 404（`/player/:slug`）だけは、その slug を入れた検索（`/browse?q=`、「「{slug}」で走者を探す」）を主ボタンにし、ホーム・ガイドを副にして、見つからない原因（MCID を変えると URL も変わる）を1文添える（ルーターの中の `NotFoundActions`。root の砦は従来の3リンク）
+- **画面遷移の読み込み表示**（`app/components/layout/navigation-progress.tsx`）: 遷移が約300ms を超えたときだけ全面のぼかし＋「読み込み中」を出す（速い遷移ではちらつかせない）。外枠は常に `role="status" aria-live="polite"`。Tips は 1s 以上かかったときだけ（読み上げ対象外）。同じパス内・タブ群内の遷移では出さない
+- **相対時刻**: `app/lib/relative-time.ts` が単一の入口。1日未満は分・時間（経過時間）、日単位以上は暦日（端末の日付変更で数える。今日・昨日・N日前・N週間前・Nか月前・N年前。en は Yesterday / 2d ago / 5mo ago）。date-fns の `formatDistanceToNow` は使わない
 - `_layout` 自身や root の loader が落ちたときは、root（`app/root.tsx`）の `ErrorBoundary` が最後の砦として描く（ルーターが壊れている可能性があるのでリンクは `<a href>`）
 - loader は `onboardingPending`（ログイン済みで初期設定が未完了。`users` の行がまだ無い場合も含む）を返す。true のとき、ヘッダーの下に「初期設定を続ける」（`/onboarding` へ）の案内を出す。`/onboarding`・`/login`・`/dev/login` では出さない
 

@@ -92,8 +92,7 @@ import {
 } from "lucide-react";
 import { getGameLanguageName, normalizeGameLanguage } from "@/lib/game-languages";
 import { decodePresetPlayerConfig } from "@/lib/preset-read";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { RelativeTime } from "@/components/relative-time";
 
 // リマップ表示用のバーチャルキーボードのレイアウト切替（テンプレートはレイアウト情報を持たないため閲覧者が選択）
 type KeyboardLayoutOption = "US" | "JIS" | "US_TKL" | "JIS_TKL";
@@ -573,13 +572,7 @@ export default function TemplateViewPage() {
             {author.name}
           </Link>
           <span aria-hidden>·</span>
-          {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制 */}
-          <span suppressHydrationWarning>
-            {formatDistanceToNow(new Date(template.createdAt), {
-              addSuffix: true,
-              locale: dateFnsLocale(locale),
-            })}
-          </span>
+          <RelativeTime date={template.createdAt} />
           <span aria-hidden>·</span>
           <span className="inline-flex items-center gap-1">
             <ListOrdered className="h-3 w-3" aria-hidden />

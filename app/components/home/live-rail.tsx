@@ -10,7 +10,7 @@ import type { Translator } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { pickMcidDisplayName } from "@/lib/mcid-display-name";
 import { pickDisplayName } from "@/lib/slug";
-import { formatRelativeTimeInMinutes } from "@/lib/relative-time";
+import { RelativeTime } from "@/components/relative-time";
 import { formatClock, formatStreamDuration, splitMinutesSeconds } from "@/lib/home-format";
 import {
   isFinishedRun,
@@ -492,8 +492,8 @@ function RecentPaceCard({ run, maps, className }: { run: CachedPace; maps: McidM
         time={formatClock(run.rta)}
         aria={igtAria(t, run.rta)}
         aside={
-          <p className="shrink-0 text-xs text-muted-foreground" suppressHydrationWarning>
-            {formatRelativeTimeInMinutes(t, new Date(run.time * 1000))}
+          <p className="shrink-0 text-xs text-muted-foreground">
+            <RelativeTime date={run.time * 1000} />
           </p>
         }
       />
