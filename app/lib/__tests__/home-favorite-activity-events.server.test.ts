@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDbAt, seedConfigPreset, seedUser, seedPlayerRanking, seedSpeedrunCategory, schema, type TestDb } from "./helpers/test-db";
 import { invalidateCache } from "../cache";
 import { getFavoriteActivity } from "../home-favorite-activity.server";
+import { PUBLIC_CONFIG_HISTORY_SINCE } from "../config-history";
 
 // お気に入りの動きの「レート帯 UP / Ranked PB / speedrun.com 申請 / 操作設定の変更」を実DBで検証する。
 // 日付の境界を固定するため now を明示する（2026-11-14 15:00 UTC。7日窓の開始日は 2026-11-07）
@@ -171,10 +172,15 @@ describe("お気に入りの動き: srcSubmit", () => {
 });
 
 describe("お気に入りの動き: settings", () => {
+  // 操作設定の動きは PUBLIC_CONFIG_HISTORY_SINCE（リリースごとに更新する）より前の行を出さないので、
+  // 日付は固定せず SINCE を起点に置く（SINCE の日の 15:00 UTC を now とする）
+  const day = PUBLIC_CONFIG_HISTORY_SINCE.getTime();
+  const settingsNow = day + 15 * 60 * 60 * 1000;
+  const settingsOpts = { ...opts, now: settingsNow };
+
   it("1人・1日（UTC）・changeType ごとに最新1件へまとめ、種別ごとに遷移先タブが変わる", async () => {
     const u = await seedRunner("tweaker");
     const main = await seedConfigPreset(db, u.id, { isMain: true, isActive: true });
-    const day = Date.parse("2026-11-14T00:00:00Z"); // PUBLIC_CONFIG_HISTORY_SINCE 以降
     const insert = (changeType: "keybinding" | "device" | "game_setting", offsetMin: number) =>
       db.insert(schema.configHistory).values({
         userId: u.id,
@@ -187,7 +193,7 @@ describe("お気に入りの動き: settings", () => {
     await insert("keybinding", 120); // 同じ日・同じ種別 -> 新しい方だけ
     await insert("device", 90);
     await insert("game_setting", 30);
-    const result = await getFavoriteActivity(asDb(db), ["tweaker"], opts);
+    const result = await getFavoriteActivity(asDb(db), ["tweaker"], settingsOpts);
     const settings = result.items.filter((i) => i.kind === "settings");
     expect(settings.map((i) => i.label)).toEqual(["keybinding", "device", "game_setting"]);
     expect(settings[0].at).toBe(day + 120 * 60_000);
@@ -197,7 +203,7 @@ describe("お気に入りの動き: settings", () => {
       "/player/tweaker?tab=keybindings",
     ]);
     // ホーム既定（limit 10）は1人1件
-    const home = await getFavoriteActivity(asDb(db), ["tweaker"], { now: NOW });
+    const home = await getFavoriteActivity(asDb(db), ["tweaker"], { now: settingsNow });
     expect(home.items.filter((i) => i.kind === "settings")).toHaveLength(1);
   });
 
@@ -206,13 +212,13 @@ describe("お気に入りの動き: settings", () => {
     const main = await seedConfigPreset(db, u.id, { isMain: true, isActive: true });
     const base = { userId: u.id, changeDescription: "x" } as const;
     // 非メインの編集・編集対象の切替など: preset_id なし
-    await db.insert(schema.configHistory).values({ ...base, changeType: "keybinding", createdAt: new Date(NOW - DAY) });
-    // 移行前の行: preset_id があっても SINCE（2026-11-14T00:00Z）より前なら公開影響なし扱い
-    await db.insert(schema.configHistory).values({ ...base, changeType: "device", presetId: main.id, createdAt: new Date(NOW - 3 * DAY) });
+    await db.insert(schema.configHistory).values({ ...base, changeType: "keybinding", createdAt: new Date(settingsNow - 60_000) });
+    // 移行前の行: preset_id があっても SINCE より前なら公開影響なし扱い（7日窓の内側に置く）
+    await db.insert(schema.configHistory).values({ ...base, changeType: "device", presetId: main.id, createdAt: new Date(day - DAY) });
     // 対象: SINCE 以降で preset_id あり
-    await db.insert(schema.configHistory).values({ ...base, changeType: "preset_switch", presetId: main.id, createdAt: new Date(NOW - 60_000) });
+    await db.insert(schema.configHistory).values({ ...base, changeType: "preset_switch", presetId: main.id, createdAt: new Date(settingsNow - 60_000) });
 
-    const settings = (await getFavoriteActivity(asDb(db), ["quiet"], opts)).items.filter((i) => i.kind === "settings");
+    const settings = (await getFavoriteActivity(asDb(db), ["quiet"], settingsOpts)).items.filter((i) => i.kind === "settings");
     expect(settings.map((i) => i.label)).toEqual(["preset_switch"]);
   });
 });
