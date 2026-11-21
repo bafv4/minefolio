@@ -118,7 +118,7 @@ export function ScrollUpStickyHeader({
         className={cn(
           // 角丸は重ねる先の表の枠（rankings.tsx の TABLE_FRAME_CLASS = rounded-xl）と揃える
           "fixed z-30 bg-card border-b-2 shadow-md rounded-t-xl overflow-hidden",
-          "transition-transform duration-200 ease-out will-change-transform",
+          "transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none",
           visible
             ? "translate-y-0 opacity-100 pointer-events-auto"
             : "-translate-y-full opacity-0 pointer-events-none",

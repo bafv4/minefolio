@@ -21,6 +21,7 @@ import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
 import { listedRunnerCondition } from "@/lib/users-filter";
 import { eq, desc, and, or, isNotNull, sql } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
+import { getHomeOutlooks } from "@/lib/home-live-outlook.server";
 import { guideLikeCountSql } from "@/lib/likes.server";
 import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
@@ -193,8 +194,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   })();
 
   const locale = resolveLocale(request);
-  const [account, recentlyUpdatedUsers, popularUsersRaw, guidesWithTranslations, [profileCounts], spotlight, heroFaces] =
-    await Promise.all([
+  const [
+    account,
+    recentlyUpdatedUsers,
+    popularUsersRaw,
+    guidesWithTranslations,
+    [profileCounts],
+    spotlight,
+    heroFaces,
+    outlooks,
+  ] = await Promise.all([
     accountPromise,
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
     db
@@ -264,6 +273,8 @@ export async function loader({ request }: Route.LoaderArgs) {
             .orderBy(desc(users.updatedAt))
             .limit(HERO_FACE_POOL),
     ),
+    // ライブ欄・動画欄の読み込み中の骨組みの形を選ぶ見込み（キャッシュと DB の1行確認だけ。上流は呼ばない）
+    getHomeOutlooks(),
   ]);
   const currentUser = account?.user ?? null;
   const isRegistered = currentUser != null;
@@ -301,6 +312,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalPublicProfiles,
     spotlight,
     heroFaces,
+    outlooks,
   };
 }
 
@@ -555,13 +567,43 @@ async function fetchFeedJson<T>(url: string): Promise<T> {
 const HOME_YOUTUBE_COUNT = 3;
 
 // 動画欄のローディングスケルトン（memo化）
-const VideosSkeleton = memo(function VideosSkeleton() {
+// expectEmpty: サーバーの見込みが「動画0件」のときは、本物の0件の文と同じ <p> を invisible で置く（折り返しの行数が幅・ロケールで変わるため。外れたら本物に合わせて伸びる）
+const VideosSkeleton = memo(function VideosSkeleton({ expectEmpty }: { expectEmpty: boolean }) {
+  const t = useT();
+  if (expectEmpty) {
+    return (
+      <div className="relative" aria-hidden="true">
+        <p className="invisible text-sm">
+          {t("home.noVideos")}
+          {t("home.noVideosSeparator")}
+          {t("home.noVideosDescription")}
+        </p>
+        <Skeleton className="absolute top-0 left-0 h-5 w-72 max-w-full" />
+      </div>
+    );
+  }
   return (
-    // YouTube のカード行1段ぶん（モバイルは横レールの見た目）。空状態に縮んでも下の欄が跳ねにくい高さ
-    <div className="flex gap-4 overflow-hidden md:grid md:grid-cols-3 md:overflow-visible" aria-hidden="true">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="h-56 w-[calc(100%-4rem)] shrink-0 rounded-xl md:w-auto" />
-      ))}
+    // 本物（YouTube の見出し行 ＋ HomeVideoCard の1段）と同じ形・同じ高さ。モバイルは横レールの見た目。
+    // カード: 枠 1px ＋ aspect-video のサムネイル ＋ p-4 の本文（タイトル2行 leading-snug 14px×1.375 = 38.5px ＋ mt-3 / 枠 / pt-3 ＋ 走者行 min-h-11 / sm 以上 min-h-5）
+    <div className="space-y-6" aria-hidden="true">
+      <div className="space-y-3">
+        <Skeleton className="h-5 w-24" />
+        <div className="-mx-2 -mt-2 flex gap-4 overflow-hidden px-2 pt-2 pb-3 md:mx-0 md:mt-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="w-[calc(100%-4rem)] shrink-0 md:w-auto">
+              <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border/70 bg-card">
+                <Skeleton className="aspect-video rounded-none" />
+                <div className="flex flex-1 flex-col p-4">
+                  <Skeleton className="h-[38.5px]" />
+                  <div className="mt-3 border-t border-border/60 pt-3">
+                    <div className="min-h-11 sm:min-h-5" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 });
@@ -579,6 +621,7 @@ export default function HomePage() {
     totalPublicProfiles,
     spotlight,
     heroFaces,
+    outlooks,
     layout: savedLayout,
   } = useLoaderData<typeof loader>();
 
@@ -592,6 +635,9 @@ export default function HomePage() {
   }, [submittedOrder, submittedHidden, savedLayout]);
 
   const [feed, dispatch] = useReducer(feedReducer, initialFeedState);
+  // 「0人・最近のペース0件」の見込み。読み込み中の骨組みを0人の形にする（外れたら本物に合わせて伸びる）。
+  // 初回の取得が成功する前だけ使う（一度でも取れたあとの再取得・再試行では、実際のカードを骨組みに差し替えない）
+  const expectLiveEmpty = outlooks.live === "empty" && feed.liveRunsCheckedAt === null;
 
   // お気に入りの並べ替え・ハート表示はクライアント側で適用する
   // （/api/home-feed のレスポンスはユーザー非依存でCDNキャッシュされるため）
@@ -899,6 +945,8 @@ export default function HomePage() {
   const videosLoading = feed.loading.videos || feed.loading.twitchVods;
   const showTwitch = twitchStreams.length > 0 || twitchVods.length > 0;
   const noVideoData = youtubeVideos.length === 0 && !showTwitch;
+  // 動画0件の見込みも、まだ動画を一度も取れていないあいだだけ使う
+  const expectVideosEmpty = outlooks.videos === "empty" && noVideoData;
 
   const hasProfiles = recentlyUpdatedUsers.length > 0;
   const liveEmptySettled = liveSettled && !feed.loading.liveRuns && liveEntries.length === 0;
@@ -935,10 +983,13 @@ export default function HomePage() {
         {hasFavoriteLive && (
           <FavoritesFirstNote>{t("home.liveFavoritesFirstNote")}</FavoritesFirstNote>
         )}
-        {!liveEmptySettled && <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />}
+        {/* 0人の見込みで読み込み中のときは、0人の形（文＋右端の更新時刻）に合わせて独立した行を出さない */}
+        {!liveEmptySettled && !(expectLiveEmpty && feed.loading.liveRuns) && (
+          <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
+        )}
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
         {/* 0人のときは帯を弱め、0件の1文と導線の下（LiveRail 内）へ置く。人が居るとき・取得中は従来どおり先頭 */}
-        {(feed.loading.liveRuns || liveSettled) && !liveEmptySettled && (
+        {((feed.loading.liveRuns && !expectLiveEmpty) || liveSettled) && !liveEmptySettled && (
           <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
         )}
         <LiveRail
@@ -956,6 +1007,7 @@ export default function HomePage() {
           favoriteSlugs={favoriteSlugSet}
           streamingSlugs={streamingSlugs}
           loading={feed.loading.liveRuns}
+          expectEmpty={expectLiveEmpty}
           error={feed.errors.liveRuns}
           hasData={feed.liveRunsCheckedAt !== null}
           onRetry={retryLiveRuns}
@@ -974,7 +1026,7 @@ export default function HomePage() {
         viewAllTo="/videos"
       >
         {videosLoading ? (
-          <VideosSkeleton />
+          <VideosSkeleton expectEmpty={expectVideosEmpty} />
         ) : (feed.errors.videos || feed.errors.twitchVods) && noVideoData ? (
           <FeedErrorNotice message={t("home.videosFetchFailed")} onRetry={retryVideos} />
         ) : noVideoData ? (

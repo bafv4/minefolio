@@ -245,4 +245,10 @@ describe("parseRankingsParams", () => {
     expect(parsed.categorySlug).toBe("any");
     expect(parsed.rankedType).toBe("elo");
   });
+
+  it("不正な tab / rankedType は既定へ戻す", () => {
+    const parsed = parseRankingsParams(new URLSearchParams({ tab: "foo", rankedType: "bar" }));
+    expect(parsed.tab).toBe("speedruncom");
+    expect(parsed.rankedType).toBe("pb");
+  });
 });

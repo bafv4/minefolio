@@ -206,6 +206,14 @@ export default function VideosPage() {
   // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジとチップで状態を示す（/paces と同じ）
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [periodInvalid, setPeriodInvalid] = useState(false);
+  // 送信時の検証（periodInvalid）に加え、URL から入った逆順の期間（フォームの入力欄にも反映される）も同じ文言で知らせる。
+  // サーバーは from <= date <= to で絞るので、逆順は必ず0件になる。条件としては効いている（絞り込みに数える）が、原因が分からないため
+  const periodError = periodInvalid || (Boolean(from && to) && from > to);
+  const appliedPeriodReversed = Boolean(appliedFrom && appliedTo) && (appliedFrom ?? "") > (appliedTo ?? "");
+  // 畳んだモバイルでも原因が見えるよう、URL の逆順の期間は開いて示す
+  useEffect(() => {
+    if (appliedPeriodReversed) setFiltersOpen(true);
+  }, [appliedPeriodReversed]);
 
   // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
   const appliedChips: { key: string; label: string }[] = [];
@@ -322,7 +330,10 @@ export default function VideosPage() {
               <Label htmlFor="video-filter-platform">{t("videos.filterPlatform")}</Label>
               <Select value={platform} onValueChange={(v) => setPlatform(normalizePlatform(v))}>
                 <SelectTrigger id="video-filter-platform" className="w-full">
-                  <SelectValue />
+                  {/* Radix の SelectValue は SSR で選択中の項目を描けないため、中身を明示して渡す（/browse と同じ） */}
+                  <SelectValue>
+                    {platform === "youtube" ? "YouTube" : platform === "twitch" ? "Twitch" : t("videos.platformAll")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("videos.platformAll")}</SelectItem>
@@ -350,8 +361,8 @@ export default function VideosPage() {
                       setFrom(e.target.value);
                       setPeriodInvalid(false);
                     }}
-                    aria-invalid={periodInvalid || undefined}
-                    aria-describedby={periodInvalid ? "video-filter-period-error" : undefined}
+                    aria-invalid={periodError || undefined}
+                    aria-describedby={periodError ? "video-filter-period-error" : undefined}
                   />
                 </div>
                 <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
@@ -370,12 +381,12 @@ export default function VideosPage() {
                       setTo(e.target.value);
                       setPeriodInvalid(false);
                     }}
-                    aria-invalid={periodInvalid || undefined}
-                    aria-describedby={periodInvalid ? "video-filter-period-error" : undefined}
+                    aria-invalid={periodError || undefined}
+                    aria-describedby={periodError ? "video-filter-period-error" : undefined}
                   />
                 </div>
               </div>
-              {periodInvalid && (
+              {periodError && (
                 <p id="video-filter-period-error" role="alert" className="text-xs text-destructive">
                   {t("videos.filterPeriodError")}
                 </p>

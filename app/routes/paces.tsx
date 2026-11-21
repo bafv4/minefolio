@@ -255,6 +255,14 @@ export default function PacesPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [maxTimeInvalid, setMaxTimeInvalid] = useState(false);
   const [periodInvalid, setPeriodInvalid] = useState(false);
+  // 送信時の検証（periodInvalid）に加え、URL から入った逆順の期間（フォームの入力欄にも反映される）も同じ文言で知らせる。
+  // サーバーは from <= date <= to で絞るので、逆順は必ず0件になる。条件としては効いている（絞り込みに数える）が、原因が分からないため
+  const periodError = periodInvalid || (Boolean(from && to) && from > to);
+  const appliedPeriodReversed = Boolean(appliedFrom && appliedTo) && (appliedFrom ?? "") > (appliedTo ?? "");
+  // 畳んだモバイルでも原因が見えるよう、URL の逆順の期間は開いて示す
+  useEffect(() => {
+    if (appliedPeriodReversed) setFiltersOpen(true);
+  }, [appliedPeriodReversed]);
 
   // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
   const appliedChips: { key: string; label: ReactNode }[] = [];
@@ -398,7 +406,14 @@ export default function PacesPage() {
             <Label htmlFor="pace-filter-split">{t("paces.filterSplit")}</Label>
             <Select value={split} onValueChange={setSplit}>
               <SelectTrigger id="pace-filter-split" className="w-full">
-                <SelectValue />
+                {/* Radix の SelectValue は SSR で選択中の項目を描けないため、中身を明示して渡す（/browse と同じ） */}
+                <SelectValue>
+                  {split === "all" ? (
+                    t("paces.splitAll")
+                  ) : (
+                    <PaceManSplitMark timeline={split} size={14} labelClassName="leading-normal" />
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("paces.splitAll")}</SelectItem>
@@ -428,8 +443,8 @@ export default function PacesPage() {
                     setFrom(e.target.value);
                     setPeriodInvalid(false);
                   }}
-                  aria-invalid={periodInvalid || undefined}
-                  aria-describedby={periodInvalid ? "pace-filter-period-error" : undefined}
+                  aria-invalid={periodError || undefined}
+                  aria-describedby={periodError ? "pace-filter-period-error" : undefined}
                 />
               </div>
               <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
@@ -448,12 +463,12 @@ export default function PacesPage() {
                     setTo(e.target.value);
                     setPeriodInvalid(false);
                   }}
-                  aria-invalid={periodInvalid || undefined}
-                  aria-describedby={periodInvalid ? "pace-filter-period-error" : undefined}
+                  aria-invalid={periodError || undefined}
+                  aria-describedby={periodError ? "pace-filter-period-error" : undefined}
                 />
               </div>
             </div>
-            {periodInvalid && (
+            {periodError && (
               <p id="pace-filter-period-error" role="alert" className="text-xs text-destructive">
                 {t("paces.filterPeriodError")}
               </p>
@@ -508,7 +523,7 @@ export default function PacesPage() {
             </Label>
             <Select value={sort} onValueChange={handleSortChange}>
               <SelectTrigger id="pace-filter-sort" className="min-h-11 w-56 sm:min-h-8">
-                <SelectValue />
+                <SelectValue>{sort === "time" ? t("paces.sortTime") : t("paces.sortRecent")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="recent">{t("paces.sortRecent")}</SelectItem>

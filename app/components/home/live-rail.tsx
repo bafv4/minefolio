@@ -532,6 +532,7 @@ export function LiveRail({
   favoriteSlugs,
   streamingSlugs,
   loading,
+  expectEmpty = false,
   error,
   hasData,
   onRetry,
@@ -542,6 +543,8 @@ export function LiveRail({
   emptyStrip,
   emptyUpdatedAt,
 }: {
+  /** サーバーの見込み: ライブ0人・最近のペース0件。読み込み中の骨組みを0人の形（1行）にして、確定したときに下の欄が飛ばないようにする。外れたら本物に合わせて伸びる */
+  expectEmpty?: boolean;
   /** 0人のときだけ、0件の1文と導線の下に置く区間分布の帯（文言と導線を帯の上にするため） */
   emptyStrip?: ReactNode;
   /** 0人のときの「N秒前に更新」。0件の文と同じ行の右端へ収める（独立した行にしない） */
@@ -569,6 +572,28 @@ export function LiveRail({
     listRef,
     entries.map((e) => e.id),
   );
+
+  if (loading && expectEmpty && !hasData) {
+    // 0人の形に合わせる。折り返しで高さが変わる（375px の ja は2行＋更新時刻の行）ので、固定の高さで描かず、
+    // 本物（0件の文・導線・更新時刻の行）と同じマークアップと文言を invisible で置き、その上に Skeleton を重ねる
+    return (
+      <div className="space-y-3" aria-hidden="true">
+        <div className="relative">
+          <div className="invisible flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span>{t("home.liveEmpty")}</span>
+              <span className="-my-3 inline-flex items-center gap-0.5 py-3 font-medium">
+                {t("home.liveEmptyPacesLink")}
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </span>
+            </p>
+            <p className="min-h-4 text-right text-xs tabular-nums">{t("home.liveUpdatedSecondsAgo", { count: 10 })}</p>
+          </div>
+          <Skeleton className="absolute top-0 left-0 h-5 w-64 max-w-full" />
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -720,8 +745,9 @@ export function LiveRail({
         </div>
       )}
       {/* ライブ0人で最近のペースも0件（読み込み済み）の日は、人数の無い空の7段の帯を出さない。読み込み中・失敗中は高さを保つため出す */}
-      {(recentLoading || recentError || recent.length > 0) && emptyStrip}
-      {recentLoading ? (
+      {/* 0人の見込み（expectEmpty）のあいだは、最近のペースの読み込み中も帯・骨組みを出さない（0件だったとき下の欄が飛ぶため）。あれば伸びる */}
+      {((recentLoading && !expectEmpty) || recentError || recent.length > 0) && emptyStrip}
+      {recentLoading && !expectEmpty ? (
         // 件数は読み込むまで分からないので少なめに描く（モバイルは縦積みなので1枚、md 以上は1段ぶんの3枚）。
         // 多めに描くと、少なかったときに下の欄が大きく上へ動く。
         // 1枚の高さは RecentPaceCard（border 2 + p-4 の 32 + gap-3 の 2つ分 24 + 顔 36 + StateBand 40 + TIME_SLOT 56 = 190px。LinkRow は無い）に合わせる

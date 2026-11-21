@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { PaceTimelineModal } from "@/components/pace-timeline-modal";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { getLocalizedDisplayName } from "@/lib/slug";
-import { DAY_MS } from "@/lib/home-favorite-activity-shared";
 import { cn } from "@/lib/utils";
 import type { Translator } from "@/lib/messages";
 import { formatClock } from "@/lib/home-format";
@@ -230,6 +230,17 @@ export function FavoriteActivityRow({
         {timeText}
       </span>
     </Link>
+  );
+}
+
+/** 読み込み中の行。実際の行（アバター36px＋py-1.5 = 48px、行間 space-y-1 = 4px）と同じ高さ・間隔で描く */
+export function ActivityRowsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="space-y-1" aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className="h-12 rounded-lg" />
+      ))}
+    </div>
   );
 }
 

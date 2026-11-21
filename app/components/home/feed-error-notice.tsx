@@ -3,7 +3,18 @@ import { useT } from "@/hooks/use-locale";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
 /** 取得失敗時の文言 + 再試行ボタン（ホームの各欄・お気に入りの動き一覧で共用） */
-export function FeedErrorNotice({ message, note, onRetry }: { message: string; note?: string; onRetry: () => void }) {
+export function FeedErrorNotice({
+  message,
+  note,
+  onRetry,
+  retrying = false,
+}: {
+  message: string;
+  note?: string;
+  onRetry: () => void;
+  /** true の間は再試行ボタンを aria-disabled にして多重実行を防ぐ（任意） */
+  retrying?: boolean;
+}) {
   const t = useT();
   return (
     <div
@@ -15,7 +26,7 @@ export function FeedErrorNotice({ message, note, onRetry }: { message: string; n
         {message}
         {note && <span className="block text-xs text-muted-foreground">{note}</span>}
       </span>
-      <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" onClick={onRetry}>
+      <Button variant="outline" size="sm" className="ml-auto min-h-11 shrink-0 sm:min-h-8" aria-disabled={retrying || undefined} onClick={() => !retrying && onRetry()}>
         <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
         {t("home.feedRetry")}
       </Button>

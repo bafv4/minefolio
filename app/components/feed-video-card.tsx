@@ -61,7 +61,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
   const thumbnailUrl = thumbFailed || rawThumbnailUrl?.includes("_404") ? null : rawThumbnailUrl;
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       {/* カード全体のクリックで動画の視聴ページへ（外部リンク）。
           サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる。
           同じ URL への Tab 停止点と読み上げはタイトルのリンクに任せる（ペースカードと同じ。全面リンクはポインター専用） */}
@@ -94,7 +94,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
               <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" onError={() => setThumbFailed(true)} />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
-                <Twitch className="h-10 w-10 text-muted-foreground/50" />
+                {isYouTube ? <Youtube className="h-10 w-10 text-muted-foreground/50" /> : <Twitch className="h-10 w-10 text-muted-foreground/50" />}
               </div>
             )}
             {/* 再生オーバーレイ */}

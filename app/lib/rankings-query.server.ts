@@ -43,9 +43,10 @@ export interface RankingsArgs {
 
 export function parseRankingsParams(searchParams: URLSearchParams): RankingsArgs {
   return {
-    tab: (searchParams.get("tab") as RankingsTab) ?? "speedruncom",
+    // 不正な値は既定へ（URL の値をそのまま型に流さない）
+    tab: searchParams.get("tab") === "ranked" ? "ranked" : "speedruncom",
     categorySlug: searchParams.get("category"),
-    rankedType: (searchParams.get("rankedType") as RankedType) ?? "pb",
+    rankedType: searchParams.get("rankedType") === "elo" ? "elo" : "pb",
   };
 }
 

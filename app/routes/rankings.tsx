@@ -61,7 +61,7 @@ const TABLE_COLUMN_COUNT: Record<RankingsTableKind, number> = {
 function tableKindFromSearch(search: string, hasCategories: boolean): RankingsTableKind {
   const params = new URLSearchParams(search);
   const tab = params.get("tab");
-  if (tab === "speedruncom" || (tab === null && hasCategories)) return "speedruncom";
+  if (tab === "speedruncom" || (tab !== "ranked" && hasCategories)) return "speedruncom";
   return params.get("rankedType") === "elo" ? "rankedElo" : "rankedPb";
 }
 
@@ -173,7 +173,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     // 選択カテゴリの id が要るのでカテゴリ一覧が先（キャッシュ済みなら往復なし）
     loadedCategories = await loadCategories();
     // Speedrun.com のカテゴリが1件も無く、タブの指定も無い（既定）ときは、データのある Ranked PB を既定にする
-    if (loadedCategories.length === 0 && !url.searchParams.has("tab")) {
+    const tabParam = url.searchParams.get("tab");
+    if (loadedCategories.length === 0 && tabParam !== "speedruncom") {
       args = { ...args, tab: "ranked", rankedType: "pb" };
     }
   }
@@ -683,7 +684,13 @@ function RankingsTableSkeleton({ columns }: { columns: number }) {
           {Array.from({ length: 10 }).map((_, i) => (
             <TableRow key={i}>
               <TableCell className="sticky left-0 bg-background z-10"><Skeleton className="h-4 w-8" /></TableCell>
-              <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+              {/* 本物の走者セルは 32px のアバター＋名前（行の高さ 48px）。同じ高さを確保する */}
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="size-8 shrink-0 rounded-lg" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              </TableCell>
               {Array.from({ length: restColumns }).map((_, j) => (
                 <TableCell key={j}><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
               ))}

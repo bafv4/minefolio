@@ -53,7 +53,14 @@ export function LiveUpdatedAt({ checkedAt, pending = false }: { checkedAt: numbe
 
   return (
     <p className="min-h-4 text-right text-xs text-muted-foreground tabular-nums">
-      {label && checkedAt !== null && <time dateTime={new Date(checkedAt).toISOString()}>{label}</time>}
+      {label && checkedAt !== null ? (
+        <time dateTime={new Date(checkedAt).toISOString()}>{label}</time>
+      ) : (
+        // マウント前・初回取得中も、確定後と同じ幅を取る（幅0だと折り返しが変わり、行の段数が一瞬ずれる）
+        <span aria-hidden="true" className="invisible">
+          {t("home.liveUpdatedSecondsAgo", { count: 10 })}
+        </span>
+      )}
     </p>
   );
 }

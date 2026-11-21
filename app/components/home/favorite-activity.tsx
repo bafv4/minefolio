@@ -1,6 +1,5 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProfileFeedCard, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
-import { FavoriteActivityRow, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
+import { FavoriteActivityRow, ActivityRowsSkeleton, ACTIVITY_TIMELINE_CLASS } from "@/components/favorite-activity-row";
 import { PageSection } from "@/components/page-section";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useFavoriteActivity } from "@/hooks/use-favorite-activity";
@@ -33,11 +32,7 @@ export function FavoriteActivity({
     <PageSection id="home-favorites" icon={<Heart className="h-5 w-5 text-favorite" />} title={t(noFavorites ? "home.favFindTitle" : "home.favTitle")} viewAllTo={noFavorites ? "/browse" : "/favorites/activity"}>
       {state.status === "loading" ? (
         // 動きの件数は読み込むまで分からない（0〜10件）。多めに描くと少なかったときに下の欄が大きく上へ動くので2行にする
-        <div className="space-y-2" aria-hidden="true">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Skeleton key={i} className="h-11 rounded-lg" />
-          ))}
-        </div>
+        <ActivityRowsSkeleton count={2} />
       ) : state.status === "error" ? (
         <FeedErrorNotice message={t("home.favFetchFailed")} onRetry={retry} />
       ) : state.data.favoritesCount === 0 ? (

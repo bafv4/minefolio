@@ -9,6 +9,12 @@ import { fetchLiveRuns, type PaceManLiveRun } from "@/lib/paceman";
 import { getPaceFeedEntries, getRunTimeline, type PaceTimelineEntry } from "@/lib/paceman-cache";
 import { getTwitchAppToken, getLiveStreams } from "@/lib/twitch";
 import { getCached, setCached } from "@/lib/cache";
+import {
+  RANKED_LIVE_CACHE_KEY,
+  TWITCH_STREAMS_CACHE_KEY,
+  HOME_LIVE_COUNT_CACHE_KEY,
+  HOME_LIVE_COUNT_TTL_MS,
+} from "@/lib/home-live-outlook.server";
 import { getPublicTwitchLinks, getPublicVideoFeed } from "@/lib/videos-feed.server";
 import { getHomeHiddenUsers } from "@/lib/home-visibility.server";
 import { getUserData, pickUserDataForMcids, type McidUserMaps } from "@/lib/home-user-data.server";
@@ -229,6 +235,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
       // キャッシュに保存
       await setCached(cacheKey, result, CACHE_TTL.LIVE_RUNS);
+      // ホームの骨組みの見込み用に、登録走者で絞った後の件数を長めに残す（home-live-outlook.server.ts）
+      await setCached(HOME_LIVE_COUNT_CACHE_KEY, filteredLiveRuns.length, HOME_LIVE_COUNT_TTL_MS);
 
       return jsonResponse(result, CDN_CACHE.LIVE_RUNS);
     }
@@ -263,7 +271,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     case "ranked-live": {
       // MCSR Ranked の公開ライブ試合のうち Minefolio 登録者が出ているもの。ユーザー非依存・30秒キャッシュ
-      const cacheKey = "home-feed:ranked-live:v3";
+      const cacheKey = RANKED_LIVE_CACHE_KEY;
       const cached = await getCached<{ matches: RankedLiveMatch[]; fetchedAt: number }>(cacheKey);
       if (cached) return jsonResponse(cached, CDN_CACHE.LIVE_RUNS);
 
@@ -328,7 +336,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
 
       // 共通キャッシュキー
-      const cacheKey = "home-feed:twitch:all:v2";
+      const cacheKey = TWITCH_STREAMS_CACHE_KEY;
       type TwitchCache = { liveStreams: HomeTwitchStream[] };
 
       const cached = await getCached<TwitchCache>(cacheKey);
