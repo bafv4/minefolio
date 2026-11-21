@@ -6,7 +6,7 @@
  * 呼び出し側（What's New アイコン等）は「通知なし」に安全側でフォールバックする。
  */
 
-import type { MessageKey } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 
 /**
  * 見出し（### カテゴリ）の表示名の読み替え。changelog.md の見出しはリリース時の表記のまま残すので、
@@ -19,6 +19,15 @@ const CATEGORY_LABEL_KEYS: Record<string, MessageKey> = {
 /** 見出しの文字に対応する読み替えの翻訳キー。無ければ undefined（元の文字のまま表示する） */
 export function changelogCategoryLabelKey(heading: string): MessageKey | undefined {
   return CATEGORY_LABEL_KEYS[heading.replace(/`/g, "").trim()];
+}
+
+/**
+ * 見出しの表示名。更新履歴の本文は日本語の文書なので、読み替えはロケールによらず日本語で行う
+ * （英語ロケールで「Controls」だけが日本語の本文に混ざらないように）。変わらなければ元の文字のまま
+ */
+export function changelogCategoryLabel(heading: string): string {
+  const key = changelogCategoryLabelKey(heading);
+  return key ? createTranslator("ja")(key) : heading;
 }
 
 export interface ChangelogEntry {

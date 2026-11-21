@@ -214,6 +214,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
   },
   developers: {
     jaOnlyNotice: "The content of this page is available in Japanese only.",
+    jaOnlyBadge: "Japanese only",
     githubRepository: "GitHub repository",
     title: "Developers - Minefolio",
     metaDescription:
@@ -343,6 +344,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     genericDetails: "An unexpected error occurred. Reload the page or go back to the home page.",
     notFoundDetails: "We couldn't find the page you were looking for.",
     notFoundHint: "The URL may be wrong, or the page may not be public. Check the URL.",
+    playerNotFoundCause: "It may be a typo, or the runner may not have registered on Minefolio yet. Searching by name may find them.",
+    searchPlayer: "Search runners for \"{name}\"",
   },
   common: {
     scrollHorizontalHint: "Scroll horizontally to see more",

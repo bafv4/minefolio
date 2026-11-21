@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useLocale, useT } from "@/hooks/use-locale";
-import { changelogCategoryLabelKey, unreadEntries, type ChangelogEntry } from "@/lib/changelog";
+import { changelogCategoryLabel, unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -94,10 +94,8 @@ export function WhatsNew() {
   const openRef = useRef(false);
 
   const latest = entries?.[0] ?? null;
-  const categoryLabel = (category: string) => {
-    const key = changelogCategoryLabelKey(category);
-    return key ? t(key) : category;
-  };
+  // 本文が日本語の文書なので、見出しの読み替えもロケールによらず日本語（changelogCategoryLabel）
+  const categoryLabel = changelogCategoryLabel;
 
   // SSRとの整合のため、entries読み込み・未読判定は初回マウントの useEffect に
   // 閉じ込める（cookie-consent.tsx と同じ隔離パターン。初期レンダは常に「未読なし」）
@@ -225,7 +223,7 @@ export function WhatsNew() {
                 <button
                   key={category}
                   type="button"
-                  onClick={() => scrollToCategory(category)}
+                  onClick={() => scrollToCategory(categoryLabel(category))}
                   className="inline-flex min-h-6 items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {categoryLabel(category)}

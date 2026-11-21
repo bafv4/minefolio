@@ -59,7 +59,7 @@ export function MeChecklist({ onDismiss }: { onDismiss?: () => void } = {}) {
         className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
       >
         <div
-          className="h-full origin-left bg-brand transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          className="h-full origin-left bg-brand transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
           style={{ transform: `scaleX(${checklist.doneCount / checklist.total})` }}
         />
       </div>

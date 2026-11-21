@@ -15,26 +15,63 @@ function ErrorLink({ to, plain, className, children }: { to: string; plain: bool
   );
 }
 
-/**
- * 走者の 404（/player/:slug）なら、打ち間違いを1手で直せるよう slug を入れた検索（/browse?q=）を返す。
- * それ以外は /browse。useLocation を使うので、ルーターの中でだけ描く（root の最後の砦では使わない）
- */
-function browseHrefForMissingPlayer(pathname: string): string {
+/** 走者の 404（/player/:slug）の slug（デコード済み）。それ以外のパスは null */
+function missingPlayerSlug(pathname: string): string | null {
   const match = /^\/player\/([^/]+)/.exec(pathname);
-  if (!match) return "/browse";
+  if (!match) return null;
   try {
-    return `/browse?q=${encodeURIComponent(decodeURIComponent(match[1]))}`;
+    return decodeURIComponent(match[1]);
   } catch {
-    return "/browse";
+    return null;
   }
 }
 
-function SearchBrowseLink({ className, children }: { className: string; children: React.ReactNode }) {
+const SECONDARY_BUTTON = cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9");
+
+/**
+ * 404 の操作部（ルーターの中でだけ描く。useLocation を使うので root の最後の砦では使わない）。
+ * 走者の 404（/player/:slug）は、打ち間違いを1手で直せるよう「その名前で探す」（/browse?q=）を主ボタンにし、
+ * 見つからない原因（打ち間違い・未登録の可能性。MCID を変えた旧 URL は今の URL へ転送されるので原因に挙げない）を添える。ホームは副ボタンへ。ほかの 404 はホームが主
+ */
+function NotFoundActions() {
+  const t = useT();
   const { pathname } = useLocation();
+  const slug = missingPlayerSlug(pathname);
+  const primary = "min-h-11 sm:min-h-9";
+
+  if (slug) {
+    return (
+      <>
+        <p className="text-sm text-muted-foreground">{t("errorPage.playerNotFoundCause")}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to={`/browse?q=${encodeURIComponent(slug)}`}
+            className={cn(buttonVariants(), primary, "max-w-full")}
+          >
+            <span className="truncate">{t("errorPage.searchPlayer", { name: slug })}</span>
+          </Link>
+          <Link to="/" className={SECONDARY_BUTTON}>
+            {t("common.backToHome")}
+          </Link>
+          <Link to="/guides" className={SECONDARY_BUTTON}>
+            {t("nav.guides")}
+          </Link>
+        </div>
+      </>
+    );
+  }
   return (
-    <Link to={browseHrefForMissingPlayer(pathname)} className={className}>
-      {children}
-    </Link>
+    <div className="flex flex-wrap items-center justify-center gap-3">
+      <Link to="/" className={cn(buttonVariants(), primary)}>
+        {t("common.backToHome")}
+      </Link>
+      <Link to="/browse" className={SECONDARY_BUTTON}>
+        {t("nav.browse")}
+      </Link>
+      <Link to="/guides" className={SECONDARY_BUTTON}>
+        {t("nav.guides")}
+      </Link>
+    </div>
   );
 }
 
@@ -92,27 +129,25 @@ export function ErrorView({ error, plainLinks = false }: { error: unknown; plain
           <code className="text-sm">{stack}</code>
         </pre>
       )}
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <ErrorLink to="/" plain={plainLinks} className={cn(buttonVariants(), "min-h-11 sm:min-h-9")}>
-          {t("common.backToHome")}
-        </ErrorLink>
-        {isNotFound && (
-          <>
-            {plainLinks ? (
-              <ErrorLink to="/browse" plain className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
+      {isNotFound && !plainLinks ? (
+        <NotFoundActions />
+      ) : (
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <ErrorLink to="/" plain={plainLinks} className={cn(buttonVariants(), "min-h-11 sm:min-h-9")}>
+            {t("common.backToHome")}
+          </ErrorLink>
+          {isNotFound && (
+            <>
+              <ErrorLink to="/browse" plain className={SECONDARY_BUTTON}>
                 {t("nav.browse")}
               </ErrorLink>
-            ) : (
-              <SearchBrowseLink className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
-                {t("nav.browse")}
-              </SearchBrowseLink>
-            )}
-            <ErrorLink to="/guides" plain={plainLinks} className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
-              {t("nav.guides")}
-            </ErrorLink>
-          </>
-        )}
-      </div>
+              <ErrorLink to="/guides" plain className={SECONDARY_BUTTON}>
+                {t("nav.guides")}
+              </ErrorLink>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

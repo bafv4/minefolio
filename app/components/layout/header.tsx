@@ -408,7 +408,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                 {/* 表示設定: ナビの後ろ（スクロール領域の末尾）。移動先を先に見せる */}
                 <div className="mt-5 border-t border-border px-1 pt-3 pb-2">
                   <span className="text-sm text-muted-foreground">{t("nav.theme")}</span>
-                  <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
+                  <div data-slot="segmented" className="mt-2 flex rounded-lg bg-secondary/50 p-0.5 gap-0.5">
                     {THEME_OPTIONS.map(({ value, shortLabelKey, icon: Icon }) => (
                       <button
                         key={value}
@@ -420,7 +420,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                           // 高さは 44px 以上になる（押せる範囲もそのまま）
                           "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-xs font-medium transition-colors",
                           theme === value
-                            ? "bg-secondary text-foreground"
+                            ? "bg-background text-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -441,7 +441,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                   <span className="mt-4 block text-sm text-muted-foreground">
                     {t("nav.language")}
                   </span>
-                  <div className="mt-2 flex rounded-lg border bg-card p-0.5 gap-0.5">
+                  <div data-slot="segmented" className="mt-2 flex rounded-lg bg-secondary/50 p-0.5 gap-0.5">
                     {SUPPORTED_LOCALES.map((value) => (
                       <button
                         key={value}
@@ -452,7 +452,7 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
                           // 高さは 44px 以上（押せる範囲も見た目もそのまま）
                           "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
                           locale === value
-                            ? "bg-secondary text-foreground"
+                            ? "bg-background text-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >

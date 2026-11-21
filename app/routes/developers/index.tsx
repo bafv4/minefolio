@@ -3,14 +3,13 @@ import type { Route } from "./+types/index";
 import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
 import { PageSection } from "@/components/page-section";
-import { JaOnlyNotice } from "@/components/ja-only-notice";
 import { Button } from "@/components/ui/button";
-import { Code, FileText, History, Download, MessageSquare, ChevronRight } from "lucide-react";
+import { Code, FileText, History, Download, MessageSquare, ChevronRight, Languages } from "lucide-react";
 import { Github } from "@/components/brand-icons";
 import type { LucideIcon } from "lucide-react";
 import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useT } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -34,24 +33,28 @@ const sections = [
     to: "/developers/api",
     icon: FileText,
     titleKey: "developers.apiTitle",
+    jaOnly: true,
     descriptionKey: "developers.apiDescription",
   },
   {
     to: "/developers/changelog",
     icon: History,
     titleKey: "developers.changelogTitle",
+    jaOnly: true,
     descriptionKey: "developers.changelogDescription",
   },
   {
     to: "/developers/export",
     icon: Download,
     titleKey: "developers.exportTitle",
+    jaOnly: false,
     descriptionKey: "developers.exportDescription",
   },
-] as const satisfies readonly { to: string; icon: LucideIcon; titleKey: MessageKey; descriptionKey: MessageKey }[];
+] as const satisfies readonly { to: string; icon: LucideIcon; titleKey: MessageKey; descriptionKey: MessageKey; jaOnly: boolean }[];
 
 export default function DevelopersHubPage() {
   const t = useT();
+  const locale = useLocale();
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="space-y-2">
@@ -63,8 +66,6 @@ export default function DevelopersHubPage() {
           {t("developers.lead")}
         </p>
       </div>
-
-      <JaOnlyNotice />
 
       {/* セクション一覧 */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -82,11 +83,18 @@ export default function DevelopersHubPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="font-semibold">{t(section.titleKey)}</h2>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform motion-reduce:group-hover:translate-x-0" />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     {t(section.descriptionKey)}
                   </p>
+                  {/* 本文が日本語だけの文書（API・更新履歴）にだけ、日本語以外のロケールで小さな印を付ける */}
+                  {section.jaOnly && locale !== "ja" && (
+                    <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Languages className="h-3 w-3" aria-hidden />
+                      {t("developers.jaOnlyBadge")}
+                    </p>
+                  )}
                 </div>
               </div>
             </Link>

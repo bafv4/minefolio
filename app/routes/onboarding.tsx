@@ -576,6 +576,8 @@ type Completion = {
   /** 自分のプロフィール */
   profileHref: string;
   name: string;
+  /** MCID を登録したときの顔（スキン）。未登録なら null（チェックのアイコンのまま） */
+  avatar: { uuid: string | null; skinUrl: string | null; mcid: string } | null;
 };
 
 /**
@@ -1158,6 +1160,7 @@ function VisibilityStep({
       returnTo,
       profileHref: `/player/${user.slug}`,
       name: getLocalizedDisplayName(user, locale),
+      avatar: user.mcid ? { uuid: user.uuid, skinUrl: user.customSkinUrl, mcid: user.mcid } : null,
     });
   });
   // 既定選択なし（本人が必ず選ぶ）。選ぶまで完了ボタンは押せない
@@ -1271,7 +1274,20 @@ function CompleteScreen({ completion, focusTitle }: { completion: Completion; fo
   return (
     <>
       <CardHeader className="justify-items-center gap-3 px-4 text-center sm:px-5">
-        <CheckCircle2 className="mb-1 h-8 w-8 text-success" aria-hidden />
+        {completion.avatar ? (
+          // 作ったプロフィールの顔（隣に名前の見出しがあるので alt は空）
+          <div className="mb-1 h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+            <MinecraftAvatar
+              uuid={completion.avatar.uuid}
+              skinUrl={completion.avatar.skinUrl}
+              mcid={completion.avatar.mcid}
+              size={64}
+              alt=""
+            />
+          </div>
+        ) : (
+          <CheckCircle2 className="mb-1 h-8 w-8 text-success" aria-hidden />
+        )}
         <p className="text-sm font-medium text-success">{t("onboarding.completeTitle")}</p>
         <h1
           ref={titleRef}

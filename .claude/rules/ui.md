@@ -391,6 +391,7 @@
 - **ページ間のナビ**（`app/components/content-tabs.tsx` の `ContentTabs`。`GuidesContentTabs` / `MyContentTabs` など）: タブの見た目をした `nav` のリンク列。行き先は別のページ（URL）で、下にパネルを持たないので一体カードにしない。選択中は `aria-current="page"`。ベースラインと 1px 重ねる仕組みは `ui/tabs.tsx` と同じなので、外側を別のスクロールコンテナで包まない
 - **エディタのリボン**（`app/components/guide-editor/toolbar/desktop-toolbar.tsx`）: ツールバーの操作群を切り替える自作の tablist。選択中は brand の下線（1 章「選択中」）。編集ボードの中の道具なので、フォルダ型にしない
 - **キー配置のビュー切替**（`keybindings/view-switcher.tsx`、表／ビジュアル／統計）: タブではなくセグメント（`rounded-lg bg-secondary/50 p-0.5`、選択中だけ `bg-background shadow-sm`、brand の線なし）の `nav` リンク列。役割はページ間のナビだが、直下に表の中身を切り替えるフォルダ型タブがあるため、同じ形を2段に積まないよう見た目だけを格下げした例外。brand（選択中）は下段のタブだけが持つ。タイトル行の右に置く。ハイコントラストでは選択中に前景色の内側アウトラインを足す（面の差だけでは 3:1 に届かないため）
+- **モバイルメニューのテーマ・言語の段**（`layout/header.tsx`）: 同じセグメントの形を、`aria-pressed` のボタン列として使う設定の切替（ページ間ではない）。コンテナに `data-slot="segmented"`（ナビのセグメントは `data-slot="view-switcher"`）。ハイコントラストでは `app/app.css` の規則が選択中（`aria-pressed="true"`）に前景色の内側アウトラインを足す。新しい設定の切替セグメントも同じ属性で揃える
 - 新しくタブを足すときは、まず `ui/tabs.tsx`（パネル切替）か `ContentTabs`（ページ間）のどちらかに当てはめる。新しい形を作らない（セグメントの例外も増やさない）
 
 ## 12. ダイアログ・トースト

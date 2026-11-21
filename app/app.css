@@ -667,8 +667,10 @@ body {
 :root[data-contrast="more"] [data-selected="true"] svg {
   color: inherit !important;
 }
-/* セグメント（キー配置のビュー切替）の選択中: 面の差だけでは 3:1 に届かないので、前景色の内側アウトラインを足す */
-:root[data-contrast="more"] [data-slot="view-switcher"] [aria-current="page"] {
+/* セグメント（キー配置のビュー切替・モバイルメニューのテーマ/言語の段）の選択中: 面の差だけでは 3:1 に届かないので、前景色の内側アウトラインを足す。
+   選択を aria-current で示すセグメントは data-slot="view-switcher"、aria-pressed のボタン列は data-slot="segmented" */
+:root[data-contrast="more"] [data-slot="view-switcher"] [aria-current="page"],
+:root[data-contrast="more"] [data-slot="segmented"] [aria-pressed="true"] {
   outline: 2px solid var(--foreground);
   outline-offset: -2px;
 }

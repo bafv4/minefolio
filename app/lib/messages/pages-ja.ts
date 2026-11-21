@@ -231,6 +231,7 @@ export const PAGES_JA = {
   /** 開発者向けページ（/developers 配下） */
   developers: {
     jaOnlyNotice: "このページの本文は日本語のみで提供しています。",
+    jaOnlyBadge: "日本語のみ",
     githubRepository: "GitHub リポジトリ",
     title: "開発者向け - Minefolio",
     metaDescription: "Minefolio の開発者向け情報・APIドキュメント・更新履歴・データエクスポート",
@@ -355,6 +356,9 @@ export const PAGES_JA = {
     notFoundDetails: "お探しのページが見つかりませんでした。",
     /** loader が「〇〇が見つかりません」を載せた 404 の説明（走者・テンプレート・ユーザーなど、どの 404 にも合う文） */
     notFoundHint: "URL が間違っているか、公開されていない可能性があります。URL を確認してください。",
+    /** 走者の 404（/player/:slug）に添える原因の補足。MCID を変えた旧 URL は slug_history で今の URL へ転送されるので、原因は打ち間違い・未登録 */
+    playerNotFoundCause: "打ち間違いのほか、まだ Minefolio に登録していない走者の可能性があります。名前で探すと見つかることがあります。",
+    searchPlayer: "「{name}」で走者を探す",
   },
   common: {
     /** 横スクロール可能領域のヒント（はみ出し時のみ表示） */
