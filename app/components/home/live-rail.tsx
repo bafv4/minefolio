@@ -540,9 +540,12 @@ export function LiveRail({
   recentError,
   onRetryRecent,
   emptyStrip,
+  emptyUpdatedAt,
 }: {
   /** 0人のときだけ、0件の1文と導線の下に置く区間分布の帯（文言と導線を帯の上にするため） */
   emptyStrip?: ReactNode;
+  /** 0人のときの「N秒前に更新」。0件の文と同じ行の右端へ収める（独立した行にしない） */
+  emptyUpdatedAt?: ReactNode;
   entries: LiveRailEntry[];
   maps: McidMaps;
   splitBests: Record<string, Record<string, number>>;
@@ -701,6 +704,7 @@ export function LiveRail({
       {/* 0件の1文の隣に次の行き先（最近のペース /paces）を置く。見出し右の「ペース一覧」と同じ行き先だが、
           ライブも注目の走者も空のときに上半分が空振りで終わらないよう、目に入る位置にも出す */}
       {!error && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>{t("home.liveEmpty")}</span>
           <Link
@@ -712,6 +716,8 @@ export function LiveRail({
             <ArrowRight className="h-3 w-3" aria-hidden="true" />
           </Link>
         </p>
+        {emptyUpdatedAt}
+        </div>
       )}
       {emptyStrip}
       {recentLoading ? (

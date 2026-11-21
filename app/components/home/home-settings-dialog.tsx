@@ -141,7 +141,7 @@ export function HomeSettingsDialog({
           <DialogTitle>{t("home.settingsTitle")}</DialogTitle>
           <DialogDescription>{t("home.settingsDescription")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{t("home.settingsOrderHeading")}</h3>
             <Button
@@ -155,7 +155,7 @@ export function HomeSettingsDialog({
               {t("home.settingsReset")}
             </Button>
           </div>
-          <ul ref={listRef} className="divide-y divide-border/60 rounded-xl border border-border/70 bg-background/80">
+          <ul ref={listRef} className="min-w-0 divide-y divide-border/60 rounded-xl border border-border/70 bg-background/80">
             {order.map((id, index) => {
               const name = t(HOME_SECTION_LABEL_KEYS[id]);
               const visible = !hidden.includes(id);

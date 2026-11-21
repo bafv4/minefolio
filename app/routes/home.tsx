@@ -935,13 +935,18 @@ export default function HomePage() {
         {hasFavoriteLive && (
           <FavoritesFirstNote>{t("home.liveFavoritesFirstNote")}</FavoritesFirstNote>
         )}
-        <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
+        {!liveEmptySettled && <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />}
         {/* 誰もいなくても出す（高さを確保）。取得に失敗して一度も成功していないときだけ出さない（空の帯が「誰もいない」と誤読されるため） */}
         {/* 0人のときは帯を弱め、0件の1文と導線の下（LiveRail 内）へ置く。人が居るとき・取得中は従来どおり先頭 */}
         {(feed.loading.liveRuns || liveSettled) && !liveEmptySettled && (
           <LiveSplitStrip entries={activeLiveEntries} loading={feed.loading.liveRuns} />
         )}
         <LiveRail
+          emptyUpdatedAt={
+            liveEmptySettled ? (
+              <LiveUpdatedAt checkedAt={feed.liveRunsCheckedAt} pending={feed.loading.liveRuns} />
+            ) : undefined
+          }
           emptyStrip={
             liveEmptySettled ? <LiveSplitStrip entries={activeLiveEntries} muted /> : undefined
           }

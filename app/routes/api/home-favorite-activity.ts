@@ -7,6 +7,8 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
 import { apiJsonResponse, getApiUser } from "@/lib/api-auth.server";
+import { eq } from "drizzle-orm";
+import { users } from "@/lib/schema";
 import { getFavoritesFromDb } from "@/lib/favorites";
 import { clampFavoriteActivityOptions, getFavoriteActivity } from "@/lib/home-favorite-activity.server";
 
@@ -27,7 +29,15 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // 未ログインの本文 slugs は検証前の値。型・長さ・件数の検証は getFavoriteActivity に任せる
-  const slugs = user ? await getFavoritesFromDb(db, user.id) : Array.isArray(body.slugs) ? body.slugs : [];
+  let slugs: unknown[] = Array.isArray(body.slugs) ? body.slugs : [];
+  if (user) {
+    // 自分自身の更新は「お気に入りの動き」に出さない（自分の行動のこだまで欄の意味が読めなくなるため）
+    const [favorites, me] = await Promise.all([
+      getFavoritesFromDb(db, user.id),
+      db.query.users.findFirst({ where: eq(users.id, user.id), columns: { slug: true } }),
+    ]);
+    slugs = me ? favorites.filter((slug) => slug !== me.slug) : favorites;
+  }
   const result = await getFavoriteActivity(db, slugs, clampFavoriteActivityOptions(body));
   return apiJsonResponse(result);
 }

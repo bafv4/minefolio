@@ -90,6 +90,7 @@ Minefolioのトップページ。登録ユーザーのアクティビティ、�
 - **「すべて見る」の遷移先は `/favorites/activity`**（動きの一覧ページ。仕様は [favorites.md](./favorites.md#お気に入り走者の動き一覧-favoritesactivity)）。
 - **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。アバターは装飾（リンクではない）。走者プロフィールへは、モーダルの `profileHref` prop（`pace-timeline-modal.tsx` の任意 prop。あるときだけ走者のプロフィールへのリンクを出す）経由で行ける（ホームの動きの行からのみ渡す。`/paces` のペースカードからは出さない）。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
 - **行の見た目**（`FavoriteActivityRow`、ホームと `/favorites/activity` 共通）: 記録系（Ranked PB・完走〈ペースの Finish〉＝アイコン `text-gold`、ティア昇格＝`text-success`、speedrun.com 申請＝`text-info`）は文を `font-medium text-foreground`、プロフィール更新・設定系は文を muted、それ以外（途中区間のペース・動画・ガイド）は通常。文は値（タイム・ティア）を切り詰めない: モバイルは2行（1行目＝名前と文脈、2行目＝値と述語）、sm 以上は1行で前半だけ省略する。読み上げは sr-only の全文。
+- **本人は除く**: ログイン済みのとき、自分自身（`users.slug` が自分）の更新は、お気に入りに入っていても動きに出さない（自分の行動のこだまで欄の意味が読めなくなるため）。未ログインはブラウザのお気に入りをそのまま使う。
 - API は本文の `windowDays`（既定7・最大30）・`limit`（既定10・最大100）で期間・件数を指定でき、サーバー側（`clampFavoriteActivityOptions`）で検証・クランプする（不正値は既定）。ホーム欄は指定しない（7日・10件）。取得ロジックはフック `useFavoriteActivity`（`app/hooks/use-favorite-activity.ts`）、行の描画・文言は `FavoriteActivityRow`（`app/components/favorite-activity-row.tsx`）をホーム欄と一覧ページで共用する。
 
 「よく見られている」は `page_view_stats` のスナップショット行を起点に `innerJoin` する（PV スナップショットが無い環境では自然に0件。UI は件数だけで列を出すか判定）。
