@@ -263,6 +263,11 @@ export function Header({ user, onboardingPending = false }: HeaderProps) {
             {/* Mobile menu button — Sheet (Radix Dialog) でアクセシブル化 */}
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <div className="flex shrink-0 items-center gap-1 lg:hidden">
+                {!user && (
+                  <Button asChild size="sm" className="min-h-11 sm:min-h-8">
+                    <Link to={loginHref}>{t("nav.login")}</Link>
+                  </Button>
+                )}
                 <WhatsNew />
                 <SheetTrigger asChild>
                   <Button
