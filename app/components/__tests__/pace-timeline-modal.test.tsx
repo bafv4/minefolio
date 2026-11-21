@@ -2,6 +2,9 @@
 // PaceTimelineModal の取得結果の扱い。HTTP エラーを「区間データなし」と取り違えず、エラー表示にする。
 // 区間タイムは home-format の formatClock（1時間以上は h:mm:ss）で出す。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { PaceTimelineModal } from "../pace-timeline-modal";
@@ -48,7 +51,7 @@ describe("PaceTimelineModal", () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "x" }), { status: 500 })) as never;
     await renderModal();
     const text = document.body.textContent ?? "";
-    expect(text).toContain("タイムラインの取得に失敗しました");
+    expect(text).toContain(t("home.timelineError"));
     expect(text).not.toContain("区間データがありません");
   });
 

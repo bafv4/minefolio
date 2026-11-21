@@ -327,10 +327,10 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 - 検索条件パネル（面は `rounded-xl border border-border/70 bg-card`。大型パネルの見た目にはしない）はモバイルで畳める（開閉ボタンは高さ44px）。畳んだ間も、URL に適用済みの条件を丸ピル（`rounded-full` のチップ）で表示する（入力中の下書きは含めない）。走者の欄のラベルは「走者」（`paces.filterPlayer`）
 - 一覧のグリッドは `sm:grid-cols-2 xl:grid-cols-4`（4件のグリッドの規約）
-- ヘッダーは「アイコンチップ＋h1＋件数ピル（右端 `ml-auto`）」（`/videos`・`/rankings` と同じ形。件数は 0 のとき出さない）。並び順はフォームの外の「表示の設定」の行（`justify-end`、ラベル＋セレクトだけ）にあり、セレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す。並び順は適用中チップ・「N件適用中」の件数に入らず、「条件をリセット」でも残る
+- ヘッダーは「アイコンチップ＋h1＋件数ピル（右端 `ml-auto`）」（`/videos`・`/rankings` と同じ形。件数は 0 のとき出さない）。並び順はフォームの外の「表示の設定」の行（`justify-end`、ラベル＋セレクトだけ）にあり、セレクト変更で即時に URL へ反映する（/browse と同じ）。他欄の未送信の入力は保持し、URL 上の適用済み条件に `sort` だけを足す。`sort` 以外のパラメータが変わったときだけ入力欄を URL に同期し直す。並び順は適用中チップ・「絞り込みN件」の件数に入らず、「絞り込みを解除」でも残る
 - タイム上限は `m:ss`（`^\d{1,3}:[0-5]?\d$`、サーバーの `parseTimeParamToMs` と同じ）をクライアントで検証し、不正なら送信せず入力欄の下にエラーを表示する（`aria-invalid` / `aria-describedby` でエラー文・ヒント文を関連付け）
 - 開始日が終了日より後なら送信せず、期間の欄の下にエラー（`paces.filterPeriodError`、`role="alert"`、/videos と同じ）を出す。日付入力には `min`（保持期間の開始日＝過去2か月）と `max`（今日・JST）を付ける。値は loader が `toJstDateString`（`paces-feed.server.ts`）で作って返す（SSR とクライアントで「今日」がずれない）
-- 折りたたみバッジ「N件適用中」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みではないので数えない）
+- 折りたたみバッジ「絞り込みN件」の N は、下に並ぶチップの数と同じ（開始日・終了日は「時期」の1件。並び順は絞り込みではないので数えない）
 - 絞り込み・並び替えの再取得中（`useNavigation` が `/paces` 内の `loading`）は、一覧（または空状態）を差し替えず `opacity-50` ＋ `aria-busy` で残す（`/rankings` と同じ。`navigation-progress.tsx` は同一パス内の遷移では何も出さないため）
 - 絞り込みの無い空状態は「どうすれば載るか」を説明する（`paces.emptyHint`: MCID を登録して公開プロフィールにした走者の、PaceMan に記録された過去2か月のペース。`getUserData` の条件に対応）。ログイン中の人には `/me/edit` への `action`（loader の `signedIn`）。未ログインは説明だけ
 - 不正な URL 値（`maxTime` が m:ss でない・`from` / `to` がサーバーの `parseDateParam` に捨てられる）は、チップ・件数・`hasActiveFilters` に数えない（`split` と同じ）。データが0件で条件も無いときは検索フォームを出さず空状態だけにする（条件ありで0件ならフォームは残す）。`/videos` も同じ（不正な `platform` は「すべて」に正規化）
@@ -382,7 +382,7 @@ URLクエリパラメータで指定（`parsePaceSearchParams()` で解析、共
 
 空状態の説明（`videos.emptyHint`: YouTube か Twitch のリンクを登録して公開プロフィールにした走者の、直近90日の動画・配信アーカイブ）と `/me/edit` への `action`（ログイン中のみ）、再取得中の `opacity-50` ＋ `aria-busy`、日付入力の `min`（直近90日の開始日）/ `max`（今日・JST）、バッジ件数＝チップ数は `/paces` と同じ。`FeedVideoCard` の全面リンクは `tabIndex={-1}` ＋ `aria-hidden`（Tab 停止点・読み上げはタイトルのリンクに一本化。外部リンクアイコンも同様）。
 
-検索 UI は `/paces` と同じ作り（`app/routes/videos.tsx`）: モバイルでは既定で畳み、畳んだ間も適用中の条件をチップと件数（`videos.filterActiveCount`）で示す。走者の欄のラベルは「走者」、期間は見出し「時期」の下に「開始日」「終了日」の2欄。開始日が終了日より後なら送信せず、欄の下にエラー（`videos.filterPeriodError`、`aria-invalid` / `role="alert"`）を出す。解除の文言は「条件をリセット」（`common.resetFilters`）。0件は `EmptyState`（絞り込み中なら「条件をリセット」の操作つき）。動画カードのサムネイルは `alt=""`（タイトルはカードの見出しと再生ボタンの名前で読まれるので二重にしない）。
+検索 UI は `/paces` と同じ作り（`app/routes/videos.tsx`）: モバイルでは既定で畳み、畳んだ間も適用中の条件をチップと件数（`videos.filterActiveCount`）で示す。走者の欄のラベルは「走者」、期間は見出し「時期」の下に「開始日」「終了日」の2欄。開始日が終了日より後なら送信せず、欄の下にエラー（`videos.filterPeriodError`、`aria-invalid` / `role="alert"`）を出す。解除の文言は「絞り込みを解除」（`common.resetFilters`）。0件は `EmptyState`（絞り込み中なら「絞り込みを解除」の操作つき）。動画カードのサムネイルは `alt=""`（タイトルはカードの見出しと再生ボタンの名前で読まれるので二重にしない）。
 
 ### 遅延ロード・無限スクロール
 
