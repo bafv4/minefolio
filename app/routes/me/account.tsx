@@ -38,7 +38,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, AlertCircle, AlertTriangle, Download, Settings } from "lucide-react";
+import { Loader2, AlertCircle, AlertTriangle, Download } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
@@ -352,7 +352,6 @@ export default function AccountPage() {
       <PageSection
         id="account-settings"
         first
-        icon={<Settings className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("meEdit.profileSettings")}
         className="space-y-4"
       >
@@ -418,13 +417,12 @@ export default function AccountPage() {
       {showLegacyImport && (
         <PageSection
           id="account-legacy-import"
-          icon={<Download className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meEdit.importFromLegacyTitle")}
         >
           <p className="text-sm text-muted-foreground">{t("meEdit.importFromLegacyDesc")}</p>
           <importFetcher.Form method="post">
             <input type="hidden" name="_action" value="import_legacy" />
-            <Button type="submit" disabled={isImporting || hasChanges}>
+            <Button type="submit" className="min-h-11 sm:min-h-9" disabled={isImporting || hasChanges}>
               {isImporting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -455,7 +453,6 @@ export default function AccountPage() {
       {/* Danger Zone */}
       <PageSection
         id="account-danger"
-        icon={<AlertTriangle className="h-5 w-5 text-destructive" aria-hidden="true" />}
         title={t("meEdit.dangerZone")}
       >
         <p className="text-sm text-muted-foreground">{t("meEdit.dangerZoneDesc")}</p>
@@ -474,7 +471,7 @@ export default function AccountPage() {
               }}
             >
               <DialogTrigger asChild>
-                <Button variant="destructive">{t("meEdit.deleteAccount")}</Button>
+                <Button variant="destructive" className="min-h-11 sm:min-h-9">{t("meEdit.deleteAccount")}</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -511,12 +508,13 @@ export default function AccountPage() {
                     )}
                   </div>
                   <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                    <Button type="button" variant="outline" className="min-h-11 sm:min-h-9" onClick={() => setIsDeleteDialogOpen(false)}>
                       {t("meEdit.cancel")}
                     </Button>
                     <Button
                       type="submit"
                       variant="destructive"
+                      className="min-h-11 sm:min-h-9"
                       disabled={confirmText !== (user.mcid || user.slug) || isDeleting}
                       // 削除後の遷移を未保存警告（useBlocker）に止められないよう、下書きを先に破棄する
                       onClick={() => {

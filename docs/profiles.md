@@ -834,7 +834,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 認証必須 (`getCurrentUser` を使用)。ユーザーの各フィールドを編集できるフォーム。
 
-画面は欄区切り（`PageSection`、ui.md 4章）。h1 ＞ 欄 h2 ＞ 欄の中の小見出し h3 の段。欄は「MCID・スキン」「基本情報」「Speedrun.com 連携」「ソーシャルリンク」「動画」「プロフィール設定」「危険な操作」。危険な操作は欄区切りの中に `NoticeBanner tone="error"` で削除の行を置く（箱の入れ子はしない）。最初の欄を包む要素に `data-me-tour="edit-form"`（ツアーの対象、[me-common.md](./me-common.md)）。
+画面は欄区切り（`PageSection`、ui.md 4章）。h1 ＞ 欄 h2 ＞ 欄の中の小見出し h3 の段。欄は「MCID」「スキンとマント」（アップロード・削除はすぐ反映／h3「表示」のポーズ・スキンモデル・マント表示は保存バーで確定）「基本情報」「ソーシャルリンク」（Speedrun.com の読み取り状況もここに出す）「動画」「プロフィール設定」「危険な操作」。危険な操作は欄区切りの中に `NoticeBanner tone="error"` で削除の行を置く（箱の入れ子はしない）。最初の欄を包む要素に `data-me-tour="edit-form"`（ツアーの対象、[me-common.md](./me-common.md)）。
 
 「基本情報」に残るのは `mainPlatform` / `role` の2フィールドのみ。**`mainEdition` / `inputMethod` / `inputMethodBadge` はこの画面からは削除済み**で、`/me/playstyle` に移管されている（`mainEdition` は `/me/playstyle` でメインバージョンを選ぶと自動決定され、単体でのクリア手段は無い）。移行期の誘導リンクは廃止した。詳細は上記「プレイスタイル」を参照
 
@@ -890,7 +890,7 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### Bedrock版 MCID（Xbox ゲーマータグ）
 
-「MCID・スキン」カードの Java版 MCID ブロックの下で登録・変更・削除する。
+「MCID」欄の Java版 MCID ブロックの下で登録・変更・削除する。
 
 - 保存: 一括保存（`save_all`）のフォーム値 `bedrockMcid`（空欄で削除）。`users.bedrockMcid` を更新するだけで、
   `recordSlugChange` などの slug 関連処理・Mojang 検証・YouTubeキャッシュ追従は**一切呼ばない**

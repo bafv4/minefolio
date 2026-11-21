@@ -1257,12 +1257,12 @@ export default function EditProfilePage() {
         {/* MCID & Skin Section（ツアーの「プロフィール編集」の指す先） */}
         <div data-me-tour="edit-form">
         <PageSection
-          id="edit-mcid-skin"
+          id="edit-mcid"
           first={!hasChecklist}
-          title={t("meEdit.mcidSkinTitle")}
+          title={t("meEdit.mcidTitle")}
           className="space-y-6"
         >
-            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.mcidSkinDesc")}</p>
+            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.mcidDesc")}</p>
             {/* MCID設定（下書き。保存バーで保存するまで反映されない） */}
             <div className="space-y-3">
               <h3 className="text-base font-semibold">{t("meEdit.minecraftIdTitle")}</h3>
@@ -1431,7 +1431,12 @@ export default function EditProfilePage() {
               )}
             </div>
 
-            <Separator />
+        </PageSection>
+        </div>
+
+        {/* スキンとマント。アップロード・削除はすぐ反映（保存バーとは別）、「表示」の設定は保存バーで確定 */}
+        <PageSection id="edit-skin" title={t("meEdit.skinCapeTitle")} className="space-y-6">
+            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
 
             {/* Custom Skin Upload */}
             <div className="space-y-3">
@@ -1471,15 +1476,17 @@ export default function EditProfilePage() {
                 onUploadComplete={(url) => setCustomCapeUrl(url)}
                 onDelete={() => setCustomCapeUrl(null)}
               />
-              {/* スキンとマントの両方に当てはまる注意なので、2つのアップロード欄の後に1回だけ出す */}
-              <p className="text-xs text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
             </div>
+
+            <Separator />
+
+            {/* 見せ方の設定（保存バーで確定） */}
+            <div className="space-y-6">
+            <h3 className="text-base font-semibold">{t("meEdit.skinDisplayTitle")}</h3>
 
             {/* Pose Selection - show when user has uuid OR custom skin */}
             {(user.uuid || customSkinUrl) && (
               <>
-                <Separator />
-
                 <div className="space-y-3">
                   <Label id="pose-label">{t("meEdit.poseLabel")}</Label>
                   <RadioGroup
@@ -1527,8 +1534,6 @@ export default function EditProfilePage() {
               </>
             )}
 
-            <Separator />
-
             {/* Skin Model Toggle - 常に表示 */}
             <div className="space-y-2">
               <Label id="skin-model-label">{t("meEdit.skinModelLabel")}</Label>
@@ -1559,8 +1564,6 @@ export default function EditProfilePage() {
               </RadioGroup>
             </div>
 
-            <Separator />
-
             {/* Cape Display Toggle - 常に表示（Mojang のマントにも適用されるため） */}
             <div className="space-y-2">
               <Label id="cape-display-label">{t("meEdit.capeDisplayLabel")}</Label>
@@ -1587,8 +1590,8 @@ export default function EditProfilePage() {
               </RadioGroup>
               <p className="text-xs text-muted-foreground">{t("meEdit.capeDisplayHint")}</p>
             </div>
+            </div>
         </PageSection>
-        </div>
 
         {/* Basic Info */}
         <PageSection id="edit-basic" title={t("meEdit.basicInfo")} className="space-y-4">
@@ -1864,26 +1867,9 @@ export default function EditProfilePage() {
         </PageSection>
 
         {/* Speedrun.com連携 */}
-        <PageSection
-          id="edit-speedrun"
-          icon={<ExternalLink className="h-5 w-5 text-primary" aria-hidden="true" />}
-          title={t("meEdit.speedrunIntegration")}
-        >
-            <p className="text-sm text-muted-foreground">{t("meEdit.speedrunIntegrationDesc")}</p>
-            {/* 設定の入口はソーシャルリンクの Speedrun.com だけ。ここは読み取り結果の表示（下書きのリンクに追従する） */}
-            <p className="text-sm" id="speedruncom-linked">
-              {formValues.speedruncomUsername ? (
-                t("meEdit.speedrunLinkedFrom", { username: formValues.speedruncomUsername })
-              ) : (
-                <span className="text-muted-foreground">{t("meEdit.speedrunLinkedNone")}</span>
-              )}
-            </p>
-        </PageSection>
-
         {/* Social Links Section（下書き。保存バーで一括保存） */}
         <PageSection
           id="edit-social"
-          icon={<Share2 className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meEdit.socialLinks")}
           action={
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -1908,6 +1894,15 @@ export default function EditProfilePage() {
           }
         >
             <p className="text-sm text-muted-foreground">{t("meEdit.socialLinksDesc")}</p>
+            {/* Speedrun.com の読み取り状況。設定の入口はこの一覧の Speedrun.com だけ（下書きのリンクに追従する） */}
+            <p className="text-sm text-muted-foreground">{t("meEdit.speedrunIntegrationDesc")}</p>
+            <p className="text-sm" id="speedruncom-linked">
+              {formValues.speedruncomUsername ? (
+                t("meEdit.speedrunLinkedFrom", { username: formValues.speedruncomUsername })
+              ) : (
+                <span className="text-muted-foreground">{t("meEdit.speedrunLinkedNone")}</span>
+              )}
+            </p>
             {draft.links.length > 0 || deletedLinks.length > 0 ? (
               <div className="space-y-2">
                 {draft.links.map((link) => {
@@ -2002,7 +1997,6 @@ export default function EditProfilePage() {
         {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継）。下書き（保存バーで一括保存） */}
         <PageSection
           id="edit-videos"
-          icon={<Video className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meEdit.videos")}
           action={
               <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>

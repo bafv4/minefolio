@@ -208,6 +208,7 @@ export function PngTextureUploader({
         <Button
           type="button"
           variant="outline"
+          className="min-h-11 sm:min-h-9"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading || isDeleting}
         >
@@ -228,6 +229,7 @@ export function PngTextureUploader({
           <Button
             type="button"
             variant="ghost"
+            className="min-h-11 sm:min-h-9"
             onClick={handleDelete}
             disabled={isUploading || isDeleting}
           >

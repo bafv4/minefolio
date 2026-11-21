@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Layers, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import {
@@ -469,7 +468,6 @@ export default function PlaystylePage() {
       <PageSection
         id="playstyle-content"
         first
-        icon={<Layers className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("mePlaystyle.sectionPlayContent")}
         className="space-y-6"
       >
@@ -581,7 +579,6 @@ export default function PlaystylePage() {
       {/* 操作 */}
       <PageSection
         id="playstyle-controls"
-        icon={<SlidersHorizontal className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("mePlaystyle.sectionControls")}
         className="space-y-6"
       >
@@ -700,7 +697,6 @@ export default function PlaystylePage() {
       {/* テクニック */}
       <PageSection
         id="playstyle-technique"
-        icon={<Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("mePlaystyle.sectionTechnique")}
         className="space-y-6"
       >

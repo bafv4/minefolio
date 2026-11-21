@@ -779,7 +779,6 @@ export default function RecordsPage() {
         <PageSection
           id="records-speedruncom"
           first
-          icon={<Trophy className="h-5 w-5 text-primary" aria-hidden="true" />}
           title={t("meRecords.speedrunSectionTitle")}
         >
           <p className="text-sm text-muted-foreground">
@@ -909,7 +908,6 @@ export default function RecordsPage() {
       {/* カスタム記録セクション */}
       <PageSection
         id="records-custom"
-        icon={<Trophy className="h-5 w-5 text-primary" aria-hidden="true" />}
         title={t("meRecords.customRecords")}
         first={!speedruncomUsername}
       >
