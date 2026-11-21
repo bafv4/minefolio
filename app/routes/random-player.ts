@@ -1,6 +1,6 @@
 // /random-player — 一覧（/browse）と同じ母集団（公開プロフィール かつ 視聴者ロール以外。role 未設定は走者扱い）から
 // ランダムに1人選び、そのプロフィールへリダイレクトするリソースルート。
-// ログイン中は本人を除く。該当者がいなければ /browse へ。
+// ログイン中は本人を除く。該当者がいなければ /browse?random=none へ（/browse が一文で知らせる。保存領域は使わない）。
 import { redirect, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -24,6 +24,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     columns: { slug: true },
   });
 
-  if (!runner) return redirect("/browse");
+  if (!runner) return redirect("/browse?random=none");
   return redirect(`/player/${runner.slug}`);
 }

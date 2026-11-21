@@ -62,14 +62,14 @@ describe("/random-player", () => {
     await seedUser(db, { slug: "private", profileVisibility: "private", role: "runner" });
     await seedUser(db, { slug: "unlisted", profileVisibility: "unlisted", role: "runner" });
 
-    expect(await destination()).toBe("/browse");
+    expect(await destination()).toBe("/browse?random=none");
   });
 
   it("ログイン中は本人を除く（ほかに対象がいなければ /browse）", async () => {
     await seedUser(db, { slug: "me", discordId: "discord-me", profileVisibility: "public", role: "runner" });
     sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "discord-me" } });
 
-    expect(await destination()).toBe("/browse");
+    expect(await destination()).toBe("/browse?random=none");
 
     await seedUser(db, { slug: "other", profileVisibility: "public", role: "runner" });
     for (let i = 0; i < 10; i++) expect(await destination()).toBe("/player/other");

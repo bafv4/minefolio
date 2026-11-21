@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, ArrowLeft } from "lucide-react";
 import { useCookieConsent } from "@/components/cookie-consent";
 import { useT } from "@/hooks/use-locale";
+import { useFavorites } from "@/hooks/use-favorites";
 import { localeFromMatches } from "@/lib/locale";
 
 type FavoritePlayer = ProfileFeedCardPlayer;
@@ -98,6 +99,7 @@ export default function FavoritesPage() {
   const t = useT();
   const { players: ssrPlayers, isLoggedIn } = useLoaderData<typeof loader>();
   const { hasConsent, acceptCookies } = useCookieConsent();
+  const { isFavorite } = useFavorites();
 
   // 未ログイン時はクライアント側で localStorage → /api/users/by-slugs を呼んで詳細取得
   const [guestPlayers, setGuestPlayers] = useState<FavoritePlayer[]>([]);
@@ -154,23 +156,26 @@ export default function FavoritesPage() {
   const showCookieAlert = !isLoggedIn && hasConsent === false;
   const isLoadingList = !isLoggedIn && guestLoading;
   const showFailure = !isLoggedIn && guestFailed && !guestLoading;
+  // 見出しの件数は実際にお気に入りの数（外した後は減る。カードは再読み込みまで残す）。ゲストの読み込み中・失敗中は出さない
+  const favoriteCount = players.filter((p) => isFavorite(p.slug)).length;
+  const showCount = !isLoadingList && !showFailure;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold flex items-center gap-2 outline-none">
-            <Heart className="h-6 w-6 text-favorite fill-current" />
+            <Heart className="h-6 w-6 text-favorite fill-current" aria-hidden />
             {t("favorites.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {t("favorites.totalCountWithNumber", { count: players.length })}
+          <p className="min-h-5 text-sm text-muted-foreground">
+            {showCount ? t("favorites.totalCountWithNumber", { count: favoriteCount }) : null}
           </p>
         </div>
         {/* 副次の導線なので目立たせない（全幅の主ボタン級にしない） */}
         <Button asChild variant="ghost" size="sm" className="self-start min-h-11 text-muted-foreground sm:self-auto sm:min-h-8">
           <Link to="/">
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4 mr-2" aria-hidden />
             {t("common.backToHome")}
           </Link>
         </Button>
@@ -196,7 +201,7 @@ export default function FavoritesPage() {
           {players.map((player) => (
             // 外してもカードはその場に残る（ハートが空になるだけ。もう一度押せば戻せる＝取り消し）。
             // 一覧は再読み込みまで変えない（並びの slug 順を保ち、押した直後にカードが消えて位置がずれるのを避ける）
-            <ProfileFeedCard key={player.slug} player={player} showFavoriteButton />
+            <ProfileFeedCard key={player.slug} player={player} showFavoriteButton surface="card" />
           ))}
         </div>
       ) : (
@@ -217,7 +222,7 @@ function FavoriteCardSkeletonGrid() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: 6 }).map((_, i) => (
-        <ProfileFeedCardSkeleton key={i} />
+        <ProfileFeedCardSkeleton key={i} surface="card" />
       ))}
     </div>
   );

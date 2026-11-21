@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { useT } from "@/hooks/use-locale";
@@ -9,16 +9,15 @@ import { Cookie, Users } from "lucide-react";
 export function FavoritesCookieAlert({ onAccept }: { onAccept: () => void }) {
   const t = useT();
   return (
-    <Alert>
-      <Cookie className="h-4 w-4" />
-      <AlertTitle>{t("favorites.cookieDisabled")}</AlertTitle>
-      <AlertDescription className="flex items-center justify-between">
-        <span>{t("favorites.cookieRequired")}</span>
-        <Button size="sm" onClick={onAccept} className="ml-4">
+    <NoticeBanner tone="warning" icon={Cookie}>
+      <p className="font-medium">{t("favorites.cookieDisabled")}</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-muted-foreground">{t("favorites.cookieRequired")}</p>
+        <Button size="sm" onClick={onAccept} className="min-h-11 sm:min-h-8">
           {t("favorites.enableCookie")}
         </Button>
-      </AlertDescription>
-    </Alert>
+      </div>
+    </NoticeBanner>
   );
 }
 
@@ -27,7 +26,7 @@ export function FavoritesEmptyState({ cookieBlocked }: { cookieBlocked: boolean 
   const t = useT();
   return (
     <EmptyState
-      icon={<Users className="h-12 w-12" />}
+      icon={<Users className="h-12 w-12" aria-hidden />}
       title={t("favorites.emptyTitle")}
       description={cookieBlocked ? t("favorites.cookieRequired") : t("favorites.emptyHelp")}
       action={

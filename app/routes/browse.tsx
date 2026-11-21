@@ -95,6 +95,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     totalCount,
     hasMore,
     isLoggedIn: !!session,
+    // /random-player が該当者なしで戻してきたとき（理由を一文で知らせる）
+    randomNone: url.searchParams.get("random") === "none",
     filters: {
       roles: args.roles,
       editions: args.editions,
@@ -161,7 +163,7 @@ function FilterCheckboxRow({
 export default function BrowsePage() {
   const t = useT();
   const { favorites, isFavorite } = useFavorites();
-  const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, isLoggedIn } =
+  const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, isLoggedIn, randomNone } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -369,11 +371,11 @@ export default function BrowsePage() {
       <div>
         <div className="flex items-center justify-between gap-x-4 gap-y-2">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Users className="h-6 w-6" />
+            <Users className="h-6 w-6" aria-hidden />
             {t("browse.title")}
           </h1>
           {/* 副次の操作: ランダムな走者のプロフィールへ（/random-player はリダイレクトだけのリソースルートなので文書ごと読み込む） */}
-          <Button variant="outline" size="sm" asChild className="min-h-11 min-w-11 md:min-h-8 md:min-w-0">
+          <Button variant="outline" size="sm" asChild className="min-h-11 min-w-11 md:min-h-9 md:min-w-0">
             <Link to="/random-player" reloadDocument>
               <Shuffle className="h-4 w-4" aria-hidden="true" />
               <span className="sr-only md:not-sr-only">{t("browse.randomRunner")}</span>
@@ -383,6 +385,11 @@ export default function BrowsePage() {
         <p className="text-sm text-muted-foreground">
           {t(countKey, { count: totalCount })}
         </p>
+        {randomNone && (
+          <p role="status" className="mt-2 text-sm text-muted-foreground">
+            {t("browse.randomNone")}
+          </p>
+        )}
         {/* 並びの優先はログイン中だけに効く。お気に入りが1人以上いるときだけ理由を示す */}
         {isLoggedIn && favorites.length > 0 && (
           // 狭い画面で2行に折り返したときもハートは1行目に揃える（items-start + 行高 20px に対する 3px 下げ）
@@ -396,7 +403,7 @@ export default function BrowsePage() {
           <Form onSubmit={handleSearch} className="flex-1">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
                 <Input
                   type="search"
                   placeholder={t("browse.searchPlaceholder")}
@@ -410,7 +417,7 @@ export default function BrowsePage() {
               </div>
               {/* モバイルは Enter（と debounce）で送れるので検索ボタンを出さない */}
               <Button type="submit" className="hidden sm:inline-flex sm:min-h-9">
-                <Search className="mr-2 h-4 w-4" />
+                <Search className="mr-2 h-4 w-4" aria-hidden />
                 {t("common.search")}
               </Button>
             </div>
@@ -420,7 +427,7 @@ export default function BrowsePage() {
             <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="min-h-11 gap-2 sm:min-h-9">
-                  <Filter className="h-4 w-4" />
+                  <Filter className="h-4 w-4" aria-hidden />
                   {t("browse.filter")}
                   {activeFilterCount > 0 && (
                     <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
@@ -495,7 +502,7 @@ export default function BrowsePage() {
                   {/* 入力方法 */}
                   <div className="space-y-3">
                     <div className="text-sm font-medium">{t("browse.inputMethod")}</div>
-                    <div className="space-y-0.5">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                       <FilterCheckboxRow id="input-kbm" checked={draftFilters.inputMethods.includes("keyboard_mouse")} onCheckedChange={(checked) => handleDraftFilterChange("inputMethods", "keyboard_mouse", checked)}>
                         {t("browse.inputKeyboardMouse")}
                       </FilterCheckboxRow>
@@ -520,14 +527,21 @@ export default function BrowsePage() {
                       {t("common.clearAll")}
                     </Button>
                   )}
+                  {/* 件数の読み上げはボタンの外で行う（ボタンの名前が「…」に変わったり、チェックのたびに割り込んだりしないよう） */}
+                  <span role="status" aria-live="polite" className="sr-only">
+                    {draftCount !== null && !isCountLoading
+                      ? draftCount === 0
+                        ? t("browse.showCountNone")
+                        : t("browse.showCount", { count: draftCount })
+                      : ""}
+                  </span>
                   <Button
-                    className="w-full sm:w-auto"
+                    // 0人のときは「この先は空」と伝わるよう副次の見た目にする（押せる）
+                    variant={draftCount === 0 ? "outline" : "default"}
+                    className="min-h-11 w-full sm:min-h-9 sm:w-auto"
                     onClick={applyDraftFilters}
                   >
-                    <span
-                      className={cn(isCountLoading && draftCount !== null && "opacity-60")}
-                      aria-live="polite"
-                    >
+                    <span className={cn(isCountLoading && draftCount !== null && "opacity-60")}>
                       {draftCount === null
                         ? isCountLoading
                           ? "…"
@@ -554,7 +568,7 @@ export default function BrowsePage() {
                 <SelectItem value="displayName">{t("browse.sortDisplayName")}</SelectItem>
               </SelectContent>
             </Select>
-            <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+            <ViewToggle viewMode={viewMode} onChange={setViewMode} comfortable />
           </div>
         </div>
 
@@ -575,7 +589,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("role", role, false)}
                   aria-label={t("browse.removeFilterAria", { label: roleLabels(t)[role] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -587,7 +601,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("edition", edition, false)}
                   aria-label={t("browse.removeFilterAria", { label: editionLabels(t)[edition] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -599,7 +613,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("platform", platform, false)}
                   aria-label={t("browse.removeFilterAria", { label: platformLabel(t, platform, "short") ?? platform })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -611,7 +625,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
                   aria-label={t("browse.removeFilterAria", { label: inputMethodLabels(t)[inputMethod] })}
-                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:text-destructive before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -627,14 +641,14 @@ export default function BrowsePage() {
         viewMode === "card" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
-              <ProfileFeedCardSkeleton key={i} />
+              <ProfileFeedCardSkeleton key={i} surface="card" />
             ))}
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="divide-y divide-border/60">
             {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 px-1">
-                <Skeleton className="h-9 w-9 rounded-xl shrink-0" />
+              <div key={i} className="flex min-h-14 items-center gap-3 px-1 py-2">
+                <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="h-3 w-48" />
@@ -653,13 +667,13 @@ export default function BrowsePage() {
             )}
           >
             {infinite.items.map((player) => (
-              <ProfileFeedCard key={player.slug} player={player} isFavorite={isFavorite(player.slug)} />
+              <ProfileFeedCard key={player.slug} player={player} isFavorite={isFavorite(player.slug)} surface="card" />
             ))}
           </div>
         ) : (
           <div
             aria-busy={isNavigating}
-            className={cn("divide-y transition-opacity", isNavigating && "opacity-60")}
+            className={cn("divide-y divide-border/60 transition-opacity", isNavigating && "opacity-60")}
           >
             {infinite.items.map((player) => (
               <ProfileFeedListItem key={player.slug} player={player} isFavorite={isFavorite(player.slug)} />

@@ -38,7 +38,7 @@ export interface ProfileFeedCardPlayer {
 }
 
 /** 既定値（Java / Windows / KBM / 走者）は全員同じで識別情報にならないため、カードには出さない */
-function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
+function FeedCardTags({ player, mobileMax = 3 }: { player: ProfileFeedCardPlayer; mobileMax?: number }) {
   const t = useT();
   const tags: { key: string; label: string; variant: "secondary" | "outline" }[] = [];
   if (isCategoryKey(player.mainCategory)) {
@@ -60,11 +60,12 @@ function FeedCardTags({ player }: { player: ProfileFeedCardPlayer }) {
   }
   return (
     <>
-      {tags.slice(0, 3).map((tag) => (
+      {tags.slice(0, 3).map((tag, i) => (
         <Badge
           key={tag.key}
           variant={tag.variant}
-          className="shrink-0 rounded-full px-2 py-0.5 text-[11px]"
+          // md 未満は mobileMax 個まで（幅が狭い行で名前を押し出さない。残りは md 以上で出る）
+          className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px]", i >= mobileMax && "max-md:hidden")}
         >
           {tag.label}
         </Badge>
@@ -152,8 +153,8 @@ export function ProfileFeedCard({
           {player.pageViews7d !== undefined && <PageViews7dMeta count={player.pageViews7d} />}
         </div>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">
-          <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(t, player.updatedAt)}
+          <Clock3 className="h-3 w-3" aria-hidden />
+          <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
         </span>
       </div>
     </div>
@@ -176,31 +177,36 @@ export function ProfileFeedListItem({
     <Link
       to={`/player/${player.slug}`}
       prefetch="intent"
-      className="flex items-center gap-3 py-3 px-1 -mx-1 rounded hover:bg-muted/50 transition-colors group"
+      className="group -mx-1 flex min-h-14 items-center gap-3 rounded px-1 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
-      <div className="h-9 w-9 shrink-0 rounded-lg overflow-hidden">
-        <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={36} />
+      <div className="h-8 w-8 shrink-0 rounded-lg overflow-hidden">
+        <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} size={32} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-medium group-hover:text-primary transition-colors">
             {displayName}
           </span>
           {player.mcid && (
-            <span className="text-xs text-muted-foreground shrink-0">@{player.mcid}</span>
+            <span className="max-w-[40%] truncate text-xs text-muted-foreground shrink-0">@{player.mcid}</span>
           )}
         </div>
-        {player.shortBio && (
-          <p className="text-xs text-muted-foreground line-clamp-1">{player.shortBio}</p>
-        )}
+        {/* md 未満は右側に時刻を置く幅が無いので、2行目へ下ろす */}
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          {player.shortBio && <p className="min-w-0 flex-1 truncate">{player.shortBio}</p>}
+          <span className="inline-flex shrink-0 items-center gap-1 md:hidden">
+            <Clock3 className="h-3 w-3" aria-hidden />
+            <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
+          </span>
+        </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex min-w-0 shrink items-center gap-1.5">
         {isFavorite && <FavoriteMark />}
-        {/* カードと同じ規則（既定値は出さず、識別に効くタグだけ最大3個） */}
-        <FeedCardTags player={player} />
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground ml-1">
-          <Clock3 className="h-3 w-3" />
-          {formatRelativeDate(t, player.updatedAt)}
+        {/* カードと同じ規則（既定値は出さず、識別に効くタグだけ。md 未満は1個、md 以上は最大3個） */}
+        <FeedCardTags player={player} mobileMax={1} />
+        <span className="ml-1 inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground max-md:hidden">
+          <Clock3 className="h-3 w-3" aria-hidden />
+          <span suppressHydrationWarning>{formatRelativeDate(t, player.updatedAt)}</span>
         </span>
       </div>
     </Link>
