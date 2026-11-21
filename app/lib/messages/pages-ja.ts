@@ -2650,7 +2650,7 @@ export const PAGES_JA = {
       settingsShort: "設定",
       /** 公開版の無いガイドで、保存ボタンの隣に出す近道（押すとガイド設定の「公開する」へ） */
       publishOpen: "公開...",
-      publishOpenHint: "ガイド設定を開いて、公開するかどうかを選びます",
+      publishOpenHint: "タイトル・URL・カバー画像を確認して、読者に公開します",
       saveDraft: "下書き保存",
       /** 下書き保存ボタンのツールチップ（押した結果） */
       saveDraftHint: "公開版は変えずに、下書きとして保存します",
@@ -2744,12 +2744,16 @@ export const PAGES_JA = {
       settingsDescSingle: "タイトル・概要・カバー画像・タグ・公開設定を編集します。「反映」すると編集中の内容に入りますが、まだ保存はされません（ツールバーの「{save}」で保存します）。",
       /** 公開スイッチの見えるラベル兼アクセシブルネーム（オン/オフは switch の状態で伝える） */
       publishLabel: "公開する",
-      /** 「公開…」から開いたとき: 主ボタンが適用と公開の保存を一度に行う */
+      /** 公開の確認ダイアログの主ボタン（保存と公開を一度に行う） */
       publishNow: "公開する",
       /** 「公開…」から開いたダイアログの題（公開前の確認。通常の設定ダイアログは toolbar.settings） */
       publishTitle: "公開の確認",
       publishDesc: "内容を確認して「公開する」を押すと、保存してすぐ読者に公開されます。",
-      publishToggleHint: "オフにすると、公開せずに設定だけ変更します",
+      /** 公開の確認ダイアログ（確認専用）の読み取り表示 */
+      publishTitleEmpty: "（タイトルが未入力です）",
+      publishCoverNone: "カバー画像なし",
+      /** 公開の確認から、欄を編集するガイド設定へ移るボタン */
+      publishEditSettings: "設定を変える",
       /** 公開スイッチの説明。オン/オフと、いま公開中か（Live）・公開版が無いか（New）で出し分ける */
       publishOnLive: "公開中です。「{save}」で、今の内容が読者に公開されます（「{draft}」では公開版は変わりません）。",
       publishOnNew: "「{save}」で保存すると、読者に公開されます",
@@ -2979,7 +2983,8 @@ export const PAGES_JA = {
     /** 新規作成の確定ボタン。作成したテンプレートは非公開で、公開は編集画面の保存（公開スイッチ）で行う */
     createSubmit: "テンプレートを作成",
     /** 編集画面: 公開スイッチ・下書き保存・未公開の変更の帯（ガイドの guideEditor.ui と同じ作り。文言は「テンプレート」） */
-    publishSwitch: "公開する",
+    /** 公開スイッチの名前。主ボタン（「公開する」など）と同じ語にしない */
+    publishSwitch: "公開設定",
     publishUpdate: "更新を公開",
     saveDraft: "下書き保存",
     draftSaved: "下書きを保存しました（公開版はそのままです）",
@@ -3066,8 +3071,10 @@ export const PAGES_JA = {
     emptyTitle: "公開されているテンプレートがまだありません",
     emptyDescriptionLink: "テンプレートを作成する",
     emptyDescriptionSuffix: "最初のテンプレートを作成して公開しましょう",
-    searchPlaceholder: "テンプレート名で検索...",
+    searchPlaceholder: "テンプレート名や説明で検索...",
     searchLabel: "テンプレートを検索",
+    /** 一覧の上限を超えているとき（一覧の下に出す注記） */
+    listTruncatedNote: "{count}件まで表示しています。ほかのテンプレートは、語句や言語で絞り込んで探してください。",
     allLanguages: "すべての言語",
     languageFilterLabel: "ゲーム言語で絞り込み",
     resultCount: "{count}件",

@@ -41,8 +41,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);
 
+  // user はクライアントへ渡す列（画像パスの userId と公開 URL の slug）だけ引く
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
+    columns: { id: true, slug: true },
   });
   if (!user) return redirect("/onboarding");
 
@@ -88,7 +90,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // .server の関数はコンポーネントから使えないため、真偽値だけをエディタへ渡す
   const translationEnabled = isTranslationEnabled();
 
-  return { guide: { ...guide, ...resolved }, user, hasDraft, published, translationEnabled };
+  // ガイドの行をそのまま展開しない（content と draftContent など、同じ本文を二重に送ってしまう）。
+  // エディタが使う列だけ返す
+  return {
+    guide: {
+      id: guide.id,
+      slug: guide.slug,
+      isPublished: guide.isPublished,
+      allowAutoTranslation: guide.allowAutoTranslation,
+      ...resolved,
+    },
+    user,
+    hasDraft,
+    published,
+    translationEnabled,
+  };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {

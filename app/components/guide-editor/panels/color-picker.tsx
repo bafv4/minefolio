@@ -58,7 +58,7 @@ export function PickerTrigger({
             {labelable && (
               <span
                 className={cn(
-                  "overflow-hidden whitespace-nowrap text-xs transition-all duration-200",
+                  "overflow-hidden whitespace-nowrap text-xs transition-all duration-200 motion-reduce:transition-none",
                   showLabel ? "max-w-[14ch] opacity-100 ml-1.5" : "max-w-0 opacity-0",
                 )}
               >

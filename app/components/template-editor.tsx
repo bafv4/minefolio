@@ -395,10 +395,39 @@ export function TemplateEditorForm({
             </AlertDialogContent>
           </AlertDialog>
         )}
-        {publishState && (
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm sm:min-h-9">
-            <Switch id={publishSwitchId} checked={publishSetting} onCheckedChange={setPublishSetting} />
-            {t("meTemplates.publishSwitch")}
+        {publishState && publishAction && (
+          // スイッチの名前は主ボタンの名前（「公開する」など）と重ならない「公開設定」にし、いまの状態で保存すると
+          // どうなるかをガイドの公開スイッチと同じ説明で下に添える（オン/オフは role=switch の状態で伝える）
+          // label で全体を包み、文字ごと押せる範囲を 44px（sm 以上は 36px）にする。名前は見出しの span だけ（説明は describedby）
+          <label
+            htmlFor={publishSwitchId}
+            className="flex min-h-11 cursor-pointer items-start gap-2 py-1.5 text-sm sm:min-h-9"
+          >
+            <Switch
+              id={publishSwitchId}
+              checked={publishSetting}
+              onCheckedChange={setPublishSetting}
+              aria-labelledby={`${publishSwitchId}-label`}
+              aria-describedby={`${publishSwitchId}-desc`}
+              className="mt-0.5"
+            />
+            <span className="block space-y-0.5">
+              <span id={`${publishSwitchId}-label`} className="block font-medium">
+                {t("meTemplates.publishSwitch")}
+              </span>
+              <span id={`${publishSwitchId}-desc`} className="block max-w-xs text-xs text-muted-foreground">
+                {t(
+                  publishSetting
+                    ? publishState.livePublished
+                      ? "guideEditor.ui.publishOnLive"
+                      : "guideEditor.ui.publishOnNew"
+                    : publishState.livePublished
+                      ? "guideEditor.ui.publishOffLive"
+                      : "guideEditor.ui.publishOffNew",
+                  { save: publishLabels[publishAction], draft: t("meTemplates.saveDraft") },
+                )}
+              </span>
+            </span>
           </label>
         )}
         <div className="ml-auto">{submitButton}</div>

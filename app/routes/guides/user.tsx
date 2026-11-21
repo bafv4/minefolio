@@ -267,6 +267,7 @@ export default function UserGuidesPage() {
           linkFn={linkFn}
           viewMode={viewMode}
           titleLevel="h2"
+          linkState={{ guideListPath: `${location.pathname}${location.search}` }}
         />
       )}
     </div>

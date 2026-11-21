@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { useLocale, useT } from "@/hooks/use-locale";
+import { useT } from "@/hooks/use-locale";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -177,7 +177,7 @@ export function GuideCardGrid({
    */
   pageViewsMode?: "additional" | "replace";
 }) {
-  const locale = useLocale();
+  const t = useT();
   // ログイン状態は LikesProvider が持つ（未ログインなら LikeButton が静的表示に落ちる）
   return (
     <div className={`grid gap-4 ${gridCols}`}>
@@ -291,7 +291,7 @@ export function GuideListView({
   /** タイトルの見出しレベル。既定 h3（GuideCardGrid と同じ） */
   titleLevel?: "h2" | "h3" | "h4";
 }) {
-  const locale = useLocale();
+  const t = useT();
   return (
     <div className="divide-y divide-border/60">
       {guides.map((guide) => {
@@ -358,6 +358,31 @@ export function GuideListView({
 }
 
 /**
+ * テンプレート一覧（/guides/templates）の行のスケルトン。本物の行（タイトル・説明・メタ行）と同じ配置。
+ * 同じ一覧の中の遷移と、ガイド一覧からのタブ切替の両方で使う
+ */
+export function TemplateListSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="divide-y divide-border/60" aria-hidden>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-5 w-48 max-w-full" />
+            <Skeleton className="mt-0.5 h-4 w-2/3" />
+            <div className="mt-1.5 flex items-center gap-3">
+              <Skeleton className="size-5 rounded-md" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="ml-auto h-4 w-16" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * 一覧の読み込み中スケルトン（`GuideCardGrid` / `GuideListView` と同じ配置・同じ高さの目安）。
  * 読み込みの前後でレイアウトが跳ねないようにし、読み上げには出さない（aria-hidden。ui.md 8 章）。
  * 表紙画像の無いガイドが多数派なので、表紙の帯・サムネイルは描かない（常に描くと、本物より背が高くなる）
@@ -394,8 +419,9 @@ export function GuideListSkeleton({
         <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
           <div className="min-w-0 flex-1">
             <Skeleton className="h-5 w-48 max-w-full" />
-            <Skeleton className="mt-1.5 h-4 w-2/3" />
+            <Skeleton className="mt-0.5 h-4 w-2/3" />
             <div className="mt-1.5 flex items-center gap-3">
+              <Skeleton className="size-5 rounded-md" />
               <Skeleton className="h-4 w-24" />
               <Skeleton className="ml-auto h-4 w-16" />
             </div>

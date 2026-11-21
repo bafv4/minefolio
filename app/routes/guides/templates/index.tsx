@@ -8,7 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
-import { eq, and, asc, desc, sql, isNotNull } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, isNotNull } from "drizzle-orm";
 import { templateLikeCountSql } from "@/lib/likes.server";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { useLoginHref } from "@/hooks/use-login-href";
@@ -22,12 +22,11 @@ import { LikeButton } from "@/components/like-button";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/empty-state";
 import { LayoutTemplate, Search, ListOrdered, Keyboard, Download, FlaskConical, Languages, X } from "lucide-react";
 import { GuidesContentTabs } from "@/components/content-tabs";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import { GuideListSkeleton, TemplateListSkeleton } from "@/components/guide-list-views";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { getGameLanguageName, gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
 import { RelativeTime } from "@/components/relative-time";
@@ -58,6 +57,9 @@ export const meta = ({
   ];
 };
 
+/** 一覧に出す最大件数（超えるときは truncated で知らせる） */
+const TEMPLATE_LIST_LIMIT = 100;
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const env = getEnv();
   const db = createDb();
@@ -76,7 +78,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
-  const lang = (url.searchParams.get("lang") ?? "").trim();
+  // 言語は許可リストで正規化する（大文字の SV_SE は sv_se へ）。未知の値は絞り込まない
+  // （完全一致のまま SQL に渡すと、該当があっても偽の0件になり、Combobox にも生の値が出る）
+  const lang = normalizeGameLanguage(url.searchParams.get("lang")) ?? "";
   // 作成者（走者の slug）での絞り込み。著者別のガイド一覧（/guides/:author）からの導線で使う
   const authorSlug = (url.searchParams.get("author") ?? "").trim();
   // テンプレートは新着順・いいね数順のみ（未対応の値は既定順へ落ちる）
@@ -92,6 +96,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const conditions = [...publicConditions];
   if (lang) {
     conditions.push(eq(searchCraftTemplates.gameLanguage, lang));
+  }
+  if (q) {
+    // 名称・説明の部分一致。limit より前に SQL で効かせる（メモリ上で絞ると「新しい100件の中だけ」を探すことになり、
+    // 101件目より古いテンプレートが検索に出ない）。LIKE のワイルドカードはエスケープして文字どおりに扱う
+    const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    conditions.push(
+      or(
+        sql`${searchCraftTemplates.title} LIKE ${likePattern} ESCAPE '\\'`,
+        sql`${searchCraftTemplates.description} LIKE ${likePattern} ESCAPE '\\'`,
+      )!,
+    );
   }
   if (authorSlug) {
     // slug の大文字小文字を区別せず一致させる（/guides/:author と同じポリシー）
@@ -160,7 +175,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .innerJoin(users, eq(searchCraftTemplates.userId, users.id))
     .where(and(...conditions))
     .orderBy(...orderBy)
-    .limit(100);
+    // 1件多く取り、上限を超えているか（truncated）を知らせる
+    .limit(TEMPLATE_LIST_LIMIT + 1);
 
   const [viewer, rows, languageCountRows, filterAuthor] = await Promise.all([
     viewerPromise,
@@ -173,7 +189,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     if (row.gameLanguage) languageCounts[row.gameLanguage] = Number(row.count);
   }
 
-  let templates = rows.map((row) => ({
+  const truncated = rows.length > TEMPLATE_LIST_LIMIT;
+  const templates = rows.slice(0, TEMPLATE_LIST_LIMIT).map((row) => ({
     id: row.id,
     title: row.title,
     description: row.description,
@@ -195,14 +212,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       ) || row.authorMcid || row.authorSlug,
   }));
 
-  // 名称の絞り込みはガイド一覧と同様にメモリ上で行う（部分一致・大文字小文字を無視）
-  if (q) {
-    const lower = q.toLowerCase();
-    templates = templates.filter((template) =>
-      template.title.toLowerCase().includes(lower),
-    );
-  }
-
   const appUrl = env.APP_URL || "https://minefolio.app";
 
   const authorFilterName = authorSlug
@@ -216,6 +225,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   return {
     templates,
+    truncated,
+    limit: TEMPLATE_LIST_LIMIT,
     q,
     lang,
     author: authorSlug,
@@ -230,7 +241,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function TemplatesIndexPage() {
   const t = useT();
   const locale = useLocale();
-  const { templates, q, lang, author, authorFilterName, languageCounts, sort, isLoggedIn } =
+  const { templates, truncated, limit, q, lang, author, authorFilterName, languageCounts, sort, isLoggedIn } =
     useLoaderData<typeof loader>();
   const loginHref = useLoginHref();
   const [langValue, setLangValue] = useState(lang || "__all");
@@ -328,7 +339,8 @@ export default function TemplatesIndexPage() {
 
       {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに */}
       {isTabSwitching ? (
-        <TabContentSkeleton variant="cards" />
+        // 行き先（ガイド一覧）の形。表示形式（?view=）はタブのリンクが持たないので既定のカード表示
+        <GuideListSkeleton viewMode="card" />
       ) : (
       <>
       {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
@@ -446,23 +458,9 @@ export default function TemplatesIndexPage() {
 
       {isNavigating ? (
         // 本物の行（タイトル・説明・メタ行）と同じ配置。読み込みの前後で高さが変わらないようにする
-        <div className="divide-y divide-border/60" aria-hidden>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="-mx-1 flex items-center gap-3 px-1 py-3">
-              <div className="min-w-0 flex-1">
-                <Skeleton className="h-5 w-48 max-w-full" />
-                <Skeleton className="mt-1.5 h-4 w-2/3" />
-                <div className="mt-1.5 flex items-center gap-3">
-                  <Skeleton className="size-5 rounded-md" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-12" />
-                  <Skeleton className="ml-auto h-4 w-16" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <TemplateListSkeleton />
       ) : templates.length > 0 ? (
+        <>
         <div className="divide-y divide-border/60">
           {templates.map((template) => (
             // 行全体のクリックはタイトルのリンクの ::after で敷くオーバーレイが担う（いいねボタンを <a> の
@@ -484,6 +482,8 @@ export default function TemplatesIndexPage() {
                   <h2 className="text-sm font-medium line-clamp-2 sm:line-clamp-1">
                     <Link
                       to={`/guides/templates/${template.id}`}
+                      // 詳細の「テンプレート一覧へ」が、言語・検索語・並び順を保ったまま戻れるようにする
+                      state={{ templateListSearch: location.search }}
                       prefetch="intent"
                       className="outline-none after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring"
                     >
@@ -544,6 +544,10 @@ export default function TemplatesIndexPage() {
             </div>
           ))}
         </div>
+        {truncated && (
+          <p className="mt-3 text-xs text-muted-foreground">{t("templates.listTruncatedNote", { count: limit })}</p>
+        )}
+        </>
       ) : hasFilters ? (
         <EmptyState
           icon={<Search className="h-12 w-12" />}

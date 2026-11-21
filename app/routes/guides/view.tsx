@@ -458,6 +458,16 @@ export default function GuideViewPage() {
   const location = useLocation();
   const stateSearch = (location.state as { guideListSearch?: unknown } | null)?.guideListSearch;
   const guideListSearch = typeof stateSearch === "string" && stateSearch.startsWith("?") ? stateSearch : "";
+  // 著者のガイド一覧（/guides/:author）から来たときは、全体の一覧ではなくその著者の一覧へ戻る。
+  // 戻り先はこの記事の著者のパスだけを許す（state は履歴に残る任意の値なので、任意のパスへは飛ばさない。
+  // URL の slug は大文字小文字を区別しないので、比べるときだけ小文字にそろえる）
+  const statePath = (location.state as { guideListPath?: unknown } | null)?.guideListPath;
+  const authorListPath = `/guides/${author.slug}`.toLowerCase();
+  const authorListBack =
+    typeof statePath === "string" &&
+    (statePath.toLowerCase() === authorListPath || statePath.toLowerCase().startsWith(`${authorListPath}?`))
+      ? statePath
+      : null;
   // 原文/訳文の切替は ?original=1 の有無（ローダーが SSR で出し分ける）
   const translationToggleSearch = (() => {
     const next = new URLSearchParams(searchParams);
@@ -513,9 +523,11 @@ export default function GuideViewPage() {
       {/* Back button + Owner edit button */}
       <div className="mb-6 flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
-          <Link to={`/guides${guideListSearch}`}>
+          <Link to={authorListBack ?? `/guides${guideListSearch}`}>
             <ArrowLeft className="h-4 w-4 mr-1" />
-            {t("guides.guideList")}
+            {authorListBack
+              ? t("guides.userGuidesTitle", { name: getLocalizedDisplayName(author, locale) })
+              : t("guides.guideList")}
           </Link>
         </Button>
         {isOwner && (

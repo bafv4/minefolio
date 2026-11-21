@@ -32,12 +32,12 @@ import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { pickDisplayName } from "@/lib/slug";
 import { GuidesContentTabs } from "@/components/content-tabs";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GUIDE_TAG_HIT_AREA,
   GuideListSkeleton,
+  TemplateListSkeleton,
   type GuideItem,
   type GuideItemWithAuthorSlug,
 } from "@/components/guide-list-views";
@@ -348,7 +348,8 @@ export default function GuidesIndexPage() {
       {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
           先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
       {isTabSwitching ? (
-        <TabContentSkeleton variant="cards" />
+        // 行き先（テンプレート一覧）の形
+        <TemplateListSkeleton />
       ) : (
       <>
       {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}

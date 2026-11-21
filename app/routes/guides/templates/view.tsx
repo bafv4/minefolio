@@ -2,7 +2,7 @@ import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { useState, useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher, useLocation, Link } from "react-router";
 import type { Route } from "./+types/view";
 import { createDb } from "@/lib/db";
 import { resolvePublicPresetId } from "@/lib/config-history";
@@ -382,6 +382,10 @@ export default function TemplateViewPage() {
   const { template, crafts, remaps, loops, author, myPresets, isOwner, isLoggedIn, appUrl } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  // 一覧から来たときは、一覧の絞り込み（?lang= など）へ戻る。直接開いたときは素の一覧
+  const location = useLocation();
+  const stateSearch = (location.state as { templateListSearch?: unknown } | null)?.templateListSearch;
+  const templateListSearch = typeof stateSearch === "string" && stateSearch.startsWith("?") ? stateSearch : "";
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   // 反映した（または新規作成した）プリセットを、その場で編集中にする。/me/presets の action（intent=apply-preset）へ送る
   const activateFetcher = useFetcher<{ success?: boolean; error?: string }>();
@@ -541,7 +545,7 @@ export default function TemplateViewPage() {
 
       <div>
         <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
-          <Link to="/guides/templates">
+          <Link to={`/guides/templates${templateListSearch}`}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("templates.backToList")}
           </Link>
@@ -1018,7 +1022,7 @@ export default function TemplateViewPage() {
               onValueChange={(v) => setKeyboardLayout(v as KeyboardLayoutOption)}
             >
               <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
-                <SelectValue />
+                <SelectValue>{keyboardLayout.replace("_", " ")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {LAYOUT_OPTIONS.map((option) => (

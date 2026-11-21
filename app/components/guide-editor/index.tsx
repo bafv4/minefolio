@@ -39,6 +39,7 @@ import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
 import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { insertEmbed, insertGuideLink, insertTemplateEmbed } from "./lib/block-commands";
 import { SettingsDialog, type GuideSettingsValues } from "./panels/settings-dialog";
+import { PublishDialog } from "./panels/publish-dialog";
 import { EmbedDialog, type EmbedKind } from "./panels/embed-dialog";
 import { TemplateEmbedDialog } from "./panels/template-embed-dialog";
 import { primeTemplateEmbedMeta, type TemplateEmbedMeta } from "./lib/template-embed-meta";
@@ -99,7 +100,7 @@ export function GuideEditor({
   // ── ダイアログ状態 ──────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 設定ダイアログを「公開する」スイッチへフォーカスして開くか（ツールバーの「公開…」から開いたときだけ）
-  const [settingsFocusPublish, setSettingsFocusPublish] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [embedKind, setEmbedKind] = useState<EmbedKind | null>(null);
   const [templateEmbedOpen, setTemplateEmbedOpen] = useState(false);
   // 埋め込み NodeView の「変更」から開いたときの初期値と書き戻し先（null なら挿入として開く）
@@ -177,7 +178,7 @@ export function GuideEditor({
     [editor, submit, title, summary, tags, isPublished, coverImageUrl, slug, allowAutoTranslation, translationEnabled],
   );
 
-  // 設定モーダルの「公開する」で保存中か。保存が成功するまでモーダルは閉じず、失敗したら開いたままエラーを出す
+  // 公開の確認の「公開する」で保存中か。保存が成功するまで確認は閉じず、失敗したら開いたままエラーを出す
   const [settingsPublishing, setSettingsPublishing] = useState(false);
 
   // 設定モーダルの値を全体 State へ反映する（保存はしない）
@@ -213,7 +214,7 @@ export function GuideEditor({
     }
     if (settingsPublishing) {
       setSettingsPublishing(false);
-      setSettingsOpen(false);
+      setPublishOpen(false);
     }
     if (saveResult.slug && saveResult.slug !== guideSlug) {
       navigate(`/my-guides/${saveResult.slug}/edit`, { replace: true });
@@ -470,14 +471,8 @@ export function GuideEditor({
             hasSavedDraft={draftActive}
             onSaveDraft={() => save("draft")}
             onSavePublish={() => save("publish")}
-            onOpenSettings={() => {
-              setSettingsFocusPublish(false);
-              setSettingsOpen(true);
-            }}
-            onOpenPublishSettings={() => {
-              setSettingsFocusPublish(true);
-              setSettingsOpen(true);
-            }}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenPublishSettings={() => setPublishOpen(true)}
             previewUrl={previewUrl}
             onImagePicker={() => imageInputRef.current?.click()}
             onYoutube={slashContext.insertYoutube}
@@ -585,7 +580,6 @@ export function GuideEditor({
         <SettingsDialog
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
-          focusPublishOnOpen={settingsFocusPublish}
           initialValues={{ title, summary, tags, coverImageUrl, isPublished, slug, allowAutoTranslation }}
           authorSlug={authorSlug}
           translationEnabled={translationEnabled}
@@ -599,14 +593,28 @@ export function GuideEditor({
           }
           isUploadingCover={coverUpload.isUploading}
           uploadError={coverUpload.error ?? imageUpload.error}
+          onApply={applySettings}
+        />
+
+        <PublishDialog
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          title={title}
+          slug={slug}
+          authorSlug={authorSlug}
+          coverImageUrl={coverImageUrl}
           saving={saving}
-          onApplyAndPublish={(v) => {
-            // 適用と公開の保存を一度に行う。保存の結果が返るまでモーダルは閉じない（保存結果の effect）
+          onPublish={() => {
+            // 公開版の無いガイドを公開として保存する。保存の結果が返るまで確認は閉じない（保存結果の effect）
+            const v: GuideSettingsValues = { title, summary, tags, coverImageUrl, isPublished: true, slug, allowAutoTranslation };
             applySettings(v);
             setSettingsPublishing(true);
             save("publish", v);
           }}
-          onApply={applySettings}
+          onEditSettings={() => {
+            setPublishOpen(false);
+            setSettingsOpen(true);
+          }}
         />
 
         <EmbedDialog

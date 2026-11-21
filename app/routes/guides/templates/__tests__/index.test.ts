@@ -265,3 +265,83 @@ describe("言語ごとの件数（languageCounts）", () => {
     expect((await callCounts("?lang=ja_jp")).templates.map((t) => t.title)).toEqual(["alpha"]);
   });
 });
+
+describe("言語（?lang=）の正規化", () => {
+  async function callLang(search: string) {
+    return (await callLoader(search)) as unknown as {
+      templates: Array<{ title: string }>;
+      lang: string;
+    };
+  }
+
+  it("大文字のコードも小文字へ正規化して絞り込む（偽の0件にならない）", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, { title: "sv", gameLanguage: "sv_se" });
+    await seedSearchCraftTemplate(db, pub.id, { title: "ja", gameLanguage: "ja_jp" });
+
+    const res = await callLang("?lang=SV_SE");
+
+    expect(res.lang).toBe("sv_se");
+    expect(res.templates.map((t) => t.title)).toEqual(["sv"]);
+  });
+
+  it("未知の値は絞り込まない（lang は空）", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, { title: "ja", gameLanguage: "ja_jp" });
+
+    const res = await callLang("?lang=foo");
+
+    expect(res.lang).toBe("");
+    expect(res.templates.map((t) => t.title)).toEqual(["ja"]);
+  });
+});
+
+describe("検索語（?q=）", () => {
+  async function callQ(search: string) {
+    return (await callLoader(search)) as unknown as {
+      templates: Array<{ title: string }>;
+      truncated: boolean;
+    };
+  }
+
+  it("101件目より古いテンプレートも、タイトルで検索すると見つかる（LIMIT より前に SQL で絞る）", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, {
+      title: "Ancient Needle",
+      createdAt: new Date("2020-01-01"),
+    });
+    for (let i = 0; i < 100; i++) {
+      await seedSearchCraftTemplate(db, pub.id, {
+        title: `filler-${i}`,
+        createdAt: new Date(2026, 0, 1, 0, i),
+      });
+    }
+
+    const res = await callQ("?q=needle");
+
+    expect(res.templates.map((t) => t.title)).toEqual(["Ancient Needle"]);
+    expect(res.truncated).toBe(false);
+  });
+
+  it("説明文も対象にする。LIKE のワイルドカード（% と _）は文字どおりに扱う", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, pub.id, { title: "plain", description: "100% fast" });
+    await seedSearchCraftTemplate(db, pub.id, { title: "other", description: "nothing" });
+
+    expect((await callQ("?q=fast")).templates.map((t) => t.title)).toEqual(["plain"]);
+    expect((await callQ("?q=%25")).templates.map((t) => t.title)).toEqual(["plain"]);
+    expect((await callQ("?q=_")).templates).toEqual([]);
+  });
+
+  it("100件を超えるときは100件だけ返して truncated を立てる", async () => {
+    const pub = await seedUser(db, { slug: "pub", profileVisibility: "public" });
+    for (let i = 0; i < 101; i++) {
+      await seedSearchCraftTemplate(db, pub.id, { title: `t-${i}`, createdAt: new Date(2026, 0, 1, 0, i) });
+    }
+
+    const res = await callQ("");
+
+    expect(res.templates).toHaveLength(100);
+    expect(res.truncated).toBe(true);
+  });
+});

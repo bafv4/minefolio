@@ -55,17 +55,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);
 
+  // クライアントへ渡すのは一覧で使う列だけ（行をそのまま返すと、本文・下書き本文や
+  // ユーザーの個人情報の列まで HTML と hydration に載る）。user は id（クエリ用）と公開 URL 用の slug だけ
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
+    columns: { id: true, slug: true },
   });
   if (!user) return redirect("/onboarding");
 
   const userGuides = await db.query.guides.findMany({
     where: eq(guides.authorId, user.id),
+    columns: {
+      id: true,
+      slug: true,
+      title: true,
+      isPublished: true,
+      isPinned: true,
+      tags: true,
+      viewCount: true,
+      updatedAt: true,
+      draftUpdatedAt: true,
+    },
     orderBy: [desc(guides.updatedAt)],
   });
 
-  return { guides: userGuides, user };
+  return { guides: userGuides, user: { slug: user.slug } };
 }
 
 export async function action({ request }: ActionFunctionArgs) {

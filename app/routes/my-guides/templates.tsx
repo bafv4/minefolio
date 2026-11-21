@@ -176,7 +176,7 @@ export default function MyTemplatesPage() {
       {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
           先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
       {isTabSwitching ? (
-        <TabContentSkeleton variant="list" />
+        <TabContentSkeleton variant="templateList" />
       ) : (
       <>
       {/* タイトル・説明・作成ボタンはタブの内側（コンテンツ側）に置く */}
