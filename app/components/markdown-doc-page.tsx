@@ -144,7 +144,7 @@ export function MarkdownDocPage({
     <div className="space-y-6 w-full max-w-4xl mx-auto">
       {backLink && (
         <div>
-          <Button variant="ghost" size="sm" asChild className="-ml-2">
+          <Button variant="ghost" size="sm" asChild className="-ml-2 min-h-11 sm:min-h-8">
             <Link to={backLink.to}>
               <ArrowLeft className="h-4 w-4 mr-1" />
               {backLink.label}

@@ -15,12 +15,6 @@ import { createFeedbackIssue } from "@/lib/github.server";
 import { cn } from "@/lib/utils";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -248,9 +242,8 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
         // 欄のエラーは欄の下に出し、その欄へフォーカスを戻す（トーストは出さない）
         setFieldErrors((prev) => ({ ...prev, [field]: data.error }));
         (field === "category" ? categoryRef : field === "subject" ? subjectRef : messageRef).current?.focus();
-      } else {
-        toast.error(data.error);
       }
+      // 欄に結ばないエラー（送信の失敗など）はフォームの帯だけに出す（トーストと二重にしない）
     }
   }, [fetcher.data]);
 
@@ -273,8 +266,8 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
   if (sent) {
     return (
       <div className="max-w-2xl mx-auto w-full">
-        <Card>
-          <CardContent>
+        <div>
+          <div>
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <CheckCircle2 className="h-16 w-16 text-success mb-4" aria-hidden />
               <h1 ref={sentHeadingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">
@@ -288,7 +281,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                   href={issueUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mb-6 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  className="mb-6 inline-flex min-h-11 items-center gap-1.5 text-sm text-primary underline underline-offset-2 hover:text-primary/80 sm:min-h-6"
                 >
                   <ExternalLink className="h-4 w-4" />
                   {t("feedback.viewIssue")}
@@ -298,30 +291,30 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                 {t("feedback.sendAnother")}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-2xl mx-auto w-full">
-      <Card>
-        <CardHeader>
-          {/* ページの h1。見た目は CardTitle と同じ */}
-          <h1 data-slot="card-title" className="flex items-center gap-2 text-2xl leading-snug font-bold">
+      {/* カードにしない（ui.md 4 章。欄区切り）。見出し部とフォームを罫線で分ける */}
+      <div className="space-y-7">
+        <header className="space-y-2">
+          <h1 className="flex items-center gap-2 text-2xl leading-snug font-bold">
             <MessageSquare className="h-5 w-5" aria-hidden />
             {t("feedback.pageTitle")}
           </h1>
-          <CardDescription>
+          <p className="text-sm text-muted-foreground">
             {t("feedback.pageDescription")}
-          </CardDescription>
+          </p>
           {/* 送った内容の行き先（privacy.md「2. 4.」「4.」の Resend の行・terms.md「12.」に書いてあることだけ） */}
-          <CardDescription>
+          <p className="text-sm text-muted-foreground">
             {t("feedback.deliveryNote")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </header>
+        <div className="border-t border-foreground/15 pt-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="category">{t("feedback.category")}</Label>
@@ -335,6 +328,7 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
                 <SelectTrigger
                   ref={categoryRef}
                   id="category"
+                  className="w-full"
                   aria-required
                   aria-invalid={fieldErrors.category ? true : undefined}
                   aria-describedby={fieldErrors.category ? "category-error" : undefined}
@@ -451,8 +445,8 @@ export default function FeedbackPage({ loaderData }: Route.ComponentProps) {
               )}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

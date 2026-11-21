@@ -201,7 +201,7 @@ export default function ExportPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-0">
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 min-h-11 sm:min-h-8">
           <Link to="/developers">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("developers.heading")}
@@ -210,7 +210,7 @@ export default function ExportPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Download className="h-6 w-6" />
+        <Download className="h-6 w-6" aria-hidden />
         <h1 className="text-2xl font-bold">{t("developers.exportTitle")}</h1>
       </div>
 

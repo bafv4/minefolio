@@ -1,4 +1,4 @@
-import { isRouteErrorResponse, Link } from "react-router";
+import { isRouteErrorResponse, Link, useLocation } from "react-router";
 import { buttonVariants } from "@/components/ui/button";
 import { useT } from "@/hooks/use-locale";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,29 @@ function ErrorLink({ to, plain, className, children }: { to: string; plain: bool
     </a>
   ) : (
     <Link to={to} className={className}>
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * 走者の 404（/player/:slug）なら、打ち間違いを1手で直せるよう slug を入れた検索（/browse?q=）を返す。
+ * それ以外は /browse。useLocation を使うので、ルーターの中でだけ描く（root の最後の砦では使わない）
+ */
+function browseHrefForMissingPlayer(pathname: string): string {
+  const match = /^\/player\/([^/]+)/.exec(pathname);
+  if (!match) return "/browse";
+  try {
+    return `/browse?q=${encodeURIComponent(decodeURIComponent(match[1]))}`;
+  } catch {
+    return "/browse";
+  }
+}
+
+function SearchBrowseLink({ className, children }: { className: string; children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  return (
+    <Link to={browseHrefForMissingPlayer(pathname)} className={className}>
       {children}
     </Link>
   );
@@ -75,9 +98,15 @@ export function ErrorView({ error, plainLinks = false }: { error: unknown; plain
         </ErrorLink>
         {isNotFound && (
           <>
-            <ErrorLink to="/browse" plain={plainLinks} className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
-              {t("nav.browse")}
-            </ErrorLink>
+            {plainLinks ? (
+              <ErrorLink to="/browse" plain className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
+                {t("nav.browse")}
+              </ErrorLink>
+            ) : (
+              <SearchBrowseLink className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
+                {t("nav.browse")}
+              </SearchBrowseLink>
+            )}
             <ErrorLink to="/guides" plain={plainLinks} className={cn(buttonVariants({ variant: "outline" }), "min-h-11 sm:min-h-9")}>
               {t("nav.guides")}
             </ErrorLink>

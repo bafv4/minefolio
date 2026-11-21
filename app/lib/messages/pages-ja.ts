@@ -1716,6 +1716,9 @@ export const PAGES_JA = {
     returnToGeneric: "ログインすると、元のページに戻ります。",
     /** /me/* へ戻るときのページ名 */
     returnToSettings: "プロフィールの設定",
+    /** フィードバックから来たときの、ログインせずに伝える手段 */
+    feedbackAlt: "ログインせずに伝えたいときは、",
+    feedbackAltLink: "GitHub の Issues へ（外部サイト）",
     /** Discord から受け取る情報（privacy.md「1. (1)」と auth.ts の scope に合わせる） */
     /** Discord の認証が失敗・取り消しになって /login へ戻ったとき（理由の文字列は出さない） */
     authFailed: "ログインできませんでした。もう一度お試しください。",

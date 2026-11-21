@@ -162,6 +162,20 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
               </Link>
             </Button>
           )}
+          {/* ログインしたくない人の逃げ道（フィードバックから来たときだけ）。外部リンクは本文中なので下線 */}
+          {returnTo && returnToPageKey(returnTo) === "nav.feedback" && (
+            <p className="text-xs text-muted-foreground">
+              {t("login.feedbackAlt")}{" "}
+              <a
+                href="https://github.com/bafv4/minefolio/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center text-primary underline underline-offset-2 hover:text-primary/80 sm:min-h-6"
+              >
+                {t("login.feedbackAltLink")}
+              </a>
+            </p>
+          )}
           {/* Discord から受け取る情報（app/content/privacy.md「1. (1)」と auth.ts の scope: identify・email に合わせる） */}
           <div className="space-y-2 border-t border-border/60 pt-4 text-xs text-muted-foreground">
             <p>{t("login.discordDataNote")}</p>

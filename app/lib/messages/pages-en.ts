@@ -673,6 +673,8 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     returnToNamed: "After logging in, you'll return to {page}.",
     returnToGeneric: "After logging in, you'll return to the page you were on.",
     returnToSettings: "Profile settings",
+    feedbackAlt: "If you'd rather not log in, you can also reach us on",
+    feedbackAltLink: "GitHub Issues (external site)",
     authFailed: "Could not sign you in. Please try again.",
     discordDataNote: "We receive your Discord ID, username, avatar, and email address from Discord. Your email address is never shown on the site and is used only for logging in.",
   },

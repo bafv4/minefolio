@@ -56,7 +56,7 @@ export default function DevelopersHubPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Code className="h-6 w-6" />
+          <Code className="h-6 w-6" aria-hidden />
           {t("developers.heading")}
         </h1>
         <p className="text-muted-foreground">
@@ -98,7 +98,7 @@ export default function DevelopersHubPage() {
       <PageSection id="developers-related" title={t("developers.relatedLinks")}>
         <p className="text-sm text-muted-foreground">{t("developers.relatedLinksDescription")}</p>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-h-11 sm:min-h-9">
             <a
               href="https://github.com/bafv4/minefolio"
               target="_blank"
@@ -108,7 +108,7 @@ export default function DevelopersHubPage() {
               {t("developers.githubRepository")}
             </a>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-h-11 sm:min-h-9">
             <a
               href="https://github.com/bafv4/minefolio/issues"
               target="_blank"
@@ -118,7 +118,7 @@ export default function DevelopersHubPage() {
               Issues
             </a>
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="min-h-11 sm:min-h-9">
             <Link to="/feedback">
               <MessageSquare className="mr-2 h-4 w-4" />
               {t("nav.feedback")}
