@@ -825,17 +825,17 @@ export const PAGES_JA = {
     description: "RTA走者の操作設定・キー配置を一覧で確認できます。",
     countSuffix: "走者",
     columnRunner: "走者",
-    emptyFiltered: "フィルタ条件に一致する走者がいません",
+    emptyFiltered: "絞り込み条件に一致する走者がいません",
     movementTab: "移動",
     inventoryTab: "インベントリ",
     combatUiTab: "戦闘・UI",
     remapsTab: "リマップ",
     customActionsTab: "カスタムアクション",
     mouseTab: "マウス",
-    numericFilter: "数値フィルタ",
+    numericFilter: "数値の絞り込み",
     inGameSensitivityRange: "ゲーム内感度 (%)",
     turnDistanceRange: "振り向き (cm/180°)",
-    clearFilter: "フィルタをクリア",
+    clearFilter: "絞り込みをクリア",
     customMultiplier: "カスタム係数",
     sensitivityOutOfRange:
       "ゲーム内感度が有効範囲（0〜200%）外のため、振り向きは計算されず、ソートでは未設定として扱われます。統計の集計からも除外されます",
@@ -849,14 +849,14 @@ export const PAGES_JA = {
     reasonNoWindowsSpeed: "Windows ポインター速度が未設定です",
     reasonUnknownWindowsMultiplier:
       "Windows ポインター速度の係数が不明です",
-    /** フィルタの感度レンジに常時出すヘルパーテキスト */
+    /** 絞り込みの感度レンジに常時出すヘルパーテキスト */
     sensitivityRangeHint: "有効範囲: 0〜200%",
     countTabText: "このタブ {count}人 / 全{total}人",
     usersOnTabNote: "指定した{specified}人のうち、このタブに設定のある{shown}人を表示しています",
     countText: "{count}人の{suffix}",
     hotbarColumn: "ホットバー",
     noPlayers: "該当する走者がいません",
-    filter: "フィルタ",
+    filter: "絞り込み",
     filterDescription: "走者の指定・操作とキー・数値範囲で、表示する走者を絞り込みます",
     apply: "適用",
     userFilter: "走者で絞り込み",
@@ -885,17 +885,17 @@ export const PAGES_JA = {
     columnSensShort: "感度",
     columnTurnShort: "振り向き",
     /** 0 件の説明（EmptyState） */
-    emptyFilteredHint: "フィルタを解除するか、条件を変えてみてください。",
+    emptyFilteredHint: "絞り込みを解除するか、条件を変えてみてください。",
     emptyHint: "この表に載せる設定を登録した走者がまだいません。",
     /** 絞り込み後の走者は居るが、このタブのデータを持つ人が居ないとき */
     emptyNoTabData: "このタブの設定を登録している走者はいません",
-    emptyNoTabDataHint: "絞り込んだ走者の中に、このタブの設定を登録している人がいません。ほかのタブを見るか、フィルタを解除してください。",
+    emptyNoTabDataHint: "絞り込んだ走者の中に、このタブの設定を登録している人がいません。ほかのタブを見るか、絞り込みを解除してください。",
     /** ビジュアル表示の副題 */
     visualDescription: "RTA走者のキー配置を、走者ごとにキーボードの図で見られます。",
     legendRemapped: "リマップ済み",
     legendEmpty: "空きキー",
     visualCompareLink: "2人の配置を見比べる（比較）",
-    /** フィルタの数値欄が有効範囲の外のとき（欄の下に出す） */
+    /** 絞り込みの数値欄が有効範囲の外のとき（欄の下に出す） */
     rangeErrorBetween: "{min}〜{max}の値を入力してください",
     rangeErrorMin: "{min}以上の値を入力してください",
     /** フィルタ: 範囲チップ・数値欄 */
@@ -906,7 +906,7 @@ export const PAGES_JA = {
     rangeMaxOf: "{label}の最大",
     /** 表のアクセシブルネーム（タブ名と組にして使う） */
     tableLabel: "操作設定の表: {tab}",
-    /** フィルター: 操作＝キーの絞り込み（例: ダッシュ = 左Ctrl）。チップは「{action} = {key}」 */
+    /** 絞り込み: 操作＝キーの絞り込み（例: ダッシュ = 左Ctrl）。チップは「{action} = {key}」 */
     bindFilter: "操作とキーで絞り込み",
     bindFilterHint: "選んだ操作に、選んだキーを割り当てている走者だけを表示します。複数の条件はすべて満たす走者が対象です。",
     bindFilterAction: "操作",
@@ -939,7 +939,7 @@ export const PAGES_JA = {
     /** 列幅のリサイズ取っ手 */
     resizeColumn: "列幅（左右キーで変更、Enter で既定に戻す）",
     resizeColumnReset: "ダブルクリックで既定の幅に戻す",
-    /** 数値フィルタの注記 */
+    /** 数値の絞り込みの注記 */
     numericFilterNote:
       "数値で絞ると、マウス設定がある走者に絞られます（キー配置のタブにも効きます）。",
   },
@@ -2217,7 +2217,7 @@ export const PAGES_JA = {
     addLoopAria: "{timing} にLoopを追加",
     deleteEntryAria: "このアイテムを削除",
     deleteLoopAria: "Loop {index} を削除",
-    emptyBoardTitle: "まだサーチクラフトがありません",
+    emptyBoardTitle: "サーチクラフトがまだありません",
     emptyBoardDescription: "最初のアイテムを追加すると、区間ごとに並べて編集できます。1件以上あるとテンプレートを作成できます。",
     addFirstEntry: "最初のアイテムを追加",
     listTitle: "区間ごとのサーチクラフト",
@@ -2300,7 +2300,7 @@ export const PAGES_JA = {
     deletePresetTitle: "プリセットを削除",
     deletePresetDescription: "「{name}」を削除しますか？この操作は取り消せません。",
     delete: "削除",
-    emptyTitle: "まだプリセットがありません",
+    emptyTitle: "プリセットがまだありません",
     emptyDescription: "「新規プリセット」から、最初のプリセットを作成しましょう",
     historyTitle: "変更履歴",
     historyDescription: "設定の変更履歴（最新20件）",
@@ -3178,7 +3178,7 @@ export const PAGES_JA = {
     emptyCraftTitle: "サーチクラフトはまだありません",
     emptyCraftDescription: "アイテムを追加すると、区間ごとに並べて編集できます。",
     craftSectionDescription: "アイテムとサーチ文字列を編集します。現在のリマップ設定で実際に押すキーがプレビュー表示されます",
-    saveHintLoggedIn: "この設定を実際に使うには、設定ページで保存してください:",
+    saveHintLoggedIn: "保存したプリセットは、設定ページでも編集できます:",
     goToKeybindings: "キー配置・リマップ設定",
     goToSearchCraft: "サーチクラフト設定",
     saveHintLoggedOut: "設定を保存するにはログインが必要です。",

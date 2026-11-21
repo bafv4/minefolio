@@ -3121,7 +3121,7 @@ export const PAGES_EN: PartialMessages<typeof PAGES_JA> = {
     craftSectionDescription:
       "Edit items and search strings. The keys you'd actually press with your current remaps are previewed",
     saveHintLoggedIn:
-      "To actually use this setup, save it from the settings pages:",
+      "A saved preset can also be edited from the settings pages:",
     goToKeybindings: "Controls & remaps",
     goToSearchCraft: "Search-craft settings",
     saveHintLoggedOut: "You need to log in to save your settings.",
