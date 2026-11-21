@@ -20,7 +20,7 @@ import type { Database } from "./db";
 type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /** この規約で書かれた行の開始時刻（これより前の行は判定情報が無いため公開影響なし扱い） */
-export const PUBLIC_CONFIG_HISTORY_SINCE = new Date("2026-11-14T00:00:00Z");
+export const PUBLIC_CONFIG_HISTORY_SINCE = new Date("2026-11-22T00:00:00Z");
 
 /**
  * config_history の行のうち、公開面に影響した変更だけを選ぶ SQL 条件。
