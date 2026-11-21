@@ -3,6 +3,9 @@
 // 不正な値は何も書かずにエラーを返すことを固定する。セッションはモックし、DB は実DBで検証する
 // （records.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -143,7 +146,7 @@ describe("action - 不正な値は何も書かずにエラーを返す", () => {
 
     const res = await callAction(validFields({ inputMethod: "gamepad" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await playstyleRows(user.id)).toHaveLength(0);
   });
 
@@ -170,7 +173,7 @@ describe("action - 書き込みは1トランザクション", () => {
 
     const res = await callAction(validFields());
 
-    expect(res).toEqual({ error: "プレイスタイルの保存に失敗しました" });
+    expect(res).toEqual({ error: "プレイスタイルを保存できませんでした。時間をおいて、もう一度お試しください。" });
     expect(await playstyleRows(user.id)).toHaveLength(0);
     errorSpy.mockRestore();
   });

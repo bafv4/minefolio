@@ -42,6 +42,7 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
 import { action, loader } from "../edit";
 import { saveProfileBatch } from "@/lib/profile-edit.server";
 import { createTranslator } from "@/lib/messages";
+const t = createTranslator("ja");
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -121,7 +122,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "2008-12" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -130,7 +131,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "2020-13" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -139,7 +140,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "9999-12" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -213,7 +214,7 @@ describe("action - ageGroup（年代）の検証", () => {
 
     const res = await callAction(baseFormData({ ageGroup: "teens" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await findAge(user.id)).toEqual({ ageGroup: "30s", ageGroupPublic: true });
   });
 });
@@ -225,7 +226,7 @@ describe("action - profileVisibility の検証", () => {
 
     const res = await callAction(baseFormData({ profileVisibility: "foo" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
   });
 });
@@ -262,7 +263,7 @@ describe("action - capeDisplay の検証", () => {
 
     const res = await callAction(baseFormData({ capeDisplay: "evil" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
   });
 
@@ -276,7 +277,7 @@ describe("action - capeDisplay の検証", () => {
 
     const res = await callAction(baseFormData({ capeDisplay: "" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await findCapeDisplay(user.id)).toBe("elytra");
   });
 
@@ -419,7 +420,7 @@ describe("action - defaultProfileTab の検証", () => {
 
     const res = await callAction(baseFormData({ defaultProfileTab: value, displayName: "Changed" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
   });
 });
@@ -446,7 +447,7 @@ describe("action - 真偽の欄（slimSkin / show*）の検証", () => {
 
       const res = await callAction(baseFormData({ [flag]: value, displayName: "Changed" }));
 
-      expect(res).toEqual({ error: "不正な選択肢です" });
+      expect(res).toEqual({ error: t("meEdit.invalidOption") });
       expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
     },
   );
@@ -558,7 +559,7 @@ describe("action - 未知の _action", () => {
 
     for (const unknown of ["import_legacy", "delete_account", "bogus", ""]) {
       const res = await callAction(baseFormData({ _action: unknown, displayName: "Changed" }));
-      expect(res).toEqual({ error: "不正な選択肢です" });
+      expect(res).toEqual({ error: t("meEdit.invalidOption") });
     }
     expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
   });

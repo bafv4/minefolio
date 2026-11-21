@@ -166,7 +166,7 @@ describe("action - 検証", () => {
     signInAs("discord-runner");
     const fd = saveForm();
     fd.set("records", "not json");
-    expect(await callAction(fd)).toEqual({ error: "無効な操作です" });
+    expect(await callAction(fd)).toEqual({ error: "不明な操作です。ページを再読み込みしてお試しください。" });
   });
 });
 
@@ -303,10 +303,10 @@ describe("action - saveRecords（カスタム記録のまとめて保存）", ()
         { id: othersRecord.id, delete: true },
       ]),
     );
-    expect(res).toEqual({ error: "無効な操作です" });
+    expect(res).toEqual({ error: "不明な操作です。ページを再読み込みしてお試しください。" });
 
     const res2 = await callAction(saveForm([{ category: "aa_any" }, { id: othersRecord.id, delete: true }]));
-    expect(res2).toEqual({ error: "無効な操作です" });
+    expect(res2).toEqual({ error: "不明な操作です。ページを再読み込みしてお試しください。" });
 
     expect(await recordCount(user.id)).toBe(0);
     const stillThere = await db.query.categoryRecords.findFirst({

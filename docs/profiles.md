@@ -904,10 +904,10 @@ OGP画像・`/compare`・`/browse` のカードは対象外。
 
 ### 年代（ageGroup）
 
-任意項目。`/me/edit` の基本情報（代名詞の近く）に Select と「走者画面に表示する」スイッチを置く。
+任意項目。`/me/edit` の基本情報（代名詞の近く）に Select と「プロフィールに表示する」スイッチを置く。
 
 - 選択肢は `AGE_GROUP_VALUES` の順（中学生 / 高校生 / 18〜21歳 / 二十代 / … / 六十代以上）。表示名は翻訳キー `meEdit.ageGroupLabels.*`（走者画面も同じキー）。先頭に「未設定」
-- スイッチは既定オフ。年代が未設定のときは無効（オンにできない）。説明文は「既定では非公開です。オンにすると、走者画面を見た人に表示されます。」
+- スイッチは既定オフ。年代が未設定のときは無効（オンにできない）。説明文は「既定では非公開です。オンにすると、プロフィールを見た人に表示されます。」
 - 保存: `profile-edit.server.ts` の `parseProfileFields` が `parseAgeGroup` で検証する。空文字は null（未設定）、未知の値は `meEdit.invalidOption` で拒否し、既存値を null で上書きしない。`ageGroup` が（保存後に）null になるときは `ageGroupPublic` も false に戻す。`ageGroup` の変更は内容の変化（`updatedAt` を進める）、`ageGroupPublic` だけの変更は表示設定なので進めない
 - 公開: 走者画面の loader は `publicAgeGroup()`（`age-group.ts`）を通し、`ageGroupPublic` が true のときだけ `player.ageGroup` を返す（非公開の値は本人を含めレスポンスに載せない）。身元帯のメタ情報（場所・代名詞と同じ並び、Cake アイコン）に表示する。本人が非公開にしているときはどこにも出さない
 - 他の公開経路（`/compare` は `applyMainPreset` で落とす。browse・by-slugs・OGP・お気に入りは列を明示選択しており含まない）へは出さない。新しく users を公開する経路を足すときは `ageGroup` を含めない

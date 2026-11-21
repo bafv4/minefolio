@@ -5,6 +5,9 @@
 //
 // セッション・翻訳スケジュール・targeted-refresh はモックし、DB は実DBで検証する（edit.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -319,7 +322,7 @@ describe("/me/account の保存の検証（不正な値は拒否し、ほかの�
 
     const res = (await callAccount({ ...ACCOUNT_FORM, defaultProfileTab: value })) as { error?: string };
 
-    expect(res.error).toBe("不正な選択肢です");
+    expect(res.error).toBe(t("meEdit.invalidOption"));
     // 同じ保存に含まれる有効な変更（公開範囲・表示設定）も書かれない
     expect(await userRow(before.id)).toEqual(before);
   });
@@ -344,7 +347,7 @@ describe("/me/account の保存の検証（不正な値は拒否し、ほかの�
         const res = (await callAccount({ ...ACCOUNT_FORM, profileVisibility: "private", [flag]: value })) as {
           error?: string;
         };
-        expect(res.error).toBe("不正な選択肢です");
+        expect(res.error).toBe(t("meEdit.invalidOption"));
       }
       expect(await userRow(before.id)).toEqual(before);
     },

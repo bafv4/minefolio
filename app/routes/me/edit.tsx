@@ -1416,7 +1416,7 @@ export default function EditProfilePage() {
                             onClick={handleBedrockRemove}
                             className={buttonVariants({ variant: "destructive" })}
                           >
-                            {t("meEdit.delete")}
+                            {t("meEdit.removeBedrockMcidAction")}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -1876,7 +1876,7 @@ export default function EditProfilePage() {
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={handleOpenCreate} disabled={isSubmitting}>
                     <Plus className="mr-2 h-4 w-4" />
-                    {t("meEdit.add")}
+                    {t("meEdit.addLink")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -2009,7 +2009,7 @@ export default function EditProfilePage() {
                     disabled={isSubmitting || draft.videos.length >= MAX_PROFILE_VIDEOS}
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    {t("meEdit.add")}
+                    {t("meEdit.videoAdd")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>

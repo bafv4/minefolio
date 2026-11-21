@@ -983,7 +983,7 @@ export default function ComparePage() {
               {/* 件数はキー配置の表だけを数える（デバイス・設定の表は含めない）ので、対象を明示する */}
               <p className="text-xs font-medium text-muted-foreground">
                 {t("compare.keybindingComparison")}
-                {stats.total > 0 && ` ・ ${t("compare.matchRate", { rate: Math.round((stats.same / stats.total) * 100) })}`}
+                {stats.total > 0 && ` · ${t("compare.matchRate", { rate: Math.round((stats.same / stats.total) * 100) })}`}
               </p>
               <p className="text-sm text-muted-foreground">
                 <span className="text-xl font-bold tabular-nums text-foreground">{stats.same}</span> {t("compare.same")}
@@ -1136,7 +1136,7 @@ function SimilarPlayersSection({
           {t("compare.similarTitle")}
         </CardTitle>
         <CardDescription>
-          {getLocalizedDisplayName(targetPlayer, locale) + t("compare.similarSuffix")}
+          {t("compare.similarDescription", { name: getLocalizedDisplayName(targetPlayer, locale) })}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">

@@ -72,6 +72,7 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
 
 import { MojangError } from "@/lib/mojang";
 import { createTranslator } from "@/lib/messages";
+const t = createTranslator("ja");
 import { action, loader } from "../onboarding";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
@@ -514,7 +515,7 @@ describe("action - save_visibility", () => {
 
     const res = await callAction(makeVisibilityFormData({ profileVisibility: "foo" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     const updated = await findUserByDiscordId("discord-runner");
     expect(updated?.onboardingCompleted).toBe(false);
     expect(updated?.profileVisibility).toBe("private");
