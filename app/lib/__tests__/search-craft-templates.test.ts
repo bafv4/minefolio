@@ -418,7 +418,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     const result = parseEditorSubmission(t,
       buildForm({ title: "a", crafts: JSON.stringify([null]), remaps: "[]" }),
     );
-    expect(result).toEqual({ error: "テンプレートのデータが不正です" });
+    expect(result).toEqual({ error: t("templates.invalidTemplateData") });
   });
 
   it("remaps=[null] はその行だけ無視されて成功する", () => {

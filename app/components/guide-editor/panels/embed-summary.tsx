@@ -133,7 +133,7 @@ export function EmbedSummary({
       s.total === 0
         ? null
         : t("guideEditor.embedSummarySearchCraft", {
-            groups: s.groups.map((g) => `${timingShortLabel(t, g.timing)} ${g.count}`).join("・"),
+            groups: s.groups.map((g) => `${timingShortLabel(t, g.timing)} ${g.count}`).join(t("common.listSeparator")),
             count: s.total,
           });
   } else {

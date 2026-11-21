@@ -109,7 +109,7 @@ export function SearchCraftTemplateEmbedNodeView({ node, editor, selected, delet
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>
               {meta.isOwn ? t("guideEditor.embedTemplateMine") : meta.authorName}
-              {"・"}
+              {t("common.listSeparator")}
               {t("guideEditor.embedTemplateCraftCount", { count: meta.craftCount })}
             </span>
             {!meta.isPublished && (

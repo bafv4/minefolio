@@ -22,7 +22,7 @@
 | publishedAt | timestamp (nullable) | **初めて公開した日時**（`publishedAt ?? now` で初回の公開時にだけ入る。非公開に戻して再公開しても変えない）。公開一覧の新着順の基準。未公開のまま保存した行は null |
 | draftTitle / draftDescription / draftGameLanguage / draftCraftsData / draftRemapsData / draftLoopsData | text (nullable) | **下書き**（公開中のテンプレートの「下書き保存」）。公開版の対応する列と同じ形式 |
 | draftUpdatedAt | timestamp (nullable) | 下書きの保存日時。**下書きの有無はこの列が null でないかだけで判定する**（NULL 可の下書き列は「空にした」を表すので、`??` で公開版へ落とさない） |
-| gameLanguage | text (nullable) | サーチ文字列が想定するゲーム内言語コード（例: `ja_jp`、最大32文字。一覧・詳細・管理画面にバッジ表示） |
+| gameLanguage | text (nullable) | サーチ文字列が想定するゲーム言語コード（例: `ja_jp`、最大32文字。一覧・詳細・管理画面にバッジ表示） |
 | loopsData | text (JSON, nullable) | 繋ぎ方（Loop）のスナップショット（`PresetSearchCraftLoopData[]` と同一形式。`TemplateLoop[]` として読み書きする、下記） |
 
 - インデックス: `idx_search_craft_templates_user_id`、`idx_search_craft_templates_published_created`
@@ -78,19 +78,19 @@ type TemplateLoop = {
 
 - `/my-guides/templates`（`app/routes/my-guides/templates.tsx`）で管理する。ガイド管理（`/my-guides`）と同じ「自分の公開コンテンツ」エリアに置かれ、両ページ間は `MyContentTabs`（`app/components/content-tabs.tsx`）のタブで行き来する。管理ページの action は `delete` のみ（公開・非公開の切替は編集画面の保存に一本化した。`toggle-publish` は不明な操作として拒否する。いいねは `/api/likes` が担当）。一覧の行は、公開状態のピルに加え、公開中で下書きがあれば「未公開の変更あり」のピル、非公開なら「編集画面で公開できる」旨の補足を出す。並びは更新日時（`updatedAt`）の新しい順で、時刻は「{time}に更新」（`meGuides.updatedAgo`）。行はマイガイドの行と同じ作りで、行全体（タイトルのリンクの `::after`）が**編集**へ、公開ページへは右の Globe ボタン（公開中のときだけ・新しいタブ）、削除と並べて 44px 四方（sm 以上 32px。`ROW_ACTION_CLASS`）。
 - **作成 `/my-guides/templates/new`**（`app/routes/my-guides/template-new.tsx`）・**編集 `/my-guides/templates/:templateId/edit`**（`app/routes/my-guides/template-edit.tsx`）: テンプレートエディタでテンプレートの内容そのものを直接編集する。**プリセットや現在の設定を経由せずゼロから作成できる**。
-  - 構成: 基本情報（テンプレート名・説明・ゲーム内言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同じ部品**で、`craftFirst` によりサーチクラフト編集を先頭に置く（サーチクラフト編集 → バーチャルキーボード → キーリマップ編集。Playground はバーチャルキーボード → キーリマップ → サーチクラフト。タイピングテストはバーチャルキーボード欄のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
+  - 構成: 基本情報（テンプレート名・説明・ゲーム言語 = `GAME_LANGUAGE_OPTIONS` の Combobox、任意）+ **`SearchCraftWorkbench`**（`app/components/search-craft-workbench.tsx`）。ワークベンチは **Playground と同じ部品**で、`craftFirst` によりサーチクラフト編集を先頭に置く（サーチクラフト編集 → バーチャルキーボード → キーリマップ編集。Playground はバーチャルキーボード → キーリマップ → サーチクラフト。タイピングテストはバーチャルキーボード欄のボタンから開くモーダル。詳細は後述「Playground > セクション構成」参照）。
   - サーチクラフト＋繋ぎ方（Loop）編集部は **`SearchCraftTimingBoard`**（`app/components/search-craft-editor.tsx`）によるタイミングブロック型UI（「指定なし」+ 6種のタイミング、計7ブロックを常時表示。timing の変更はブロック間D&D）。クラフト行はアイテムチップ + サーチ文字列 + 「Shiftを押しながら」チェックボックス + コメント常時表示。`remaps` prop を渡すと**入力キーのライブプレビュー**（`ActualKeyBadges`）が各行に表示される（ワークベンチは編集中のリマップ、`/me/search-craft` はユーザーの現在のリマップを使用）。withShift が有効な行のプレビューは Shift 押下前提の逆引きになり、先頭に「⇧ Shift」バッジが付く。詳細は [`docs/items-searchcraft.md`](items-searchcraft.md) の「編集UI（タイミングブロック型）」を参照。
   - 「現在の設定を読み込む」ボタンでライブテーブル（`search_crafts` / `key_remaps`）の内容を編集中の内容に読み込める（確認ダイアログ付き）。
   - 送信は `parseEditorSubmission()` でサーバー側検証（タイトル必須・各クラフトにアイテム1件以上とサーチ文字列必須・上限チェック・未入力リマップ行と重複 sourceKey の除外）。検証は下書き保存と公開（保存）の両方に掛ける。
-  - **作成**: 作成すると**非公開**（`isPublished: false`・`publishedAt: null`）。確定ボタンは「作成」で、成功すると編集画面（`/my-guides/templates/:id/edit`）へ移る（ガイドの新規作成と同じ）。公開は編集画面の保存で行う。確定ボタンの下に「作成後、編集画面で公開できます」の補足（`submitHint`）を出す。
+  - **作成**: 作成すると**非公開**（`isPublished: false`・`publishedAt: null`）。確定ボタンは「テンプレートを作成」で、成功すると編集画面（`/my-guides/templates/:id/edit`）へ移る（ガイドの新規作成と同じ）。公開は編集画面の保存で行う。確定ボタンの下に「作成後、編集画面で公開できます」の補足（`submitHint`）を出す。
   - **保存の経路（ガイドと同じ。公開版と下書きを分ける）**: 編集画面の action は `_action` の allowlist（`draft` / `publish` / `discard`。未知の値は拒否）で判定する。他人のテンプレートへの操作は拒否する。
     - `draft`（**公開中のテンプレートだけ**。非公開に送ると拒否）: 下書き列だけを書き `draftUpdatedAt` を更新する。公開版の列・`isPublished`・`updatedAt`・`publishedAt` は変えない。成功は `{ success: true, action: "draft" }`（編集を続けるので遷移しない）。
     - `publish`: 送信された値を公開版へ書き、`isPublished`（フォームの公開スイッチ `isPublished=true|false`）と `updatedAt` を更新し、初回の公開なら `publishedAt` を入れ、下書き列をすべて null にする。未公開のままの「保存」もこの経路。成功は `{ success: true, action: "publish" }`（保存後は編集画面にとどまる。ガイドと同じ）。
     - `discard`: 下書き列をすべて null にする（「公開版に戻す」。確認ダイアログつき）。成功は `{ success: true, action: "discard" }`。
   - **編集画面の表示**: loader は下書きがあれば下書きの内容、なければ公開版を返し、`isPublished`・`hasDraft`・`draftUpdatedAt` も返す（フォームは `key` に `draftUpdatedAt` を含め、破棄・保存の後に中身が入れ替わる）。操作バーに「公開する」スイッチを置き、未保存の判定に含める。送信ボタンは、公開中は「下書き保存」（outline）＋主ボタン（スイッチがオンなら「更新を公開」、オフなら「非公開にする」）、未公開は主ボタン1つ（スイッチがオフなら「保存」、オンなら「公開」。`getPublishAction` / `hasDraftSave`＝ガイドと共有）。下書きがあるときは上部に `NoticeBanner` で「未公開の変更があります」と「公開版に戻す」を出す。
   - **公開側は下書き列を読まない**: 詳細 loader・「反映」action（`guides/templates/view.tsx`）と `/playground?template=` は `columns` で下書き列を除く。一覧・ガイド埋め込み・`api/guides/templates-search`・いいね・作者ページは列を明示して読むので下書き列は入らない。本人向けの下書きプレビューは無い。
-  - **離脱確認**: 名前・説明・ゲーム内言語・サーチクラフト・リマップ・Loop のいずれかが、開いたときの値（保存に成功した後は、その送信内容）と違う間は未保存として扱う。キーボード配列の表示切替は数えない。未保存のままアプリ内で遷移しようとすると確認ダイアログ（「編集を続ける」「保存せず離れる」）を出し、タブを閉じる・再読み込みではブラウザの警告を出す（`useUnsavedWarning` / `UnsavedChangesDialog`）。
-  - **保存後**: 編集画面（新規作成は作成後に編集画面）にとどまり、保存に成功したら未保存を解消する。公開版への保存のトーストには「一覧へ」のボタン（`/my-guides/templates`）を付ける。失敗したときは入力を残す。「公開版に戻す」の確定ボタンは destructive（取り消せない破棄）。
+  - **離脱確認**: 名前・説明・ゲーム言語・サーチクラフト・リマップ・Loop のいずれかが、開いたときの値（保存に成功した後は、その送信内容）と違う間は未保存として扱う。キーボード配列の表示切替は数えない。未保存のままアプリ内で遷移しようとすると確認ダイアログ（「編集を続ける」「保存せず離れる」）を出し、タブを閉じる・再読み込みではブラウザの警告を出す（`useUnsavedWarning` / `UnsavedChangesDialog`）。
+  - **保存後**: 編集画面（新規作成は作成後に編集画面）にとどまり、保存に成功したら未保存を解消する。公開版への保存のトーストには「マイテンプレートを開く」のボタン（`/my-guides/templates`）を付ける。失敗したときは入力を残す。「公開版に戻す」の確定ボタンは destructive（取り消せない破棄）。
   - **送信ボタン**: 上端の操作バーと文書の末尾の両方に同じボタンを置く（文書が長いので、上へ戻らずに送れるように）。
   - **検証エラー**: クライアントの検証（テンプレート名・サーチクラフト0件・アイテム未選択・サーチ文字列未入力・Loop のステップ不足・Loop の未選択）はトーストに加えて画面にも出す。テンプレート名は欄に `aria-invalid` と欄の下の文（`aria-describedby`）。サーチクラフト・Loop の誤りはワークベンチの中の個々の欄までは指せないので、ワークベンチの直前に文を出す。最初の誤り（文書順でテンプレート名が先）へフォーカスを移す。直すと消える
   - **見出しの段**: ページの h1 の下の欄名（基本情報・ワークベンチの3つの欄）は h2（ワークベンチは `sectionHeadingLevel="h2"`）。
@@ -99,11 +99,11 @@ type TemplateLoop = {
 
 ### 公開ページ
 
-- **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` **かつ著者が公開プロフィール（`profileVisibility = "public"`）** のテンプレートを最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム内言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
+- **一覧 `/guides/templates`**（`app/routes/guides/templates/index.tsx`）: `isPublished = true` **かつ著者が公開プロフィール（`profileVisibility = "public"`）** のテンプレートを最大100件、ガイド一覧のリスト表示（`GuideListView`）と同様の `divide-y` コンパクト行形式で表示。ゲーム言語は最重要メタ情報としてタイトル行の右側に大きめに表示する。認証不要。公開ガイド一覧（`/guides`）と `GuidesContentTabs` のタブで行き来する（ヘッダーナビ「ガイド」から到達）。
   - **並び替え**: `?sort=` で「新着順（既定、**初めて公開した日時** `publishedAt` の降順。防御として `coalesce(published_at, created_at)`）」と「いいね数順（総いいね数降順）」を切り替えられる（`ContentSortSelect`、`TEMPLATE_SORTS = ["new", "likes"]`）。`.limit(100)` より前に SQL の `ORDER BY` で並べる（メモリ上で並べ替えると「新しい100件をいいね数順に並べた」結果になるため）。同数時は公開日時 → `id` でタイブレークする。行の相対時刻も公開日時。詳細ページの「更新日時」は公開版の `updatedAt`。旧ラベル「人気順」（`?sort=popular`）は v1.13.0 で「いいね数順」（`likes`）に改名し、旧クエリ値は既定の新着順へフォールバックする（詳細は [`docs/likes.md`](./likes.md#並び替え)）
   - **いいね**: 各行にいいね数を表示し、ログイン中は行内のグッドボタンで直接いいねできる（自分のテンプレートは件数のみ）。詳細は `docs/likes.md`
-  - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム内言語（`?lang=`、SQLで完全一致）で絞り込める。並び順は hidden input で持ち越す。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。言語の選択肢は公開一覧にテンプレートがある言語だけを件数つきで出す。作成者（`?author=<slug>`）でも絞り込める（著者別のガイド一覧からの導線）。絞り込み結果が0件の場合は解除リンク付きの専用メッセージを表示（検索語があれば見出しに引用する）。詳細は [`docs/guides.md`](./guides.md) の「/guides — ガイド一覧」。
-- **詳細 `/guides/templates/:templateId`**（`app/routes/guides/templates/view.tsx`）: テンプレートの内容（リマップ・サーチクラフト一覧）を表示。ゲーム内言語はバッジではなくヘッダー部に大きく表示する（サーチ文字列の前提となる最重要情報のため）。
+  - **検索バー**: テンプレート名（`?q=`、部分一致・大文字小文字無視、メモリ上でフィルタ）とゲーム言語（`?lang=`、SQLで完全一致）で絞り込める。並び順は hidden input で持ち越す。ガイド一覧と同じ `Form method="get"` 方式で、**検索ボタン押下時にページが更新される**。言語はComboboxで選択（`__all` = 絞り込みなし、hidden input でGET送信）。言語の選択肢は公開一覧にテンプレートがある言語だけを件数つきで出す。作成者（`?author=<slug>`）でも絞り込める（著者別のガイド一覧からの導線）。絞り込み結果が0件の場合は解除リンク付きの専用メッセージを表示（検索語があれば見出しに引用する）。詳細は [`docs/guides.md`](./guides.md) の「/guides — ガイド一覧」。
+- **詳細 `/guides/templates/:templateId`**（`app/routes/guides/templates/view.tsx`）: テンプレートの内容（リマップ・サーチクラフト一覧）を表示。ゲーム言語はバッジではなくヘッダー部に大きく表示する（サーチ文字列の前提となる最重要情報のため）。
   - リマップ設定の欄: md 未満では、リマップを「元のキー → 先」の一覧（`/keybindings/visual` の `AssignmentAccordion` と同じ表記）で常に出し、キーボード（約 1120px）は「キーボードを表示」で開く補助にする。md 以上はキーボードを常に出す。リマップ0件のテンプレートでは、サーチクラフト欄の凡例に「リマップ済み」を出さない（`KeyBadgeLegend` の `showRemapped`）
   - 実入力キーはテンプレートに含まれるリマップを前提に `getActualKeyInfos()` で導出して表示する。withShift のエントリは `{ shiftHeld: true }` で導出し「⇧ Shift」バッジ付きで表示する（詳細は docs/items-searchcraft.md の「Shiftを押しながらクラフト」参照）。
   - 非公開テンプレートは作成者本人のみ閲覧可能（他者には404）。**著者のプロフィールが非公開（private）の場合も本人以外は404**（限定公開 unlisted はURL指定なら閲覧可）。
@@ -118,7 +118,7 @@ type TemplateLoop = {
 
 ダイアログで**反映先を選択**する:
 
-- **新しいプリセットとして保存（今の設定は変わりません）**（デフォルト。確定ボタンは「保存する」。既存プリセットへの反映は「反映する」。プリセット名の初期値はテンプレート名）
+- **新しいプリセットとして保存（現在の設定は変わりません）**（デフォルト。確定ボタンは「新しいプリセットとして保存」。既存プリセットへの反映は「テンプレートを反映」。プリセット名の初期値はテンプレート名）
   - **元となるプリセット**（任意）を選ぶと、そのプリセットの全設定データ（キーバインド・デバイス設定・アイテム配置等）をコピーした上でサーチクラフト（＋リマップ）を上書きする
   - 新規プリセットは**常に非アクティブ**で作成される（ライブ設定は変更されない）。使用するには編集中にする。反映に成功した直後の成功帯に「このプリセットを編集中にする」ボタンが出て、`/me/presets` の action（`intent=apply-preset`）へ `useFetcher` で直接 POST する（成功するとトーストと帯の文言が更新される。action が返す `presetId` を使う。編集中でない既存プリセットへ反映したときも同じ。編集中のプリセットへ反映したときは現在の設定がすでに変わっているので出さず、「自分のサーチクラフト設定を確認する」へのリンクを出す）
 - **既存のプリセットに反映**（反映先プリセットを選択）
@@ -274,7 +274,7 @@ type TemplateLoop = {
 | `app/components/search-craft-editor.tsx` | サーチクラフト＋繋ぎ方（Loop）のタイミングブロック型編集UI（`SearchCraftTimingBoard`。`/me/search-craft` とワークベンチで共通） |
 | `app/components/search-craft-loop-editor.tsx` | 繋ぎ方（Loop）行編集UI（`LoopEditorRow`。`SearchCraftTimingBoard` から再利用される） |
 | `app/components/search-craft-loop-view.tsx` | 繋ぎ方（Loop）表示UI（`SearchCraftLoopRow` / `SearchCraftLoopGroupSection` 等） |
-| `app/lib/game-languages.ts` | ゲーム内言語リスト（日本語名併記、例: `Svenska（スウェーデン語）`） |
+| `app/lib/game-languages.ts` | ゲーム言語リスト（日本語名併記、例: `Svenska（スウェーデン語）`） |
 | `app/components/content-tabs.tsx` | タブナビゲーション（汎用 `ContentTabs` + `MyContentTabs` / `GuidesContentTabs`） |
 | `app/routes/guides/templates/index.tsx` | 公開テンプレート一覧 |
 | `app/routes/guides/templates/view.tsx` | テンプレート詳細・適用action |

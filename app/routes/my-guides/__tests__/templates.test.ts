@@ -4,6 +4,9 @@
 // 唯一の防壁になっている。他人の templateId を渡しても行を変更・削除できないことを実DBで検証する
 // （app/routes/me/__tests__/edit.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -100,7 +103,7 @@ describe("action - 所有権チェック（他人のテンプレート）", () =
 
     const res = await callAction(actionFormData("toggle-publish", template.id));
 
-    expect(res).toEqual({ error: "不明な操作です" });
+    expect(res).toEqual({ error: t("meTemplates.unknownAction") });
     expect((await findTemplate(template.id))?.isPublished).toBe(true);
   });
 });

@@ -570,7 +570,7 @@ export default function TemplatesIndexPage() {
           action={
             <Button asChild variant="outline" size="sm" className="min-h-11 sm:min-h-9">
               {isLoggedIn ? (
-                <Link to="/my-guides/templates">{t("templates.emptyDescriptionLink")}</Link>
+                <Link to="/my-guides/templates/new">{t("templates.emptyDescriptionLink")}</Link>
               ) : (
                 <Link to={loginHref}>{t("templates.emptyLoginToCreate")}</Link>
               )}

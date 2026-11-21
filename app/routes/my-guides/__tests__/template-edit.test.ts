@@ -2,6 +2,9 @@
 // draft = 下書き列だけ書く、publish = 公開版へ反映して下書きを消す、discard = 下書きを消す。
 // 所有権チェックと「draft が公開列に触れない」ことを、実DBの列を1つずつ確かめて検証する。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -151,7 +154,7 @@ describe("action - _action の検証", () => {
 
     const res = await callAction(tpl.id, form("bogus"));
 
-    expect(res).toEqual({ error: "不明な操作です" });
+    expect(res).toEqual({ error: t("meTemplates.unknownAction") });
     expect(await findTemplate(tpl.id)).toEqual(tpl);
   });
 

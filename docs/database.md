@@ -794,7 +794,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `apply_count` | int | 既定 0 |
 | `created_at` | ts | |
 | `updated_at` | ts | |
-| `game_language` | text? | 想定するゲーム内言語（例: `ja_jp`） |
+| `game_language` | text? | 想定するゲーム言語（例: `ja_jp`） |
 | `loops_data` | json? | 繋ぎ方（Loop）のスナップショット。`config_presets.search_craft_loops_data` と同一形式（`craftSeq = craftIndex + 1` が恒等） |
 | `draft_title` | text? | 下書き。公開版の `title` に対応 |
 | `draft_description` | text? | 下書き。`description` に対応 |
