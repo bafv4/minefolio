@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { redirect, useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-edit";
 import { createDb } from "@/lib/db";
@@ -210,11 +210,19 @@ export default function TemplateEditPage() {
   const fetcher = useFetcher<typeof action>();
   const navigate = useNavigate();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
+  // フォームを作り直すのは「下書きを破棄して公開版に戻す」ときだけ。下書き保存・公開では作り直さない
+  // （保存中も入力できるので、作り直すと送信後の編集が消える。保存の基準はフォーム側が送信内容で更新する）
+  const [formGeneration, setFormGeneration] = useState(0);
 
   useEffect(() => {
     const data = fetcher.data;
     if (!data || data === prevDataRef.current) return;
     prevDataRef.current = data;
+
+    if ("success" in data && data.success && data.action === "discard") {
+      // fetcher は再検証のあとで idle に戻るので、この時点の loader の値は公開版
+      setFormGeneration((n) => n + 1);
+    }
 
     if ("success" in data && data.success) {
       const message =
@@ -255,7 +263,7 @@ export default function TemplateEditPage() {
       </div>
 
       <TemplateEditorForm
-        key={`${template.id}:${template.draftUpdatedAt ?? ""}`}
+        key={`${template.id}:${formGeneration}`}
         initial={{
           title: template.title,
           description: template.description,
