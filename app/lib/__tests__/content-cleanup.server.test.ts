@@ -105,7 +105,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   for (const key of ENV_KEYS) originalEnv[key] = process.env[key];
   process.env.TURSO_DATABASE_URL = SHARED_MEMORY_URL;
-  process.env.BLOB_READ_WRITE_TOKEN = "test-token";
+  process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_xxx_secret";
   db = await createTestDbAt(SHARED_MEMORY_URL);
   blobMocks.list.mockResolvedValue(emptyPage());
   blobMocks.del.mockResolvedValue(undefined);
@@ -180,7 +180,7 @@ describe("cleanupUserBlobs", () => {
   });
 
   it("customSkinUrl が正規 Blob URL なら保険として del() する", async () => {
-    const skinUrl = "https://xxx.public.blob.vercel-storage.com/skins/legacy/skin.png";
+    const skinUrl = "https://xxx.public.blob.vercel-storage.com/skins/u1/legacy/skin.png";
 
     await cleanupUserBlobs({ userId: "u1", customSkinUrl: skinUrl });
 
@@ -216,7 +216,7 @@ describe("cleanupUserBlobs", () => {
   });
 
   it("customCapeUrl が正規 Blob URL なら保険として del() する", async () => {
-    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/legacy/cape.png";
+    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/u1/legacy/cape.png";
 
     await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: capeUrl });
 
@@ -225,6 +225,16 @@ describe("cleanupUserBlobs", () => {
 
   it("customCapeUrl が正規 Blob URL でなければ保険 del() しない（不正な URL を del に渡さない）", async () => {
     await cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: "https://evil.example/cape.png" });
+
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("他人のパス・他ストアの customSkinUrl / customCapeUrl は保険 del() に渡さない", async () => {
+    await cleanupUserBlobs({
+      userId: "u1",
+      customSkinUrl: "https://xxx.public.blob.vercel-storage.com/skins/u2/skin.png",
+      customCapeUrl: "https://other.public.blob.vercel-storage.com/capes/u1/cape.png",
+    });
 
     expect(blobMocks.del).not.toHaveBeenCalled();
   });
@@ -238,7 +248,7 @@ describe("cleanupUserBlobs", () => {
 
   it("customCapeUrl の保険 del() が失敗しても throw しない", async () => {
     blobMocks.del.mockRejectedValue(new Error("blob not found"));
-    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/legacy/cape.png";
+    const capeUrl = "https://xxx.public.blob.vercel-storage.com/capes/u1/legacy/cape.png";
 
     await expect(
       cleanupUserBlobs({ userId: "u1", customSkinUrl: null, customCapeUrl: capeUrl })

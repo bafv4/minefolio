@@ -207,6 +207,31 @@ function EntrySelect({
   onChange: (craftId: string, variationIndex: number) => void;
 }) {
   const t = useT();
+  const selectedEntry = entries.find((e) => e.id === craftId);
+  const selectedVariation = selectedEntry?.variations[variationIndex];
+  const renderEntryLabel = (
+    entry: LoopEditorEntry,
+    variation: LoopEditorEntry["variations"][number],
+  ) => (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {/* 同じサーチ文字列で複数アイテムが出せるクラフトも、全アイコン+全アイテム名を
+          表示して識別できるようにする（最初の1件だけに省略しない） */}
+      {entry.items.length > 0 && (
+        <span className="flex shrink-0 items-center gap-0.5">
+          {entry.items.map((itemId, i) => (
+            <ItemIcon key={i} itemId={itemId} size={16} alt="" />
+          ))}
+        </span>
+      )}
+      <span className="truncate">
+        {entry.items.length > 0
+          ? entry.items.map((itemId) => formatItemName(itemId)).join(" / ")
+          : "—"}
+      </span>
+      {variation.str && <code className="text-xs text-muted-foreground">({variation.str})</code>}
+      {variation.withShift && <ShiftMark className="size-2.5 text-warning" />}
+    </span>
+  );
   return (
     // エントリ数が少ないうちは Select で十分。数十件規模に増えたら
     // 検索可能な @/components/ui/combobox.tsx への差替えを検討する
@@ -218,32 +243,16 @@ function EntrySelect({
       }}
     >
       <SelectTrigger className="h-8 min-w-0 flex-1">
-        <SelectValue placeholder={t("meSearchCraft.loopSelectEntryPlaceholder")} />
+        {/* SSR では Radix が項目から文言を写せず空になるため、選択中の中身を子で渡す */}
+        <SelectValue placeholder={t("meSearchCraft.loopSelectEntryPlaceholder")}>
+          {selectedEntry && selectedVariation ? renderEntryLabel(selectedEntry, selectedVariation) : null}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {entries.flatMap((entry) =>
           entry.variations.map((variation, idx) => (
             <SelectItem key={`${entry.id}:${idx}`} value={encodeSelection(entry.id, idx)}>
-              <span className="flex min-w-0 items-center gap-1.5">
-                {/* 同じサーチ文字列で複数アイテムが出せるクラフトも、全アイコン+全アイテム名を
-                    表示して識別できるようにする（最初の1件だけに省略しない） */}
-                {entry.items.length > 0 && (
-                  <span className="flex shrink-0 items-center gap-0.5">
-                    {entry.items.map((itemId, i) => (
-                      <ItemIcon key={i} itemId={itemId} size={16} />
-                    ))}
-                  </span>
-                )}
-                <span className="truncate">
-                  {entry.items.length > 0
-                    ? entry.items.map((itemId) => formatItemName(itemId)).join(" / ")
-                    : "—"}
-                </span>
-                {variation.str && (
-                  <code className="text-xs text-muted-foreground">({variation.str})</code>
-                )}
-                {variation.withShift && <ShiftMark className="size-2.5 text-warning" />}
-              </span>
+              {renderEntryLabel(entry, variation)}
             </SelectItem>
           )),
         )}
@@ -255,6 +264,17 @@ function EntrySelect({
 // ============================================
 // 遷移行（ステップ2以降）
 // ============================================
+
+/** 遷移の種類に対応する翻訳キー（SelectValue と SelectItem で共用） */
+function transitionLabelKey(type: LoopTransitionType) {
+  return type === "backspace"
+    ? "meSearchCraft.loopTransitionBackspace"
+    : type === "arrowLeft"
+      ? "meSearchCraft.loopTransitionArrowLeft"
+      : type === "selectAll"
+        ? "meSearchCraft.loopTransitionSelectAll"
+        : "meSearchCraft.loopTransitionHome";
+}
 
 function TransitionRow({
   prevResolved,
@@ -313,20 +333,14 @@ function TransitionRow({
         </Label>
         <Select value={transition.type} onValueChange={(v) => handleTypeChange(v as LoopTransitionType)}>
           <SelectTrigger className="h-8 w-full sm:w-64">
-            <SelectValue />
+            <SelectValue>
+              {t(transitionLabelKey(transition.type))}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {LOOP_TRANSITION_TYPES.map((type) => (
               <SelectItem key={type} value={type}>
-                {t(
-                  type === "backspace"
-                    ? "meSearchCraft.loopTransitionBackspace"
-                    : type === "arrowLeft"
-                      ? "meSearchCraft.loopTransitionArrowLeft"
-                      : type === "selectAll"
-                        ? "meSearchCraft.loopTransitionSelectAll"
-                        : "meSearchCraft.loopTransitionHome",
-                )}
+                {t(transitionLabelKey(type))}
               </SelectItem>
             ))}
           </SelectContent>
@@ -538,7 +552,8 @@ function LoopRowBodyInner<T extends SearchCraftLoopDraft>({
           value={loop.comment || ""}
           onChange={(e) => onUpdate(loop.id, { ...loop, comment: e.target.value || null })}
           placeholder={t("meSearchCraft.commentOptional")}
-          className="h-8 text-sm"
+          aria-label={t("meSearchCraft.commentOptional")}
+          className="h-8 max-sm:h-11 text-sm"
         />
       </div>
     </>
@@ -561,6 +576,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   keyboardLayout,
   onUpdate,
   onDelete,
+  deleteWithUndo = false,
 }: {
   loop: T;
   index: number;
@@ -570,6 +586,8 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
   keyboardLayout?: KeyboardLayout;
   onUpdate: (id: string, updated: T) => void;
   onDelete: (id: string) => void;
+  /** true なら確認ダイアログを出さず即削除する（呼び出し側が「元に戻す」を用意する。Playground 用） */
+  deleteWithUndo?: boolean;
 }) {
   const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -581,6 +599,7 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
     <div
       ref={setNodeRef}
       style={style}
+      data-loop-row=""
       className={cn(
         "py-3 space-y-3",
         isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
@@ -592,36 +611,64 @@ export function LoopEditorRow<T extends SearchCraftLoopDraft>({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meSearchCraft.dragHandle")}
-          className="flex items-center justify-center text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+          aria-label={`${t("meSearchCraft.dragHandle")} (${index + 1})`}
+          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground/60">
           {index + 1}
         </span>
 
+        {deleteWithUndo ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
+            data-loop-delete=""
+            className="ml-auto shrink-0 max-sm:size-11"
+            onClick={(e) => {
+              // 押した行は消えるので、フォーカスは先に次の Loop（無ければ区間の Loop 追加ボタン）へ移す
+              const row = e.currentTarget.closest("[data-loop-row]");
+              const next = row?.nextElementSibling?.matches("[data-loop-row]")
+                ? row.nextElementSibling.querySelector<HTMLElement>("[data-loop-delete]")
+                : null;
+              const add = row?.closest("[data-craft-block]")?.querySelector<HTMLElement>("[data-add-loop]");
+              (next ?? add)?.focus();
+              onDelete(loop.id);
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+          </Button>
+        ) : (
         <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm" className="ml-auto shrink-0">
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("meSearchCraft.deleteLoopDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => onDelete(loop.id)}>
-                {t("meSearchCraft.delete")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t("meSearchCraft.deleteLoopAria", { index: index + 1 })}
+                className="ml-auto shrink-0 max-sm:size-11"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("meSearchCraft.deleteLoopTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("meSearchCraft.deleteLoopDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(loop.id)}>
+                  {t("meSearchCraft.deleteLoopConfirm")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       <LoopRowBody

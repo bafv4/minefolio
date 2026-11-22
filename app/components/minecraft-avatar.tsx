@@ -9,6 +9,8 @@ interface MinecraftAvatarProps {
   size?: number;
   overlay?: boolean;
   className?: string;
+  /** 指定すると既定の alt の代わりに使う（隣に名前があるときは `""`） */
+  alt?: string;
 }
 
 const MinecraftAvatarComponent = ({
@@ -18,16 +20,18 @@ const MinecraftAvatarComponent = ({
   size = 64,
   overlay = true,
   className = "",
+  alt,
 }: MinecraftAvatarProps) => {
   const t = useT();
   // MCID未登録（uuid も customSkinUrl も無い）はスキンPNGが存在しないため、
   // 頭部を切り出すキャッシュ経路を通さずプレースホルダーSVGをそのまま <img> で描く
   const missingSkinSource = isMissingSkinSource({ uuid, skinUrl });
-  const altText = missingSkinSource
+  const defaultAlt = missingSkinSource
     ? t("fullbodyViewer.noMcidAvatarLabel")
     : mcid
       ? t("fullbodyViewer.avatarLabelOf", { name: mcid })
       : t("fullbodyViewer.avatarLabel");
+  const altText = alt ?? defaultAlt;
   // スキンが取得済み（別サイズ・別ページ含む）なら初期描画から即座に表示（ちらつき防止）
   const [imgSrc, setImgSrc] = useState<string | null>(
     () => (missingSkinSource ? null : getRenderableAvatar({ uuid, skinUrl, size, overlay }) ?? null)

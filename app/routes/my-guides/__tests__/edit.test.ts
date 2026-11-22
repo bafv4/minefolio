@@ -11,6 +11,9 @@
 // セッションはモックし、ルート本体（所有権・検証・DB書き込み）は実DBで検証する
 // （app/routes/me/__tests__/edit.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -52,11 +55,11 @@ const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as cons
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
 // pages-ja.ts の meGuides.* に対応する期待文言（既定ロケール = ja）
-const ERROR_INVALID_ACTION = "不正な操作です。ページを再読み込みしてから、もう一度お試しください";
+const ERROR_INVALID_ACTION = t("meGuides.errorInvalidAction");
 const ERROR_NOT_FOUND = "ガイドが見つかりません";
 const ERROR_SLUG_REQUIRED = "URLを入力してください（半角英小文字・数字・ハイフン・アンダースコア）";
-const ERROR_SLUG_TAKEN = "このURLは既に使われています。別の値を指定してください";
-const ERROR_TAGS_INVALID = "タグの形式が不正です";
+const ERROR_SLUG_TAKEN = t("meGuides.errorSlugTaken");
+const ERROR_TAGS_INVALID = t("meGuides.errorTagsInvalid");
 const ERROR_TAGS_TOO_MANY = "タグは10件までです";
 const ERROR_TAG_TOO_LONG = "タグは50文字以内で入力してください";
 

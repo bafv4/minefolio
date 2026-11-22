@@ -3,8 +3,8 @@ import { useState, useMemo } from "react";
 import type { Route } from "./+types/export";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users, keybindings, keyRemaps, customActions } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -201,7 +201,7 @@ export default function ExportPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-0">
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 min-h-11 sm:min-h-8">
           <Link to="/developers">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("developers.heading")}
@@ -210,7 +210,7 @@ export default function ExportPage() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Download className="h-6 w-6" />
+        <Download className="h-6 w-6" aria-hidden />
         <h1 className="text-2xl font-bold">{t("developers.exportTitle")}</h1>
       </div>
 
@@ -231,7 +231,7 @@ export default function ExportPage() {
                 {t("developers.exportSectionsHint")}
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={toggleAllSections}>
+            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={toggleAllSections}>
               {allSectionsSelected ? t("developers.exportDeselectAll") : t("developers.exportSelectAll")}
             </Button>
           </div>
@@ -240,45 +240,42 @@ export default function ExportPage() {
           {SECTIONS.map((section) => {
             const Icon = section.icon;
             const isChecked = selectedSections.has(section.id);
+            const titleId = `export-section-${section.id}-title`;
+            const descriptionId = `export-section-${section.id}-description`;
+            // 行全体を label にしてチェックボックスと結ぶ（button の中に role="checkbox" を入れ子にしない）。
+            // label の中は記述内容しか置けないので、見出し・説明は span（block）で組む。選択中は brand（ui.md 1 章）
             return (
-              <button
-                type="button"
+              <label
                 key={section.id}
-                onClick={() => toggleSection(section.id)}
                 className={cn(
-                  "w-full text-left rounded-lg border p-4 transition-colors hover:bg-accent/50",
-                  isChecked ? "border-primary bg-primary/5" : "border-border bg-card",
+                  "flex w-full cursor-pointer items-start gap-3 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/50",
+                  isChecked ? "border-brand" : "border-border/70",
                 )}
               >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    checked={isChecked}
-                    className="mt-0.5 pointer-events-none"
-                    tabIndex={-1}
-                  />
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
-                      isChecked ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{t(section.labelKey)}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {t(section.descriptionKey)}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {section.columnKeys.map((col) => (
-                        <Badge key={col} variant="secondary" className="text-xs font-mono">
-                          {t(col)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </button>
+                <Checkbox
+                  checked={isChecked}
+                  onCheckedChange={() => toggleSection(section.id)}
+                  className="mt-0.5"
+                  aria-labelledby={titleId}
+                  aria-describedby={descriptionId}
+                />
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <span className="block flex-1 min-w-0">
+                  <span id={titleId} className="block font-semibold">
+                    {t(section.labelKey)}
+                  </span>
+                  <span id={descriptionId} className="block text-sm text-muted-foreground mt-1">
+                    {t(section.descriptionKey)}
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-1">
+                    {section.columnKeys.map((col) => (
+                      <Badge key={col} variant="secondary" className="text-xs font-mono">
+                        {t(col)}
+                      </Badge>
+                    ))}
+                  </span>
+                </span>
+              </label>
             );
           })}
         </CardContent>
@@ -300,6 +297,7 @@ export default function ExportPage() {
             <Button
               variant="outline"
               size="sm"
+              className="min-h-11 sm:min-h-8"
               onClick={() => setSelectedUsers(new Set())}
               disabled={selectedUsers.size === 0}
             >
@@ -322,40 +320,38 @@ export default function ExportPage() {
           </div>
 
           {/* ユーザー一覧 */}
-          <div className="rounded-lg border max-h-80 overflow-y-auto">
+          <div className="rounded-xl border border-border/70 max-h-80 overflow-y-auto">
             {filteredUsers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 {t("developers.exportNoUsers")}
               </p>
             ) : (
-              <div className="divide-y">
+              <div className="divide-y divide-border/60">
                 {filteredUsers.map((user) => {
                   const isChecked = selectedUsers.has(user.slug);
                   const name = getDisplayName(user, locale);
+                  // 行全体を label にしてチェックボックスと結ぶ（入れ子の button をやめる）
                   return (
-                    <button
-                      type="button"
+                    <label
                       key={user.slug}
-                      onClick={() => toggleUser(user.slug)}
                       className={cn(
-                        "w-full text-left px-3 py-2 hover:bg-accent/50 transition-colors flex items-center gap-2",
-                        isChecked && "bg-primary/5",
+                        "w-full cursor-pointer text-left px-3 py-2 min-h-11 hover:bg-muted/50 transition-colors flex items-center gap-2",
+                        isChecked && "bg-secondary/50",
                       )}
                     >
                       <Checkbox
                         checked={isChecked}
-                        className="pointer-events-none"
-                        tabIndex={-1}
+                        onCheckedChange={() => toggleUser(user.slug)}
                       />
-                      <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
                         <span className="font-medium truncate">{name}</span>
                         {user.mcid && user.displayName && user.mcid !== user.displayName && (
                           <span className="text-xs text-muted-foreground truncate">
                             @{user.mcid}
                           </span>
                         )}
-                      </div>
-                    </button>
+                      </span>
+                    </label>
                   );
                 })}
               </div>
@@ -369,7 +365,7 @@ export default function ExportPage() {
       </p>
 
       {/* ダウンロードバー（ページ末尾） */}
-      <div className="rounded-xl border-2 border-primary/20 bg-card/95 p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-muted-foreground">
           {selectedSections.size === 0 ? (
             t("developers.exportPickSections")
@@ -388,6 +384,7 @@ export default function ExportPage() {
           )}
         </div>
         <Button
+          className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
           disabled={selectedSections.size === 0 || availableUsers.length === 0}
         >

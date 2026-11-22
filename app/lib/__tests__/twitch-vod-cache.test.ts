@@ -118,6 +118,45 @@ describe("fetchAndCacheNewVods", () => {
 // targeted-refresh.server.ts の refreshTwitchVodsForLogin（1チャンネル即時）の両方から呼ばれる
 // 共通部品のため、getRecentVods の Map/Set をモックではなく直接組み立てて検証する
 describe("applyFetchedVods", () => {
+  it("gameName は新規行にだけ保存し、既存行は上書きしない（取得失敗の null も既存値を消さない）", async () => {
+    await applyFetchedVods(
+      new Map([["runner1", [makeApiVod({ id: "g1", userLogin: "runner1", gameName: "Minecraft" })]]])
+    );
+    // 2回目: カテゴリが変わった/取得失敗でも、既存行の gameName は据え置き。新規行は新しい値
+    await applyFetchedVods(
+      new Map([
+        [
+          "runner1",
+          [
+            makeApiVod({ id: "g1", userLogin: "runner1", gameName: "Just Chatting" }),
+            makeApiVod({ id: "g2", userLogin: "runner1", gameName: "Just Chatting" }),
+          ],
+        ],
+      ])
+    );
+    await applyFetchedVods(
+      new Map([
+        [
+          "runner1",
+          [
+            makeApiVod({ id: "g1", userLogin: "runner1", gameName: null }),
+            makeApiVod({ id: "g2", userLogin: "runner1", gameName: null }),
+          ],
+        ],
+      ])
+    );
+
+    const rows = await db.query.twitchVodCache.findMany();
+    const byId = Object.fromEntries(rows.map((r) => [r.vodId, r.gameName]));
+    expect(byId).toEqual({ g1: "Minecraft", g2: "Just Chatting" });
+  });
+
+  it("gameName が無い（取得失敗）VODは null のまま取り込まれる", async () => {
+    await applyFetchedVods(new Map([["runner1", [makeApiVod({ id: "n1", userLogin: "runner1" })]]]));
+    const rows = await db.query.twitchVodCache.findMany();
+    expect(rows[0].gameName).toBeNull();
+  });
+
   it("判定不能（vodsにキーが無い）チャンネルは差分削除の対象にならない", async () => {
     // API失敗チャンネル分の既存キャッシュ行（保持期間内）
     await db.insert(schema.twitchVodCache).values({

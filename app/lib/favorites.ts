@@ -107,7 +107,7 @@ export function isFavorite(list: string[], slug: string): boolean {
 }
 
 /**
- * MCID変更（set_mcid）・MCID削除（remove_mcid）で users.slug が変わる際に呼ぶ。
+ * MCID の変更・削除（/me/edit の一括保存 save_all → app/lib/mcid-change.server.ts の applyMcidSlugChange）で users.slug が変わる際に呼ぶ。
  * schema.ts の favorites ポリシーコメントに定める「slug 変更時はアプリケーション層で
  * 旧 slug → 新 slug の追従更新を行う」の実装。
  *

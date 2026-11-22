@@ -1,8 +1,12 @@
+import { errorSummary } from "@/lib/error-summary";
 import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { parseVercelBlobUrl } from "@/lib/blob-url";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+
+// カスタムスキンのアップロード上限（blob-storage.server.ts の maximumSizeInBytes と同じ 1MB）
+const MAX_CUSTOM_SKIN_BYTES = 1 * 1024 * 1024;
 
 // Steve's default skin URL (embedded as base64 fallback would be better, but using official URL)
 const STEVE_SKIN_URL =
@@ -62,7 +66,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const safeCustomSkinUrl = parseVercelBlobUrl(user?.customSkinUrl);
       if (safeCustomSkinUrl) {
         const skinResponse = await fetch(safeCustomSkinUrl);
-        if (skinResponse.ok) {
+        // アップロード上限（1MB）を超える巨大ファイルは読まない（自ストア判定は読み取り側に入れない）
+        const declaredLength = Number(skinResponse.headers.get("content-length"));
+        const tooLarge = Number.isFinite(declaredLength) && declaredLength > MAX_CUSTOM_SKIN_BYTES;
+        if (skinResponse.ok && !tooLarge) {
           const skinData = await skinResponse.arrayBuffer();
           return new Response(skinData, {
             headers: {
@@ -79,7 +86,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         return fetchMojangSkin(user.uuid);
       }
     } catch (error) {
-      console.error("Failed to fetch user skin:", error);
+      console.error("Failed to fetch user skin:", errorSummary(error));
     }
   }
 
@@ -157,7 +164,7 @@ async function fetchMojangSkin(uuid: string): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch skin:", error);
+    console.error("Failed to fetch skin:", errorSummary(error));
     return new Response("Failed to fetch skin", { status: 500 });
   }
 }

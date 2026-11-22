@@ -1,10 +1,11 @@
 import { createDb } from "./db";
 import { pacemanPaces, users } from "./schema";
 import { eq, and, gte, lt, desc, inArray, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import type { PaceManRecentRun } from "./paceman";
 
 // ペースキャッシュの保持期間の開始時刻（過去2か月）
-function getPaceRetentionStart(): Date {
+export function getPaceRetentionStart(): Date {
   const d = new Date();
   d.setMonth(d.getMonth() - 2);
   return d;
@@ -33,13 +34,13 @@ export interface GroupedPaceEntry {
   }>;
 }
 
-// スプリットの進行順序
+// スプリットの進行順序（ゲーム進行順。Blaze Rods は Fortress 内で、First Portal（Blind）の前）
 const SPLIT_ORDER: Record<string, number> = {
   "Enter Nether": 1,
   "Bastion": 2,
   "Fortress": 3,
-  "First Portal": 4,
-  "Obtain Blaze Rods": 5,
+  "Obtain Blaze Rods": 4,
+  "First Portal": 5,
   "Enter Stronghold": 6,
   "Enter End": 7,
   "Finish": 8,
@@ -86,12 +87,16 @@ function extractPaceEntries(run: PaceManRecentRun): PaceEntry[] {
     });
   }
 
-  if (run.second_structure !== null) {
+  // getRecentRuns はブレイズロッド取得を obtainRod で返す。値は他の区間（nether / fortress /
+  // first_portal）と同じ IGT として rta 列へ入れる（実応答で fortress < obtainRod < first_portal と
+  // 同じ時間軸で並ぶため）。API 応答に obtainRod が無い場合は null（fetchRecentRuns で正規化）で、未到達扱い。
+  // is2ndStructureOrLater: 「主なペース」に含めるかは未決。含めるなら true。現状は挙動を変えない false
+  if (run.obtainRod != null) {
     entries.push({
       timeline: "Obtain Blaze Rods",
-      rta: run.second_structure,
+      rta: run.obtainRod,
       isNetherEnter: false,
-      is2ndStructureOrLater: true,
+      is2ndStructureOrLater: false,
     });
   }
 
@@ -181,7 +186,8 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
         userId,
         timeline: entry.timeline,
         rta: entry.rta,
-        igt: null, // PaceManRecentRunにはIGTがないためnull
+        // 注意: PaceMan stats API（getRecentRuns）の区間値は IGT。歴史的経緯で rta 列に格納しており、igt 列は常に null
+        igt: null,
         date: runDate,
         isNetherEnter: entry.isNetherEnter,
         is2ndStructureOrLater: entry.is2ndStructureOrLater,
@@ -189,28 +195,48 @@ export async function cachePacemanPaces(recentPaces: PaceManRecentRun[]): Promis
     }
   }
 
-  // 削除→挿入を1トランザクションにまとめる
-  // （途中失敗で削除だけがコミットされると、取得ウィンドウ外の蓄積済みペースが復元不能になるため）
-  await db.transaction(async (tx) => {
-    // 取得したランの既存キャッシュを削除（重複防止・進行中ランのSplit更新）
-    // MCID単位ではなくランID単位で削除することで、取得ウィンドウ外の過去ペースを保持する
-    const fetchedRunIds = [...new Set(recentPaces.map((p) => p.id))];
-    const deleteBatchSize = 100;
-    for (let i = 0; i < fetchedRunIds.length; i += deleteBatchSize) {
-      const batch = fetchedRunIds.slice(i, i + deleteBatchSize);
-      await tx.delete(pacemanPaces).where(inArray(pacemanPaces.pacemanRunId, batch));
-    }
+  // 削除→挿入を1回の db.batch（libSQL では単一の暗黙トランザクション＝1往復）にまとめる
+  // （途中失敗で削除だけがコミットされると、取得ウィンドウ外の蓄積済みペースが復元不能になるため。
+  //  対話型トランザクションは1文ごとに往復が発生するので使わない）
+  // 取得したランの既存キャッシュを削除（重複防止・進行中ランのSplit更新）
+  // MCID単位ではなくランID単位で削除することで、取得ウィンドウ外の過去ペースを保持する
+  const fetchedRunIds = [...new Set(recentPaces.map((p) => p.id))];
+  const deleteBatchSize = 100;
+  const insertBatchSize = 50; // SQLiteの変数上限対策
+  const statements: BatchItem<"sqlite">[] = [];
 
-    // バッチサイズを制限してインサート（SQLiteの変数上限対策）
-    const batchSize = 50;
-    for (let i = 0; i < pacesToInsert.length; i += batchSize) {
-      const batch = pacesToInsert.slice(i, i + batchSize);
-      await tx.insert(pacemanPaces).values(batch);
-    }
+  for (let i = 0; i < fetchedRunIds.length; i += deleteBatchSize) {
+    const batch = fetchedRunIds.slice(i, i + deleteBatchSize);
+    statements.push(db.delete(pacemanPaces).where(inArray(pacemanPaces.pacemanRunId, batch)));
+  }
+  for (let i = 0; i < pacesToInsert.length; i += insertBatchSize) {
+    const batch = pacesToInsert.slice(i, i + insertBatchSize);
+    statements.push(db.insert(pacemanPaces).values(batch));
+  }
+  // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
+  statements.push(db.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart)));
 
-    // 保持期間（2か月）より古いデータを削除（他ユーザーの古いデータも含む）
-    await tx.delete(pacemanPaces).where(lt(pacemanPaces.date, retentionStart));
-  });
+  await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+}
+
+/**
+ * 保持期間内の paceman_paces.user_id を「現在の users.mcid（大文字小文字無視）」に合わせ直す。
+ * - 後から MCID を登録したユーザーの既存行（user_id = null）を紐づける
+ * - MCID を変更・解除したユーザーの旧 MCID 行は user_id を null に戻す（別ユーザーが同じ MCID を
+ *   登録していればそのユーザーへ付け替わる）
+ * リンク条件は cachePacemanPaces の INSERT 時（lower(mcid) 一致のみ。公開/視聴者判定はしない）と同じ。
+ * 表示時の公開判定は参照側の結合（getPaceFeedEntries 等）に残す。
+ * これにより user_id 結合が、従来の lower(users.mcid) = lower(paceman_paces.mcid) 結合と同じ結果になる。
+ * cron（update-paceman-cache）から毎回呼ぶ。冪等。変更行数を返す。
+ */
+export async function relinkPacemanPaceUsers(): Promise<number> {
+  const db = createDb();
+  const currentUserId = sql`(select ${users.id} from ${users} where lower(${users.mcid}) = lower(${pacemanPaces.mcid}) limit 1)`;
+  const result = await db
+    .update(pacemanPaces)
+    .set({ userId: currentUserId })
+    .where(and(gte(pacemanPaces.date, getPaceRetentionStart()), sql`${pacemanPaces.userId} is not ${currentUserId}`));
+  return result.rowsAffected;
 }
 
 // フィード用ペースエントリ（ホームフィード・ペース一覧で共用）

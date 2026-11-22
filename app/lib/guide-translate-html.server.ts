@@ -6,6 +6,7 @@
 // このモジュールは DB・翻訳 API・サニタイザのいずれにも依存しない純関数（テストしやすくするため）。
 // 書き戻した HTML は呼び出し側が sanitizeGuideHtml() を通す。
 import { parseFragment, serialize, type DefaultTreeAdapterMap } from "parse5";
+import { isGenericImageAlt } from "./guide-image-alt";
 
 type ChildNode = DefaultTreeAdapterMap["childNode"];
 type ParentNode = DefaultTreeAdapterMap["parentNode"];
@@ -16,7 +17,7 @@ type TextNode = DefaultTreeAdapterMap["textNode"];
 const SKIP_TAGS = new Set(["code", "pre", "kbd", "samp", "script", "style", "textarea", "template"]);
 
 /** 埋め込みノード（atom。中身を持たないが明示的にスキップする）を示す属性 */
-const EMBED_ATTRS = ["data-keybind-embed", "data-searchcraft-embed", "data-guide-link"];
+const EMBED_ATTRS = ["data-keybind-embed", "data-searchcraft-embed", "data-sctemplate-embed", "data-guide-link"];
 
 /** 訳文の書き戻し先 1 つ分（テキストノード、または img の alt 属性） */
 interface Slot {
@@ -73,7 +74,8 @@ export function extractGuideHtmlTexts(html: string): ExtractedHtmlTexts {
     const attr = element.attrs.find((a) => a.name === "alt");
     if (!attr) return;
     const { lead, core, trail } = splitWhitespace(attr.value);
-    if (core === "") return;
+    // 空・旧エディタの汎用値 "image" は送らない（表示時に空 alt にするため。guide-image-alt.ts）
+    if (core === "" || isGenericImageAlt(core)) return;
     texts.push(core);
     slots.push({
       write(translated) {

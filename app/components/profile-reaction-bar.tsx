@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ProfileReactionPill } from "@/hooks/use-profile-reactions";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { SmilePlus } from "lucide-react";
 import type { MessageKey } from "@/lib/messages";
 
@@ -37,8 +38,8 @@ const EMOJI_NAME_KEY_BY_EMOJI = new Map<ProfileReactionEmoji, MessageKey>(
  * - ピルは count>0 の絵文字のみ、表示順は PROFILE_REACTION_EMOJIS 固定
  *   （カウント順だと押すたびに並びが跳ねるため）
  * - 未ログイン時はピルを静的表示にし、追加ボタンは `/login` への導線にする
- * - カウントが1件も無く未ログインの場合はバーごと非表示にする
- *   （ログイン済みなら0件でも追加ボタンを出す必要があるため表示する）
+ * - カウントが1件も無く未ログインの場合は、ログインを促す一文と `/login` への導線を出す
+ *   （ログイン済みなら0件でも追加ボタンを出す）
  * - `pills`/`toggle` は props で受け取るだけの表示コンポーネントで、内部で
  *   `useProfileReactions()` は呼ばない。呼び出し元は `/player/:slug` の
  *   タブを描画する親ページコンポーネント側にすること（対象は常に1プロフィールのみで
@@ -53,11 +54,12 @@ export function ProfileReactionBar({
   className,
 }: ProfileReactionBarProps) {
   const t = useT();
+  const loginHref = useLoginHref();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const visiblePills = pills.filter((pill) => pill.count > 0);
 
-  if (!isLoggedIn && visiblePills.length === 0) return null;
+  const showLoginPrompt = !isLoggedIn && visiblePills.length === 0;
 
   return (
     <div
@@ -66,6 +68,9 @@ export function ProfileReactionBar({
         className,
       )}
     >
+      {showLoginPrompt && (
+        <span className="text-sm text-muted-foreground">{t("profileReactions.loginPrompt")}</span>
+      )}
       {visiblePills.map((pill) => {
         const emojiName = t(EMOJI_NAME_KEY_BY_EMOJI.get(pill.emoji)!);
 
@@ -96,7 +101,10 @@ export function ProfileReactionBar({
                 : t("profileReactions.reactAria", { emoji: emojiName, count: pill.count })
             }
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums transition-colors",
+              "relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm tabular-nums",
+              // 見た目を変えずに押せる範囲を広げる（モバイル 44px。sm 以上は枠どおり）
+              "after:absolute after:-inset-x-1 after:-inset-y-[9.2px] sm:after:inset-0",
+              "transition-[color,background-color,border-color,scale] duration-150 active:scale-95 motion-reduce:active:scale-100",
               "border-border bg-muted/50 hover:border-muted-foreground/40",
               pill.reacted && "border-brand/40 bg-brand/10 text-brand",
               "disabled:pointer-events-none",
@@ -115,7 +123,8 @@ export function ProfileReactionBar({
               type="button"
               variant="outline"
               size="icon-sm"
-              className="rounded-full"
+              // 見た目は 32px のまま、モバイルの押せる範囲を 44px に広げる
+              className="relative rounded-full after:absolute after:-inset-1.5 sm:after:inset-0"
               aria-label={t("profileReactions.addLabel")}
             >
               <SmilePlus className="h-4 w-4" aria-hidden />
@@ -147,7 +156,7 @@ export function ProfileReactionBar({
         </Popover>
       ) : (
         <Button asChild variant="outline" size="sm">
-          <Link to="/login">
+          <Link to={loginHref}>
             <SmilePlus className="mr-2 size-4" aria-hidden />
             {t("profileReactions.loginToReact")}
           </Link>

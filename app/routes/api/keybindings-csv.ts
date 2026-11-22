@@ -5,7 +5,7 @@ import { resolveLocale } from "@/lib/locale";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { loadKeybindingsListPlayers } from "@/lib/keybindings-list.server";
 import { getActionLabel, getKeyLabel, isUnbound, getKeyCombinationLabel } from "@/lib/keybindings";
-import { getRemapSourceLabel, getRemapOutputLabel } from "@/lib/remap-utils";
+import { getRemapSourceLabel } from "@/lib/remap-utils";
 import {
   calculateCm360,
   calculateCursorSpeed,
@@ -162,7 +162,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (sections.has("mouse")) {
     if (csvBlocks.length > 0) csvBlocks.push("");
-    csvBlocks.push(["Player", "DPI", "Sensitivity (%)", "cm/360", "Win Sens Multiplier", "Cursor Speed", "Raw Input", "Mouse Accel"].map(escapeCsv).join(","));
+    csvBlocks.push(["Player", "DPI", "Sensitivity (%)", "cm/180°", "Win Sens Multiplier", "Cursor Speed", "Raw Input", "Mouse Accel"].map(escapeCsv).join(","));
     for (const player of players) {
       const config = player.playerConfig;
       const cm360 = config ? calculateCm360(config.mouseDpi, config.gameSensitivity, config.rawInput, config.windowsSpeed, config.windowsSpeedMultiplier) : null;

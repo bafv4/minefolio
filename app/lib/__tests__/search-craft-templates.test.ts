@@ -5,6 +5,8 @@ import { createTranslator } from "../messages";
 const t = createTranslator("ja");
 import {
   parseTemplateCrafts,
+  resolveCraftTiming,
+  groupCraftsByTiming,
   parseTemplateRemapData,
   parseTemplateRemaps,
   serializeTemplateCrafts,
@@ -416,7 +418,7 @@ describe("parseEditorSubmission（テンプレートエディタの送信検証�
     const result = parseEditorSubmission(t,
       buildForm({ title: "a", crafts: JSON.stringify([null]), remaps: "[]" }),
     );
-    expect(result).toEqual({ error: "テンプレートのデータが不正です" });
+    expect(result).toEqual({ error: t("templates.invalidTemplateData") });
   });
 
   it("remaps=[null] はその行だけ無視されて成功する", () => {
@@ -657,5 +659,26 @@ describe("parseEditorSubmission - loops（繋ぎ方）", () => {
       buildLoopForm({ title: "テスト", crafts: twoCrafts, remaps: "[]", loops: JSON.stringify(tooManySteps) }),
     );
     expect(result).toHaveProperty("error");
+  });
+});
+
+describe("resolveCraftTiming / groupCraftsByTiming", () => {
+  it("null と既知の区分はそのまま、enum 外は other に寄せる", () => {
+    expect(resolveCraftTiming(null)).toBeNull();
+    expect(resolveCraftTiming("ow")).toBe("ow");
+    expect(resolveCraftTiming("legacy")).toBe("other");
+  });
+
+  it("全件がいずれかのグループに入る（件数 = 描画行数）", () => {
+    const crafts = [
+      { id: "a", timing: null },
+      { id: "b", timing: "ow" },
+      { id: "c", timing: "legacy" },
+      { id: "d", timing: "other" },
+    ];
+    const grouped = groupCraftsByTiming(crafts);
+    const total = [...grouped.values()].reduce((n, g) => n + g.length, 0);
+    expect(total).toBe(crafts.length);
+    expect(grouped.get("other")?.map((c) => c.id)).toEqual(["c", "d"]);
   });
 });

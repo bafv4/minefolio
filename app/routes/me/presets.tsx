@@ -1,23 +1,27 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import type { Route } from "./+types/presets";
 import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions, type Keybinding, type PlayerConfig, type KeyRemap, type ItemLayout, type SearchCraft } from "@/lib/schema";
+import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions } from "@/lib/schema";
 import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { encodeHistoryDescription, parseHistoryDescription, describeHistory, historyGroupKey } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
-import { createPreset, setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
+import { setMainPreset, resolveIsMainForNewPreset, serializeKeybindings, serializePlayerConfig, serializeRemaps, serializeItemLayouts, serializeSearchCrafts, serializeSearchCraftLoops, serializeCustomKeys, serializeCustomActions, type PresetKeybindingData, type PresetRemapData, type PresetPlayerConfigData, type PresetItemLayoutData, type PresetSearchCraftData, type PresetCustomKeyData, type PresetCustomActionData } from "@/lib/preset-utils";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
 import { parseLoopSteps, remapLoopSteps } from "@/lib/search-craft-loops";
 import { resolveRowVariations, searchCraftColumnValues } from "@/lib/search-craft-variations";
 import { decodePresetSearchCraftLoops } from "@/lib/preset-read";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { PageSection } from "@/components/page-section";
+import { EmptyState } from "@/components/empty-state";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,10 +55,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Save, Trash2, Check, Plus, History, Clock, ArrowRight, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { dateFnsLocale } from "@/lib/date-locale";
+import { Save, Layers, Trash2, Plus, Clock, Loader2, Copy, Keyboard, Mouse, Package, Search, Star, Pencil, Crosshair } from "lucide-react";
+import { StatusPill } from "@/components/status-pill";
+import { RelativeTime } from "@/components/relative-time";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { intlLocale } from "@/lib/date-locale";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -193,6 +199,9 @@ async function restoreSearchCraftLoopsFromSnapshot(
   );
 }
 
+// 旧実装が apply-preset（編集先の切替）で記録した履歴の文言（ja / en）。% は名前部分
+const LEGACY_APPLY_HISTORY_PATTERNS = ["プリセット「%」を適用しました", 'Applied preset "%"'];
+
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
@@ -243,20 +252,34 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
     }),
     db.query.configHistory.findMany({
-      where: eq(configHistory.userId, user.id),
+      // 「編集先の切替」は履歴に出さない。今は記録しないが、過去の行（旧文言「…を適用しました」）が
+      // 残っているため、文言で除外する（既存データは書き換えない）
+      where: and(
+        eq(configHistory.userId, user.id),
+        ...LEGACY_APPLY_HISTORY_PATTERNS.map((p) => sql`${configHistory.changeDescription} not like ${p}`),
+      ),
       orderBy: [desc(configHistory.createdAt)],
       limit: 20,
-      with: {
-        preset: {
-          columns: {
-            name: true,
-          },
-        },
+      // 履歴表示が使う列だけ（previous_data / new_data の JSON は送らない）
+      columns: {
+        id: true,
+        changeType: true,
+        changeDescription: true,
+        createdAt: true,
       },
+      // どのプリセットの変更か（削除済みなら null で名前なし）
+      with: { preset: { columns: { name: true } } },
     }),
   ]);
 
-  return { userId: user.id, presets, history };
+  // 履歴の文言は表示時に翻訳する。保存された文字列（トークン・旧文言）の読み替えはサーバーで行う
+  // （旧文言の照合に全ロケールの文言が要るが、クライアントは表示言語の分しか読み込まない）
+  const historyRows = history.map((entry) => ({
+    ...entry,
+    parsed: parseHistoryDescription(entry.changeDescription),
+  }));
+
+  return { userId: user.id, presets, history: historyRows };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -268,7 +291,7 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await getSession(request, auth);
 
   const formData = await request.formData();
-  const intent = formData.get("intent") as string;
+  const intent = formString(formData, "intent");
   const now = new Date();
 
   // 全8リレーションが必要なのは create-preset の現設定分岐と apply-preset の
@@ -285,13 +308,28 @@ export async function action({ request }: Route.ActionArgs) {
 
   // プリセット作成（現在の設定を保存 or 既存プリセットからコピー）
   if (intent === "create-preset") {
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string | null;
-    const sourceType = formData.get("sourceType") as string; // "current" or "copy"
-    const sourcePresetId = formData.get("sourcePresetId") as string | null;
+    const name = formString(formData, "name");
+    const description = formString(formData, "description");
+    const sourceType = formString(formData, "sourceType"); // "current" or "copy"
+    const sourcePresetId = formString(formData, "sourcePresetId");
 
     if (!name?.trim()) {
       return { error: t("mePresets.presetNameRequired") };
+    }
+    if (
+      name.trim().length > SAVE_LIMITS.presetName ||
+      (description?.trim().length ?? 0) > SAVE_LIMITS.presetDescription
+    ) {
+      return { error: t("mePresets.limitExceeded") };
+    }
+
+    // 1ユーザーあたりのプリセット数の上限（コピーも数える）
+    const [{ count: presetCount }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(configPresets)
+      .where(eq(configPresets.userId, user.id));
+    if (presetCount >= SAVE_LIMITS.presetsPerUser) {
+      return { error: t("mePresets.tooManyPresets", { max: SAVE_LIMITS.presetsPerUser }) };
     }
 
     let sourcePreset: typeof configPresets.$inferSelect | undefined;
@@ -340,7 +378,7 @@ export async function action({ request }: Route.ActionArgs) {
       // 既存プリセット非アクティブ化、ライブテーブル全クリア
       await tx
         .update(configPresets)
-        .set({ isActive: false, updatedAt: now })
+        .set({ isActive: false })
         .where(eq(configPresets.userId, user.id));
       await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
       await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
@@ -686,24 +724,25 @@ export async function action({ request }: Route.ActionArgs) {
 
       // 履歴記録
       const description = sourcePreset
-        ? t("mePresets.copiedAndApplied", { source: sourcePreset.name, name: trimmedName })
-        : t("mePresets.createdFromCurrentAndApplied", { name: trimmedName });
+        ? encodeHistoryDescription("preset.copy", { source: sourcePreset.name, name: trimmedName })
+        : encodeHistoryDescription("preset.createFromCurrent", { name: trimmedName });
       await tx.insert(configHistory).values({
         id: createId(),
         userId: user.id,
         changeType: "preset_switch",
         changeDescription: description,
-        presetId,
+        // 公開面に影響するのは、新規プリセットが（初回作成で）メインになる場合だけ
+        presetId: isMain ? presetId : null,
         createdAt: now,
       });
     });
 
-    return { success: true, message: t("mePresets.createdAndApplied", { name: trimmedName }) };
+    return { success: true, intent: "create-preset", message: t("mePresets.createdAndApplied", { name: trimmedName }) };
   }
 
   // プリセット削除
   if (intent === "delete-preset") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, presetId),
@@ -750,12 +789,12 @@ export async function action({ request }: Route.ActionArgs) {
           id: createId(),
           userId: user.id,
           changeType: "preset_switch",
-          changeDescription: t("mePresets.deleteHistoryDescription", { name: preset.name }),
+          changeDescription: encodeHistoryDescription("preset.delete", { name: preset.name }),
           createdAt: now,
         });
       });
 
-      return { success: true, message: t("mePresets.presetDeleted") };
+      return { success: true, intent: "delete-preset", message: t("mePresets.presetDeleted") };
     }
 
     await db
@@ -767,18 +806,18 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: t("mePresets.deleteHistoryDescription", { name: preset.name }),
+      changeDescription: encodeHistoryDescription("preset.delete", { name: preset.name }),
       createdAt: now,
     });
 
-    return { success: true, message: t("mePresets.presetDeleted") };
+    return { success: true, intent: "delete-preset", message: t("mePresets.presetDeleted") };
   }
 
   // メイン（公開用）プリセットの設定。
   // is_main フラグを排他的に付け替えるだけで、ライブテーブル・編集対象（isActive）には一切触れない。
   // 公開面はメインプリセットのスナップショットを表示するため、即座に反映される。
   if (intent === "set-main") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)),
@@ -788,7 +827,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: t("mePresets.presetNotFound") };
     }
     if (preset.isMain) {
-      return { success: true, message: t("mePresets.mainPresetSet") };
+      return { success: true, intent: "set-main", message: t("mePresets.mainPresetSet") };
     }
 
     await setMainPreset(db, { id: preset.id, userId: user.id });
@@ -797,17 +836,72 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: t("mePresets.setMainHistoryDescription", { name: preset.name }),
+      changeDescription: encodeHistoryDescription("preset.setMain", { name: preset.name }),
       presetId,
       createdAt: now,
     });
 
-    return { success: true, message: t("mePresets.mainPresetSet") };
+    return { success: true, intent: "set-main", message: t("mePresets.mainPresetSet") };
+  }
+
+  // プリセットの名前・説明の変更。
+  // 設定内容（スナップショット・ライブテーブル）・編集先・メインには触れない。検証は create-preset と同じ
+  // （名前は trim して必須、説明は trim して空なら null）。updatedAt は設定内容の更新日時なので変えない。名前は走者画面のプリセット選択にも出るが、
+  // 公開される操作設定の内容は変わらないため、履歴の presetId は null（お気に入り走者の動きには出さない）
+  if (intent === "update-preset") {
+    const presetId = formString(formData, "presetId") ?? "";
+    const name = formString(formData, "name");
+    const description = formString(formData, "description");
+
+    if (!name?.trim()) {
+      return { error: t("mePresets.presetNameRequired") };
+    }
+    if (
+      name.trim().length > SAVE_LIMITS.presetName ||
+      (description?.trim().length ?? 0) > SAVE_LIMITS.presetDescription
+    ) {
+      return { error: t("mePresets.limitExceeded") };
+    }
+    const trimmedName = name.trim();
+    const trimmedDescription = description?.trim() || null;
+
+    const preset = await db.query.configPresets.findFirst({
+      where: and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)),
+      columns: { id: true, name: true, description: true },
+    });
+    if (!preset) {
+      return { error: t("mePresets.presetNotFound") };
+    }
+
+    const nameChanged = preset.name !== trimmedName;
+    const descriptionChanged = (preset.description ?? null) !== trimmedDescription;
+    if (!nameChanged && !descriptionChanged) {
+      return { success: true, intent: "update-preset", message: t("mePresets.presetUpdated") };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(configPresets)
+        .set({ name: trimmedName, description: trimmedDescription })
+        .where(and(eq(configPresets.id, preset.id), eq(configPresets.userId, user.id)));
+      await tx.insert(configHistory).values({
+        id: createId(),
+        userId: user.id,
+        changeType: "preset_switch",
+        changeDescription: nameChanged
+          ? encodeHistoryDescription("preset.rename", { oldName: preset.name, name: trimmedName })
+          : encodeHistoryDescription("preset.describe", { name: trimmedName }),
+        presetId: null,
+        createdAt: now,
+      });
+    });
+
+    return { success: true, intent: "update-preset", message: t("mePresets.presetUpdated") };
   }
 
   // プリセット適用
   if (intent === "apply-preset") {
-    const presetId = formData.get("presetId") as string;
+    const presetId = formString(formData, "presetId") ?? "";
 
     const preset = await db.query.configPresets.findFirst({
       where: eq(configPresets.id, presetId),
@@ -816,13 +910,6 @@ export async function action({ request }: Route.ActionArgs) {
     if (!preset || preset.userId !== user.id) {
       return { error: t("mePresets.presetNotFound") };
     }
-
-    // 現在の設定をバックアップ（履歴用）。apply-preset で必要なのは
-    // user.keybindings だけのため、8リレーション付きではなくこの1本だけ取得する
-    const liveKeybindings = await db.query.keybindings.findMany({
-      where: eq(keybindings.userId, user.id),
-    });
-    const previousKeybindings = JSON.stringify(liveKeybindings);
 
     await db.transaction(async (tx) => {
       // ライブテーブル全クリア（フルシンク）
@@ -953,29 +1040,19 @@ export async function action({ request }: Route.ActionArgs) {
       // 全てのプリセットを非アクティブに
       await tx
         .update(configPresets)
-        .set({ isActive: false, updatedAt: now })
+        .set({ isActive: false })
         .where(eq(configPresets.userId, user.id));
 
       // このプリセットをアクティブに
       await tx
         .update(configPresets)
-        .set({ isActive: true, updatedAt: now })
+        .set({ isActive: true })
         .where(eq(configPresets.id, presetId));
 
-      // 履歴に記録
-      await tx.insert(configHistory).values({
-        id: createId(),
-        userId: user.id,
-        changeType: "preset_switch",
-        changeDescription: t("mePresets.appliedPreset", { name: preset.name }),
-        previousData: previousKeybindings,
-        newData: preset.keybindingsData,
-        presetId,
-        createdAt: now,
-      });
+      // 編集先の切替は変更履歴に記録しない（公開内容も設定内容も変えないため、履歴が切替の繰り返しで埋まる）
     });
 
-    return { success: true, message: t("mePresets.appliedPreset", { name: preset.name }) };
+    return { success: true, intent: "apply-preset", message: t("mePresets.appliedPreset", { name: preset.name }) };
   }
 
   return { error: t("mePresets.unknownAction") };
@@ -988,10 +1065,15 @@ export default function PresetsPage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  // 絶対時刻はブラウザの TZ で描くため、ハイドレーション後にだけ出す（SSR はサーバーの TZ になる）
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [newPresetName, setNewPresetName] = useState("");
   const [newPresetDescription, setNewPresetDescription] = useState("");
   const [sourceType, setSourceType] = useState<"current" | "copy">("current");
   const [sourcePresetId, setSourcePresetId] = useState<string>("");
+  // 名前・説明の変更ダイアログ（対象プリセットと入力中の値）
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; description: string } | null>(null);
 
   const isSubmitting = fetcher.state === "submitting";
 
@@ -1003,15 +1085,34 @@ export default function PresetsPage() {
 
     if ("success" in data && data.success) {
       toast.success(data.message);
-      setIsCreateDialogOpen(false);
-      setNewPresetName("");
-      setNewPresetDescription("");
-      setSourceType("current");
-      setSourcePresetId("");
+      // 成功した操作に対応するダイアログだけを閉じる（別の操作の成功で、入力中のダイアログを閉じない）
+      if (data.intent === "update-preset") {
+        setRenameTarget(null);
+      } else if (data.intent === "create-preset") {
+        setIsCreateDialogOpen(false);
+        setNewPresetName("");
+        setNewPresetDescription("");
+        setSourceType("current");
+        setSourcePresetId("");
+      }
     } else if ("error" in data) {
       toast.error(data.error);
     }
   }, [fetcher.data]);
+
+  const handleRenamePreset = () => {
+    if (!renameTarget) return;
+    if (!renameTarget.name.trim()) {
+      toast.error(t("mePresets.presetNameRequired"));
+      return;
+    }
+    const formData = new FormData();
+    formData.set("intent", "update-preset");
+    formData.set("presetId", renameTarget.id);
+    formData.set("name", renameTarget.name);
+    formData.set("description", renameTarget.description);
+    fetcher.submit(formData, { method: "post" });
+  };
 
   const handleCreatePreset = () => {
     if (!newPresetName.trim()) {
@@ -1043,8 +1144,26 @@ export default function PresetsPage() {
     preset_switch: t("mePresets.preset"),
   };
 
+  // 種別がすべて同じ（例: 全行「プリセット」）なら、ラベルは情報にならないので出さない
+  // 同じ内容（種別・文言・プリセット）の連続は 1 行にまとめ、回数と最新の時刻を出す
+  const groupedHistory = history.reduce<((typeof history)[number] & { count: number })[]>((acc, entry) => {
+    const last = acc[acc.length - 1];
+    if (
+      last &&
+      last.changeType === entry.changeType &&
+      historyGroupKey(last.changeDescription, last.parsed) === historyGroupKey(entry.changeDescription, entry.parsed) &&
+      (last.preset?.name ?? null) === (entry.preset?.name ?? null)
+    ) {
+      last.count += 1;
+    } else {
+      acc.push({ ...entry, count: 1 });
+    }
+    return acc;
+  }, []);
+  const showHistoryTypeLabel = new Set(history.map((h) => h.changeType)).size > 1;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("mePresets.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -1053,12 +1172,11 @@ export default function PresetsPage() {
       </div>
 
       {/* プリセット一覧 */}
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="text-base">{t("mePresets.listTitle")}</CardTitle>
-            <CardDescription>{t("mePresets.listDescription")}</CardDescription>
-          </div>
+      <PageSection
+        id="presets-list"
+        first
+        title={t("mePresets.listTitle")}
+        action={
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
             setIsCreateDialogOpen(open);
             if (!open) {
@@ -1069,7 +1187,7 @@ export default function PresetsPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto h-11 sm:h-10">
+              <Button className="h-11 sm:h-10">
                 <Plus className="h-4 w-4 mr-2" />
                 {t("mePresets.newPreset")}
               </Button>
@@ -1153,6 +1271,9 @@ export default function PresetsPage() {
                 </div>
               </div>
               <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  {t("meSearchCraft.cancel")}
+                </Button>
                 <Button
                   onClick={handleCreatePreset}
                   disabled={isSubmitting || !newPresetName.trim() || (sourceType === "copy" && !sourcePresetId)}
@@ -1164,13 +1285,14 @@ export default function PresetsPage() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {sourceType === "copy" ? t("mePresets.createByCopy") : t("mePresets.save")}
+                  {sourceType === "copy" ? t("mePresets.createByCopy") : t("mePresets.create")}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </CardHeader>
-        <CardContent>
+        }
+      >
+          <p className="text-sm text-muted-foreground">{t("mePresets.listDescription")}</p>
           {presets.length > 0 ? (
             <div className="space-y-3">
               {presets.map((preset) => {
@@ -1183,27 +1305,35 @@ export default function PresetsPage() {
                 const keybindingsCount = preset.keybindingsCount;
                 const itemLayoutsCount = preset.itemLayoutsCount;
                 const searchCraftsCount = preset.searchCraftsCount;
+                // サーバーは他のプリセットが残るとき、メイン・編集中の削除を拒否する（事前に防ぐ）
+                const deleteBlockedReason =
+                  presets.length > 1
+                    ? preset.isMain
+                      ? t("mePresets.cannotDeleteMain")
+                      : preset.isActive
+                        ? t("mePresets.cannotDeleteActive")
+                        : null
+                    : null;
 
                 return (
                   <div
                     key={preset.id}
-                    className="p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className="p-4 rounded-xl border border-border/70 bg-card"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium truncate">{preset.name}</p>
                           {preset.isMain && (
-                            <Badge variant="default" className="shrink-0">
-                              <Star className="h-3 w-3 mr-1" />
+                            // 公開状態の印は muted の丸ピル（ui.md 6章。メインを primary で塗らない）
+                            <StatusPill icon={Star} className="shrink-0">
                               {t("mePresets.mainBadge")}
-                            </Badge>
+                            </StatusPill>
                           )}
                           {preset.isActive && (
-                            <Badge variant="secondary" className="shrink-0">
-                              <Pencil className="h-3 w-3 mr-1" />
+                            <StatusPill icon={Crosshair} className="shrink-0">
                               {t("mePresets.editingBadge")}
-                            </Badge>
+                            </StatusPill>
                           )}
                         </div>
                         {preset.description && (
@@ -1240,19 +1370,33 @@ export default function PresetsPage() {
                           )}
                         </div>
 
-                        {/* 相対時刻はSSR時とhydration時で基準時刻がずれるため警告を抑制（pace-feed-card と同じ対処） */}
-                        <p className="text-xs text-muted-foreground mt-2" suppressHydrationWarning>
-                          {t("mePresets.updatedPrefix")} {formatDistanceToNow(new Date(preset.updatedAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
+                        {/* 相対時刻は SSR と水和で暦日がずれるので <RelativeTime> に任せる */}
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {t("mePresets.updatedPrefix")} <RelativeTime date={preset.updatedAt} unit="date" />
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isSubmitting}
+                          onClick={() =>
+                            setRenameTarget({ id: preset.id, name: preset.name, description: preset.description ?? "" })
+                          }
+                          aria-label={t("mePresets.renameAria", { name: preset.name })}
+                          className="touch-manipulation max-sm:min-h-11"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                          {t("mePresets.rename")}
+                        </Button>
                         {!preset.isActive && (
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="apply-preset" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
-                              <Pencil className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">{t("mePresets.edit")}</span>
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.editAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11">
+                              <Crosshair className="h-4 w-4" aria-hidden="true" />
+                              {t("mePresets.edit")}
                             </Button>
                           </fetcher.Form>
                         )}
@@ -1260,16 +1404,40 @@ export default function PresetsPage() {
                           <fetcher.Form method="post">
                             <input type="hidden" name="intent" value="set-main" />
                             <input type="hidden" name="presetId" value={preset.id} />
-                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} className="touch-manipulation">
-                              <Star className="h-4 w-4 sm:mr-1" />
-                              <span className="hidden sm:inline">{t("mePresets.setMain")}</span>
+                            <Button type="submit" variant="outline" size="sm" disabled={isSubmitting} aria-label={t("mePresets.setMainAria", { name: preset.name })} className="touch-manipulation max-sm:min-h-11">
+                              <Star className="h-4 w-4" aria-hidden="true" />
+                              {t("mePresets.setMain")}
                             </Button>
                           </fetcher.Form>
                         )}
+                        {deleteBlockedReason ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0} className="inline-flex rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled
+                                  aria-label={t("mePresets.deleteAria", { name: preset.name })}
+                                  className="size-11 sm:size-8 text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                </Button>
+                                <span className="sr-only">{deleteBlockedReason}</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">{deleteBlockedReason}</TooltipContent>
+                          </Tooltip>
+                        ) : (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive touch-manipulation">
-                              <Trash2 className="h-4 w-4" />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t("mePresets.deleteAria", { name: preset.name })}
+                              className="size-11 sm:size-8 text-destructive hover:text-destructive touch-manipulation"
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -1289,13 +1457,14 @@ export default function PresetsPage() {
                               <fetcher.Form method="post">
                                 <input type="hidden" name="intent" value="delete-preset" />
                                 <input type="hidden" name="presetId" value={preset.id} />
-                                <AlertDialogAction type="submit" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                <AlertDialogAction type="submit" className={buttonVariants({ variant: "destructive" })}>
                                   {t("mePresets.delete")}
                                 </AlertDialogAction>
                               </fetcher.Form>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1303,44 +1472,61 @@ export default function PresetsPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-12">
-              <Save className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <p className="text-lg font-medium">{t("mePresets.emptyTitle")}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {t("mePresets.emptyDescription")}
-              </p>
-            </div>
+            <EmptyState
+              icon={<Layers className="h-12 w-12" />}
+              title={t("mePresets.emptyTitle")}
+              description={t("mePresets.emptyDescription")}
+            />
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* 変更履歴 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <History className="h-5 w-5" />
-            {t("mePresets.historyTitle")}
-          </CardTitle>
-          <CardDescription>{t("mePresets.historyDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <PageSection
+        id="presets-history"
+        title={t("mePresets.historyTitle")}
+      >
+          <p className="text-sm text-muted-foreground">{t("mePresets.historyDescription")}</p>
           {history.length > 0 ? (
             <div className="space-y-2">
-              {history.map((entry) => (
+              {groupedHistory.map((entry) => (
                 <div
                   key={entry.id}
                   className="flex items-start gap-3 py-2 border-b last:border-0"
                 >
-                  <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm">{entry.changeDescription}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs">
-                        {changeTypeLabels[entry.changeType] ?? entry.changeType}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground" suppressHydrationWarning>
-                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true, locale: dateFnsLocale(locale) })}
-                      </span>
+                    <p className="text-sm">
+                      {describeHistory(t, entry.changeDescription, entry.parsed)}
+                      {entry.count > 1 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                          {t("mePresets.historyRepeat", { count: entry.count })}
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                      {entry.preset?.name && !describeHistory(t, entry.changeDescription, entry.parsed).includes(entry.preset.name) && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("mePresets.historyPreset", { name: entry.preset.name })}
+                        </span>
+                      )}
+                      {showHistoryTypeLabel && (
+                        <Badge variant="outline" className="text-xs">
+                          {changeTypeLabels[entry.changeType] ?? entry.changeType}
+                        </Badge>
+                      )}
+                      <time
+                        dateTime={new Date(entry.createdAt).toISOString()}
+                        className="text-xs text-muted-foreground tabular-nums"
+                        suppressHydrationWarning
+                      >
+                        {mounted && (
+                          <>
+                            {new Date(entry.createdAt).toLocaleString(intlLocale(locale), { dateStyle: "medium", timeStyle: "short" })}
+                            {" · "}
+                          </>
+                        )}
+                        <RelativeTime date={entry.createdAt} unit="date" />
+                      </time>
                     </div>
                   </div>
                 </div>
@@ -1351,8 +1537,50 @@ export default function PresetsPage() {
               {t("mePresets.noHistory")}
             </p>
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
+
+      {/* 名前・説明の変更 */}
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("mePresets.renameTitle")}</DialogTitle>
+            <DialogDescription>{t("mePresets.renameDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="rename-preset-name">{t("mePresets.presetName")}</Label>
+              <Input
+                id="rename-preset-name"
+                value={renameTarget?.name ?? ""}
+                onChange={(e) => setRenameTarget((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rename-preset-description">{t("mePresets.descriptionOptional")}</Label>
+              <Textarea
+                id="rename-preset-description"
+                placeholder={t("mePresets.descriptionPlaceholder")}
+                value={renameTarget?.description ?? ""}
+                onChange={(e) => setRenameTarget((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRenameTarget(null)}>
+              {t("meSearchCraft.cancel")}
+            </Button>
+            <Button onClick={handleRenamePreset} disabled={isSubmitting || !renameTarget?.name.trim()}>
+              {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              {t("mePresets.renameSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <MeErrorBoundary />;
 }

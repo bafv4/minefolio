@@ -28,7 +28,7 @@ description: Minefolio のフォルダ型タブ（app/components/ui/tabs.tsx）�
   （帯内に高さを取りタブがベースラインから浮くため）で、代わりに `useTabScrollbar`
   （`app/hooks/use-tab-scrollbar.tsx`）のオーバーレイ型カスタムスクロールバー
   （スクロール可能時のみ表示・ドラッグ可・レイアウト高さゼロ）を重ねる。
-  Link ベースの `ContentTabs` / `ViewSwitcher` も同じフックを使用
+  Link ベースの `ContentTabs` も同じフックを使用（キー配置の `ViewSwitcher` はセグメント形に変えたので使わない。ui.md 11章）
 - **カード化の打ち消し**: Dialog 内や独自レイアウト（プロフィールの縦サイドバー等）では、
   ルートに `rounded-none border-0 bg-transparent overflow-visible`、`TabsList` に
   `bg-transparent p-0` を指定して素の構造に戻す。プロフィールの縦サイドバーでは

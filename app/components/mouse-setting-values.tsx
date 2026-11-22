@@ -25,7 +25,8 @@ export function MissingMouseValue({
   return (
     <HintTip
       message={joinMouseReasons(reasons)}
-      className={cn("text-muted-foreground/60", className)}
+      // 押せる部品（ヒントを開く）なので文字は 4.5:1 を保つ（/60 に薄めない）
+      className={cn("text-muted-foreground", className)}
     >
       <span className="underline decoration-dotted underline-offset-4">-</span>
     </HintTip>

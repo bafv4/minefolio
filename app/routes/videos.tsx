@@ -1,11 +1,13 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData, useNavigation, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/videos";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
+import { getOptionalSession } from "@/lib/session";
+import { toJstDateString } from "@/lib/paces-feed.server";
 import {
   getPublicVideoFeed,
   getViewerVideoPrefs,
@@ -22,14 +24,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/empty-state";
 import { FeedVideoCard } from "@/components/feed-video-card";
-import { feedVideoKey, filterOwnVideos, type FeedVideo, type OwnVideoPrefs } from "@/lib/feed-video";
+import { FeedErrorNotice } from "@/components/home/feed-error-notice";
+import {
+  feedVideoKey,
+  filterOwnVideos,
+  videoRetentionCutoff,
+  type FeedVideo,
+  type OwnVideoPrefs,
+} from "@/lib/feed-video";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { VIDEOS_PAGE_SIZE } from "./api/videos";
-import { Play, Film, Loader2, Search, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { StatusPill } from "@/components/status-pill";
+import { isReversedPeriod, normalizeDateParam } from "@/lib/date-param";
+import { Play, Film, ChevronDown, Loader2, Search, X } from "lucide-react";
 
 // 検索条件として使用するURLクエリパラメータ
 const FILTER_PARAM_KEYS = ["q", "platform", "from", "to"] as const;
+
+// URL の platform を youtube / twitch / all に正規化する（それ以外の値は「すべて」扱い。サーバーも同じ値だけを使う）
+function normalizePlatform(value: string | null): "all" | "youtube" | "twitch" {
+  return value === "youtube" || value === "twitch" ? value : "all";
+}
+
+// 配信元の名前（ブランド名なので翻訳しない）。SelectValue・SelectItem・適用中の条件の表示で共有する
+const PLATFORM_LABELS = { youtube: "YouTube", twitch: "Twitch" } as const;
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -59,9 +80,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const filters = parseVideoSearchParams(url.searchParams);
-  const [items, viewerPrefs] = await Promise.all([
+  const [items, viewerPrefs, session] = await Promise.all([
     getPublicVideoFeed(db, filters),
     getViewerVideoPrefs(db, auth, request),
+    getOptionalSession(request, auth),
   ]);
 
   // 見出しの件数バッジは実際に表示されるカード数と一致させる。
@@ -75,6 +97,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     total: items.length,
     visibleTotal,
     viewerPrefs,
+    // 空状態の案内（ログイン中の人にだけ設定画面への導線を出す）
+    signedIn: Boolean(session),
+    // 日付入力の範囲: 取得できる期間（保持期間の開始日）〜今日（JST）
+    dateRange: {
+      min: toJstDateString(videoRetentionCutoff()),
+      max: toJstDateString(new Date()),
+    },
   };
 }
 
@@ -101,10 +130,16 @@ function VideosList({
   });
 
   // 「ホームに自分の動画を表示しない」設定時、自分の動画/VODを除外（ホームと共通の filterOwnVideos）
-  const visibleVideos = useMemo(
-    () => filterOwnVideos(infinite.items, viewerPrefs),
-    [infinite.items, viewerPrefs]
-  );
+  // 追加読み込みでページ間に同じ動画が重なりうる（CDN の s-maxage と offset の組み合わせ）ので、key で重複を除く
+  const visibleVideos = useMemo(() => {
+    const seen = new Set<string>();
+    return filterOwnVideos(infinite.items, viewerPrefs).filter((video) => {
+      const key = feedVideoKey(video);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [infinite.items, viewerPrefs]);
 
   return (
     <>
@@ -119,18 +154,24 @@ function VideosList({
         {infinite.liveMessage}
       </div>
 
-      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック */}
+      {/* 無限スクロール: センチネル + 「もっと読み込む」フォールバック。追加の取得に失敗したら、ボタンの代わりに失敗の帯と再試行を出す */}
       {infinite.items.length > 0 && infinite.hasMore && (
         <div className="flex flex-col items-center gap-3 py-6">
           <div ref={infinite.sentinelRef} aria-hidden className="h-px w-full" />
-          <Button
-            variant="outline"
-            onClick={infinite.loadMore}
-            disabled={infinite.isLoadingMore}
-          >
-            {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {t("videos.loadMore")}
-          </Button>
+          {infinite.loadError ? (
+            <div className="w-full">
+              <FeedErrorNotice message={t("videos.loadMoreFailed")} onRetry={infinite.retry} />
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={infinite.loadMore}
+              disabled={infinite.isLoadingMore}
+            >
+              {infinite.isLoadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("videos.loadMore")}
+            </Button>
+          )}
         </div>
       )}
     </>
@@ -139,26 +180,74 @@ function VideosList({
 
 export default function VideosPage() {
   const t = useT();
-  const { videos, total, visibleTotal, viewerPrefs } = useLoaderData<typeof loader>();
+  const { videos, total, visibleTotal, viewerPrefs, signedIn, dateRange } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  // /videos 内の絞り込みの再取得中だけ、中身を薄くして残す（別ページへ移るときは薄くしない）
+  const isLoading = navigation.state === "loading" && navigation.location?.pathname === "/videos";
 
   // 検索フォームの入力状態（URLクエリと同期）
   const [player, setPlayer] = useState(searchParams.get("q") ?? "");
-  const [platform, setPlatform] = useState(searchParams.get("platform") ?? "all");
-  const [from, setFrom] = useState(searchParams.get("from") ?? "");
-  const [to, setTo] = useState(searchParams.get("to") ?? "");
+  const [platform, setPlatform] = useState(normalizePlatform(searchParams.get("platform")));
+  const [from, setFrom] = useState(normalizeDateParam(searchParams.get("from")) ?? "");
+  const [to, setTo] = useState(normalizeDateParam(searchParams.get("to")) ?? "");
 
   useEffect(() => {
     setPlayer(searchParams.get("q") ?? "");
-    setPlatform(searchParams.get("platform") ?? "all");
-    setFrom(searchParams.get("from") ?? "");
-    setTo(searchParams.get("to") ?? "");
+    setPlatform(normalizePlatform(searchParams.get("platform")));
+    setFrom(normalizeDateParam(searchParams.get("from")) ?? "");
+    setTo(normalizeDateParam(searchParams.get("to")) ?? "");
   }, [searchParams]);
 
-  const hasActiveFilters = FILTER_PARAM_KEYS.some((key) => searchParams.get(key));
+  const appliedFrom = normalizeDateParam(searchParams.get("from"));
+  const appliedTo = normalizeDateParam(searchParams.get("to"));
+  const hasActiveFilters =
+    Boolean(searchParams.get("q")) ||
+    normalizePlatform(searchParams.get("platform")) !== "all" ||
+    Boolean(appliedFrom) ||
+    Boolean(appliedTo);
+  // モバイル（sm 未満）のみ折りたたみ。結果を1画面目に出すため適用中でも既定は閉じ、件数バッジとチップで状態を示す（/paces と同じ）
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // 入力欄の期間（URL から入った逆順もフォームに反映される）が逆順なら、送信前から同じ文言で知らせる。
+  // サーバーは from <= date <= to で絞るので、逆順は必ず0件になる。条件としては効いている（絞り込みに数える）が、原因が分からないため
+  const periodError = isReversedPeriod(from, to);
+  const appliedPeriodReversed = isReversedPeriod(appliedFrom, appliedTo);
+  // 畳んだモバイルでも原因が見えるよう、URL の逆順の期間は開いて示す
+  useEffect(() => {
+    if (appliedPeriodReversed) setFiltersOpen(true);
+  }, [appliedPeriodReversed]);
+
+  // 畳んだ状態でも適用中の条件を見せるためのチップ（URL＝適用済みの値から作る。入力中の下書きは含めない）
+  const appliedChips: { key: string; label: string }[] = [];
+  const appliedQ = searchParams.get("q");
+  if (appliedQ) appliedChips.push({ key: "q", label: `${t("videos.filterPlayer")}: ${appliedQ}` });
+  const appliedPlatform = normalizePlatform(searchParams.get("platform"));
+  if (appliedPlatform !== "all") {
+    appliedChips.push({
+      key: "platform",
+      label: `${t("videos.filterPlatform")}: ${PLATFORM_LABELS[appliedPlatform]}`,
+    });
+  }
+  if (appliedFrom || appliedTo) {
+    appliedChips.push({
+      key: "period",
+      label: `${t("videos.filterPeriod")}: ${appliedFrom ?? ""}${t("common.rangeSeparator")}${appliedTo ?? ""}`,
+    });
+  }
+
+  // 折りたたみバッジの件数は上のチップの数と同じ（/paces と同じ。開始日・終了日は「時期」の1件）
+  const activeFilterCount = appliedChips.length;
+
+  // データが0件で条件も無いときは、絞る対象が無いので検索フォームを出さず空状態だけにする（条件ありで0件ならフォームは残す）
+  const showFilterForm = visibleTotal > 0 || hasActiveFilters;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    // 開始日が終了日より後なら送らずに知らせる（YYYY-MM-DD なので文字列の比較で前後が分かる）
+    if (periodError) {
+      setFiltersOpen(true);
+      return;
+    }
     const params = new URLSearchParams();
     if (player.trim()) params.set("q", player.trim());
     if (platform !== "all") params.set("platform", platform);
@@ -186,86 +275,168 @@ export default function VideosPage() {
           </p>
           <h1 className="text-2xl font-bold">{t("videos.title")}</h1>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-xs text-muted-foreground">
-          <Film className="h-3.5 w-3.5" />
-          {t("videos.count", { count: visibleTotal })}
-        </span>
+        {visibleTotal > 0 && (
+          <StatusPill icon={Film} className="ml-auto">
+            {t("videos.count", { count: visibleTotal })}
+          </StatusPill>
+        )}
       </div>
       <p className="text-sm text-muted-foreground">{t("videos.description")}</p>
 
+      {showFilterForm && (
       <form
         onSubmit={handleSearch}
-        className="rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5"
+        className="rounded-xl border border-border/70 bg-card p-4 sm:p-5"
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="video-filter-player">{t("videos.filterPlayer")}</Label>
-            <Input
-              id="video-filter-player"
-              value={player}
-              onChange={(e) => setPlayer(e.target.value)}
-              placeholder={t("videos.filterPlayerPlaceholder")}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="video-filter-platform">{t("videos.filterPlatform")}</Label>
-            <Select value={platform} onValueChange={setPlatform}>
-              <SelectTrigger id="video-filter-platform" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("videos.platformAll")}</SelectItem>
-                <SelectItem value="youtube">YouTube</SelectItem>
-                <SelectItem value="twitch">Twitch</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="video-filter-from">{t("videos.filterPeriod")}</Label>
-            <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          aria-controls="video-filter-panel"
+          className="-my-3 flex min-h-11 w-full items-center gap-2 rounded text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+        >
+          <Search className="h-4 w-4" />
+          {t("videos.filterToggle")}
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+              {t("videos.filterActiveCount", { count: activeFilterCount })}
+            </span>
+          )}
+          <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", filtersOpen && "rotate-180")} />
+        </button>
+        {!filtersOpen && appliedChips.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-1.5 sm:hidden" aria-label={t("videos.filterToggle")}>
+            {appliedChips.map((chip) => (
+              <li key={chip.key} className="max-w-full">
+                <StatusPill className="max-w-full">
+                  <span className="truncate">{chip.label}</span>
+                </StatusPill>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div id="video-filter-panel" className={cn("mt-3 sm:mt-0 sm:block", filtersOpen ? "block" : "hidden")}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr]">
+            <div className="space-y-1.5">
+              <Label htmlFor="video-filter-player">{t("videos.filterPlayer")}</Label>
               <Input
-                id="video-filter-from"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <span className="shrink-0 text-muted-foreground">{t("common.rangeSeparator")}</span>
-              <Input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                aria-label={t("videos.filterPeriodTo")}
+                id="video-filter-player"
+                value={player}
+                onChange={(e) => setPlayer(e.target.value)}
+                placeholder={t("videos.filterPlayerPlaceholder")}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="video-filter-platform">{t("videos.filterPlatform")}</Label>
+              <Select value={platform} onValueChange={(v) => setPlatform(normalizePlatform(v))}>
+                <SelectTrigger id="video-filter-platform" className="w-full">
+                  {/* Radix の SelectValue は SSR で選択中の項目を描けないため、中身を明示して渡す（/browse と同じ） */}
+                  <SelectValue>
+                    {platform === "all" ? t("videos.platformAll") : PLATFORM_LABELS[platform]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("videos.platformAll")}</SelectItem>
+                  {(Object.keys(PLATFORM_LABELS) as (keyof typeof PLATFORM_LABELS)[]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {PLATFORM_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* 期間: /paces と同じ作り（見出し「時期」の下に開始日・終了日。sm 以上は欄名を sr-only にして横に並べる） */}
+            <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+              <span className="flex text-sm font-medium leading-none">{t("videos.filterPeriod")}</span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                <div className="space-y-1">
+                  <Label htmlFor="video-filter-from" className="text-xs text-muted-foreground sm:sr-only">
+                    {t("videos.filterPeriodFrom")}
+                  </Label>
+                  <Input
+                    id="video-filter-from"
+                    type="date"
+                    className="min-w-40"
+                    value={from}
+                    min={dateRange.min}
+                    max={dateRange.max}
+                    onChange={(e) => setFrom(e.target.value)}
+                    aria-invalid={periodError || undefined}
+                    aria-describedby={periodError ? "video-filter-period-error" : undefined}
+                  />
+                </div>
+                <span aria-hidden className="hidden text-muted-foreground sm:block">{t("common.rangeSeparator")}</span>
+                <div className="space-y-1">
+                  <Label htmlFor="video-filter-to" className="text-xs text-muted-foreground sm:sr-only">
+                    {t("videos.filterPeriodTo")}
+                  </Label>
+                  <Input
+                    id="video-filter-to"
+                    type="date"
+                    className="min-w-40"
+                    value={to}
+                    min={dateRange.min}
+                    max={dateRange.max}
+                    onChange={(e) => setTo(e.target.value)}
+                    aria-invalid={periodError || undefined}
+                    aria-describedby={periodError ? "video-filter-period-error" : undefined}
+                  />
+                </div>
+              </div>
+              {periodError && (
+                <p id="video-filter-period-error" role="alert" className="text-xs text-destructive">
+                  {t("videos.filterPeriodError")}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button type="submit" size="sm" className="min-h-11 sm:min-h-8">
+              <Search className="mr-1 h-4 w-4" />
+              {t("common.search")}
+            </Button>
+            {hasActiveFilters && (
+              <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" onClick={handleClear}>
+                <X className="mr-1 h-4 w-4" />
+                {t("common.resetFilters")}
+              </Button>
+            )}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <Button type="submit" size="sm">
-            <Search className="mr-1 h-4 w-4" />
-            {t("common.search")}
-          </Button>
-          {hasActiveFilters && (
-            <Button type="button" variant="ghost" size="sm" onClick={handleClear}>
-              <X className="mr-1 h-4 w-4" />
-              {t("common.clear")}
-            </Button>
-          )}
-        </div>
       </form>
-
-      {visibleTotal > 0 ? (
-        <VideosList
-          initialVideos={videos}
-          initialTotal={total}
-          filterKey={filterKey}
-          viewerPrefs={viewerPrefs}
-        />
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border/70 bg-background/60 py-16 text-center text-muted-foreground">
-          <Film className="mx-auto mb-2 h-12 w-12 opacity-30" />
-          <p>{hasActiveFilters ? t("videos.emptyFiltered") : t("videos.empty")}</p>
-        </div>
       )}
+
+      {/* 絞り込みの再取得中は、一覧（または空状態）を差し替えず薄くして残す */}
+      <div
+        aria-busy={isLoading || undefined}
+        className={cn("transition-opacity motion-reduce:transition-none", isLoading && "opacity-50")}
+      >
+        {visibleTotal > 0 ? (
+          <VideosList
+            initialVideos={videos}
+            initialTotal={total}
+            filterKey={filterKey}
+            viewerPrefs={viewerPrefs}
+          />
+        ) : (
+          <EmptyState
+            icon={<Film className="h-12 w-12" />}
+            title={hasActiveFilters ? t("videos.emptyFiltered") : t("videos.empty")}
+            description={hasActiveFilters ? t("videos.emptyFilteredHint") : t("videos.emptyHint")}
+            action={
+              hasActiveFilters ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/videos">{t("common.resetFilters")}</Link>
+                </Button>
+              ) : signedIn ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/me/edit">{t("videos.emptyAction")}</Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { formatRelativeTimeInHours } from "@/lib/relative-time";
+import { formatClockSeconds } from "@/lib/home-format";
+import { RelativeTime } from "@/components/relative-time";
 import type { FeedVideo } from "@/lib/feed-video";
 import { Play, ExternalLink } from "lucide-react";
 import { Youtube, Twitch } from "@/components/brand-icons";
@@ -9,7 +10,7 @@ import { useT, useLocale } from "@/hooks/use-locale";
 import { pickDisplayName } from "@/lib/slug";
 
 /** プラットフォーム上の視聴ページURL */
-function getFeedVideoUrl(video: FeedVideo): string {
+export function getFeedVideoUrl(video: FeedVideo): string {
   return video.platform === "youtube"
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`
     : `https://www.twitch.tv/videos/${encodeURIComponent(video.videoId)}`;
@@ -19,7 +20,7 @@ function getFeedVideoUrl(video: FeedVideo): string {
  * 埋め込みプレイヤーURL。Twitch は parent パラメータに現在のホスト名が必須のため、
  * クリック後（クライアント側）にのみ呼ぶこと
  */
-function getEmbedUrl(video: FeedVideo): string {
+export function getEmbedUrl(video: FeedVideo): string {
   if (video.platform === "youtube") {
     return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1`;
   }
@@ -27,14 +28,17 @@ function getEmbedUrl(video: FeedVideo): string {
   return `https://player.twitch.tv/?video=${encodeURIComponent(video.videoId)}&parent=${parent}&autoplay=true`;
 }
 
-/** 秒を "1:23:45" / "12:34" 形式に変換 */
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const mm = hours > 0 ? String(minutes).padStart(2, "0") : String(minutes);
-  const ss = String(seconds).padStart(2, "0");
-  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+/**
+ * サムネイルURL。キャッシュ行に無い YouTube は規定のサムネイルURLで代替する
+ * （Twitch は代替が無いので null）
+ */
+export function getFeedVideoThumbnailUrl(video: FeedVideo): string | null {
+  return (
+    video.thumbnailUrl ||
+    (video.platform === "youtube"
+      ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg`
+      : null)
+  );
 }
 
 /**
@@ -45,24 +49,28 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
   const t = useT();
   const locale = useLocale();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   const isYouTube = video.platform === "youtube";
   const watchUrl = getFeedVideoUrl(video);
-  const showName = pickDisplayName(video, locale) || video.channelTitle || "Unknown";
+  const showName = pickDisplayName(video, locale) || video.channelTitle || t("rankings.unknownPlayer");
   const platformName = isYouTube ? "YouTube" : "Twitch";
-  const thumbnailUrl =
-    video.thumbnailUrl ||
-    (isYouTube ? `https://i.ytimg.com/vi/${encodeURIComponent(video.videoId)}/mqdefault.jpg` : null);
+  const rawThumbnailUrl = getFeedVideoThumbnailUrl(video);
+  // 処理中の Twitch VOD は `_404/404_processing_*.png` のプレースホルダURLになる（現状 403 だが、
+  // 将来画像を返しても見栄えが悪いのでアイコン表示に落とす）。読み込み失敗時も同様
+  const thumbnailUrl = thumbFailed || rawThumbnailUrl?.includes("_404") ? null : rawThumbnailUrl;
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border border-border/70 bg-background/80 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       {/* カード全体のクリックで動画の視聴ページへ（外部リンク）。
-          サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる */}
+          サムネの再生ボタン・タイトル・チャンネル・外部リンクアイコンはこの上に z-10 で重ねる。
+          同じ URL への Tab 停止点と読み上げはタイトルのリンクに任せる（ペースカードと同じ。全面リンクはポインター専用） */}
       <a
         href={watchUrl}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label={video.title}
+        tabIndex={-1}
+        aria-hidden="true"
         className="absolute inset-0 z-0 rounded-xl"
       />
       {/* サムネイル / 埋め込みプレイヤー */}
@@ -83,10 +91,10 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             className="block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {thumbnailUrl ? (
-              <img src={thumbnailUrl} alt={video.title} className="h-full w-full object-cover" loading="lazy" />
+              <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" onError={() => setThumbFailed(true)} />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
-                <Twitch className="h-10 w-10 text-muted-foreground/50" />
+                {isYouTube ? <Youtube className="h-10 w-10 text-muted-foreground/50" /> : <Twitch className="h-10 w-10 text-muted-foreground/50" />}
               </div>
             )}
             {/* 再生オーバーレイ */}
@@ -95,19 +103,16 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
                 <Play className="ml-0.5 h-6 w-6 fill-white text-white" />
               </span>
             </span>
-            {/* プラットフォームバッジ */}
-            <span
-              className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-white ${
-                isYouTube ? "bg-youtube/90" : "bg-twitch/90"
-              }`}
-            >
-              {isYouTube ? <Youtube className="h-3 w-3" /> : <Twitch className="h-3 w-3" />}
+            {/* プラットフォームバッジ（右下の配信時間と同じ暗色ピル。ブランド色は面ではなくアイコンに置く:
+                ダークテーマの --youtube / --twitch は明るく、白文字の面にすると約3:1まで下がるため） */}
+            <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white">
+              {isYouTube ? <Youtube className="h-3 w-3 text-youtube" /> : <Twitch className="h-3 w-3 text-twitch" />}
               {platformName}
             </span>
             {/* 配信時間（Twitch VOD） */}
             {video.durationSeconds != null && video.durationSeconds > 0 && (
               <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
-                {formatDuration(video.durationSeconds)}
+                {formatClockSeconds(video.durationSeconds)}
               </span>
             )}
           </button>
@@ -141,7 +146,7 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
               {video.uuid ? (
                 <MinecraftAvatar uuid={video.uuid} skinUrl={video.customSkinUrl} size={20} className="rounded-md" />
               ) : video.discordAvatar ? (
-                <img src={video.discordAvatar} alt={showName} className="h-5 w-5 rounded-md" />
+                <img src={video.discordAvatar} alt="" className="h-5 w-5 rounded-md" />
               ) : (
                 <div className="h-5 w-5 rounded-md bg-muted" />
               )}
@@ -151,12 +156,14 @@ export function FeedVideoCard({ video }: { video: FeedVideo }) {
             <span className="min-w-0 truncate">{showName}</span>
           )}
           <span className="ml-auto flex shrink-0 items-center gap-2">
-            {formatRelativeTimeInHours(t, video.publishedAt)}
+            <RelativeTime date={video.publishedAt} unit="hours" />
+            {/* タイトルのリンクと同じ URL なので Tab 停止点・読み上げからは外す（クリックだけ受ける） */}
             <a
               href={watchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={t("home.openOnPlatform", { platform: platformName })}
+              tabIndex={-1}
+              aria-hidden="true"
               className="relative z-10 transition-colors hover:text-primary"
             >
               <ExternalLink className="h-3.5 w-3.5" />

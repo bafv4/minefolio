@@ -1,7 +1,6 @@
-import { useState, useMemo, useCallback, useReducer } from "react";
+import { useState, useMemo, useCallback, useEffect, useReducer, useRef } from "react";
 import { formatItemName } from "@bafv4/mcitems/1.16/react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -18,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ItemIcon } from "@/components/item-icon";
+import { PageSection } from "@/components/page-section";
 import { RemapRow, DialogRemapRow } from "@/components/remap-row";
 import { keyCaptureEscapeGuard } from "@/components/key-capture-button";
 import { VirtualKeyboard, VirtualMouse } from "@/components/virtual-keyboard";
@@ -40,6 +40,7 @@ import {
   getKeyLabel,
   parseKeyCombination,
   KEYBOARD_LAYOUT_OPTIONS,
+  keyboardLayoutLabel,
   normalizeKeyboardLayout,
   type KeyboardLayout,
 } from "@/lib/keybindings";
@@ -216,7 +217,7 @@ function TypingTestArea({
                           key={idx}
                           className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded bg-secondary/50 px-2"
                         >
-                          <ItemIcon itemId={itemId} size={24} />
+                          <ItemIcon itemId={itemId} size={24} alt="" />
                           <span className="text-sm">{formatItemName(itemId)}</span>
                         </span>
                       ))}
@@ -268,6 +269,9 @@ export function SearchCraftWorkbench({
   onRemapsChange,
   layout,
   onLayoutChange,
+  sectionHeadingLevel = "h2",
+  deleteWithUndo,
+  craftFirst = false,
 }: {
   crafts: SearchCraftDraft[];
   onCraftsChange: (next: SearchCraftDraft[]) => void;
@@ -277,6 +281,15 @@ export function SearchCraftWorkbench({
   onRemapsChange: (next: WorkbenchRemap[]) => void;
   layout: KeyboardLayoutOption;
   onLayoutChange: (layout: KeyboardLayoutOption) => void;
+  /**
+   * 3つの欄（キーボード／リマップ／サーチクラフト）の見出しの段。
+   * 既定は "h2"（ページの h1 の直下に置く想定。段を飛ばさない）
+   */
+  sectionHeadingLevel?: "h2" | "h3";
+  /** エントリの削除を、確認ダイアログではなく「元に戻す」つきのトーストにする（編集が即時に反映される画面向け） */
+  deleteWithUndo?: boolean;
+  /** true のとき、サーチクラフトの欄を先頭に置く（テンプレート編集。既定は キーボード → リマップ → サーチクラフト） */
+  craftFirst?: boolean;
 }) {
   const t = useT();
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
@@ -321,6 +334,39 @@ export function SearchCraftWorkbench({
     [remaps, onRemapsChange],
   );
 
+  // リマップ一覧の行操作後のフォーカス移動。
+  // 追加: 新しい行の変更元（最初の操作）。削除: 前の行（無ければ追加ボタン）。いずれも消えた/増えた要素にフォーカスが残らないように
+  const remapListRef = useRef<HTMLDivElement>(null);
+  const addRemapButtonRef = useRef<HTMLButtonElement>(null);
+  const [autoFocusRemapId, setAutoFocusRemapId] = useState<string | null>(null);
+  const [pendingFocus, setPendingFocus] = useState<{ rowIndex: number | null } | null>(null);
+  useEffect(() => {
+    if (!pendingFocus) return;
+    // 行は並び順（index）で探す。行の id を DOM の属性に出すと、SSR とクライアントで id が違う下書きの復元時に
+    // ハイドレーションの不一致になる
+    const el =
+      pendingFocus.rowIndex !== null
+        ? remapListRef.current?.children[pendingFocus.rowIndex]?.querySelector<HTMLElement>('[role="combobox"]')
+        : addRemapButtonRef.current;
+    (el ?? addRemapButtonRef.current)?.focus();
+    setPendingFocus(null);
+  }, [pendingFocus]);
+
+  const addRemapRow = useCallback(() => {
+    const id = draftId("remap");
+    setAutoFocusRemapId(id);
+    onRemapsChange([...remaps, { id, sourceKey: "", targetKey: null }]);
+  }, [remaps, onRemapsChange]);
+
+  const deleteRemapRowAt = useCallback(
+    (index: number) => {
+      // 前の行へ。キー入力待ちになる変更元ではなく、安全な出力タイプの選択へ置く
+      setPendingFocus({ rowIndex: index > 0 ? index - 1 : null });
+      onRemapsChange(remaps.filter((_, i) => i !== index));
+    },
+    [remaps, onRemapsChange],
+  );
+
   // バーチャルキーボードのキークリック → リマップ登録モーダル
   const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
 
@@ -334,97 +380,120 @@ export function SearchCraftWorkbench({
       .filter((r) => parseKeyCombination(r.sourceKey).keyCode === editingKeyCode);
   }, [editingKeyCode, remaps]);
 
-  return (
-    <>
-      {/* バーチャルキーボード */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-lg">{t("playground.keyboardSection")}</CardTitle>
-              <CardDescription>{t("playground.keyboardSectionDescription")}</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setTypingTestOpen(true)}>
-                <Keyboard className="mr-2 h-4 w-4" />
-                {t("playground.typingTestSection")}
-              </Button>
-              <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LAYOUT_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option.replace("_", " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-start gap-4">
-            <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
-              <VirtualKeyboard
-                layout={layout}
-                remaps={effectiveRemaps}
-                onKeyClick={setEditingKeyCode}
-                showRemaps
-                hideNumpad
+  const keyboardSection = (
+    <PageSection
+      id="workbench-keyboard"
+      title={t("playground.keyboardSection")}
+      headingLevel={sectionHeadingLevel}
+    >
+      <p className="text-sm text-muted-foreground">{t("playground.keyboardSectionDescription")}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="max-md:min-h-11"
+          onClick={() => setTypingTestOpen(true)}
+        >
+          <Keyboard className="mr-2 h-4 w-4" />
+          {t("playground.typingTestSection")}
+        </Button>
+        <Select value={layout} onValueChange={(v) => onLayoutChange(v as KeyboardLayoutOption)}>
+          <SelectTrigger className="w-32" aria-label={t("templates.keyboardLayoutLabel")}>
+            <SelectValue>{keyboardLayoutLabel(layout)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {LAYOUT_OPTIONS.map((option) => (
+              <SelectItem key={option} value={option}>
+                {keyboardLayoutLabel(option)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col items-start gap-4">
+        <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+          <VirtualKeyboard
+            layout={layout}
+            remaps={effectiveRemaps}
+            onKeyClick={setEditingKeyCode}
+            showRemaps
+            hideNumpad
+          />
+        </div>
+        <VirtualMouse
+          remaps={effectiveRemaps}
+          onButtonClick={setEditingKeyCode}
+          showRemaps
+        />
+      </div>
+    </PageSection>
+  );
+
+  const remapSection = (
+    <PageSection
+      id="workbench-remap"
+      title={t("playground.remapSection")}
+      headingLevel={sectionHeadingLevel}
+    >
+      <p className="text-sm text-muted-foreground">{t("playground.remapSectionDescription")}</p>
+      {remaps.length > 0 ? (
+        <div ref={remapListRef} className="divide-y border-y">
+          {remaps.map((remap, index) => (
+            <div key={remap.id}>
+              <RemapRow
+                remap={remap}
+                index={index}
+                keyboardLayout={layout}
+                onUpdate={updateRemapAt}
+                onDelete={deleteRemapRowAt}
+                autoFocusSource={remap.id === autoFocusRemapId}
               />
             </div>
-            <VirtualMouse
-              remaps={effectiveRemaps}
-              onButtonClick={setEditingKeyCode}
-              showRemaps
-            />
-          </div>
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("playground.noRemaps")}</p>
+      )}
+      <Button
+        ref={addRemapButtonRef}
+        variant="outline"
+        size="sm"
+        className="max-md:min-h-11"
+        onClick={addRemapRow}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        {t("playground.addRemap")}
+      </Button>
+    </PageSection>
+  );
 
-      {/* リマップエディタ */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{t("playground.remapSection")}</CardTitle>
-          <CardDescription>{t("playground.remapSectionDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {remaps.length > 0 ? (
-            <div className="divide-y border-y">
-              {remaps.map((remap, index) => (
-                <RemapRow
-                  key={remap.id}
-                  remap={remap}
-                  index={index}
-                  keyboardLayout={layout}
-                  onUpdate={updateRemapAt}
-                  onDelete={deleteRemapAt}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              {t("playground.noRemaps")}
-            </p>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() =>
-              onRemapsChange([
-                ...remaps,
-                { id: draftId("remap"), sourceKey: "", targetKey: null },
-              ])
-            }
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t("playground.addRemap")}
-          </Button>
-        </CardContent>
-      </Card>
+  const craftSection = (
+    <PageSection
+      id="workbench-craft"
+      title={t("playground.craftSection")}
+      headingLevel={sectionHeadingLevel}
+    >
+      <p className="text-sm text-muted-foreground">{t("playground.craftSectionDescription")}</p>
+      <SearchCraftTimingBoard
+        crafts={crafts}
+        onCraftsChange={onCraftsChange}
+        loops={loops}
+        onLoopsChange={onLoopsChange}
+        remaps={effectiveRemaps}
+        keyboardLayout={layout}
+        createCraft={createCraft}
+        createLoop={createLoop}
+        deleteWithUndo={deleteWithUndo}
+        emptyState="compact"
+      />
+    </PageSection>
+  );
+
+  return (
+    <>
+      {craftFirst ? craftSection : keyboardSection}
+      {craftFirst ? keyboardSection : remapSection}
+      {craftFirst ? remapSection : craftSection}
 
       {/* キー編集ダイアログ（バーチャルキーボードのキークリックで開く） */}
       <Dialog open={!!editingKeyCode} onOpenChange={(open) => !open && setEditingKeyCode(null)}>
@@ -496,26 +565,6 @@ export function SearchCraftWorkbench({
           <TypingTestArea remaps={effectiveRemaps} crafts={crafts} />
         </DialogContent>
       </Dialog>
-
-      {/* サーチクラフト＋繋ぎ方（Loop）編集（タイミングブロック型） */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{t("playground.craftSection")}</CardTitle>
-          <CardDescription>{t("playground.craftSectionDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SearchCraftTimingBoard
-            crafts={crafts}
-            onCraftsChange={onCraftsChange}
-            loops={loops}
-            onLoopsChange={onLoopsChange}
-            remaps={effectiveRemaps}
-            keyboardLayout={layout}
-            createCraft={createCraft}
-            createLoop={createLoop}
-          />
-        </CardContent>
-      </Card>
     </>
   );
 }

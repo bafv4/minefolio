@@ -10,3 +10,19 @@ export function parseGuideTags(tags: string | null | undefined): string[] {
     return [];
   }
 }
+
+/**
+ * タグ絞り込みのレールに並べるタグを返す。
+ * 件数の多い順、同数は名前順（`localeCompare`。ロケールに合わせる）。
+ * 一覧の並び替え（新着・人気）に依存しないよう、入力の順序には左右されない。
+ */
+export function rankGuideTags(
+  tagCounts: Record<string, number>,
+  locale: string,
+  limit = 20,
+): string[] {
+  return Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], locale))
+    .slice(0, limit)
+    .map(([name]) => name);
+}

@@ -1,8 +1,11 @@
-import { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { PageSection } from "@/components/page-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { NoticeBanner } from "@/components/notice-banner";
+import { getPublishAction, hasDraftSave, publishToggleDescKey, type PublishAction } from "@/components/guide-editor/hooks/use-guide-save";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -31,8 +34,10 @@ import {
 } from "@/lib/search-craft-templates";
 import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { useUnsavedWarning } from "@/hooks/use-unsaved-warning";
+import { UnsavedChangesDialog } from "@/components/unsaved-changes-dialog";
 import { toast } from "sonner";
-import { Download, Loader2, Save, X } from "lucide-react";
+import { Download, Loader2, Save, Send, Undo2, X } from "lucide-react";
 
 /**
  * サーチクラフトテンプレートの編集フォーム（作成・編集ページで共通）。
@@ -54,12 +59,33 @@ export type TemplateEditorData = {
   loops: SearchCraftLoopDraft[];
 };
 
+/** 保存の種類。draft＝下書き保存（公開版を変えない）、publish＝フォームの値を公開版へ書く（公開スイッチの値も送る） */
+export type TemplateSaveMode = "draft" | "publish";
+
+/** 編集画面だけが渡す、公開・下書きの状態。省略（新規作成）なら公開スイッチも下書き保存も出さない */
+export type TemplatePublishState = {
+  /** 保存済みの isPublished（いま読者に公開されているか） */
+  livePublished: boolean;
+  /** 未公開の下書きがあるか */
+  hasDraft: boolean;
+  /** 「公開版に戻す」（下書きを破棄する） */
+  onDiscard: () => void;
+  isDiscarding: boolean;
+};
+
 export function TemplateEditorForm({
   initial,
   currentSettings,
   keyboardLayout,
   isSubmitting,
   onSubmit,
+  publishState,
+  initialPublished = false,
+  submitLabel,
+  submitHint,
+  saveResult,
+  saveSucceeded,
+  onSaved,
 }: {
   initial: TemplateEditorData;
   /** 「現在の設定を読み込む」用のライブ設定（空なら非表示） */
@@ -70,7 +96,21 @@ export function TemplateEditorForm({
   } | null;
   keyboardLayout: string | null;
   isSubmitting: boolean;
-  onSubmit: (data: TemplateEditorData) => void;
+  onSubmit: (data: TemplateEditorData, mode: TemplateSaveMode, isPublished: boolean) => void;
+  publishState?: TemplatePublishState;
+  /** 公開スイッチの初期値（保存済みの isPublished） */
+  initialPublished?: boolean;
+  /** 確定ボタンの文言（省略時は「保存」） */
+  submitLabel?: string;
+  /** 確定ボタンの下に添える補足（新規作成の「作成後に公開できる」など） */
+  submitHint?: string;
+  /** 直近の保存結果（fetcher.data をそのまま渡す。送信のたびに新しい参照になる） */
+  saveResult?: unknown;
+  /** saveResult が成功を表すか */
+  saveSucceeded?: boolean;
+  /** 保存成功後、未保存の表示を消してから呼ぶ（遷移などはここで行う。離脱確認に止められない）。
+   *  下書き保存では呼ばない（編集を続けるため） */
+  onSaved?: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -80,10 +120,55 @@ export function TemplateEditorForm({
   const [crafts, setCrafts] = useState<SearchCraftDraft[]>(initial.crafts);
   const [remaps, setRemaps] = useState<TemplateRemapDraft[]>(initial.remaps);
   const [loops, setLoops] = useState<SearchCraftLoopDraft[]>(initial.loops);
+  const [publishSetting, setPublishSetting] = useState(initialPublished);
+  const publishSwitchId = useId();
   // バーチャルキーボードの表示レイアウト（初期値はユーザーの設定）
   const [layout, setLayout] = useState<KeyboardLayoutOption>(() =>
     normalizeLayout(keyboardLayout),
   );
+
+  // 未保存判定: 現在値が基準（開いたときの値。保存に成功したらその送信内容）と違うか。表示レイアウトは含めない
+  const currentKey = useMemo(
+    () =>
+      JSON.stringify({ title, description, gameLanguage, crafts, remaps, loops, publishSetting }),
+    [title, description, gameLanguage, crafts, remaps, loops, publishSetting],
+  );
+  const [baselineKey, setBaselineKey] = useState(() =>
+    JSON.stringify({
+      title: initial.title,
+      description: initial.description,
+      gameLanguage: initial.gameLanguage,
+      crafts: initial.crafts,
+      remaps: initial.remaps,
+      loops: initial.loops,
+      publishSetting: initialPublished,
+    }),
+  );
+  const dirty = currentKey !== baselineKey;
+  const blocker = useUnsavedWarning(dirty);
+  const submittedKeyRef = useRef<string | null>(null);
+  const submittedModeRef = useRef<TemplateSaveMode>("publish");
+  const handledResultRef = useRef<unknown>(saveResult);
+  const [savedPending, setSavedPending] = useState(false);
+
+  // 保存に成功したら、送信した内容を基準にして未保存を解消する
+  useEffect(() => {
+    if (saveResult === undefined || saveResult === handledResultRef.current) return;
+    handledResultRef.current = saveResult;
+    if (saveSucceeded && submittedKeyRef.current !== null) {
+      setBaselineKey(submittedKeyRef.current);
+      // 下書き保存は編集を続ける。公開版への保存だけ、保存後の遷移（onSaved）へ進む
+      if (submittedModeRef.current === "publish") setSavedPending(true);
+    }
+  }, [saveResult, saveSucceeded]);
+
+  // 未保存が解消された後のレンダーで onSaved を呼ぶ（useUnsavedWarning の blocker が更新された後なので止められない）
+  useEffect(() => {
+    if (savedPending && !dirty) {
+      setSavedPending(false);
+      onSaved?.();
+    }
+  }, [savedPending, dirty, onSaved]);
 
   const hasCurrentSettings =
     !!currentSettings &&
@@ -113,49 +198,183 @@ export function TemplateEditorForm({
     toast.success(t("meTemplates.loadedFromCurrent"));
   }, [currentSettings]);
 
-  const handleSave = useCallback(() => {
-    if (!title.trim()) {
-      toast.error(t("meTemplates.titleRequired"));
-      return;
-    }
+  // 検証エラー。テンプレート名は欄に aria-invalid と欄の下の文を出す。サーチクラフト・Loop の誤りは
+  // ワークベンチの中の個々の欄までは指せないので、ワークベンチの直前に文を出す（どちらもトーストは補助として残す）
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const contentErrorId = useId();
+  // 直した内容が変わったら、その欄のエラーを消す（次の保存で改めて検証する）
+  useEffect(() => {
+    setContentError(null);
+  }, [crafts, loops]);
+
+  const handleSave = useCallback((mode: TemplateSaveMode) => {
+    const nextTitleError = title.trim() ? null : t("meTemplates.titleRequired");
+    let nextContentError: string | null = null;
     if (crafts.length === 0) {
-      toast.error(t("meTemplates.noCraftsInEditor"));
+      nextContentError = t("meTemplates.noCraftsInEditor");
+    } else if (crafts.some((c) => c.items.length === 0)) {
+      nextContentError = t("meSearchCraft.selectAtLeastOneItem");
+    } else if (crafts.some((c) => c.variations.length === 0 || c.variations.some((v) => !v.str.trim()))) {
+      nextContentError = t("meSearchCraft.craftStringRequired");
+    } else if (loops.some((loop) => loop.steps.length < 2)) {
+      nextContentError = t("meSearchCraft.loopStepsRequired");
+    } else if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
+      nextContentError = t("meSearchCraft.loopEntryRequired");
+    }
+    setTitleError(nextTitleError);
+    setContentError(nextContentError);
+    if (nextTitleError || nextContentError) {
+      toast.error(nextTitleError ?? nextContentError);
+      // 最初の誤りへフォーカスを移す（文書順でテンプレート名が先）。文は描画後に出るので次のフレームで移す
+      requestAnimationFrame(() => {
+        if (nextTitleError) titleInputRef.current?.focus();
+        else document.getElementById(contentErrorId)?.focus();
+      });
       return;
     }
-    if (crafts.some((c) => c.items.length === 0)) {
-      toast.error(t("meSearchCraft.selectAtLeastOneItem"));
-      return;
-    }
-    if (crafts.some((c) => c.variations.length === 0 || c.variations.some((v) => !v.str.trim()))) {
-      toast.error(t("meSearchCraft.craftStringRequired"));
-      return;
-    }
-    if (loops.some((loop) => loop.steps.length < 2)) {
-      toast.error(t("meSearchCraft.loopStepsRequired"));
-      return;
-    }
-    if (loops.some((loop) => loop.steps.some((s) => !s.craftId))) {
-      toast.error(t("meSearchCraft.loopEntryRequired"));
-      return;
-    }
-    onSubmit({
-      title: title.trim(),
-      description: description.trim(),
-      gameLanguage,
-      crafts,
-      remaps,
-      loops,
-    });
-  }, [crafts, description, gameLanguage, loops, onSubmit, remaps, title]);
+    submittedKeyRef.current = currentKey;
+    submittedModeRef.current = mode;
+    onSubmit(
+      {
+        title: title.trim(),
+        description: description.trim(),
+        gameLanguage,
+        crafts,
+        remaps,
+        loops,
+      },
+      mode,
+      publishSetting,
+    );
+  }, [crafts, currentKey, description, gameLanguage, loops, onSubmit, publishSetting, remaps, title]);
+
+  // 送信ボタン（上端の操作バーと文書の末尾に同じものを置く。文書が長く、上へ戻らずに送れるように）
+  // 公開中は「下書き保存」（公開版を変えない）＋主ボタン。主ボタンの名前は公開スイッチと保存済みの公開状態で決まる（ガイドと同じ）
+  const publishAction: PublishAction | null = publishState
+    ? getPublishAction(publishState.livePublished, publishSetting)
+    : null;
+  const publishLabels: Record<PublishAction, string> = {
+    publish: t("meTemplates.publish"),
+    publishUpdate: t("meTemplates.publishUpdate"),
+    unpublish: t("meTemplates.unpublish"),
+    saveUnpublished: t("meTemplates.save"),
+  };
+  const showDraftSave = !!publishState && hasDraftSave(publishState.livePublished);
+  const busy = isSubmitting || !!publishState?.isDiscarding;
+  const submitButton = (
+    <div className="flex flex-col items-end gap-1">
+    <div className="flex flex-wrap items-center gap-2">
+      {showDraftSave && (
+        <Button
+          variant="outline"
+          onClick={() => handleSave("draft")}
+          disabled={busy}
+          className="h-11 sm:h-9"
+        >
+          <Save className="mr-2 h-4 w-4" aria-hidden />
+          {t("meTemplates.saveDraft")}
+        </Button>
+      )}
+      {publishAction === "unpublish" ? (
+        // 公開中のテンプレートを非公開にする操作だけ確認する（公開ページが見られなくなるため）
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" disabled={busy} className="h-11 sm:h-9">
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" aria-hidden />
+              )}
+              {publishLabels.unpublish}
+            </Button>
+          </AlertDialogTrigger>
+          {/* 確定すると分岐が切り替わって引き金のボタンが消えるので、フォーカスは公開スイッチへ送る */}
+          <AlertDialogContent
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              document.getElementById(publishSwitchId)?.focus();
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("meTemplates.unpublishConfirmTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("meTemplates.unpublishConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
+              {/* 取り消せる操作なので destructive にはせず、主操作の brand とも区別する */}
+              <AlertDialogAction
+                className={buttonVariants({ variant: "secondary" })}
+                onClick={() => handleSave("publish")}
+              >
+                {t("meTemplates.unpublishConfirmAction")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : (
+        <Button onClick={() => handleSave("publish")} disabled={busy} className="h-11 sm:h-9">
+          {isSubmitting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : publishAction && publishAction !== "saveUnpublished" ? (
+            <Send className="mr-2 h-4 w-4" aria-hidden />
+          ) : (
+            <Save className="mr-2 h-4 w-4" aria-hidden />
+          )}
+          {publishAction ? publishLabels[publishAction] : (submitLabel ?? t("meTemplates.save"))}
+        </Button>
+      )}
+    </div>
+    {submitHint && <p className="text-xs text-muted-foreground">{submitHint}</p>}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
+      {/* 下書きがあるとき: 公開版との差があることを知らせ、公開版へ戻せる（破棄は取り消せないので確認する） */}
+      {publishState?.hasDraft && (
+        <NoticeBanner tone="warning">
+         <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>{t("meTemplates.draftBanner", { action: publishAction ? publishLabels[publishAction] : t("meTemplates.save") })}</span>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={busy}>
+                <Undo2 className="mr-2 h-4 w-4" aria-hidden />
+                {t("meTemplates.revertToPublished")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("meTemplates.revertConfirmTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("meTemplates.revertConfirmDescription")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("meTemplates.cancel")}</AlertDialogCancel>
+                {/* 取り消せない破棄の確定は、ガイド・テンプレートの削除と同じ destructive */}
+                <AlertDialogAction
+                  className={buttonVariants({ variant: "destructive" })}
+                  onClick={publishState.onDiscard}
+                >
+                  {t("meTemplates.revertToPublished")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+         </div>
+        </NoticeBanner>
+      )}
+
       {/* 操作バー */}
       <div className="flex flex-wrap items-center gap-2">
         {hasCurrentSettings && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
                 <Download className="mr-2 h-4 w-4" />
                 {t("meTemplates.loadFromCurrent")}
               </Button>
@@ -176,33 +395,66 @@ export function TemplateEditorForm({
             </AlertDialogContent>
           </AlertDialog>
         )}
-        <Button onClick={handleSave} disabled={isSubmitting} className="ml-auto">
-          {isSubmitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
-          {t("meTemplates.save")}
-        </Button>
+        {publishState && publishAction && (
+          // スイッチの名前は主ボタンの名前（「公開する」など）と重ならない「公開設定」にし、いまの状態で保存すると
+          // どうなるかをガイドの公開スイッチと同じ説明で下に添える（オン/オフは role=switch の状態で伝える）
+          // label で全体を包み、文字ごと押せる範囲を 44px（sm 以上は 36px）にする。名前は見出しの span だけ（説明は describedby）
+          <label
+            htmlFor={publishSwitchId}
+            className="flex min-h-11 cursor-pointer items-start gap-2 py-1.5 text-sm sm:min-h-9"
+          >
+            <Switch
+              id={publishSwitchId}
+              checked={publishSetting}
+              onCheckedChange={setPublishSetting}
+              aria-labelledby={`${publishSwitchId}-label`}
+              aria-describedby={`${publishSwitchId}-desc`}
+              className="mt-0.5"
+            />
+            <span className="block space-y-0.5">
+              <span id={`${publishSwitchId}-label`} className="block font-medium">
+                {t("meTemplates.publishSwitch")}
+              </span>
+              <span id={`${publishSwitchId}-desc`} className="block max-w-xs text-xs text-muted-foreground">
+                {t(publishToggleDescKey(publishSetting, publishState.livePublished), {
+                  save: publishLabels[publishAction],
+                  draft: t("meTemplates.saveDraft"),
+                })}
+              </span>
+            </span>
+          </label>
+        )}
+        <div className="ml-auto">{submitButton}</div>
       </div>
 
-      {/* 基本情報 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{t("meTemplates.basicInfo")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="template-title">{t("meTemplates.templateName")}</Label>
+      {/* 基本情報（欄名はページの h1 の下の h2。ワークベンチの欄名も同じ段） */}
+      <PageSection id="template-basic-info" title={t("meTemplates.basicInfo")}>
+          <div className="max-w-2xl space-y-2">
+            <Label htmlFor="template-title">
+              {t("meTemplates.templateName")}
+              <span className="font-normal text-muted-foreground">{t("meTemplates.requiredMark")}</span>
+            </Label>
             <Input
+              ref={titleInputRef}
               id="template-title"
               value={title}
+              aria-required
               maxLength={TEMPLATE_TITLE_MAX}
               placeholder={t("meTemplates.templateNamePlaceholder")}
-              onChange={(e) => setTitle(e.target.value)}
+              aria-invalid={titleError ? true : undefined}
+              aria-describedby={titleError ? "template-title-error" : undefined}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (titleError && e.target.value.trim()) setTitleError(null);
+              }}
             />
+            {titleError && (
+              <p id="template-title-error" className="text-sm text-destructive">
+                {titleError}
+              </p>
+            )}
           </div>
-          <div className="space-y-2">
+          <div className="max-w-2xl space-y-2">
             <Label htmlFor="template-description">{t("meTemplates.descriptionOptional")}</Label>
             <Textarea
               id="template-description"
@@ -217,6 +469,7 @@ export function TemplateEditorForm({
             <Label htmlFor="template-language">{t("meTemplates.languageLabel")}</Label>
             <div className="flex items-center gap-2">
               <Combobox
+                id="template-language"
                 options={gameLanguageOptions(t, locale)}
                 value={gameLanguage}
                 onValueChange={setGameLanguage}
@@ -229,19 +482,33 @@ export function TemplateEditorForm({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-9 w-9 p-0 shrink-0"
+                  className="size-11 shrink-0 p-0 sm:size-9"
+                  aria-label={t("meTemplates.languageClear")}
+                  title={t("meTemplates.languageClear")}
                   onClick={() => setGameLanguage("")}
                 >
-                  <X className="h-4 w-4" />
+                  <X aria-hidden />
                 </Button>
               )}
             </div>
             <p className="text-xs text-muted-foreground">{t("meTemplates.languageHint")}</p>
           </div>
-        </CardContent>
-      </Card>
+      </PageSection>
 
-      {/* ワークベンチ（/playground と同一構成: リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
+      {/* サーチクラフト・Loop の検証エラー（ワークベンチの中の個々の欄は指せないので、ワークベンチの直前に出し、ここへフォーカスを移す） */}
+      {contentError && (
+        <NoticeBanner
+          tone="error"
+          role="status"
+          id={contentErrorId}
+          tabIndex={-1}
+          className="px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {contentError}
+        </NoticeBanner>
+      )}
+
+      {/* ワークベンチ（/playground と同じ部品。craftFirst で、主作業のサーチクラフトを先頭にする: サーチクラフト → キーボード → リマップ） */}
       <SearchCraftWorkbench
         crafts={crafts}
         onCraftsChange={setCrafts}
@@ -251,7 +518,14 @@ export function TemplateEditorForm({
         onRemapsChange={setRemaps}
         layout={layout}
         onLayoutChange={setLayout}
+        sectionHeadingLevel="h2"
+        craftFirst
       />
+
+      {/* 末尾の送信ボタン（上端と同じ。文書が長いので、編集を終えた位置から送れるようにする） */}
+      <div className="flex justify-end border-t border-border/60 pt-4">{submitButton}</div>
+
+      <UnsavedChangesDialog blocker={blocker} />
     </div>
   );
 }

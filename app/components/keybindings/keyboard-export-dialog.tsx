@@ -200,7 +200,7 @@ export function KeyboardExportDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
+        <Button variant="outline" size="sm" className="min-h-11 gap-1.5 sm:min-h-8">
           <ImageDown className="h-4 w-4" />
           {t("playerProfile.exportImage")}
         </Button>

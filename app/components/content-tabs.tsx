@@ -18,14 +18,23 @@ export type ContentTab = {
  * アクティブタブの bg がベースラインを覆ってページ面に開く（ui/tabs.tsx と同じ機構）。
  * タブは横スクロール可能（狭い画面でも見切れない）。
  */
-export function ContentTabs({ tabs, active }: { tabs: ContentTab[]; active: string }) {
+export function ContentTabs({
+  tabs,
+  active,
+  label,
+}: {
+  tabs: ContentTab[];
+  active: string;
+  /** nav ランドマークの名前（ページ内のほかの nav と区別して読み上げさせる） */
+  label: string;
+}) {
   const { scrollerRef, scrollbar, isScrollable } = useTabScrollbar();
   // タブ切替中は遷移先を先行してアクティブ表示する（コンテンツ側はスケルトン表示）
   const { targetPathname } = useTabNavigation();
   const activeKey =
     (targetPathname && tabs.find((tab) => tab.to === targetPathname)?.key) || active;
   return (
-    <nav className="flex w-full items-end border-b border-border">
+    <nav aria-label={label} className="flex w-full items-end border-b border-border">
       {/* relative ラッパ: カスタムスクロールバーの位置基準。-mb-px でベースラインに 1px 重ねる */}
       <div className="relative -mb-px min-w-0 flex-1">
       <div
@@ -42,7 +51,7 @@ export function ContentTabs({ tabs, active }: { tabs: ContentTab[]; active: stri
             to={to}
             aria-current={activeKey === key ? "page" : undefined}
             className={cn(
-              "relative inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-lg border border-border px-3.5 text-sm font-medium transition-colors",
+              "relative inline-flex h-11 shrink-0 sm:h-9 items-center gap-1.5 whitespace-nowrap rounded-t-lg border border-border px-3.5 text-sm font-medium transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
               "before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:h-0.5 before:rounded-full",
               activeKey === key
@@ -67,6 +76,7 @@ export function MyContentTabs({ active }: { active: "guides" | "templates" }) {
   return (
     <ContentTabs
       active={active}
+      label={t("meGuides.contentTabsLabel")}
       tabs={[
         { key: "guides", to: "/my-guides", label: t("meGuides.tabGuides"), icon: BookOpen },
         { key: "templates", to: "/my-guides/templates", label: t("meGuides.tabTemplates"), icon: LayoutTemplate },
@@ -81,6 +91,7 @@ export function GuidesContentTabs({ active }: { active: "guides" | "templates" }
   return (
     <ContentTabs
       active={active}
+      label={t("guides.contentTabsLabel")}
       tabs={[
         { key: "guides", to: "/guides", label: t("guides.tabGuides"), icon: BookOpen },
         { key: "templates", to: "/guides/templates", label: t("guides.tabTemplates"), icon: LayoutTemplate },

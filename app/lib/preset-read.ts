@@ -10,6 +10,8 @@
 //
 // 合成する行の id は `preset-<kind>-<idx>` 形式（表示専用。DB の行 id とは無関係)。
 // 並び順はライブテーブル取得時の orderBy と揃える。
+import type { FingerType } from "./keybindings";
+import { sanitizeFingerAssignments } from "./finger-assignments";
 import { normalizeKeyRemapType } from "./remap-utils";
 import { isValidLoopTransitionValue, normalizeVariationIndex, type LoopStepData } from "./search-craft-loops";
 import { resolveVariations, variationMirror } from "./search-craft-variations";
@@ -45,6 +47,23 @@ export function safeParseArray<T>(json: string | null | undefined): T[] | null {
   } catch {
     // 破損スナップショットで公開ページを落とさない（ライブへフォールバック）
     return null;
+  }
+}
+
+/**
+ * 指割り当て JSON（player_configs.fingerAssignments・プリセットスナップショット内の同名フィールド）を
+ * 安全にパースする。破損 JSON・オブジェクト以外（配列・null・数値等）・未設定は空オブジェクト扱いにし、
+ * 壊れた行 1 つで描画（SSR）を落とさない。
+ */
+export function parseFingerAssignments(
+  json: string | null | undefined,
+): Record<string, FingerType[]> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    return sanitizeFingerAssignments(parsed);
+  } catch {
+    return {};
   }
 }
 

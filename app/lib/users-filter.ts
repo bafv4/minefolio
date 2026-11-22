@@ -1,4 +1,4 @@
-import { or, isNull, ne, inArray } from "drizzle-orm";
+import { and, eq, or, isNull, ne, inArray } from "drizzle-orm";
 import { users } from "./schema";
 
 /**
@@ -26,3 +26,26 @@ export const publiclyReferencableCondition = inArray(users.profileVisibility, [
   "public",
   "unlisted",
 ]);
+
+/**
+ * 一覧・発見面（ホームの注目の走者・お気に入りの動き・Ranked ライブ等）に出してよい走者の WHERE 条件。
+ * 公開プロフィール（profileVisibility = "public"）かつ視聴者ロール以外。
+ */
+export const listedRunnerCondition = and(
+  eq(users.profileVisibility, "public"),
+  excludeViewersCondition,
+);
+
+/**
+ * 「Ranked 統計を表示する」人の WHERE 条件。showRankedStats が NULL（未設定）または true。
+ * NULL は既定の表示扱いなので除外しない（`showRankedStats !== false` と同じ意味）。
+ */
+export const rankedStatsVisibleCondition = or(
+  isNull(users.showRankedStats),
+  eq(users.showRankedStats, true),
+);
+
+/** rankedStatsVisibleCondition の JS 版（取得済みの行に対する判定） */
+export function isRankedStatsVisible(user: { showRankedStats: boolean | null | undefined }): boolean {
+  return user.showRankedStats !== false;
+}

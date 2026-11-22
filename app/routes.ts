@@ -35,10 +35,11 @@ export default [
     route("keybindings/visual", "routes/keybindings-visual.tsx"),
     route("keybindings/stats", "routes/keybindings-stats.tsx"),
     route("rankings", "routes/rankings.tsx"),
-    route("stats", "routes/stats.tsx"),
+    route("stats", "routes/stats.ts"),
     route("compare", "routes/compare.tsx"),
     route("playground", "routes/playground.tsx"),
     route("favorites", "routes/favorites.tsx"),
+    route("favorites/activity", "routes/favorites-activity.tsx"),
     route("feedback", "routes/feedback.tsx"),
     route("privacy", "routes/privacy.tsx"),
     route("terms", "routes/terms.tsx"),
@@ -56,6 +57,7 @@ export default [
       layout("routes/me/_layout.tsx", [
         index("routes/me/index.tsx"),
         route("edit", "routes/me/edit.tsx"),
+        route("account", "routes/me/account.tsx"),
         route("playstyle", "routes/me/playstyle.tsx"),
         route("records", "routes/me/records.tsx"),
         route("keybindings", "routes/me/keybindings.tsx"),
@@ -81,11 +83,17 @@ export default [
     route("guides/templates/:templateId", "routes/guides/templates/view.tsx"),
     route("guides/:authorSlug", "routes/guides/user.tsx"),
     route("guides/:authorSlug/:guideSlug", "routes/guides/view.tsx"),
+
+    // 未マッチパスのキャッチオール。共通レイアウトの内側に置き、ヘッダー・フッター付きで 404 を出す。
+    // root ローダーを走らせてロケールを確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
+    route("*", "routes/not-found.tsx"),
   ]),
 
   // API routes (outside of layout)
   route("api/auth/*", "routes/api/auth/splat.tsx"),
   route("api/skin", "routes/api/skin.ts"),
+  route("api/me/mcid-check", "routes/api/me/mcid-check.ts"),
+  route("api/me/guide", "routes/api/me/guide.ts"),
   route("api/me/skin", "routes/api/me/skin.ts"),
   route("api/me/skin/upload-token", "routes/api/me/skin/upload-token.ts"),
   route("api/cape", "routes/api/cape.ts"),
@@ -93,13 +101,19 @@ export default [
   route("api/me/cape/upload-token", "routes/api/me/cape/upload-token.ts"),
   route("api/me/guides/upload-image", "routes/api/me/guides/upload-image.ts"),
   route("api/guides/search", "routes/api/guides/search.ts"),
+  route("api/guides/templates-search", "routes/api/guides/templates-search.ts"),
+  route("api/guides/embed-resolve", "routes/api/guides/embed-resolve.ts"),
+  route("api/guides/view-count", "routes/api/guides/view-count.ts"),
   route("api/favorites", "routes/api/favorites.ts"),
   route("api/likes", "routes/api/likes.ts"),
   route("api/profile-reactions", "routes/api/profile-reactions.ts"),
   route("api/set-locale", "routes/api/set-locale.ts"),
   route("api/users/by-slugs", "routes/api/users/by-slugs.ts"),
   route("api/home-feed", "routes/api/home-feed.ts"),
+  route("api/home-featured", "routes/api/home-featured.ts"),
+  route("api/home-favorite-activity", "routes/api/home-favorite-activity.ts"),
   route("api/social-stats", "routes/api/social-stats.ts"),
+  route("api/paceman-registration", "routes/api/paceman-registration.ts"),
   route("api/paces", "routes/api/paces.ts"),
   route("api/videos", "routes/api/videos.ts"),
   route("api/keybindings-csv", "routes/api/keybindings-csv.ts"),
@@ -119,8 +133,4 @@ export default [
 
   // OGP image generation (outside of layout)
   route("og-image", "routes/og-image.tsx"),
-
-  // 未マッチパスのキャッチオール（必ず最後）。root ローダーを走らせてロケールを
-  // 確定させてから 404 を投げ直す。詳細は routes/not-found.tsx のコメント
-  route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

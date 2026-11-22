@@ -1,25 +1,32 @@
 import type { MessageKey } from "@/lib/messages";
-import { memo, type CSSProperties } from "react";
+import { memo, useId, type CSSProperties } from "react";
 import { useT } from "@/hooks/use-locale";
+import { useRovingKeyFocus, type RovingItemProps } from "@/hooks/use-roving-key-focus";
 import type { Translator } from "@/lib/messages";
 import { ArrowBigUp, ChevronUp, Command, Option, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getKeyLabel, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, getFingerLabel, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
-import { getRemapOutputLabel, getRemapSourceLabel, isSpecialRemapTarget, type RemapInfo } from "@/lib/remap-utils";
+import { getKeyLabel, getKeyCodeAliases, isJisLayout, isTklLayout, getActionLabel, getShortActionLabel, normalizeKeyCode, keysEqual, DEFAULT_FINGER_ASSIGNMENTS, parseKeyCombination, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { getRemapOutputLabel, getRemapSourceLabel, type RemapInfo } from "@/lib/remap-utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { KeyInfoTrigger, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
+import { KeyInfoTrigger, hasKeyInfo, type KeyInfoData, type KeyInfoCustomAction } from "@/components/key-info-trigger";
+
+// キーのフォーカスリング。横スクロールの枠（padding 0）で左端・上端のキーのリングが切れないよう、内側に描く
+const KEY_FOCUS_RING = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
 
 // カスタムアクションのトリガーキー（修飾キー組み合わせ可）が指定キーコードに一致するものを抽出。
 // リマップと同様、修飾キー組み合わせ（"Ctrl+KeyX"）はベースキー（KeyX）で照合する。
+// layout を渡すと、JIS の半角キー（IntlYen）には別名の Backquote をトリガーにするものも含める。
 function getCustomActionsForKeyCode(
   customActions: KeyInfoCustomAction[],
   keyCode: string,
+  layout?: string | null,
 ): KeyInfoCustomAction[] {
+  const codes = getKeyCodeAliases(keyCode, layout);
   return customActions.filter((ca) => {
     const baseKey = ca.triggerKey.includes("+")
       ? parseKeyCombination(ca.triggerKey).keyCode
       : ca.triggerKey;
-    return keysEqual(baseKey, keyCode);
+    return codes.some((c) => keysEqual(baseKey, c));
   });
 }
 
@@ -47,7 +54,8 @@ function buildKeyAriaLabel(t: Translator, opts: {
     ...opts.remaps.map((r) =>
       t("keyboardView.ariaRemap", {
         from: getRemapSourceLabel(t, r.sourceKey, opts.layout),
-        to: getRemapOutputLabel(t, r, opts.layout),
+        // 無効化は見える表示が「×」だが、読み上げでは意味が伝わらないので文言にする
+        to: r.targetKey === null ? t("keyboardView.remapDisabled") : getRemapOutputLabel(t, r, opts.layout),
       }),
     ),
   ].join(t("keyboardView.ariaSeparator"));
@@ -260,37 +268,6 @@ const JIS_MAIN_LAYOUT: KeyboardRow[] = [
   ],
 ];
 
-// テンキー定義
-const NUMPAD_LAYOUT: KeyboardRow[] = [
-  [
-    { code: "NumLock", label: "Num" },
-    { code: "NumpadDivide", label: "/" },
-    { code: "NumpadMultiply", label: "*" },
-    { code: "NumpadSubtract", label: "-" },
-  ],
-  [
-    { code: "Numpad7", label: "7" },
-    { code: "Numpad8", label: "8" },
-    { code: "Numpad9", label: "9" },
-    { code: "NumpadAdd", label: "+", height: 2 },
-  ],
-  [
-    { code: "Numpad4", label: "4" },
-    { code: "Numpad5", label: "5" },
-    { code: "Numpad6", label: "6" },
-  ],
-  [
-    { code: "Numpad1", label: "1" },
-    { code: "Numpad2", label: "2" },
-    { code: "Numpad3", label: "3" },
-    { code: "NumpadEnter", label: "Enter", height: 2 },
-  ],
-  [
-    { code: "Numpad0", label: "0", width: 2 },
-    { code: "NumpadDecimal", label: "." },
-  ],
-];
-
 // 指の種類から基本色名へのマッピング
 type FingerColorName = "pinky" | "ring" | "middle" | "index" | "thumb" | "palm";
 
@@ -381,8 +358,49 @@ export function getFingerKeyStyle(
   };
 }
 
+/**
+ * 指色の付かないキーの状態ごとの面・枠・ラベル色。
+ * - data: キーに情報（操作・リマップ・カスタムアクション・指）がある
+ * - empty: 情報が無く、押せない（読み取り専用）。後ろへ引かせる
+ * - emptyEditable: 情報が無いが、押せる（編集）。操作部品なのでフォーム部品と同じ枠（3:1 以上）
+ */
+export const KEY_STATE_CLASS = {
+  data: "bg-secondary border-muted-foreground/70 text-foreground",
+  empty: "bg-secondary/50 border-border text-muted-foreground",
+  emptyEditable: "bg-secondary/50 border-muted-foreground/70 text-muted-foreground",
+} as const;
+
+/**
+ * キーの面・枠・ラベル色を決める（VirtualKeyboard のキー・JIS Enter・カスタムキー・
+ * VirtualMouse・VirtualNumpad で共有）。
+ *
+ * - `fingerKeyClass` があれば（指色表示で指あり）それを使う
+ * - そうでなければ情報の有無（`hasKeyInfo`）と押せるか（`editable`）で状態を選ぶ
+ * - `remapped` なら枠を `border-primary` に上書き（指色のキーにも適用）
+ *
+ * `labelMuted` は、キー内のラベル（span）を muted にするか（空きの状態のときだけ true）。
+ */
+function getKeySurface(opts: {
+  fingerKeyClass?: string;
+  hasInfo: boolean;
+  editable: boolean;
+  remapped: boolean;
+}): { className: string; labelMuted: boolean } {
+  if (opts.fingerKeyClass) {
+    return {
+      className: cn(opts.fingerKeyClass, opts.remapped && "border-primary"),
+      labelMuted: false,
+    };
+  }
+  const state = opts.hasInfo ? "data" : opts.editable ? "emptyEditable" : "empty";
+  return {
+    className: cn(KEY_STATE_CLASS[state], opts.remapped && "border-primary"),
+    labelMuted: state !== "data",
+  };
+}
+
 // チップ用の色（操作名表示用）- CSS変数を使用。
-// 文字色は --finger-chip-fg（ライト=白 / ダーク・ウルトラダーク=黒）を参照。
+// 文字色は --finger-chip-fg（ライト=暗色 / ダーク・ウルトラダーク=白。全指で 4.5:1 以上）を参照。
 // dark: 変種ではなく変数で切り替えることで、画像出力プレビューなど
 // グローバルとは別テーマを局所適用するコンテナ内でも正しく描画できる。
 export const FINGER_CHIP_COLORS: Record<FingerType, string> = {
@@ -433,7 +451,6 @@ interface VirtualKeyboardProps {
   fingerAssignments?: FingerAssignment;
   remaps?: RemapInfo[]; // リマップ情報
   customActions?: KeyInfoCustomAction[]; // カスタムアクション（トリガーキーごとにツールチップ/モーダルへ表示）
-  customKeyNames?: Record<string, string>; // カスタムキーコード → 表示名のマップ
   customKeys?: CustomKeyboardButton[]; // カスタムキーボードキー
   highlightedKeys?: string[];
   /**
@@ -462,6 +479,11 @@ interface VirtualKeyboardProps {
   useDefaultFingerAssignments?: boolean; // デフォルトの指割り当てを使用
   hideNumpad?: boolean; // テンキーを非表示にする
   alwaysShowActions?: string[]; // showActionLabels=false でも常に表示する操作名
+  /**
+   * 描画する範囲。"all"（既定）は従来どおり全体、"main" はメイン部（＋カスタムキー・テンキー）のみ、
+   * "nav" はナビクラスタ（Insert〜PgDn の島＋矢印）のみ（F行の空き段なしの5段。テンキーと上端・下端がそろう）
+   */
+  section?: "all" | "main" | "nav";
 }
 
 // JIS の L 字 Enter（リターン）専用キー。
@@ -483,6 +505,7 @@ function JisEnterKey({
   isHighlighted,
   clickable,
   onClick,
+  itemProps,
 }: {
   baseSize: number;
   gap: number;
@@ -495,6 +518,8 @@ function JisEnterKey({
   isHighlighted: boolean;
   clickable: boolean;
   onClick: () => void;
+  /** roving tabindex の props。undefined ならフォーカスできないキーとして div（aria-hidden）で描く */
+  itemProps?: RovingItemProps;
 }) {
   const unit = (u: number) => u * baseSize + (u - 1) * gap;
   const topPx = unit(JIS_ENTER_TOP_UNITS);
@@ -506,33 +531,29 @@ function JisEnterKey({
   // 左へずらして段差を作る。隣キーとの隙間（gap）は他キー同様に残す
   const marginLeftPx = -(topPx - bottomPx);
 
-  // group-hover で、上下どちらにホバーしても両方が同じホバー表示になる
+  // group-hover で、上下どちらにホバーしても両方が同じホバー表示になる。
+  // 押せないときはホバーの見た目を付けない
   const rectBase = cn(
     "absolute border-2 transition-colors",
     keyClass,
     isHighlighted && "border-primary",
-    clickable
-      ? "group-hover:bg-secondary/80 group-hover:border-primary/50"
-      : "group-hover:bg-secondary",
+    clickable && "group-hover:bg-secondary/80 group-hover:border-primary/50",
   );
 
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={onClick}
-      className={cn(
-        "group relative shrink-0 select-none",
-        clickable && "cursor-pointer",
-        isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background rounded-md",
-      )}
-      style={{
-        width: topPx,
-        height: totalHeightPx,
-        marginTop: marginTopPx,
-        marginLeft: marginLeftPx,
-      }}
-    >
+  const wrapperClassName = cn(
+    "group relative shrink-0 select-none",
+    clickable && "cursor-pointer",
+    isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background rounded-md",
+  );
+  const wrapperStyle: CSSProperties = {
+    width: topPx,
+    height: totalHeightPx,
+    marginTop: marginTopPx,
+    marginLeft: marginLeftPx,
+  };
+
+  const content = (
+    <>
       {/* 上段（広い側）。下辺は角丸・枠線なしにして下段と継ぎ目なく一体化（中央の横線を出さない） */}
       <div
         aria-hidden
@@ -559,6 +580,28 @@ function JisEnterKey({
         <span className="font-semibold leading-none">{label}</span>
         {chips}
       </div>
+    </>
+  );
+
+  if (!itemProps) {
+    return (
+      <div aria-hidden="true" className={wrapperClassName} style={wrapperStyle}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      // L 字の外接矩形に、内側 2px のフォーカスリングを描く
+      className={cn(wrapperClassName, "rounded-md", KEY_FOCUS_RING)}
+      style={wrapperStyle}
+      {...itemProps}
+    >
+      {content}
     </button>
   );
 }
@@ -575,7 +618,6 @@ function VirtualKeyboardComponent({
   fingerAssignments = {},
   remaps = [],
   customActions = [],
-  customKeyNames = {},
   customKeys = [],
   highlightedKeys = [],
   heldKeys = [],
@@ -589,12 +631,18 @@ function VirtualKeyboardComponent({
   useDefaultFingerAssignments = false,
   hideNumpad = false,
   alwaysShowActions,
+  section = "all",
 }: VirtualKeyboardProps) {
   const t = useT();
-  const isJIS = layout === "JIS" || layout === "JIS_TKL";
-  const isTKL = layout === "US_TKL" || layout === "JIS_TKL";
+  // 1インスタンスにつき Tab 停止点は1つ（roving tabindex）。矢印キーでキー間を移動する
+  const { rootRef, getItemProps, onKeyDown, focusableCount } = useRovingKeyFocus<HTMLDivElement>();
+  const hintId = useId();
+  const isJIS = isJisLayout(layout);
+  const isTKL = isTklLayout(layout);
   const mainLayout = isJIS ? JIS_MAIN_LAYOUT : US_MAIN_LAYOUT;
-  const showNumpad = !isTKL && !hideNumpad;
+  const showNumpad = !isTKL && !hideNumpad && section !== "nav";
+  const showMain = section !== "nav";
+  const showNav = section !== "main";
 
   // 有効な指割り当て（ユーザー設定がなければデフォルトを使用）
   const effectiveFingerAssignments: FingerAssignment = useDefaultFingerAssignments
@@ -603,46 +651,51 @@ function VirtualKeyboardComponent({
 
   // キーコードからバインディング情報を検索（正規化して検索、複数操作対応）
   const getBindingsForKey = (keyCode: string): KeybindingInfoList => {
-    // 直接 → 正規化 → 小文字 の順に検索
-    const normalized = normalizeKeyCode(keyCode);
-    const list =
-      keybindings[keyCode] ||
-      keybindings[normalized] ||
-      keybindings[keyCode.toLowerCase()] ||
-      [];
+    // 別名のキーコード（JIS の半角 IntlYen ← Backquote）の割り当ても合わせる（同じ操作は1つに）
+    const merged: KeybindingInfoList = [];
+    for (const code of getKeyCodeAliases(keyCode, layout)) {
+      // 直接 → 正規化 → 小文字 の順に検索
+      const normalized = normalizeKeyCode(code);
+      const list =
+        keybindings[code] ||
+        keybindings[normalized] ||
+        keybindings[code.toLowerCase()] ||
+        [];
+      for (const b of list) {
+        if (!merged.some((m) => m.action === b.action && m.category === b.category)) merged.push(b);
+      }
+    }
     // toggleHud はバーチャルキーボード上には表示しない
-    return list.filter((b) => b.action !== "toggleHud");
+    return merged.filter((b) => b.action !== "toggleHud");
   };
 
   // キーコードから指割り当てを取得（正規化して検索）
   const getFingersForKey = (keyCode: string): FingerType[] => {
-    const normalized = normalizeKeyCode(keyCode);
-    return effectiveFingerAssignments[normalized] ||
-           effectiveFingerAssignments[keyCode] ||
-           effectiveFingerAssignments[keyCode.toLowerCase()] ||
-           [];
+    // 別名のキーコード（JIS の半角 IntlYen ← Backquote）の指割り当ても合わせる（重複は除く）
+    const merged: FingerType[] = [];
+    for (const code of getKeyCodeAliases(keyCode, layout)) {
+      const normalized = normalizeKeyCode(code);
+      const found: unknown =
+        effectiveFingerAssignments[normalized] ||
+        effectiveFingerAssignments[code] ||
+        effectiveFingerAssignments[code.toLowerCase()];
+      // 壊れたデータ（配列でない値）で描画を落とさない
+      const list: FingerType[] = Array.isArray(found) ? found : [];
+      for (const f of list) if (!merged.includes(f)) merged.push(f);
+    }
+    return merged;
   };
 
   // キーコードからリマップ情報を取得
   // 修飾キー組み合わせの場合はベースキーが一致するものを返す
-  const getRemapForKey = (keyCode: string): RemapInfo | undefined => {
-    return remaps.find((r) => {
-      if (r.sourceKey.includes("+")) {
-        const parsed = parseKeyCombination(r.sourceKey);
-        return keysEqual(parsed.keyCode, keyCode);
-      }
-      return keysEqual(r.sourceKey, keyCode);
-    });
-  };
+  const getRemapForKey = (keyCode: string): RemapInfo | undefined => getRemapsForKey(keyCode)[0];
 
   // 特定キーに関連する全リマップを取得（修飾キー組み合わせを含む）
   const getRemapsForKey = (keyCode: string): RemapInfo[] => {
+    const codes = getKeyCodeAliases(keyCode, layout);
     return remaps.filter((r) => {
-      if (r.sourceKey.includes("+")) {
-        const parsed = parseKeyCombination(r.sourceKey);
-        return keysEqual(parsed.keyCode, keyCode);
-      }
-      return keysEqual(r.sourceKey, keyCode);
+      const source = r.sourceKey.includes("+") ? parseKeyCombination(r.sourceKey).keyCode : r.sourceKey;
+      return codes.some((c) => keysEqual(source, c));
     });
   };
 
@@ -666,12 +719,13 @@ function VirtualKeyboardComponent({
     const finger: FingerType | undefined = fingers[0];
     // 複数リマップ対応: このキーに関連する全リマップを取得
     const keyRemaps = showRemaps ? getRemapsForKey(key.code) : [];
-    const isHighlighted = highlightedKeys.includes(key.code);
-    const isHeld = heldKeys.includes(key.code);
-    const annotation = keyAnnotations[key.code];
+    const keyCodes = getKeyCodeAliases(key.code, layout);
+    const isHighlighted = keyCodes.some((c) => highlightedKeys.includes(c));
+    const isHeld = keyCodes.some((c) => heldKeys.includes(c));
+    const annotation = keyCodes.map((c) => keyAnnotations[c]).find((a) => a !== undefined);
     const isDimmed =
       emphasizedKeys !== undefined &&
-      !emphasizedKeys.includes(key.code) &&
+      !keyCodes.some((c) => emphasizedKeys.includes(c)) &&
       !isHeld &&
       !isHighlighted;
     const displayLabel =
@@ -702,20 +756,6 @@ function VirtualKeyboardComponent({
       layout,
     });
 
-    // リマップのツールチップ説明を生成
-    const getRemapTooltipText = (r: RemapInfo): string => {
-      if (r.targetKey === null) {
-        return t("keyboardView.remapDisabled");
-      }
-      if (isSpecialRemapTarget(r.targetKey)) {
-        return t("keyboardView.remapOutputsChar", { char: r.targetKey });
-      }
-      if (r.targetKey) {
-        return getKeyLabel(t, r.targetKey, layout);
-      }
-      return t("keyboardView.remapDisabled");
-    };
-
     // リマップのソースキーの修飾キーマーク（シンボルで表示）
     const getModifierIcons = (r: RemapInfo): LucideIcon[] => {
       if (!r.sourceKey.includes("+")) return [];
@@ -734,30 +774,45 @@ function VirtualKeyboardComponent({
     const remapsOnlyWithModifier =
       keyRemaps.length > 0 && keyRemaps.every(remapHasModifier);
 
-    const keyElement = (
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        onClick={() => onKeyClick?.(key.code)}
-        className={cn(
-          "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
-          "font-medium select-none gap-0.5 px-1",
-          showFingerAssignments && finger
-            ? fingerKeyClass
-            : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
-          isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-          isHeld && "border-warning bg-warning/10 text-warning",
-          isDimmed && "opacity-40 grayscale",
-          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
-          key.className
-        )}
-        style={{
-          // 保持中（isHeld）は warning 背景を優先するため、指のバンド背景は載せない
-          ...(isHeld ? undefined : fingerKeyStyle.style),
-          width: `${width}px`,
-          height: `${height}px`,
-        }}
-      >
+    // ツールチップでバインディング情報を表示
+    const info: KeyInfoData = {
+      title: getKeyLabel(t, key.code, layout),
+      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+      remaps: keyRemaps,
+      customActions: getCustomActionsForKeyCode(customActions, key.code, layout),
+      fingers: showFingerAssignments ? fingers : undefined,
+      layout,
+    };
+    const surface = getKeySurface({
+      fingerKeyClass: showFingerAssignments && finger ? fingerKeyClass : undefined,
+      hasInfo: hasKeyInfo(info),
+      editable: !!onKeyClick,
+      remapped: keyRemaps.length > 0,
+    });
+    // フォーカスできるキー: 編集では全キー、読み取り専用では情報のあるキーだけ（ツールチップ／情報ダイアログを持つ）。
+    // KeyInfoTrigger が包むかどうかと同じ式（hasKeyInfo）から決める。フォーカスできないキーは div で描く
+    const focusable = !!onKeyClick || hasKeyInfo(info);
+    const itemProps = focusable ? getItemProps(`key:${key.code}`) : undefined;
+
+    const keyClassName = cn(
+      "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
+      "font-medium select-none gap-0.5 px-1",
+      surface.className,
+      isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+      isHeld && "border-warning bg-warning/10 text-warning",
+      isDimmed && "opacity-40 grayscale",
+      onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
+      key.className
+    );
+    const keyStyle: CSSProperties = {
+      // 保持中（isHeld）は warning 背景を優先するため、指のバンド背景は載せない
+      ...(isHeld ? undefined : fingerKeyStyle.style),
+      width: `${width}px`,
+      height: `${height}px`,
+    };
+
+    const keyContent = (
+      <>
         {/* キー押下シーケンス可視化の順番注釈（例: "1", "1,4"）。キー面（40px超）に載せる数字の
             ため、h-7 バッジ肩の text-[10px] 規格より1段大きい text-[11px] で視認性を優先する */}
         {annotation && (
@@ -775,7 +830,7 @@ function VirtualKeyboardComponent({
             {remapsOnlyWithModifier && (
               <span className={cn(
                 "font-semibold leading-none text-[11px]",
-                !(showFingerAssignments && finger) && "text-muted-foreground"
+                surface.labelMuted && "text-muted-foreground"
               )}>
                 {displayLabel}
               </span>
@@ -793,13 +848,13 @@ function VirtualKeyboardComponent({
                       ))}
                     </span>
                   )}
-                  <span className="font-medium text-[9px] text-muted-foreground/50">
+                  <span className="font-medium text-[10px] text-muted-foreground">
                     {displayLabel}
                   </span>
-                  <span className="text-[8px] text-muted-foreground/40">→</span>
+                  <span className="text-[10px] text-muted-foreground">→</span>
                   <span className={cn(
-                    "font-bold text-[9px]",
-                    isDisabled ? "text-destructive/80" : "text-foreground"
+                    "font-bold text-[10px]",
+                    isDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
                   )}>
                     {targetLabel}
                   </span>
@@ -807,14 +862,14 @@ function VirtualKeyboardComponent({
               );
             })}
             {keyRemaps.length > 2 && (
-              <span className="text-[7px] text-muted-foreground/50">+{keyRemaps.length - 2}</span>
+              <span className="text-[10px] text-muted-foreground">+{keyRemaps.length - 2}</span>
             )}
           </div>
         ) : (
           /* 通常のキーラベル */
           <span className={cn(
             "font-semibold leading-none text-[11px]",
-            !(showFingerAssignments && finger) && "text-muted-foreground"
+            surface.labelMuted && "text-muted-foreground"
           )}>
             {displayLabel}
           </span>
@@ -822,10 +877,10 @@ function VirtualKeyboardComponent({
         {/* 操作名チップ（下部）- リマップがあっても表示。
             複数操作を持つキーで全件読めるよう折り返しを許容（truncate しない）。 */}
         {showAction && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {filteredBindings.map((binding, i) => (
               <span key={i} className={cn(
-                "rounded px-1 py-0 leading-none text-[8px]",
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                 chipClass
               )}>
                 {getShortActionLabel(t, binding.action)}
@@ -833,20 +888,11 @@ function VirtualKeyboardComponent({
             ))}
           </div>
         )}
-      </button>
+      </>
     );
 
-    // ツールチップでバインディング情報を表示
-    const info: KeyInfoData = {
-      title: getKeyLabel(t, key.code, layout),
-      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
-      remaps: keyRemaps,
-      customActions: getCustomActionsForKeyCode(customActions, key.code),
-      fingers: showFingerAssignments ? fingers : undefined,
-      layout,
-    };
-
-    // JIS の L 字 Enter は専用コンポーネントで描画（2段分の単一ボタン）
+    // JIS の L 字 Enter は専用コンポーネントで描画（2段分の単一ボタン）。
+    // 通常のキーは、フォーカスできるときだけ button、それ以外は支援技術から隠した div
     const renderedKey = key.jisEnter ? (
       <JisEnterKey
         baseSize={baseSize}
@@ -855,11 +901,11 @@ function VirtualKeyboardComponent({
         ariaLabel={ariaLabel}
         chips={
           showAction ? (
-            <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+            <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
               {filteredBindings.map((binding, i) => (
                 <span
                   key={i}
-                  className={cn("rounded px-1 py-0 leading-none text-[8px]", chipClass)}
+                  className={cn("min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug", chipClass)}
                 >
                   {getShortActionLabel(t, binding.action)}
                 </span>
@@ -868,22 +914,34 @@ function VirtualKeyboardComponent({
           ) : null
         }
         keyClass={cn(
-          showFingerAssignments && finger
-            ? fingerKeyClass
-            : "bg-secondary/50 border-border/50 text-muted-foreground",
+          surface.className,
           isDimmed && "opacity-40 grayscale",
         )}
         keyStyle={fingerKeyStyle.style}
         isHighlighted={isHighlighted}
         clickable={!!onKeyClick}
         onClick={() => onKeyClick?.(key.code)}
+        itemProps={itemProps}
       />
+    ) : itemProps ? (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={() => onKeyClick?.(key.code)}
+        className={cn(keyClassName, KEY_FOCUS_RING)}
+        style={keyStyle}
+        {...itemProps}
+      >
+        {keyContent}
+      </button>
     ) : (
-      keyElement
+      <div aria-hidden="true" className={keyClassName} style={keyStyle}>
+        {keyContent}
+      </div>
     );
 
     return (
-      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info} interactive={!!onKeyClick}>
         {renderedKey}
       </KeyInfoTrigger>
     );
@@ -963,7 +1021,7 @@ function VirtualKeyboardComponent({
 
     return (
       <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
-        {customKeys.map((ck, index) => {
+        {customKeys.map((ck) => {
           const bindings = getBindingsForKey(ck.code);
           const fingers = getFingersForKey(ck.code);
           const finger: FingerType | undefined = fingers[0];
@@ -990,7 +1048,7 @@ function VirtualKeyboardComponent({
               ? "text-[11px]"
               : text.length <= 7
               ? "text-[10px]"
-              : "text-[9px]";
+              : "text-[10px]";
 
           // リマップ表示時、ラベル + → + ターゲット の合計が長く 1 行に収まりにくい場合は
           // 矢印以降を改行して下段に表示する（ラベル単体が truncate されるケース対策）。
@@ -1007,6 +1065,23 @@ function VirtualKeyboardComponent({
             remaps: remap ? [remap] : [],
             layout,
           });
+          // カスタムキーは情報の有無に関わらず常に Tooltip/Dialog を表示する（alwaysShow）。
+          // キーの見た目（データあり／空き）は情報の有無だけで決める。
+          const info: KeyInfoData = {
+            title: ck.label,
+            bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+            remaps: remap ? [remap] : [],
+            customActions: getCustomActionsForKeyCode(customActions, ck.code),
+            fingers: showFingerAssignments ? fingers : undefined,
+            layout,
+          };
+          const surface = getKeySurface({
+            fingerKeyClass: showFingerAssignments && finger ? fingerKeyClass : undefined,
+            hasInfo: hasKeyInfo(info),
+            editable: !!onKeyClick,
+            remapped: !!remap,
+          });
+          // カスタムキーは常に情報（Tooltip/Dialog）を持つので、読み取り専用でもフォーカスできる
           const keyElement = (
             <button
               type="button"
@@ -1015,11 +1090,10 @@ function VirtualKeyboardComponent({
               className={cn(
                 "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
                 "font-medium select-none gap-0.5 px-2",
-                showFingerAssignments && finger
-                  ? fingerKeyClass
-                  : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
+                surface.className,
                 isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-                onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
+                onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
+                KEY_FOCUS_RING,
               )}
               style={{
                 ...fingerKeyStyle.style,
@@ -1027,25 +1101,26 @@ function VirtualKeyboardComponent({
                 maxWidth: `${baseSize * 2.5}px`,
                 height: `${baseSize}px`,
               }}
+              {...getItemProps(`custom:${ck.code}`)}
             >
               {remap ? (
                 isRemapStacked ? (
-                  <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
+                  <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-snug">
                     <span
                       className={cn(
-                        "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                        "font-medium leading-snug truncate min-w-0 max-w-full text-center text-muted-foreground",
                         labelFontClass(ck.label),
                       )}
                     >
                       {ck.label}
                     </span>
                     <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                      <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                      <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                       <span
                         className={cn(
-                          "font-bold leading-tight truncate min-w-0",
+                          "font-bold leading-snug truncate min-w-0",
                           labelFontClass(remapTargetLabel ?? ""),
-                          isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                          isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                         )}
                       >
                         {remapTargetLabel}
@@ -1056,18 +1131,18 @@ function VirtualKeyboardComponent({
                   <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
                     <span
                       className={cn(
-                        "font-medium leading-none truncate min-w-0 text-muted-foreground/50",
+                        "font-medium -my-[2px] leading-snug truncate min-w-0 text-muted-foreground",
                         labelFontClass(ck.label),
                       )}
                     >
                       {ck.label}
                     </span>
-                    <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                    <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                     <span
                       className={cn(
-                        "font-bold leading-tight truncate min-w-0",
+                        "font-bold leading-snug truncate min-w-0",
                         labelFontClass(remapTargetLabel ?? ""),
-                        isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                        isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                       )}
                     >
                       {remapTargetLabel}
@@ -1077,21 +1152,21 @@ function VirtualKeyboardComponent({
               ) : (
                 <span
                   className={cn(
-                    "font-semibold leading-none truncate max-w-full",
+                    "font-semibold -my-[2px] leading-snug truncate max-w-full",
                     labelFontClass(ck.label),
-                    !(showFingerAssignments && finger) && "text-muted-foreground",
+                    surface.labelMuted && "text-muted-foreground",
                   )}
                 >
                   {ck.label}
                 </span>
               )}
               {showAction && (
-                <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+                <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
                   {bindings.map((binding, i) => (
                     <span
                       key={i}
                       className={cn(
-                        "rounded px-1 py-0 leading-none text-[8px]",
+                        "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                         chipClass,
                       )}
                     >
@@ -1103,17 +1178,8 @@ function VirtualKeyboardComponent({
             </button>
           );
 
-          // カスタムキーは情報の有無に関わらず常に Tooltip/Dialog を表示する。
-          const info: KeyInfoData = {
-            title: ck.label,
-            bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
-            remaps: remap ? [remap] : [],
-            customActions: getCustomActionsForKeyCode(customActions, ck.code),
-            fingers: showFingerAssignments ? fingers : undefined,
-            layout,
-          };
           return (
-            <KeyInfoTrigger key={ck.code} info={info} alwaysShow>
+            <KeyInfoTrigger key={ck.code} info={info} alwaysShow interactive={!!onKeyClick}>
               {keyElement}
             </KeyInfoTrigger>
           );
@@ -1128,7 +1194,8 @@ function VirtualKeyboardComponent({
   // renderKey を使うため、クリック・ツールチップ・指色・リマップ表示は他のキーと同様に機能する
   const renderNavCluster = (baseSize: number, gap: number) => (
     <div className="flex flex-col" style={{ gap: `${gap}px` }}>
-      <div style={{ height: `${baseSize}px` }} />
+      {/* section="nav" ではF行用の空き段を外し、テンキー（5段）と上端・下端をそろえる */}
+      {section !== "nav" && <div style={{ height: `${baseSize}px` }} />}
       <div className="flex" style={{ gap: `${gap}px` }}>
         {renderKey({ code: "Insert" }, 100, 0, baseSize, gap)}
         {renderKey({ code: "Home" }, 100, 1, baseSize, gap)}
@@ -1157,23 +1224,32 @@ function VirtualKeyboardComponent({
   const mainKeyboardMinWidth = MAIN_KEYBOARD_UNITS * baseSize + (MAIN_KEYBOARD_UNITS - 1) * gap;
   // ナビクラスタ（3ユニット）と島間の余白を含めた全体最小幅
   const navClusterWidth = NAV_CLUSTER_UNITS * baseSize + (NAV_CLUSTER_UNITS - 1) * gap;
-  const totalMinWidth = mainKeyboardMinWidth + gap * 4 + navClusterWidth;
+  const totalMinWidth =
+    section === "main"
+      ? mainKeyboardMinWidth
+      : section === "nav"
+        ? navClusterWidth
+        : mainKeyboardMinWidth + gap * 4 + navClusterWidth;
 
-  return (
-    <TooltipProvider delayDuration={200}>
-      <div className={cn("shrink-0", className)} style={{ minWidth: totalMinWidth }}>
+  // キーを DOM 順で先に組み立てる（getItemProps の登録順＝DOM 順。フォーカスできるキーの数をルートの属性に使う）
+  const body = (
+    <>
         {/* メインキーボード + ナビゲーションクラスタ・矢印キー */}
         <div className="flex shrink-0 items-start" style={{ gap: `${gap * 4}px` }}>
-          <div className="shrink-0">
-            {renderKeyboardSection(mainLayout, baseSize, gap)}
-          </div>
-          <div className="shrink-0">
-            {renderNavCluster(baseSize, gap)}
-          </div>
+          {showMain && (
+            <div className="shrink-0">
+              {renderKeyboardSection(mainLayout, baseSize, gap)}
+            </div>
+          )}
+          {showNav && (
+            <div className="shrink-0">
+              {renderNavCluster(baseSize, gap)}
+            </div>
+          )}
         </div>
 
         {/* カスタムキーボードキー */}
-        {customKeys.length > 0 && (
+        {showMain && customKeys.length > 0 && (
           <div className="mt-4">
             <p className="text-xs text-muted-foreground mb-2">{t("keyboardView.customKeys")}</p>
             {renderCustomKeys(baseSize, gap)}
@@ -1186,6 +1262,30 @@ function VirtualKeyboardComponent({
             {renderNumpad(baseSize, gap)}
           </div>
         )}
+    </>
+  );
+  const hasFocusableKeys = focusableCount() > 0;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div
+        ref={rootRef}
+        role="group"
+        data-slot="virtual-keyboard"
+        aria-label={
+          section === "nav"
+            ? t("keyboardView.groupLabelNav")
+            : t("keyboardView.groupLabel", { layout: isJIS ? "JIS" : "US" })
+        }
+        aria-describedby={hasFocusableKeys ? hintId : undefined}
+        onKeyDown={onKeyDown}
+        className={cn("shrink-0", className)}
+        style={{ minWidth: totalMinWidth }}
+      >
+        {hasFocusableKeys && (
+          <p id={hintId} className="sr-only">{t("keyboardView.arrowKeyHint")}</p>
+        )}
+        {body}
       </div>
     </TooltipProvider>
   );
@@ -1225,13 +1325,16 @@ export function VirtualMouse({
   showRemaps = false,
 }: VirtualMouseProps) {
   const t = useT();
+  const { rootRef, getItemProps, onKeyDown, focusableCount } = useRovingKeyFocus<HTMLDivElement>();
+  const hintId = useId();
   const getBindingsForButton = (code: string): KeybindingInfoList => {
     return keybindings[code] || keybindings[code.toLowerCase()] || [];
   };
 
   // 指割り当てを取得（ユーザー設定のみ、デフォルトは使用しない）
   const getFingersForButton = (code: string): FingerType[] => {
-    return fingerAssignments[code] || fingerAssignments[code.toLowerCase()] || [];
+    const found: unknown = fingerAssignments[code] || fingerAssignments[code.toLowerCase()];
+    return Array.isArray(found) ? found : [];
   };
 
   // リマップ情報を取得
@@ -1254,13 +1357,12 @@ export function VirtualMouse({
     { code: "Mouse4", label: t("keyLabels.mouseSide2Short") },
   ];
 
-  const renderButton = (button: typeof buttons[0], index: number, isCustom = false) => {
+  const renderButton = (button: typeof buttons[0], isCustom = false) => {
     const bindings = getBindingsForButton(button.code);
     const fingers = showFingerAssignments ? getFingersForButton(button.code) : [];
     const finger: FingerType | undefined = fingers[0];
     const remap = showRemaps ? getRemapForButton(button.code) : undefined;
     const fingerKeyStyle = getFingerKeyStyle(fingers);
-    const fingerKeyClass = finger ? fingerKeyStyle.className : "bg-secondary/50 border-border/50 text-muted-foreground";
     const chipClass = finger ? FINGER_CHIP_COLORS[finger] : "bg-foreground/80 text-background";
 
     const width = (button.width || 1) * baseSize + ((button.width || 1) - 1) * gap;
@@ -1276,7 +1378,7 @@ export function VirtualMouse({
         ? "text-[11px]"
         : text.length <= 7
         ? "text-[10px]"
-        : "text-[9px]";
+        : "text-[10px]";
     // 単一リマップ（ラベル → ターゲット）で、操作名チップなど他の要素を併置しない場合は、
     // 収まらない長さのとき矢印の前で改行（縦積み）する。デフォルト/カスタム両方に適用。
     const hasChips = showActionLabels && bindings.length > 0;
@@ -1291,37 +1393,52 @@ export function VirtualMouse({
       bindings,
       remaps: remap ? [remap] : [],
     });
-    const buttonElement = (
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        onClick={() => onButtonClick?.(button.code)}
-        className={cn(
-          "flex flex-col items-center justify-center rounded-md border-2 transition-colors",
-          "font-medium select-none gap-0.5 px-1",
-          fingerKeyClass,
-          onButtonClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
-        )}
-        style={{ ...fingerKeyStyle.style, width: `${width}px`, height: `${height}px` }}
-      >
+    // カスタムボタンは常に表示、通常ボタンは情報があるときのみ（alwaysShow）。
+    // ボタンの見た目（データあり／空き）は情報の有無だけで決める。
+    const info: KeyInfoData = {
+      title: isCustom ? button.label : getKeyLabel(t, button.code),
+      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
+      remaps: remap ? [remap] : [],
+      customActions: getCustomActionsForKeyCode(customActions, button.code),
+      fingers: showFingerAssignments ? fingers : undefined,
+    };
+    const surface = getKeySurface({
+      fingerKeyClass: finger ? fingerKeyStyle.className : undefined,
+      hasInfo: hasKeyInfo(info),
+      editable: !!onButtonClick,
+      remapped: !!remap,
+    });
+    // フォーカスできるボタン: 編集では全ボタン、読み取り専用では情報のあるボタンとカスタムボタン
+    // （KeyInfoTrigger が包むかどうかと同じ式）。フォーカスできないボタンは div で描く
+    const focusable = !!onButtonClick || isCustom || hasKeyInfo(info);
+    const itemProps = focusable ? getItemProps(`${isCustom ? "custom" : "key"}:${button.code}`) : undefined;
+    const buttonClassName = cn(
+      "flex flex-col items-center justify-center rounded-md border-2 transition-colors",
+      "font-medium select-none gap-0.5 px-1",
+      surface.className,
+      onButtonClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary"
+    );
+    const buttonStyle: CSSProperties = { ...fingerKeyStyle.style, width: `${width}px`, height: `${height}px` };
+    const buttonContent = (
+      <>
         {remap ? (
           isRemapStacked ? (
-            <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
+            <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-snug">
               <span
                 className={cn(
-                  "font-medium leading-tight truncate min-w-0 max-w-full text-center text-muted-foreground/50",
+                  "font-medium leading-snug truncate min-w-0 max-w-full text-center text-muted-foreground",
                   labelFontClass(button.label),
                 )}
               >
                 {button.label}
               </span>
               <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+                <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
                 <span
                   className={cn(
-                    "font-bold leading-tight truncate min-w-0",
+                    "font-bold leading-snug truncate min-w-0",
                     labelFontClass(remapTargetLabel ?? ""),
-                    isRemapDisabled ? "text-destructive/80" : "text-foreground",
+                    isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground",
                   )}
                 >
                   {remapTargetLabel}
@@ -1330,13 +1447,13 @@ export function VirtualMouse({
             </div>
           ) : (
             <div className="flex flex-nowrap items-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
+              <span className="font-medium -my-[2px] leading-snug truncate min-w-0 text-[10px] text-muted-foreground">
                 {button.label}
               </span>
-              <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
+              <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
               <span className={cn(
-                "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive/80" : "text-foreground"
+                "font-bold leading-snug truncate min-w-0 text-[11px]",
+                isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
               )}>
                 {remapTargetLabel}
               </span>
@@ -1344,19 +1461,19 @@ export function VirtualMouse({
           )
         ) : (
           <span className={cn(
-            "font-semibold leading-none truncate max-w-full text-[11px]",
-            !finger && "text-muted-foreground"
+            "font-semibold -my-[2px] leading-snug truncate max-w-full text-[11px]",
+            surface.labelMuted && "text-muted-foreground"
           )}>
             {button.label}
           </span>
         )}
         {showActionLabels && bindings.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
             {bindings.map((binding, i) => (
               <span
                 key={i}
                 className={cn(
-                  "rounded px-1 py-0 leading-none text-[8px]",
+                  "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
                   chipClass
                 )}
               >
@@ -1365,19 +1482,27 @@ export function VirtualMouse({
             ))}
           </div>
         )}
+      </>
+    );
+    const buttonElement = itemProps ? (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={() => onButtonClick?.(button.code)}
+        className={cn(buttonClassName, KEY_FOCUS_RING)}
+        style={buttonStyle}
+        {...itemProps}
+      >
+        {buttonContent}
       </button>
+    ) : (
+      <div aria-hidden="true" className={buttonClassName} style={buttonStyle}>
+        {buttonContent}
+      </div>
     );
 
-    // カスタムボタンは常に表示、通常ボタンは情報があるときのみ。
-    const info: KeyInfoData = {
-      title: isCustom ? button.label : getKeyLabel(t, button.code),
-      bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
-      remaps: remap ? [remap] : [],
-      customActions: getCustomActionsForKeyCode(customActions, button.code),
-      fingers: showFingerAssignments ? fingers : undefined,
-    };
     return (
-      <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom}>
+      <KeyInfoTrigger key={button.code} info={info} alwaysShow={isCustom} interactive={!!onButtonClick}>
         {buttonElement}
       </KeyInfoTrigger>
     );
@@ -1386,32 +1511,53 @@ export function VirtualMouse({
   // カスタムマウスボタンをフィルタ
   const customMouseButtons = customButtons.filter((cb) => cb.category === "mouse");
 
-  return (
-    <TooltipProvider delayDuration={200}>
-      <div className={cn("inline-block", className)}>
+  // ボタンを DOM 順で先に組み立てる（getItemProps の登録順＝DOM 順）
+  const body = (
         <div className="flex flex-col" style={{ gap: `${gap * 2}px` }}>
           <div className="flex items-start" style={{ gap: `${gap}px` }}>
             {/* 左側: サイドボタン縦並び */}
             <div className="flex flex-col" style={{ gap: `${gap}px` }}>
-              {renderButton(buttons[3], 3)}
-              {renderButton(buttons[4], 4)}
+              {renderButton(buttons[3])}
+              {renderButton(buttons[4])}
             </div>
             {/* 右側: 左・中・右クリック横並び */}
             <div className="flex" style={{ gap: `${gap}px` }}>
-              {renderButton(buttons[0], 0)}
-              {renderButton(buttons[2], 2)}
-              {renderButton(buttons[1], 1)}
+              {renderButton(buttons[0])}
+              {renderButton(buttons[2])}
+              {renderButton(buttons[1])}
             </div>
           </div>
           {/* カスタムマウスボタン */}
           {customMouseButtons.length > 0 && (
             <div className="flex flex-wrap" style={{ gap: `${gap}px` }}>
-              {customMouseButtons.map((cb, index) =>
-                renderButton({ code: cb.code, label: cb.label }, buttons.length + index, true)
+              {customMouseButtons.map((cb) =>
+                renderButton({ code: cb.code, label: cb.label }, true)
               )}
             </div>
           )}
         </div>
+  );
+  const hasFocusableKeys = focusableCount() > 0;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div
+        ref={rootRef}
+        role="group"
+        data-slot="virtual-keyboard"
+        aria-label={t("keyboardView.groupLabelMouse")}
+        aria-describedby={hasFocusableKeys ? hintId : undefined}
+        onKeyDown={onKeyDown}
+        className={cn("inline-block", className)}
+      >
+        {/* 同じ説明がキーボード・テンキー・マウスで3回続けて読まれないよう、本文の流れに置くのはキーボードの分だけ。
+            テンキー・マウスは hidden（aria-describedby からは hidden の要素も読まれるので、グループの説明は残る） */}
+        {hasFocusableKeys && (
+          <p id={hintId} hidden>
+            {t("keyboardView.arrowKeyHint")}
+          </p>
+        )}
+        {body}
       </div>
     </TooltipProvider>
   );
@@ -1463,6 +1609,8 @@ export function VirtualNumpad({
   useDefaultFingerAssignments = false,
 }: VirtualNumpadProps) {
   const t = useT();
+  const { rootRef, getItemProps, onKeyDown, focusableCount } = useRovingKeyFocus<HTMLDivElement>();
+  const hintId = useId();
   // 有効な指割り当て（ユーザー設定がなければデフォルトを使用）
   const effectiveFingerAssignments: FingerAssignment = useDefaultFingerAssignments
     ? { ...DEFAULT_FINGER_ASSIGNMENTS, ...fingerAssignments }
@@ -1545,80 +1693,6 @@ export function VirtualNumpad({
       remaps: remap ? [remap] : [],
     });
 
-    const keyElement = (
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        onClick={() => onKeyClick?.(key.code)}
-        className={cn(
-          "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
-          "font-medium select-none gap-0.5 px-1",
-          showFingerAssignments && finger
-            ? fingerKeyClass
-            : "bg-secondary/50 border-border/50 text-muted-foreground hover:bg-secondary",
-          isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
-          onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
-          key.className
-        )}
-        style={{
-          ...fingerKeyStyle.style,
-          width: `${width}px`,
-          height: `${height}px`,
-        }}
-      >
-        {remap ? (
-          isRemapStacked ? (
-            <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-tight">
-              <span className="font-medium leading-tight truncate min-w-0 max-w-full text-center text-[9px] text-muted-foreground/50">
-                {displayLabel}
-              </span>
-              <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-                <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
-                <span className={cn(
-                  "font-bold leading-tight truncate min-w-0 text-[11px]",
-                  isRemapDisabled ? "text-destructive/80" : "text-foreground"
-                )}>
-                  {remapTargetLabel}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
-              <span className="font-medium leading-none truncate min-w-0 text-[9px] text-muted-foreground/50">
-                {displayLabel}
-              </span>
-              <span className="leading-none text-[9px] text-muted-foreground/40 shrink-0">→</span>
-              <span className={cn(
-                "font-bold leading-tight truncate min-w-0 text-[11px]",
-                isRemapDisabled ? "text-destructive/80" : "text-foreground"
-              )}>
-                {remapTargetLabel}
-              </span>
-            </div>
-          )
-        ) : (
-          <span className={cn(
-            "font-semibold leading-none truncate max-w-full text-[11px]",
-            !(showFingerAssignments && finger) && "text-muted-foreground"
-          )}>
-            {displayLabel}
-          </span>
-        )}
-        {showAction && (
-          <div className="flex flex-wrap justify-center gap-0.5 max-w-full">
-            {bindings.map((binding, i) => (
-              <span key={i} className={cn(
-                "rounded px-1 py-0 leading-none text-[8px]",
-                chipClass
-              )}>
-                {getShortActionLabel(t, binding.action)}
-              </span>
-            ))}
-          </div>
-        )}
-      </button>
-    );
-
     const info: KeyInfoData = {
       title: getKeyLabel(t, key.code),
       bindings: bindings.map((b) => ({ action: b.action, category: b.category })),
@@ -1626,16 +1700,111 @@ export function VirtualNumpad({
       customActions: getCustomActionsForKeyCode(customActions, key.code),
       fingers: showFingerAssignments ? fingers : undefined,
     };
+    const surface = getKeySurface({
+      fingerKeyClass: showFingerAssignments && finger ? fingerKeyClass : undefined,
+      hasInfo: hasKeyInfo(info),
+      editable: !!onKeyClick,
+      remapped: !!remap,
+    });
+
+    // フォーカスできるキー: 編集では全キー、読み取り専用では情報のあるキーだけ
+    // （KeyInfoTrigger が包むかどうかと同じ式）。フォーカスできないキーは div で描く
+    const focusable = !!onKeyClick || hasKeyInfo(info);
+    const itemProps = focusable ? getItemProps(`key:${key.code}`) : undefined;
+    const keyClassName = cn(
+      "relative flex flex-col items-center justify-center rounded-md border-2 transition-colors",
+      "font-medium select-none gap-0.5 px-1",
+      surface.className,
+      isHighlighted && "ring-2 ring-primary ring-offset-1 ring-offset-background",
+      onKeyClick && "cursor-pointer hover:border-primary/50 hover:bg-secondary/80 active:bg-secondary",
+      key.className
+    );
+    const keyStyle: CSSProperties = {
+      ...fingerKeyStyle.style,
+      width: `${width}px`,
+      height: `${height}px`,
+    };
+
+    const keyContent = (
+      <>
+        {remap ? (
+          isRemapStacked ? (
+            <div className="flex flex-col items-center justify-center min-w-0 max-w-full leading-snug">
+              <span className="font-medium leading-snug truncate min-w-0 max-w-full text-center text-[10px] text-muted-foreground">
+                {displayLabel}
+              </span>
+              <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+                <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
+                <span className={cn(
+                  "font-bold leading-snug truncate min-w-0 text-[11px]",
+                  isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
+                )}>
+                  {remapTargetLabel}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-nowrap items-center justify-center gap-0.5 min-w-0 max-w-full">
+              <span className="font-medium -my-[2px] leading-snug truncate min-w-0 text-[10px] text-muted-foreground">
+                {displayLabel}
+              </span>
+              <span className="leading-none text-[10px] text-muted-foreground shrink-0">→</span>
+              <span className={cn(
+                "font-bold leading-snug truncate min-w-0 text-[11px]",
+                isRemapDisabled ? "text-[color-mix(in_oklab,var(--destructive),var(--foreground)_30%)]" : "text-foreground"
+              )}>
+                {remapTargetLabel}
+              </span>
+            </div>
+          )
+        ) : (
+          <span className={cn(
+            "font-semibold -my-[2px] leading-snug truncate max-w-full text-[11px]",
+            surface.labelMuted && "text-muted-foreground"
+          )}>
+            {displayLabel}
+          </span>
+        )}
+        {showAction && (
+          <div data-key-actions className="flex flex-wrap justify-center gap-0.5 max-w-full">
+            {bindings.map((binding, i) => (
+              <span key={i} className={cn(
+                "min-w-0 max-w-full truncate rounded px-0.5 py-0 -my-[1.875px] text-[10px] leading-snug",
+                chipClass
+              )}>
+                {getShortActionLabel(t, binding.action)}
+              </span>
+            ))}
+          </div>
+        )}
+      </>
+    );
+    const keyElement = itemProps ? (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={() => onKeyClick?.(key.code)}
+        className={cn(keyClassName, KEY_FOCUS_RING)}
+        style={keyStyle}
+        {...itemProps}
+      >
+        {keyContent}
+      </button>
+    ) : (
+      <div aria-hidden="true" className={keyClassName} style={keyStyle}>
+        {keyContent}
+      </div>
+    );
+
     return (
-      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info}>
+      <KeyInfoTrigger key={`${rowIndex}-${keyIndex}`} info={info} interactive={!!onKeyClick}>
         {keyElement}
       </KeyInfoTrigger>
     );
   };
 
-  return (
-    <TooltipProvider delayDuration={200}>
-      <div className={cn("inline-block", className)}>
+  // キーを DOM 順で先に組み立てる（getItemProps の登録順＝DOM 順）
+  const body = (
         <div className="flex flex-col" style={{ gap: `${gap}px` }}>
           {/* Row 1 */}
           <div className="flex" style={{ gap: `${gap}px` }}>
@@ -1676,6 +1845,28 @@ export function VirtualNumpad({
             {renderKey({ code: "NumpadEnter", label: "Enter", height: 2 }, 3, 3)}
           </div>
         </div>
+  );
+  const hasFocusableKeys = focusableCount() > 0;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div
+        ref={rootRef}
+        role="group"
+        data-slot="virtual-keyboard"
+        aria-label={t("keyboardView.groupLabelNumpad")}
+        aria-describedby={hasFocusableKeys ? hintId : undefined}
+        onKeyDown={onKeyDown}
+        className={cn("inline-block", className)}
+      >
+        {/* 同じ説明がキーボード・テンキー・マウスで3回続けて読まれないよう、本文の流れに置くのはキーボードの分だけ。
+            テンキー・マウスは hidden（aria-describedby からは hidden の要素も読まれるので、グループの説明は残る） */}
+        {hasFocusableKeys && (
+          <p id={hintId} hidden>
+            {t("keyboardView.arrowKeyHint")}
+          </p>
+        )}
+        {body}
       </div>
     </TooltipProvider>
   );

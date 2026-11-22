@@ -18,6 +18,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["dev", "--port", "5175"],
       "port": 5175
+    },
+    {
+      "name": "dev-remote-5176",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:remote", "--port", "5176"],
+      "port": 5176
     }
   ]
 }

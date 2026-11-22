@@ -236,6 +236,11 @@ export interface TwitchVod {
   publishedAt: string;
   /** 配信時間（秒）。パース不能なら null */
   durationSeconds: number | null;
+  /**
+   * 取得時点でのチャンネルの現在のカテゴリ名（Helix /channels の game_name）。
+   * 取得失敗・未設定（空文字）なら null。VOD 個別のカテゴリではなく配信者の「現在の」カテゴリ
+   */
+  gameName?: string | null;
 }
 
 /**
@@ -287,6 +292,41 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(i, i + size));
   }
   return chunks;
+}
+
+/**
+ * 配信者IDの配列から「現在のカテゴリ名」を一括取得する（Helix Get Channel Information:
+ * GET /channels?broadcaster_id=...、最大100件/リクエスト）。
+ * 返り値は broadcaster id → game_name（空文字＝カテゴリ未設定は含めない）。
+ * リクエスト失敗時は該当バッチを飛ばすだけで throw しない（呼び出し側は null 扱いで続行する）
+ */
+export async function getChannelGameNames(
+  headers: Record<string, string>,
+  broadcasterIds: string[]
+): Promise<Map<string, string>> {
+  const gameNames = new Map<string, string>();
+  for (const batch of chunk([...new Set(broadcasterIds)], 100)) {
+    try {
+      const params = batch.map((id) => `broadcaster_id=${encodeURIComponent(id)}`).join("&");
+      const res = await fetch(`${TWITCH_API}/channels?${params}`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        console.error("Twitch channels API failed:", res.status);
+        continue;
+      }
+      const data = (await res.json()) as {
+        data?: Array<{ broadcaster_id: string; game_name?: string }>;
+      };
+      for (const c of data.data ?? []) {
+        if (c.game_name) gameNames.set(c.broadcaster_id, c.game_name);
+      }
+    } catch (error) {
+      console.error("Twitch channels error:", error);
+    }
+  }
+  return gameNames;
 }
 
 /**
@@ -373,11 +413,16 @@ export interface TwitchVodFetchResult {
  * @param clientId Twitch Client ID
  * @param accessToken App Access Token
  * @param userLogins Twitchユーザー名の配列（件数上限なし）
+ * @param options.getKnownVodIds 既存キャッシュ判定（新規 VOD があるチャンネルだけ /channels を呼ぶため）
  */
 export async function getRecentVods(
   clientId: string,
   accessToken: string,
-  userLogins: string[]
+  userLogins: string[],
+  options: {
+    /** 渡された vodId のうち、既にキャッシュにあるものを返す。新規 VOD を含むチャンネルだけカテゴリ名を取得する */
+    getKnownVodIds?: (vodIds: string[]) => Promise<Set<string>>;
+  } = {}
 ): Promise<TwitchVodFetchResult> {
   const vods = new Map<string, TwitchVod[]>();
   const failedLogins = new Set<string>();
@@ -450,6 +495,7 @@ export async function getRecentVods(
           thumbnailUrl: resolveVodThumbnail(v.thumbnail_url),
           publishedAt: v.published_at || v.created_at,
           durationSeconds: parseTwitchDuration(v.duration),
+          gameName: null,
         }));
       vods.set(login, publicVods);
     }
@@ -457,6 +503,29 @@ export async function getRecentVods(
 
   const workerCount = Math.min(VOD_FETCH_CONCURRENCY, broadcasters.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  // 現在のカテゴリ名は「キャッシュにまだ無い VOD を含むチャンネル」だけを対象に、100件ずつまとめて取得する
+  // （新規 VOD が無ければ /channels は呼ばない）。getKnownVodIds 未指定なら全 VOD を新規扱い。
+  // 失敗しても VOD 取得は続行（gameName は null のまま）
+  const allVodIds = [...vods.values()].flatMap((list) => list.map((v) => v.id));
+  const knownVodIds = options.getKnownVodIds
+    ? await options.getKnownVodIds(allVodIds)
+    : new Set<string>();
+  const idByLogin = new Map(broadcasters.map((b) => [b.login.toLowerCase(), b.id]));
+  const loginsWithNew = [...vods.entries()]
+    .filter(([, list]) => list.some((v) => !knownVodIds.has(v.id)))
+    .map(([login]) => login);
+  if (loginsWithNew.length > 0) {
+    const gameNames = await getChannelGameNames(
+      headers,
+      loginsWithNew.map((l) => idByLogin.get(l)).filter((id): id is string => !!id)
+    );
+    for (const login of loginsWithNew) {
+      const name = gameNames.get(idByLogin.get(login) ?? "");
+      if (!name) continue;
+      for (const v of vods.get(login) ?? []) v.gameName = name;
+    }
+  }
 
   return { vods, failedLogins, incompleteLogins };
 }

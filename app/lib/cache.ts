@@ -161,9 +161,8 @@ export async function getDbCached<T>(cacheKey: string): Promise<T | null> {
     }
 
     // 有効期限チェック
+    // 期限切れは miss 扱い。行は次の setDbCached が上書きするため、削除の往復は不要
     if (cached.expiresAt < new Date()) {
-      // 期限切れの場合は削除
-      await db.delete(apiCache).where(eq(apiCache.cacheKey, cacheKey));
       return null;
     }
 
@@ -192,29 +191,24 @@ export async function setDbCached<T>(
     const expiresAt = new Date(Date.now() + ttlMs);
     const jsonData = JSON.stringify(data);
 
-    // upsert: 存在すれば更新、なければ挿入
-    const existing = await db.query.apiCache.findFirst({
-      where: eq(apiCache.cacheKey, cacheKey),
-    });
-
-    if (existing) {
-      await db
-        .update(apiCache)
-        .set({
-          data: jsonData,
-          expiresAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(apiCache.cacheKey, cacheKey));
-    } else {
-      await db.insert(apiCache).values({
+    // upsert を1文で（cache_key は unique）
+    await db
+      .insert(apiCache)
+      .values({
         id: createId(),
         cacheKey,
         cacheType,
         data: jsonData,
         expiresAt,
+      })
+      .onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: {
+          data: jsonData,
+          expiresAt,
+          updatedAt: new Date(),
+        },
       });
-    }
   } catch (error) {
     console.error("DB cache write error:", error);
   }

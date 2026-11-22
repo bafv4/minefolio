@@ -63,6 +63,20 @@ body {
   --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-control-fill: var(--control-fill);
+  --color-outline-fill: var(--outline-fill);
+  --color-outline-fill-hover: var(--outline-fill-hover);
+  --color-outline-border: var(--outline-border);
+  --color-ghost-hover: var(--ghost-hover);
+  --color-destructive-fill: var(--destructive-fill);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-live: var(--live);
+  --color-live-fill: var(--live-fill);
+  --color-live-on-fill: var(--live-on-fill);
+  --color-live-tint: var(--live-tint);
+  --color-switch-track-off: var(--switch-track-off);
+  --color-switch-thumb-off: var(--switch-thumb-off);
+  --color-switch-thumb-on: var(--switch-thumb-on);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -115,9 +129,27 @@ body {
   --muted-foreground: oklch(0.46 0.04 256); /* WCAG AA: ≥5.5:1 on light bg */
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
+  --destructive: oklch(0.52 0.22 27.3); /* 文字色・10% ティント面でも 4.5:1 以上（旧 0.577 は 3.97:1） */
+  /* 枠線は少し濃いめ（slate-200 と slate-300 の間）。背景の格子模様は --page-grid-line で従来の濃さのまま */
+  --border: oklch(0.9 0.017 254);
+  --page-grid-line: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
+  /* 操作部品（ui/*）の面。dark: 変種を使わず、テーマ側でここを切り替える（ライトは従来の見た目） */
+  --control-fill: transparent; /* チェックボックス・ラジオの面 */
+  --outline-fill: var(--background); /* outline ボタンの面 */
+  --outline-fill-hover: var(--accent);
+  --outline-border: var(--border);
+  --ghost-hover: var(--accent); /* ghost ボタンのホバー面 */
+  --destructive-fill: var(--destructive); /* destructive の塗り（ボタン・バッジ） */
+  --destructive-tint: color-mix(in oklab, var(--destructive) 10%, transparent); /* destructive メニュー項目のフォーカス面 */
+  /* ライブ中（PaceMan のライブ・配信中）の印。意味色の destructive とは別（失敗の帯と同じ赤を並べない）。点・文字は --live、塗りのバッジは --live-fill に --live-on-fill の文字 */
+  --live: oklch(0.55 0.2 42); /* 白 5.3:1 */
+  --live-fill: var(--live);
+  --live-on-fill: oklch(1 0 0);
+  --live-tint: color-mix(in oklab, var(--live) 10%, transparent);
+  --switch-track-off: var(--input);
+  --switch-thumb-off: var(--background);
+  --switch-thumb-on: var(--background);
   --ring: oklch(0.53 0.13 162);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -130,20 +162,22 @@ body {
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
   --sidebar-accent: oklch(0.968 0.007 247.896);
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-border: oklch(0.9 0.017 254);
   --sidebar-ring: oklch(0.704 0.04 256.788);
 
-  /* Brand accent (emerald) — primary interactive color */
-  --brand: oklch(0.53 0.13 162);
+  /* Brand accent (emerald) — primary interactive color。text-brand を /10 ティント上でも 4.5:1 以上にするため、ライトは L=0.50、ダークは L=0.62（カード上ティントで 4.69:1。brand-foreground の暗色文字は 5.5:1 を維持） */
+  --brand: oklch(0.50 0.13 162);
   --brand-foreground: oklch(0.985 0.01 162);
   --brand-link: oklch(0.48 0.13 160);
 
   /* Semantic colors */
-  --success: oklch(0.56 0.16 139);
+  --success: oklch(0.50 0.15 139);
   --success-foreground: oklch(0.985 0.01 139);
-  --warning: oklch(0.828 0.189 84.429);
+  /* ライトでは文字色としても使う（text-warning）ため白背景で 4.5:1 以上を確保する（amber-700 相当、約5.0:1）。
+     旧値 oklch(0.828 0.189 84.429) は約1.7:1 で、警告文言が読めなかった */
+  --warning: oklch(0.555 0.163 48.998);
   --warning-foreground: oklch(0.129 0.042 264.695);
-  --info: oklch(0.623 0.214 259.815);
+  --info: oklch(0.53 0.19 259.8);
   --info-foreground: oklch(1 0 0);
 
   /* Keybinding category colors */
@@ -160,8 +194,8 @@ body {
   --finger-index: oklch(0.82 0.12 175);
   --finger-thumb: oklch(0.85 0.12 145);
   --finger-palm: oklch(0.85 0.12 70);
-  /* 指色チップ上の文字色（ライトでは白）。dark: 変種に依存せず変数で切替えてテーマを局所適用可能にする */
-  --finger-chip-fg: oklch(1 0 0);
+  /* 指色チップ上の文字色（ライトは淡い背景なので暗色。全指で 4.5:1 以上）。dark: 変種に依存せず変数で切替えてテーマを局所適用可能にする */
+  --finger-chip-fg: oklch(0.25 0.03 260);
 
   /* Discord brand color */
   --discord: oklch(0.546 0.195 270.769);
@@ -176,18 +210,42 @@ body {
   --twitch: oklch(0.558 0.288 302.321);
 
   /* ランキング1位・3位のメダル色（rankings 等で共有）。
-     yellow-500 相当だとライトの白背景で埋もれるため、金は yellow-600 相当まで落として濃くする */
-  --gold: oklch(0.681 0.162 75.834);
-  --bronze: oklch(0.666 0.179 58.318);
+     文字色としても使うため、ライトは白背景で 4.5:1 以上になるまで濃くする（金・銅とも約 5.6:1） */
+  --gold: oklch(0.52 0.12 75.8);
+  --bronze: oklch(0.52 0.14 58.3);
 
   /* MCSR Ranked のレート帯（階級）色（公式ゲーム内UIから抽出）。
-     ライトは白背景での可読性のため明度を落とした変種（色相は抽出色と同一） */
+     ライトは白背景・10% ティント面での文字コントラスト 4.5:1 以上のため明度を落とした変種（色相は抽出色と同一） */
   --rank-coal: oklch(0.48 0 0);
-  --rank-iron: oklch(0.65 0 0);
-  --rank-gold: oklch(0.66 0.155 73.3);
-  --rank-emerald: oklch(0.6 0.19 143.1);
-  --rank-diamond: oklch(0.6 0.115 195);
+  --rank-iron: oklch(0.5 0 0);
+  --rank-gold: oklch(0.5 0.11 73.3);
+  --rank-emerald: oklch(0.5 0.15 143.1);
+  --rank-diamond: oklch(0.48 0.088 195);
   --rank-netherite: oklch(0.526 0.224 314.5);
+
+  /* ガイド本文の背景パレット（app/lib/guide-colors.ts の GUIDE_BG_COLOR_TOKENS）。
+     保存データの inline style（ライトの淡い色）を .guide-content 配下で置き換える表示色（下の
+     「Guide background palette」）。ライトは保存色そのもの（見た目を変えないため、変換誤差の出る
+     oklch ではなく保存値と同じ hex で持つ）。オレンジと黄は同じ #FBF3DB なので yellow 1 つ */
+  --guide-bg-gray: #F1F1EF;
+  --guide-bg-red: #FDEBEC;
+  --guide-bg-yellow: #FBF3DB;
+  --guide-bg-green: #EDF3EC;
+  --guide-bg-blue: #E7F3F8;
+  --guide-bg-purple: #F6F3F9;
+  --guide-bg-pink: #F9F0F5;
+  --guide-bg-legacy-yellow: #FEF08A;
+
+  /* ガイド本文の文字色パレット（GUIDE_TEXT_COLOR_TOKENS）。保存色（生の hex）は白地で 4.5:1 に届かない色があるため、
+     同じ色相のまま明度を下げ、白地で 4.5:1 以上にする（下の「Guide text palette」で置き換える） */
+  --guide-fg-gray: #767572;
+  --guide-fg-red: #CD4642;
+  --guide-fg-orange: #AF6201;
+  --guide-fg-yellow: #85750A;
+  --guide-fg-green: #42815F;
+  --guide-fg-blue: #317CA7;
+  --guide-fg-purple: #8E63AE;
+  --guide-fg-pink: #BF4A88;
 }
 
 .dark,
@@ -207,8 +265,23 @@ body {
   --accent: oklch(0.279 0.041 260.031);
   --accent-foreground: oklch(0.984 0.003 247.858);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 14%);
+  --page-grid-line: oklch(1 0 0 / 10%);
   --input: oklch(0.279 0.041 260.031);
+  --control-fill: color-mix(in oklab, var(--input) 30%, transparent);
+  --outline-fill: color-mix(in oklab, var(--input) 30%, transparent);
+  --outline-fill-hover: color-mix(in oklab, var(--input) 50%, transparent);
+  --outline-border: var(--input);
+  --ghost-hover: color-mix(in oklab, var(--accent) 50%, transparent);
+  --destructive-fill: color-mix(in oklab, var(--destructive) 60%, transparent);
+  --destructive-tint: color-mix(in oklab, var(--destructive) 20%, transparent);
+  --live: oklch(0.76 0.17 45); /* background 8.6:1・card 7.6:1 */
+  --live-fill: oklch(0.55 0.2 42); /* 明るい --live の上に白は載らないので塗りは別の値（白 5.3:1） */
+  --live-on-fill: oklch(1 0 0);
+  --live-tint: color-mix(in oklab, var(--live) 20%, transparent);
+  --switch-track-off: color-mix(in oklab, var(--input) 80%, transparent);
+  --switch-thumb-off: var(--foreground);
+  --switch-thumb-on: var(--primary-foreground);
   --ring: oklch(0.58 0.14 162);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -221,11 +294,11 @@ body {
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
   --sidebar-accent: oklch(0.279 0.041 260.031);
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: oklch(1 0 0 / 14%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 
-  /* Brand accent (emerald) — primary interactive color */
-  --brand: oklch(0.58 0.14 162);
+  /* Brand accent (emerald) — primary interactive color。text-brand を /10 ティント上でも 4.5:1 以上にするため、ライトは L=0.50、ダークは L=0.62（カード上ティントで 4.69:1。brand-foreground の暗色文字は 5.5:1 を維持） */
+  --brand: oklch(0.62 0.14 162);
   --brand-foreground: oklch(0.18 0.03 162);
   --brand-link: oklch(0.74 0.14 160);
 
@@ -270,8 +343,30 @@ body {
   --finger-index: oklch(0.52 0.15 175);
   --finger-thumb: oklch(0.55 0.15 145);
   --finger-palm: oklch(0.55 0.13 70);
-  /* 指色チップ上の文字色（ダーク/ウルトラダークでは黒） */
-  --finger-chip-fg: oklch(0 0 0);
+  /* 指色チップ上の文字色（ダーク/ウルトラダークは白。濃い背景 L 0.52〜0.55 に対し全指で 4.5:1 以上。黒だと 3.6〜4.6 で不足） */
+  --finger-chip-fg: oklch(1 0 0);
+
+  /* ガイド本文の背景パレット（dark）。保存色と同じ色相の暗い背景（L 0.30）にして、前景色の文字を
+     13:1 前後にする（保存色のままだと約 1.1:1）。灰は彩度をほぼ 0 のまま、旧ハイライトの黄は少し濃く */
+  --guide-bg-gray: oklch(0.3 0.003 106);
+  --guide-bg-red: oklch(0.3 0.05 14);
+  --guide-bg-yellow: oklch(0.3 0.05 92);
+  --guide-bg-green: oklch(0.3 0.05 141);
+  --guide-bg-blue: oklch(0.3 0.05 225);
+  --guide-bg-purple: oklch(0.3 0.05 308);
+  --guide-bg-pink: oklch(0.3 0.05 343);
+  --guide-bg-legacy-yellow: oklch(0.3 0.06 102);
+
+  /* ガイド本文の文字色パレット（dark）。保存色は暗い面で約 3.3:1 なので、明度を上げて background / card / secondary の
+     すべてで 4.5:1 以上にする */
+  --guide-fg-gray: oklch(0.654 0.005 91.5);
+  --guide-fg-red: oklch(0.675 0.172 25.8);
+  --guide-fg-orange: oklch(0.664 0.134 60.7);
+  --guide-fg-yellow: oklch(0.652 0.114 100.1);
+  --guide-fg-green: oklch(0.644 0.085 158.4);
+  --guide-fg-blue: oklch(0.65 0.099 237.4);
+  --guide-fg-purple: oklch(0.667 0.12 309.5);
+  --guide-fg-pink: oklch(0.676 0.164 350.4);
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -296,19 +391,298 @@ body {
   --muted-foreground: oklch(0.705 0.015 286);
   --accent: oklch(0.23 0.006 286);
   --accent-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 8%);
+  --border: oklch(1 0 0 / 12%);
+  --page-grid-line: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
   --sidebar: oklch(0.12 0.004 286);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.23 0.006 286);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+
+  /* ガイド本文の背景パレット（ultra-dark）。背景が深いぶん dark より一段暗く（L 0.27） */
+  --guide-bg-gray: oklch(0.27 0.003 106);
+  --guide-bg-red: oklch(0.27 0.05 14);
+  --guide-bg-yellow: oklch(0.27 0.05 92);
+  --guide-bg-green: oklch(0.27 0.05 141);
+  --guide-bg-blue: oklch(0.27 0.05 225);
+  --guide-bg-purple: oklch(0.27 0.05 308);
+  --guide-bg-pink: oklch(0.27 0.05 343);
+  --guide-bg-legacy-yellow: oklch(0.27 0.06 102);
+
+  /* ガイド本文の文字色パレット（ultra-dark）。面がより深いぶん dark より少し暗くてよい */
+  --guide-fg-gray: oklch(0.606 0.005 91.5);
+  --guide-fg-red: oklch(0.627 0.172 25.8);
+  --guide-fg-orange: oklch(0.656 0.134 60.7);
+  --guide-fg-yellow: oklch(0.629 0.114 100.1);
+  --guide-fg-green: oklch(0.596 0.085 158.4);
+  --guide-fg-blue: oklch(0.603 0.099 237.4);
+  --guide-fg-purple: oklch(0.619 0.12 309.5);
+  --guide-fg-pink: oklch(0.628 0.164 350.4);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   ハイコントラスト（html[data-contrast="more"]）。テーマ（light / dark / ultra-dark）とは別軸で、
+   3テーマそれぞれに強化版のトークンを持つ。属性は use-contrast.ts（と root.tsx の初回描画前スクリプト）が付ける。
+   コンポーネントは data-contrast を見て出し分けない（dark: を使わないのと同じ。差はトークンで吸収する）。
+   目標（WCAG の強化基準）: 通常の文字 7:1 以上、枠線・フォーカスリング・アイコンなどの UI 部品 4.5:1 以上。
+   色相は通常モードのまま、明度・彩度だけを動かす。面（card / secondary 等）の差は区別が付く範囲で保つ。
+   枠線は /60・/70 のような透明度を掛けた後でも 4.5:1 になるよう、不透明で強い値にする（下の未層ルールが残りを補う）。
+   ─────────────────────────────────────────────────────────────── */
+:root[data-contrast="more"]:not(.dark):not(.ultra-dark) {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.1 0.03 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.1 0.03 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.1 0.03 265);
+  --primary: oklch(0.2 0.05 265.8);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.955 0.007 247.9);
+  --secondary-foreground: oklch(0.2 0.05 265.8);
+  --muted: oklch(0.955 0.007 247.9);
+  --muted-foreground: oklch(0.36 0.04 256);
+  --accent: oklch(0.955 0.007 247.9);
+  --accent-foreground: oklch(0.2 0.05 265.8);
+  --destructive: oklch(0.43 0.19 27.3);
+  --live: oklch(0.45 0.17 42); /* 白 8.0:1 */
+  --border: oklch(0.2 0.03 260);
+  --page-grid-line: oklch(0 0 0 / 0);
+  --input: oklch(0.955 0.007 247.9);
+  --ring: oklch(0.4 0.12 162);
+  --sidebar-border: oklch(0.2 0.03 260);
+  --sidebar-ring: oklch(0.4 0.12 162);
+  --brand: oklch(0.4 0.12 162);
+  --brand-link: oklch(0.38 0.12 160);
+  --success: oklch(0.4 0.13 139);
+  --warning: oklch(0.43 0.12 49);
+  --warning-foreground: oklch(1 0 0);
+  --info: oklch(0.42 0.17 259.8);
+  --favorite: oklch(0.5 0.2 27);
+  --youtube: oklch(0.45 0.19 27.3);
+  --twitch: oklch(0.45 0.22 302.3);
+  --gold: oklch(0.42 0.09 75.8);
+  --bronze: oklch(0.42 0.11 58.3);
+  --rank-coal: oklch(0.38 0 0);
+  --rank-iron: oklch(0.4 0 0);
+  --rank-gold: oklch(0.41 0.09 73.3);
+  --rank-emerald: oklch(0.4 0.12 143.1);
+  --rank-diamond: oklch(0.4 0.07 195);
+  --rank-netherite: oklch(0.43 0.19 314.5);
+  --key-movement: oklch(0.4 0.12 142.3);
+  --key-combat: oklch(0.42 0.17 259.8);
+  --key-inventory: oklch(0.42 0.09 84.4);
+  --key-hotbar: oklch(0.45 0.19 27.3);
+  --key-ui: oklch(0.43 0.2 303.9);
+  --finger-chip-fg: oklch(0.15 0.02 260);
+  /* ガイド本文の文字色（ハイコントラスト）。白地・secondary に対して 7:1 以上 */
+  --guide-fg-gray: oklch(0.427 0.005 91.5);
+  --guide-fg-red: oklch(0.448 0.172 25.8);
+  --guide-fg-orange: oklch(0.434 0.101 60.7);
+  --guide-fg-yellow: oklch(0.425 0.088 100.1);
+  --guide-fg-green: oklch(0.417 0.085 158.4);
+  --guide-fg-blue: oklch(0.424 0.093 237.4);
+  --guide-fg-purple: oklch(0.44 0.12 309.5);
+  --guide-fg-pink: oklch(0.449 0.164 350.4);
+}
+
+.dark[data-contrast="more"],
+.ultra-dark[data-contrast="more"] {
+  /* outline ボタンの枠は --input（塗り色）ではなく枠線の色にする */
+  --outline-border: var(--border);
+  --foreground: oklch(1 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.98 0.01 255.5);
+  --secondary-foreground: oklch(1 0 0);
+  --muted-foreground: oklch(0.88 0.03 256.8);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.84 0.14 22.2);
+  --live: oklch(0.84 0.15 45); /* 色相は通常の dark と同じ 45。background 10.8:1（ultra-dark 11.0:1）。塗りも同じ値で、文字は background */
+  --live-fill: var(--live);
+  --live-on-fill: var(--background);
+  --border: oklch(0.85 0.02 260);
+  --page-grid-line: oklch(1 0 0 / 0);
+  --ring: oklch(0.8 0.15 162);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0.02 260);
+  --sidebar-ring: oklch(0.8 0.15 162);
+  --brand: oklch(0.8 0.15 162);
+  --brand-link: oklch(0.84 0.14 160);
+  --success: oklch(0.82 0.16 140);
+  --warning: oklch(0.9 0.18 91.9);
+  --info: oklch(0.84 0.12 254.6);
+  --favorite: oklch(0.82 0.14 22);
+  --youtube: oklch(0.84 0.14 22.2);
+  --twitch: oklch(0.84 0.14 305.5);
+  --gold: oklch(0.88 0.16 86);
+  --bronze: oklch(0.84 0.15 70);
+  --rank-coal: oklch(0.84 0 0);
+  --rank-gold: oklch(0.86 0.15 73.3);
+  --rank-emerald: oklch(0.9 0.2 143.1);
+  --rank-diamond: oklch(0.92 0.12 195);
+  --rank-netherite: oklch(0.78 0.17 314.5);
+  --key-movement: oklch(0.86 0.17 151.7);
+  --key-combat: oklch(0.84 0.12 254.6);
+  --key-inventory: oklch(0.9 0.17 91.9);
+  --key-hotbar: oklch(0.84 0.14 22.2);
+  --key-ui: oklch(0.84 0.14 305.5);
+  --finger-pinky: oklch(0.42 0.15 350);
+  --finger-ring: oklch(0.42 0.15 290);
+  --finger-middle: oklch(0.42 0.12 230);
+  --finger-index: oklch(0.42 0.15 175);
+  --finger-thumb: oklch(0.42 0.15 145);
+  --finger-palm: oklch(0.42 0.13 70);
+  /* ガイド本文の文字色（ハイコントラスト）。background / card / secondary に対して 7:1 以上 */
+  --guide-fg-gray: oklch(0.775 0.005 91.5);
+  --guide-fg-red: oklch(0.79 0.12 25.8);
+  --guide-fg-orange: oklch(0.785 0.134 60.7);
+  --guide-fg-yellow: oklch(0.773 0.114 100.1);
+  --guide-fg-green: oklch(0.766 0.085 158.4);
+  --guide-fg-blue: oklch(0.772 0.099 237.4);
+  --guide-fg-purple: oklch(0.788 0.12 309.5);
+  --guide-fg-pink: oklch(0.794 0.141 350.4);
+}
+
+
+.ultra-dark[data-contrast="more"] {
+  --foreground: oklch(1 0 0);
+  --muted-foreground: oklch(0.88 0.01 286);
+  --primary: oklch(0.98 0.003 286);
+  --border: oklch(0.85 0.01 286);
+  --sidebar-border: oklch(0.85 0.01 286);
+  /* ガイド本文の文字色（ハイコントラスト、ultra-dark の面に対して 7:1 以上） */
+  --guide-fg-gray: oklch(0.722 0.005 91.5);
+  --guide-fg-red: oklch(0.741 0.157 25.8);
+  --guide-fg-orange: oklch(0.732 0.134 60.7);
+  --guide-fg-yellow: oklch(0.72 0.114 100.1);
+  --guide-fg-green: oklch(0.712 0.085 158.4);
+  --guide-fg-blue: oklch(0.718 0.099 237.4);
+  --guide-fg-purple: oklch(0.735 0.12 309.5);
+  --guide-fg-pink: oklch(0.744 0.164 350.4);
+}
+
+/* 透明度を掛けた枠線のうち、トークンを強くしても 4.5:1 に届かない物（/40・/50 は不透明の黒でも約 2.5〜4:1）を、
+   /60 相当の枠線に揃える（前景色の /15〈約 1.4:1〉は下で欄の区切りとして別に強める）。層の外（unlayered）に置いて、ユーティリティ層より優先させる。
+   コンポーネント側のクラスは書き換えず、ここだけで吸収する */
+:root[data-contrast="more"] .border-border\/40,
+:root[data-contrast="more"] .border-border\/50 {
+  border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+/* 欄の区切り（border-foreground/15）は、カードの枠（border-border/70）より強く保つ（通常時の「罫線 1.4 ＞ 枠 1.2」の順）。
+   /60 相当だと枠より弱くなり強弱が逆転するので /85 にする。背景に対するコントラスト（sRGB で合成して計算）:
+   罫線 /85 = light 11.6・dark 9.3・ultra-dark 9.4 ／ カードの枠 /70 = light 6.7・dark 6.5・ultra-dark 6.5（どちらも 4.5:1 以上） */
+:root[data-contrast="more"] .border-foreground\/15 {
+  border-color: color-mix(in oklab, var(--border) 85%, transparent);
+}
+/* 仮想キーボードのキーの枠。通常時は「空き（border-border）＜データあり・押せる空き（border-muted-foreground/70）＜
+   リマップ済み（border-primary）」の順に強い。ハイコントラストでは --border が強くなって空きキーがデータありより濃くなるので、
+   空きは /60 相当（ほかの枠線と同じ）、データありは不透明の --muted-foreground にして順序を保つ。
+   リマップ済み・保持中（border-primary / border-warning）はクラスが置き換わるので当たらない。
+   ホバーの枠（下の hover:border- のルール）より前に置き、同じ詳細度で後ろのルールを勝たせる */
+:root[data-contrast="more"] [data-slot="virtual-keyboard"] .border-border {
+  border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+:root[data-contrast="more"] [data-slot="virtual-keyboard"] .border-muted-foreground\/70 {
+  border-color: var(--muted-foreground);
+}
+/* destructive ボタン: 文字色（--destructive）がダークでは明るい値になるため、白文字を載せると読めない。
+   塗りの上は背景色（暗色）の文字にする */
+.dark[data-contrast="more"] .bg-destructive-fill,
+.ultra-dark[data-contrast="more"] .bg-destructive-fill {
+  background-color: var(--destructive);
+  color: var(--background);
+}
+/* スイッチの未選択の溝は塗り色だけで背景と区別されるので、枠線を足して輪郭を出す */
+:root[data-contrast="more"] [data-slot="switch"] {
+  border-color: var(--border);
+}
+
+/* ハイコントラストのホバー・ハイライト。面の濃淡（--accent や bg-muted/50 など）は 3:1 を出せないので、
+   濃淡ではなく「前景色のアウトライン・反転・下線・強い枠」で状態を示す（WCAG 1.4.11）。
+   クラスの列挙ではなく class 属性の部分一致（hover:bg- など）で拾うので、新しいホバー用クラスにも自動で効く。
+   タッチ端末の貼り付いたホバーを避けるため (hover: hover) の中だけ。選択中（brand）とは別の手がかりにする */
+@media (hover: hover) {
+  /* 薄い面・半透明の面に変わるホバー（リスト行・リンク行・ナビ・タブ・ghost / outline ボタン）: 内側の 2px アウトライン */
+  :root[data-contrast="more"] [class*="hover:bg-"]:not([class*="hover:bg-transparent"], :disabled, [aria-disabled="true"]):hover {
+    outline: 2px solid var(--foreground);
+    outline-offset: var(--hc-hover-offset, -2px);
+  }
+  /* 塗りのボタン（brand / primary / destructive）は塗りの濃淡の差が小さいので、外側のアウトライン */
+  :root[data-contrast="more"] [class*="hover:bg-brand"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-primary"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-destructive"]:hover {
+    --hc-hover-offset: 2px;
+  }
+  /* 塗りが薄まる（/90・/80）ホバーは、載っている文字のコントラストを下げるので、塗りは変えずアウトラインだけで示す */
+  :root[data-contrast="more"] [class*="hover:bg-brand/90"]:hover {
+    background-color: var(--brand);
+  }
+  :root[data-contrast="more"] [class*="hover:bg-primary/90"]:hover {
+    background-color: var(--primary);
+  }
+  :root[data-contrast="more"] [class*="hover:bg-destructive/80"]:hover,
+  :root[data-contrast="more"] [class*="hover:bg-destructive/90"]:hover {
+    background-color: var(--destructive);
+  }
+  /* 親（.group）のホバーで面が変わる子 */
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:bg-"] {
+    outline: 2px solid var(--foreground);
+    outline-offset: -2px;
+  }
+  /* カード等のホバー枠（border-primary/40 など）は強い枠色へ。色だけでなく太さでも示すため、内側に 1px の影を足して
+     2px 相当にする（border の幅は変えないのでレイアウトは動かない）。フォーカスリング（box-shadow）を消さないよう、
+     キーボードフォーカス中は足さない */
+  :root[data-contrast="more"] [class*="hover:border-"]:hover,
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:border-"] {
+    border-color: var(--primary);
+  }
+  :root[data-contrast="more"] [class*="hover:border-"]:hover:not(:focus-visible),
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:border-"]:not(:focus-visible) {
+    box-shadow: inset 0 0 0 1px var(--primary);
+  }
+  /* 文字色だけが変わるホバー（muted → foreground など）は下線を足す。
+     面も変わる要素（ghost / outline ボタン・ナビ項目など）は、上のアウトラインが手がかりになるので下線は足さない */
+  :root[data-contrast="more"] [class*="hover:text-"]:not([class*="hover:bg-"]):hover,
+  :root[data-contrast="more"] :where(.group):hover [class*="group-hover:text-"]:not([class*="group-hover:bg-"]) {
+    text-decoration-line: underline;
+    text-underline-offset: 3px;
+  }
+  /* 透明度だけが変わるホバー */
+  :root[data-contrast="more"] [class*="hover:opacity-"]:hover {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
+}
+/* メニュー・セレクト・コマンドのハイライト項目（Radix の data-highlighted、cmdk の data-selected）は前景色と背景色を反転。
+   選択中の brand とは別の手がかりで、文字は foreground / background の組（19:1 前後）。destructive 項目も同じ組にする */
+:root[data-contrast="more"] [data-highlighted]:not(:has([data-slot="switch"])),
+:root[data-contrast="more"] [data-selected="true"] {
+  background-color: var(--foreground) !important;
+  color: var(--background) !important;
+}
+:root[data-contrast="more"] [data-highlighted]:not(:has([data-slot="switch"])) svg,
+:root[data-contrast="more"] [data-selected="true"] svg {
+  color: inherit !important;
+}
+/* セグメント（キー配置のビュー切替・モバイルメニューのテーマ/言語の段）の選択中: 面の差だけでは 3:1 に届かないので、前景色の内側アウトラインを足す。
+   選択を aria-current で示すセグメントは data-slot="view-switcher"、aria-pressed のボタン列は data-slot="segmented" */
+:root[data-contrast="more"] [data-slot="view-switcher"] [aria-current="page"],
+:root[data-contrast="more"] [data-slot="segmented"] [aria-pressed="true"] {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
+/* スイッチを持つ項目（ハイコントラストの切替）は、スイッチの塗りが反転面に埋もれるので、反転せずアウトラインにする */
+:root[data-contrast="more"] [data-highlighted]:has([data-slot="switch"]) {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
 
   /* Respect prefers-reduced-motion: 動きとスクロール挙動を抑制 */
@@ -329,6 +703,96 @@ body {
        コンテンツの順で描画させる。html にも背景色があるため body 背景は canvas に
        伝播せず、これが無いと body 背景が負 z-index の模様レイヤーを塗りつぶす */
     isolation: isolate;
+    /* 下端固定ドック（[data-bottom-dock]）と、表示中の Cookie 同意バナー（--cookie-banner-offset）の
+       高さぶん末尾を空ける。末尾（フッターのリンク）までスクロールしきってもバナーの裏に隠れないようにするため
+       （scroll-padding だけでは最下部でそれ以上スクロールできない）。どちらも無ければ 0px */
+    padding-bottom: var(--bottom-fixed-inset);
+  }
+
+  /* 下端ドック（モバイルのみ）。変数は下方向にしか継承されないため :root で解決する。
+     ドックを持つページ（コンテナに data-bottom-dock）でだけ値が入る */
+  :root {
+    --bottom-dock-height: 0px;
+  }
+  @media (width < 48rem) {
+    :root:has([data-bottom-dock]) {
+      --bottom-dock-height: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  /* 下端に固定される UI（下端ドック・Cookie 同意バナー）の合算インセット。body の padding-bottom と
+     scroll-padding-bottom（WCAG 2.4.11: フォーカス・アンカー移動の着地点を隠さない）の両方がこれを読む。
+     --cookie-banner-offset は cookie-consent.tsx がバナー表示中だけ（高さ + 余白 16px）root に設定する
+     （閉じると除去され 0px）。ドックはバナーの下に積まれるので両者を足す。どちらも無ければ 0px。
+     カスタムプロパティは使用時に解決されるため、:has() で後から解決される --bottom-dock-height も反映される */
+  :root {
+    --bottom-fixed-inset: calc(
+      var(--bottom-dock-height, 0px) + var(--cookie-banner-offset, 0px) + var(--save-bar-inset, 0px)
+    );
+    scroll-padding-bottom: var(--bottom-fixed-inset);
+  }
+
+  /* 保存バー（floating-save-bar.tsx）が見えている間だけ、その高さ＋下の余白 1rem＋上の余白 1rem を足す
+     （Tab で移った欄がバーの裏に隠れないように。WCAG 2.4.11）。変更が無く隠れている間（aria-hidden="true"）は 0。
+     バーの高さ: モバイルは2段で約 106px（8.75rem）、sm 以上は1段で約 72px（6.5rem）。
+     Cookie バナーぶんの持ち上がりは --cookie-banner-offset 側で足されるのでここには含めない */
+  :root:has([data-me-tour="save-bar"][aria-hidden="false"]) {
+    --save-bar-inset: 8.75rem;
+  }
+  @media (width >= 40rem) {
+    :root:has([data-me-tour="save-bar"][aria-hidden="false"]) {
+      --save-bar-inset: 6.5rem;
+    }
+  }
+
+  /* lg 以上の /me はサイドバー（w-64 = 16rem ＋ gap-8 = 2rem）の分だけ本文の列が右へ寄るので、
+     保存バーも半分（9rem）右へずらして本文の列の中央に揃える。サイドバー（[data-me-tour="sidebar"]）がある画面だけ。
+     me/_layout.tsx のサイドバー幅・gap を変えたらここも合わせる */
+  @media (width >= 64rem) {
+    :root:has([data-me-tour="sidebar"]) {
+      --save-bar-shift: 9rem;
+    }
+  }
+
+  /* 上端に貼り付く UI の scroll-padding-top（WCAG 2.4.11: Tab で移ったフォーカス・アンカー移動の着地点を隠さない）。
+     --sticky-bar-inset: 上端に貼り付く帯の合計＋余白。既定はサイトヘッダー（全ページで sticky、65px）＋余白の 4.5rem（72px）。
+       - 走者画面（追従するホットバーの番兵 [data-stuck]）: md 以上はヘッダー＋貼り付いたコンパクトなホットバー（57px）＋余白の 8.5rem（136px）
+       - ガイド記事（xl 未満で出る目次バー [data-guide-toc-bar]、約 50px）: ヘッダー＋目次バー＋余白の 7.75rem（124px）
+       - ガイドエディタ（ヘッダー下に fixed のツールバー。高さは折り返しで変わる）: desktop-toolbar.tsx が実測して
+         --editor-toolbar-height を root に入れ、ヘッダー＋ツールバー＋余白にする
+       個々の要素に scroll-mt-* を付けない（この値と二重になる。ui.md 10 章）
+     --sticky-heading-inset: サーチクラフト一覧で開いているグループの見出し行が追従する（data-sticky-heading。
+       search-craft-template-view.tsx）ぶんの加算。貼り付き位置（モバイル 64px / md 以上 120px）＋追従見出しの
+       高さ（モバイル約 32px / md 以上約 57px）＋余白 から --sticky-bar-inset を引いた差分
+       モバイル 2.25rem（合計 6.75rem）/ md 以上 3.25rem（合計 11.75rem） */
+  :root {
+    --sticky-bar-inset: 4.5rem;
+    scroll-padding-top: calc(var(--sticky-bar-inset) + var(--sticky-heading-inset, 0px));
+  }
+  @media (width < 80rem) {
+    :root:has([data-guide-toc-bar]) {
+      --sticky-bar-inset: 7.75rem;
+    }
+  }
+  /* /me の lg 未満: メニュー開閉ボタンの帯（data-me-nav-bar、_layout.tsx。ヘッダー 64px の直下に貼り付く約 60px）＋余白の 8.5rem */
+  @media (width < 64rem) {
+    :root:has([data-me-nav-bar]) {
+      --sticky-bar-inset: 8.5rem;
+    }
+  }
+  :root:has([data-editor-toolbar]) {
+    --sticky-bar-inset: calc(4.5rem + var(--editor-toolbar-height, 0px));
+  }
+  :root:has([data-stuck]):has([data-sticky-heading]) {
+    --sticky-heading-inset: 2.25rem;
+  }
+  @media (width >= 48rem) {
+    :root:has([data-stuck]) {
+      --sticky-bar-inset: 8.5rem;
+    }
+    :root:has([data-stuck]):has([data-sticky-heading]) {
+      --sticky-heading-inset: 3.25rem;
+    }
   }
 
   /* ページ背景の模様レイヤー（root.tsx の BackgroundPattern が描画）。
@@ -343,13 +807,13 @@ body {
     pointer-events: none;
     background-image:
       radial-gradient(circle at 1px 1px,
-        color-mix(in oklch, var(--border) 48%, transparent) 1.2px,
+        color-mix(in oklch, var(--page-grid-line) 48%, transparent) 1.2px,
         transparent 0),
       linear-gradient(to right,
-        color-mix(in oklch, var(--border) 32%, transparent) 1px,
+        color-mix(in oklch, var(--page-grid-line) 32%, transparent) 1px,
         transparent 1px),
       linear-gradient(to bottom,
-        color-mix(in oklch, var(--border) 38%, transparent) 1px,
+        color-mix(in oklch, var(--page-grid-line) 38%, transparent) 1px,
         transparent 1px);
     background-size: 16px 16px, 34px 34px, 34px 34px;
     will-change: transform;
@@ -377,6 +841,27 @@ body {
   select:disabled {
     cursor: not-allowed;
   }
+}
+
+/* 走者画面でホットバーがヘッダー直下に貼り付いている間（md 以上）は、サイトヘッダーを不透明にする。
+   ヘッダーは半透明（bg-background/60 ＋ backdrop-blur）なので、貼り付いたバーの真上で本文が透けて見えるため。
+   ヘッダーの背景はユーティリティ層のクラスなので、層の外（unlayered）に置いて確実に上書きする。
+   ヘッダーの下罫線はそのまま残す（バーはその下に 1px もぐって貼り付くので、罫線とバーの間に隙間はできない） */
+@media (width >= 48rem) {
+  :root:has([data-stuck="true"]) header.sticky {
+    background-color: var(--background);
+  }
+}
+/* ガイド記事の目次バー（xl 未満、guide-toc-nav.tsx）がヘッダーの直下に貼り付いている間と、
+   ガイドエディタ（ヘッダーの下に不透明なツールバーが常にある）では、同じ理由でサイトヘッダーを不透明にする。
+   目次バーの貼り付きは data-toc-stuck（走者画面の data-stuck とは分ける。あちらは --sticky-bar-inset も変える） */
+@media (width < 80rem) {
+  :root:has([data-guide-toc-bar][data-toc-stuck="true"]) header.sticky {
+    background-color: var(--background);
+  }
+}
+:root:has([data-editor-toolbar]) header.sticky {
+  background-color: var(--background);
 }
 
 @layer components {
@@ -431,7 +916,9 @@ body {
 
   .ProseMirror td,
   .ProseMirror th {
-    @apply border border-border p-2 align-top text-left;
+    /* 枠は付けない: 公開ページの表は行の区切り線だけ（.guide-content.prose の表の規則）で、セルの縦線は無い。
+       編集中の列の境目はリサイズハンドルと選択の枠が示す */
+    @apply p-2 align-top text-left;
     min-width: 2em;
     position: relative;
   }
@@ -478,7 +965,8 @@ body {
 
   .ProseMirror .tableWrapper {
     overflow-x: auto;
-    margin: 1em 0;
+    /* 公開ページの器（.table-scroll-wrapper）と同じ角丸 */
+    border-radius: var(--guide-radius, var(--radius-xl));
   }
 
   /* Inline code in editor */
@@ -498,7 +986,6 @@ body {
   /* Code block with copy button */
   .code-block-wrapper {
     position: relative;
-    margin: 0.75em 0;
   }
 
   .code-block-wrapper pre {
@@ -560,23 +1047,18 @@ body {
   }
 
   /* YouTube embed in editor */
-  .ProseMirror div[data-youtube-video] {
-    @apply my-4;
-  }
-
   .ProseMirror div[data-youtube-video] > iframe {
-    @apply w-full rounded-lg;
+    @apply w-full;
+    border-radius: var(--guide-radius, var(--radius-xl));
     aspect-ratio: 16 / 9;
     height: auto;
   }
 
-  /* YouTube embed in view page */
-  div[data-youtube-video] {
-    @apply my-4;
-  }
-
+  /* YouTube embed in view page。本文の直下の動画は YouTubeClickEmbed（押してから読み込む）に置き換わり、
+     ここに当たるのはコールアウト・トグル・段組の中に残る iframe（guide-embeds.tsx の splitContentAtEmbeds） */
   div[data-youtube-video] > iframe {
-    @apply w-full rounded-lg;
+    @apply w-full;
+    border-radius: var(--guide-radius, var(--radius-xl));
     aspect-ratio: 16 / 9;
     height: auto;
   }
@@ -588,9 +1070,11 @@ body {
      の規則で縦に積まれ、エディタの NodeView 構造（icon + callout-body）でも
      同じ見た目になる */
   .callout {
-    border-radius: 0.5em;
+    /* アイコンの既定（未知の種類でも mask が無効になって色の塊にならないよう、tip と同じものを置く） */
+    --callout-accent: var(--success);
+    --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
+    border-radius: var(--guide-radius, var(--radius-xl));
     padding: 0.75em 1em;
-    margin: 0.5em 0;
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: 0.5em;
@@ -617,11 +1101,17 @@ body {
     margin-bottom: 0;
   }
 
-  /* Editor-only: NodeView icon button + body wrapper */
+  /* コールアウトのアイコン（エディタは NodeView の span、公開ビューは下の ::before。同じ見た目）。
+     lucide の線画（Lightbulb / Info / TriangleAlert / Siren。挿入メニューの desktop-toolbar.tsx と同じ組）を
+     mask にし、種類の意味色（--callout-accent）で塗る。高さは本文 1 行ぶん（行間 1.8）で、1 行目に揃える。
+     装飾なので読み上げには出さない（種類は公開ビューの role="note" + aria-label が伝える。guide-view-html.ts） */
   .callout-icon {
     flex-shrink: 0;
-    font-size: 1.1em;
-    line-height: 1.65;
+    width: 1.125em;
+    height: 1.8em;
+    background-color: var(--callout-accent, currentColor);
+    -webkit-mask: var(--callout-icon) center / 1.125em 1.125em no-repeat;
+    mask: var(--callout-icon) center / 1.125em 1.125em no-repeat;
     user-select: none;
   }
 
@@ -638,20 +1128,25 @@ body {
     margin-bottom: 0;
   }
 
+  /* 目次から移ったときにフォーカスを受ける見出し（guide-toc-nav.tsx）。本文の見た目を崩さないようリングは出さない */
+  /* 公開表示は見出しを降格するので h4 まで出うる（guide-heading-demote.ts） */
+  .guide-content :is(h1, h2, h3, h4)[tabindex="-1"]:focus {
+    outline: none;
+  }
+
   /* View page: add icon via ::before (editor uses NodeView instead)
      疑似要素も grid アイテムとして1列目・1行目に固定する */
   .guide-content .callout::before {
+    content: "";
     grid-column: 1;
     grid-row: 1;
-    font-size: 1.1em;
-    line-height: 1.65;
+    width: 1.125em;
+    height: 1.8em;
+    background-color: var(--callout-accent, currentColor);
+    -webkit-mask: var(--callout-icon) center / 1.125em 1.125em no-repeat;
+    mask: var(--callout-icon) center / 1.125em 1.125em no-repeat;
     user-select: none;
   }
-
-  .guide-content .callout-tip::before { content: "💡"; }
-  .guide-content .callout-info::before { content: "ℹ️"; }
-  .guide-content .callout-warning::before { content: "⚠️"; }
-  .guide-content .callout-danger::before { content: "🚨"; }
 
   /* エディタ内は NodeView がアイコンを描画するため ::before のアイコンを抑止
      （これがないと公開ビューと違いアイコンが二重表示になる） */
@@ -659,56 +1154,46 @@ body {
 
   /* Callout type colors — セマンティックトークンから導出し、light/dark/ultra-dark を
      var() の切り替えだけでまかなう（直値の light/dark 二重管理をしない）。
-     tip→success, info→info, warning→warning, danger→destructive */
+     tip→success, info→info, warning→warning, danger→destructive。
+     面は意味色 /10、枠は /40（ui.md 6 章「意味色の面」）。アイコンの線画（--callout-icon）もここで種類ごとに持つ */
   .callout-tip {
-    background: color-mix(in oklch, var(--success) 12%, transparent);
-    border-left: 3px solid var(--success);
+    --callout-accent: var(--success);
+    --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
+    background: color-mix(in oklch, var(--success) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--success) 40%, transparent);
   }
 
   .callout-info {
-    background: color-mix(in oklch, var(--info) 12%, transparent);
-    border-left: 3px solid var(--info);
+    --callout-accent: var(--info);
+    --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
+    background: color-mix(in oklch, var(--info) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--info) 40%, transparent);
   }
 
   .callout-warning {
-    background: color-mix(in oklch, var(--warning) 12%, transparent);
-    border-left: 3px solid var(--warning);
+    --callout-accent: var(--warning);
+    --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+    background: color-mix(in oklch, var(--warning) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent);
   }
 
   .callout-danger {
-    background: color-mix(in oklch, var(--destructive) 12%, transparent);
-    border-left: 3px solid var(--destructive);
+    --callout-accent: var(--destructive);
+    --callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 18v-6a5 5 0 1 1 10 0v6'/%3E%3Cpath d='M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z'/%3E%3Cpath d='M21 12h1'/%3E%3Cpath d='M18.5 4.5 18 5'/%3E%3Cpath d='M2 12h1'/%3E%3Cpath d='M12 2v1'/%3E%3Cpath d='m4.929 4.929.707.707'/%3E%3Cpath d='M12 12v6'/%3E%3C/svg%3E");
+    background: color-mix(in oklch, var(--destructive) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--destructive) 40%, transparent);
   }
 
-  /* Toggle list — editor only (view styles are outside layer) */
-  .ProseMirror details {
-    border: 1px solid var(--border);
-    border-radius: 0.5em;
-    padding: 0.5em 0.75em;
-    margin: 0.5em 0;
-  }
-
+  /* Toggle list — editor only。枠・角丸・印（シェブロン）・summary の高さは公開ビューと共通の
+     レイヤー外の .guide-content.prose details 規則が描く（エディタ本体も .guide-content.prose を持つ）。
+     ここはエディタだけの summary 内の入力欄 */
   .ProseMirror details summary {
-    cursor: pointer;
-    font-weight: 600;
     user-select: none;
   }
 
-  .ProseMirror details summary::marker {
-    content: "▶ ";
-    font-size: 0.75em;
-  }
-
-  .ProseMirror details[open] summary::marker {
-    content: "▼ ";
-    font-size: 0.75em;
-  }
-
-  .ProseMirror details > :not(summary) {
-    margin-top: 0.5em;
-  }
-
   .ProseMirror .toggle-summary-input {
+    flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
@@ -723,7 +1208,6 @@ body {
   /* Columns layout — editor（公開ビュー div[data-columns] と同じ見た目に揃える） */
   .columns-editor {
     position: relative;
-    margin: 0.75em 0;
   }
 
   /* 編集アフォーダンス（カラム数 + 削除）はホバー時のみ右上に小さく表示 */
@@ -801,18 +1285,20 @@ body {
   /* Guide link card — base (editor + view) */
   .guide-link-card {
     position: relative;
-    margin: 0.75em 0;
   }
 
+  /* 本文の中の埋め込み（キー配置・サーチクラフト・テンプレート）と同じ面（bg-card・枠 /70）。
+     ホバーは一覧カードと同じ枠 primary/40 ＋ shadow-md で、浮かせない（本文の中の物なので。ui.md 6 章） */
   .guide-link-card:hover .guide-link-inner {
-    border-color: color-mix(in oklch, var(--border) 100%, oklch(0.5 0 0) 30%);
-    box-shadow: 0 2px 8px color-mix(in oklch, var(--foreground) 6%, transparent);
+    border-color: color-mix(in oklch, var(--primary) 40%, transparent);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   .guide-link-inner {
     display: flex;
-    border: 1px solid var(--border);
-    border-radius: 0.5em;
+    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+    border-radius: var(--guide-radius, var(--radius-xl));
+    background: var(--card);
     overflow: hidden;
     text-decoration: none;
     color: inherit;
@@ -864,21 +1350,165 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   文書ページ（規約・ポリシー・API ドキュメント・更新履歴。markdown-doc-page.tsx の .doc-content.prose）
+   UNLAYERED — prose ユーティリティより優先させる。
+   配色はガイド本文（.guide-content.prose）と同じトークンの割り当て（prose-invert / dark: は使わない。
+   3 テーマ・ハイコントラストの差はトークン側で吸収する）。ガイド専用の規則は持ち込まないよう、別のクラスにする
+   ───────────────────────────────────────────────────────────── */
+.doc-content.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
+}
+/* 本文の1行は 42em 前後まで（和文で約 42 字）。表の器（.doc-wide）とコードブロックは幅を使ってよい */
+.doc-content.prose > :not(pre, .doc-wide) {
+  max-width: 42em;
+}
+/* 見出しの段: h1（ページ名）は text-2xl。本文の h2 は text-xl、h3 は text-lg（prose 既定の 1.5em・1.25em は
+   h1 と同じ大きさになる）。畳んだ節の h2（markdown-doc-page.tsx）も text-xl で、開いた版と同じ大きさにそろえる */
+.doc-content.prose :where(h2) {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+.doc-content.prose :where(h3) {
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+/* 4 列以上の表は、狭い画面で 1 文字ずつの縦長にならないよう最小幅を持たせ、
+   既にある横スクロールの器（.doc-wide、markdown-doc-page.tsx の ScrollableTable）の中で動かす */
+@media (max-width: 767px) {
+  .doc-content.prose table:has(thead th:nth-child(4)) {
+    min-width: 36rem;
+  }
+}
+/* 注記（blockquote）は斜体にしない（和文の斜体は読みにくい）。引用符も付けない */
+.doc-content.prose :where(blockquote) {
+  font-style: normal;
+  font-weight: normal;
+  quotes: none;
+}
+.doc-content.prose :where(blockquote p:first-of-type)::before,
+.doc-content.prose :where(blockquote p:last-of-type)::after {
+  content: none;
+}
+
+/* 短い本文（自己紹介・リリースノート）の prose。配色だけをトークンへ割り当てる（prose-invert / dark: は使わない） */
+.prose-tokens.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
    Guide content typography overrides (UNLAYERED — beats prose utility)
    ───────────────────────────────────────────────────────────── */
 
 .guide-content.prose {
   font-size: 1rem;
-  line-height: 1.65;
+  /* 長文を読む前提の行間（本文フォントはディセンダーが深いので 1.8 で詰まって見えない） */
+  line-height: 1.8;
+  /* Tailwind Typography の配色をテーマトークンへ割り当てる（prose-invert / dark: は使わない。
+     3 テーマ（light / dark / ultra-dark）はトークン側で吸収する） */
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-foreground);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  /* 区切り線は欄の区切りと同じ foreground/15（ui.md 6 章「透明度」） */
+  --tw-prose-hr: color-mix(in oklch, var(--foreground) 15%, transparent);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-kbd: var(--foreground);
+  --tw-prose-kbd-shadows: var(--foreground);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--muted);
+  /* 表の行の区切りはカード内の区切りと同じ /60 */
+  --tw-prose-th-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  --tw-prose-td-borders: color-mix(in oklch, var(--border) 60%, transparent);
+  /* 本文直下のブロック（コールアウト・トグル・コード・表の器・画像・ガイドリンク・YouTube）の角丸。
+     ui.md 6 章の 2 層: 本文直下は rounded-xl、箱（コールアウト・トグル・表のセル）の中では 1 段ずつ下げる
+     （下の「ブロックの角丸の入れ子」）。インラインの code は rounded のまま */
+  --guide-radius: var(--radius-xl);
+  /* 縦の余白の「塊」の段（表・画像・コード・コールアウト・トグル・段組・リンクカード・動画・埋め込みの上下）。
+     箱の中（コールアウト・トグル・表のセル・リスト・段組）では 0.75rem に下げる（下の「縦の余白」） */
+  --guide-gap-block: 1.5rem;
+}
+
+/* ブロックの角丸の入れ子: 箱の子孫は 1 段下げる（自分自身の角丸は親から受けた値のまま） */
+.guide-content.prose :is(.callout, details, td, th) > * {
+  --guide-radius: var(--radius-lg);
+}
+.guide-content.prose :is(.callout, details) :is(.callout, details) > * {
+  --guide-radius: var(--radius-md);
+}
+
+/* 本文のリンク・トグルの見出しのキーボードフォーカス（リングは --ring、2px） */
+.guide-content.prose a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.guide-content.prose summary:focus-visible {
+  /* トグルの枠いっぱいに広げた summary なので、外へ出さず枠の内側に引く */
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 /* 本文の行長制限（max-width + 中央寄せ）は設けない。一度 65ch → 36rem 固定カラムを
    試したが、改修前の「コンテナ幅いっぱいの左寄せ」の方がよいというユーザー判断で撤廃した
    （ch 単位はフォントサイズ依存で左端が階段状にずれる問題もあった）。再導入しないこと。 */
 
-.guide-content.prose :where(p) {
-  margin-top: 0.4em;
-  margin-bottom: 0.4em;
+/* 長い URL・英数字の連続（参考文献の生 URL 等）で本文がページ幅をはみ出さないよう、行に収まらない語だけ
+   どこでも折り返す。break-word と違い min-content にも効くので、幅を中身で決める祖先（flex / grid）を押し広げない。
+   表のセルにも当てる: 列が潰れない幅は normalizeGuideTables()（app/lib/guide-tables.ts）の表の min-width が
+   決めるので、長い語の列だけが表をはみ出させず折り返すようになる（日本語の文は元から 1 文字ずつ折り返せる）。
+   pre は white-space: pre のまま横スクロール */
+.guide-content.prose :where(p, li, a, td, th) {
+  overflow-wrap: anywhere;
+}
+
+/* 本文の要素への上書き（段落・小見出し・インライン code・画像）は、本文に差し込む React の埋め込み
+   （.not-prose: サーチクラフト・キー配置・テンプレート・YouTube）の中には当てない。Tailwind Typography 自身の
+   :not(:where(.not-prose *)) と同じ除外で、:where なので詳細度は変わらない。これらの規則はレイヤー外なので、
+   当たると埋め込みの部品（SearchCraftGroupedList 等）の Tailwind クラス（mb-2・rounded 等）に勝ってしまい、
+   テンプレート詳細ページと同じ部品でも見た目がずれる（アイテムアイコンの img に上下の余白が付く等） */
+.guide-content.prose :where(p):not(:where(.not-prose *)) {
+  /* 文の間（段落どうし・段落とリスト）: 段落の切れ目が行間と見分けられる量（行間 1.8 のとき 1 行の約半分） */
+  margin-top: 0.8em;
+  margin-bottom: 0.8em;
 }
 
 /* typographyプラグインの既定は strong に固定色を当てるため、文字色マークと
@@ -887,48 +1517,84 @@ body {
   color: inherit;
 }
 
-/* 目次アンカーで移動した際、見出しが固定ヘッダーに隠れないよう余白を確保する。
-   狭い画面では固定ヘッダーに加えて目次バーもあるため、その分を余分に確保する
-   （2xl 以上はサイドバー表示でバーが無いので控えめにする） */
-.guide-content.prose :where(h1, h2, h3) {
-  scroll-margin-top: 7.5rem;
-}
+/* 目次アンカーで移動した見出しがヘッダー・目次バーに隠れないための余白は、:root の scroll-padding-top
+   （--sticky-bar-inset。xl 未満は目次バーの分も足す）が持つ。見出しに scroll-margin-top を付けると二重になる */
 
-@media (min-width: 1536px) {
-  .guide-content.prose :where(h1, h2, h3) {
-    scroll-margin-top: 5rem;
-  }
-}
+/* 見出しの余白（rem 固定。em だと見出しの字の大きさに掛かって段ごとの値がずれる）: 上は最上位 48px・2 段目 32px・
+   3 段目 24px・それ以下 20px、下は 8px で見出しを自分の本文に寄せる。見出しの直後の要素の上余白は
+   下の「縦の余白」が 0 にして、直下を確実に 8px にする（見出しが続くとき・直後が表やコールアウトのときも）。
 
+   本文見出しの大きさ: 1.6em / 1.35em / 1.15em / 1em。記事タイトル（h1、sm 以上 36px）との比を
+   1.4 以上にして、本文の最上位の見出しがタイトルと張り合わないようにする。エディタ（h1〜）と
+   公開表示（data-guide-level）は同じ値に保つ */
 .guide-content.prose :where(h1) {
-  font-size: 1.875em;
+  font-size: 1.6em;
   font-weight: 700;
-  margin-top: 2em;
-  margin-bottom: 0.3em;
+  margin-top: 3rem;
+  margin-bottom: 0.5rem;
   line-height: 1.25;
 }
 
 .guide-content.prose :where(h2) {
-  font-size: 1.5em;
+  font-size: 1.35em;
   font-weight: 700;
-  margin-top: 1.5em;
-  margin-bottom: 0.25em;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
   line-height: 1.3;
 }
 
-.guide-content.prose :where(h3) {
+/* 埋め込み（.not-prose）のグループ見出しは直前の本文の見出しの1つ下の段（h3〜h6）で描くので、
+   h3 からは h4〜h6 と同じく埋め込みの中を除く（当たると部品の text-base・mb-2 に勝つ。guide-embeds.tsx） */
+.guide-content.prose :where(h3):not(:where(.not-prose *)) {
   font-size: 1.15em;
   font-weight: 600;
-  margin-top: 1.25em;
-  margin-bottom: 0.2em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
   line-height: 1.35;
 }
 
-.guide-content.prose :where(h4, h5, h6) {
+.guide-content.prose :where(h4, h5, h6):not(:where(.not-prose *)) {
   font-size: 1em;
   font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.15em;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  /* 公開表示は降格で h4〜h6 のどれにもなり、Typography は h4 だけ行間 1.5 を持つ。タグで行間が変わらないよう固定する */
+  line-height: 1.5;
+}
+
+/* 公開表示では本文見出しを、最小レベルが h2 になるよう降格して出力する（ページタイトルが h1。
+   降格量は記事ごとに可変: guide-heading-demote.ts）。見た目は降格後のタグではなく、
+   降格時に付与する元レベル data-guide-level に対応付けて、エディタで選んだレベルの見た目を保つ。 */
+.guide-content-demoted.guide-content.prose :where([data-guide-level="1"]) {
+  font-size: 1.6em;
+  font-weight: 700;
+  margin-top: 3rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.25;
+}
+
+.guide-content-demoted.guide-content.prose :where([data-guide-level="2"]) {
+  font-size: 1.35em;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.guide-content-demoted.guide-content.prose :where([data-guide-level="3"]) {
+  font-size: 1.15em;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.35;
+}
+
+.guide-content-demoted.guide-content.prose :where([data-guide-level="4"], [data-guide-level="5"], [data-guide-level="6"]) {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
 }
 
 /* 見出し内の文字サイズ指定を無効化する（既存ガイドや外部ペースト由来で
@@ -976,9 +1642,9 @@ body {
   margin: 0;
 }
 
-.guide-content.prose :where(code):not(pre code) {
-  background: oklch(0.96 0.005 250);
-  color: oklch(0.5 0.12 255);
+.guide-content.prose :where(code):not(pre code):not(:where(.not-prose *)) {
+  background: var(--muted);
+  color: var(--foreground);
   padding: 0.15em 0.4em;
   border-radius: 0.25em;
   font-size: 0.875em;
@@ -987,21 +1653,11 @@ body {
   white-space: pre-wrap;
 }
 
-:is(.dark, .ultra-dark) .guide-content.prose :where(code):not(pre code) {
-  background: oklch(0.25 0.02 250);
-  color: oklch(0.72 0.12 255);
-}
-
 .guide-content.prose :where(pre) {
   position: relative;
-  background: oklch(0.96 0.005 250);
-  border-radius: 0.5em;
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
-}
-
-:is(.dark, .ultra-dark) .guide-content.prose :where(pre) {
-  background: oklch(0.2 0.02 260);
+  background: var(--muted);
+  color: var(--foreground);
+  border-radius: var(--guide-radius);
 }
 
 .guide-content.prose :where(pre code) {
@@ -1011,27 +1667,53 @@ body {
   font-size: 0.875em;
 }
 
+/* コピーボタン（guides/view.tsx の useCodeCopyButtons が差し込む）。見た目 28px（rem 固定。コードの
+   文字の大きさに左右されない）。押せる範囲は ::after で 44px に広げる（ui.md 9 章。上と右の 8px は
+   pre の内側に収まるので、横スクロールの pre に切り抜かれない） */
 .guide-content.prose .code-copy-btn {
   position: absolute;
-  top: 0.5em;
-  right: 0.5em;
+  top: 0.5rem;
+  right: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.75em;
-  height: 1.75em;
-  border-radius: 0.375em;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-md);
   background: color-mix(in oklch, var(--background) 80%, transparent);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   color: var(--muted-foreground);
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
   cursor: pointer;
-  font-size: 0.75em;
+  font-size: 0.75rem;
 }
 
-.guide-content.prose pre:hover .code-copy-btn {
+.guide-content.prose .code-copy-btn::after {
+  content: "";
+  position: absolute;
+  inset: -0.5rem;
+}
+
+/* タッチ端末はホバーできないので常に出す。1 行目の右端がボタンに隠れないよう右の余白を取る */
+@media (hover: none) {
+  .guide-content.prose .code-copy-btn {
+    opacity: 1;
+  }
+  .guide-content.prose pre:has(> .code-copy-btn) {
+    padding-right: 2.75rem;
+  }
+}
+
+.guide-content.prose pre:hover .code-copy-btn,
+.guide-content.prose pre:focus-within .code-copy-btn,
+.guide-content.prose .code-copy-btn:focus-visible {
   opacity: 1;
+}
+
+.guide-content.prose .code-copy-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .guide-content.prose .code-copy-btn:hover {
@@ -1039,10 +1721,10 @@ body {
   color: var(--foreground);
 }
 
-.guide-content.prose :where(img) {
-  border-radius: 0.5em;
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
+.guide-content.prose :where(img):not(:where(.not-prose *)) {
+  border-radius: var(--guide-radius);
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
   max-width: 100%;
   height: auto;
 }
@@ -1064,19 +1746,35 @@ body {
 }
 
 .guide-content.prose :where(hr) {
-  border-color: var(--border);
+  border-color: var(--tw-prose-hr);
   margin-top: 2em;
   margin-bottom: 2em;
 }
 
 .guide-content.prose .table-scroll-wrapper {
   overflow-x: auto;
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
+  border-radius: var(--guide-radius);
   -webkit-overflow-scrolling: touch;
 }
 
+/* はみ出す表の器は tabindex="0" でキーボードから横スクロールできる（useGuideTableScroll） */
+.guide-content.prose .table-scroll-wrapper:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 表が器に収まっているとき（data-fits。useGuideTableScroll が付ける）は器をスクロール容器にしない。
+   overflow: auto の器の中では sticky がページに効かないため。clip はスクロール容器を作らずに角丸で切り抜く
+   （見出し行の背景の角を器の角丸に合わせる）。JS 前（SSR）は data-fits が無く、従来どおり横スクロール */
+.guide-content.prose .table-scroll-wrapper[data-fits] {
+  overflow: clip;
+}
+
 .guide-content.prose :where(table) {
+  /* 表の前後の余白は器（.table-scroll-wrapper / .tableWrapper）が持つ。prose 既定の 2em を残すと、
+     器が overflow: clip のとき（data-fits）は表の余白が器を抜けて、器の余白と二重になる */
+  margin-top: 0;
+  margin-bottom: 0;
   font-size: 0.9em;
   table-layout: fixed;
   min-width: 100%;
@@ -1086,15 +1784,66 @@ body {
 .guide-content.prose :where(td),
 .guide-content.prose :where(th) {
   padding: 0.35em 0.75em;
+  /* エディタのセル（align-top）と同じ。Typography 既定の baseline / bottom だと、空のセル（行ボックスが無く
+     基線が下端になる）が混ざる行で、行が文字のぶん高くなる */
+  vertical-align: top;
 }
 
 /* 列潰れ対策はサーバ側の normalizeGuideTables()（app/lib/guide-tables.ts）が
    表の min-width を「固定列合計 + 未指定列 × 160px」に再計算することで行う。
    収まらない分は .table-scroll-wrapper の横スクロールに逃げる。 */
 
+/* sm 未満（モバイル）のみ。デスクトップ表示は変えない。
+   1) 3 列以下（行のセル数で判定。colgroup の有無に依らない）の表は本文幅に収め、セルを折り返す（min-width / 列幅は inline style なので !important で上書き）
+   2) 4 列以上は横スクロールのまま、スクロール可能な側に端フェードを出して続きがあることを示す
+      （background-attachment: local の覆いグラデ + scroll の影。スクロール位置に追従し JS 不要） */
+@media (max-width: 639px) {
+  .guide-content.prose table:not(:has(tr > :nth-child(4))) {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .guide-content.prose table:not(:has(tr > :nth-child(4))) col {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  .guide-content.prose td,
+  .guide-content.prose th {
+    word-break: break-word;
+  }
+  .guide-content.prose .table-scroll-wrapper {
+    background:
+      linear-gradient(to right, var(--background) 30%, transparent) left center / 2rem 100% no-repeat local,
+      linear-gradient(to left, var(--background) 30%, transparent) right center / 2rem 100% no-repeat local,
+      linear-gradient(to right, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+      linear-gradient(to left, color-mix(in oklab, var(--muted-foreground) 30%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+  }
+  /* 収まっている表はスクロールしないので端のフェードも出さない */
+  .guide-content.prose .table-scroll-wrapper[data-fits] {
+    background: none;
+  }
+}
+
+/* 見出しセルの面は不透明（背景と混ぜる）。貼り付いた見出し行の下を、流れていく行が透けないように */
 .guide-content.prose :where(th) {
   font-weight: 600;
-  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  background: color-mix(in oklch, var(--muted) 60%, var(--background));
+}
+
+/* 長い表の見出し行をページに貼り付ける（公開ビューだけ。.guide-content-demoted）。
+   - 器に収まっている表（data-fits）だけ。はみ出す表は横スクロールのままで、見出しは貼り付かない
+   - 最初の行が全部 th のときだけ（見出し列だけの表で 1 マスだけ貼り付かないように）
+   - 位置はサイトヘッダー（64px。1px 沈めてヘッダーの線に重ねる。ui.md 10 章）＋ xl 未満の目次バーの高さ
+     （--guide-toc-bar-height を useGuideTableScroll が実測。バーが無い・非表示なら 0。バーの下端の線にも 1px 重ねる）
+   - 重なり順は目次バー（z-30）より下
+   - 表は border-collapse なので行の下線は貼り付いた th に付いてこない。th 側の内側の影で引き直し、行の下線は消す */
+.guide-content-demoted.prose .table-scroll-wrapper[data-fits] table > :is(thead, tbody:not(thead ~ tbody)) > tr:first-child:not(:has(> td)) {
+  border-bottom-color: transparent;
+}
+.guide-content-demoted.prose .table-scroll-wrapper[data-fits] table > :is(thead, tbody:not(thead ~ tbody)) > tr:first-child:not(:has(> td)) > th {
+  position: sticky;
+  top: calc(4rem + max(var(--guide-toc-bar-height, 0px) - 1px, 0px));
+  z-index: 20;
+  box-shadow: inset 0 -1px 0 var(--tw-prose-th-borders);
 }
 
 .guide-content.prose :where(a) {
@@ -1106,16 +1855,14 @@ body {
 /* Callout overrides inside prose
    （レイヤー外のためレイヤー内の基底規則より優先される。grid 化は基底と揃えること） */
 .guide-content.prose .callout {
-  border-radius: 0.5em;
+  border-radius: var(--guide-radius);
   padding: 0.75em 1em;
-  margin: 0.5em 0;
   display: grid;
   grid-template-columns: auto 1fr;
   column-gap: 0.5em;
   align-items: start;
   font-style: normal;
   color: inherit;
-  border-left-width: 3px;
 }
 
 .guide-content.prose .callout p {
@@ -1123,12 +1870,10 @@ body {
   margin-bottom: 0.2em;
 }
 
-.guide-content.prose .callout p:first-child {
+/* 公開ビューは段落が grid の直下の兄弟で、margin が相殺されない（エディタは .callout-body の中で相殺される）。
+   段落の間をエディタと同じ 0.2em にそろえる */
+.guide-content.prose .callout > p + p {
   margin-top: 0;
-}
-
-.guide-content.prose .callout p:last-child {
-  margin-bottom: 0;
 }
 
 /* Mark / highlight */
@@ -1138,40 +1883,64 @@ body {
   padding: 0.05em 0.15em;
 }
 
-/* Toggle list (details/summary) */
+/* Toggle list (details/summary)。公開ビューとエディタ（.guide-content.prose を持つ）で共通。
+   印は目次の節の開閉（guide-toc-nav.tsx）と同じ右向きシェブロン（lucide ChevronRight）を muted 色で描き、
+   開くと 90° 回す。summary は枠の左右いっぱいに広げ、押せる高さは 44px（ui.md 9 章。閉じたときの
+   高さは旧来の見た目とほぼ同じ） */
 .guide-content.prose details {
-  border: 1px solid var(--border);
-  border-radius: 0.5em;
-  padding: 0.5em 0.75em;
-  margin: 0.5em 0;
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  border-radius: var(--guide-radius);
+  padding: 0 0.75em;
 }
 
-.guide-content.prose details summary {
+.guide-content.prose details[open] {
+  padding-bottom: 0.75em;
+}
+
+.guide-content.prose details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375em;
+  min-height: 2.75rem;
+  margin: 0 -0.75em;
+  padding: 0.25em 0.75em;
+  border-radius: calc(var(--guide-radius) - 1px);
+  list-style: none;
   cursor: pointer;
   font-weight: 600;
   user-select: none;
-  margin-bottom: 0;
 }
 
-.guide-content.prose details summary::marker {
-  content: "▶ ";
-  font-size: 0.75em;
+.guide-content.prose details > summary::-webkit-details-marker {
+  display: none;
 }
 
-.guide-content.prose details[open] summary::marker {
-  content: "▼ ";
-  font-size: 0.75em;
+.guide-content.prose details > summary::marker {
+  content: "";
 }
 
-.guide-content.prose details > :not(summary) {
-  margin-top: 0.5em;
+.guide-content.prose details > summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  background-color: var(--muted-foreground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.guide-content.prose details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-content.prose details > summary::before {
+    transition: none;
+  }
 }
 
 /* Guide link card in view */
-.guide-content.prose .guide-link-card {
-  margin: 0.75em 0;
-}
-
 .guide-content.prose .guide-link-inner {
   text-decoration: none;
   color: inherit;
@@ -1181,11 +1950,36 @@ body {
   color: var(--foreground);
 }
 
+/* カード内のカバー画像には本文の画像の余白・角丸を当てない（角はカードの overflow: hidden が切る） */
+.guide-content.prose .guide-link-cover {
+  margin: 0;
+  border-radius: 0;
+}
+
+/* ガイドリンクカードの印。保存 HTML は絵文字（📄）の span だが、ui.md 14 章のとおりアイコンは lucide の線画にそろえる
+   （コールアウトのアイコンと同じ mask。絵文字は OS ごとに見た目が違い、色も変えられない）。
+   エディタの NodeView も同じ span を描くので、公開ページとエディタで同じ 16px の印になる */
+.guide-content.prose .guide-link-icon {
+  width: 1rem;
+  height: 1rem;
+  font-size: 0;
+  background-color: var(--muted-foreground);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z'/%3E%3Cpath d='M14 2v5a1 1 0 0 0 1 1h5'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* 本文の直下の YouTube（YouTubeClickEmbed）。サムネイルに本文の画像の余白・角丸・高さを当てない */
+.guide-content.prose .guide-youtube-embed img {
+  margin: 0;
+  border-radius: 0;
+  max-width: none;
+  height: 100%;
+}
+
 /* Columns layout in view */
 .guide-content.prose div[data-columns] {
   display: grid;
   gap: 1em;
-  margin: 0.75em 0;
 }
 
 .guide-content.prose div[data-columns="2"] {
@@ -1205,6 +1999,105 @@ body {
   .guide-content.prose div[data-columns="3"] {
     grid-template-columns: 1fr;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   縦の余白（公開ページ・プレビュー・エディタで同じ値。docs/guides.md「本文の余白」）
+   3 段: 文の間（段落どうし・段落とリストは 0.8em のまま）／塊の前後 1.5rem／見出し（上 48・32・24・20px、下 8px）。
+   隣り合う余白は margin の相殺で大きいほうになるので、塊どうしが続いても 24px で二重にならない。
+   構造で余白を 0 にする規則は、個々の要素の規則（詳細度が高いもの・Tailwind の my-*）に勝つため !important。
+   ───────────────────────────────────────────────────────────── */
+
+/* 塊の前後。公開ページの表の器・コールアウト・トグル・段組・リンクカード・動画、エディタ側の同じ物
+   （.tableWrapper・.code-block-wrapper・.columns-editor・.guide-block-node＝画像と動画の NodeView のラッパー）。本文の画像と pre は上の個別規則 */
+.guide-content.prose :is(
+  .table-scroll-wrapper, .tableWrapper, .code-block-wrapper, .callout, details, div[data-columns],
+  .columns-editor, .guide-link-card, div[data-youtube-video], .guide-youtube-embed, .guide-block-node
+) {
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
+}
+
+.guide-content.prose :where(pre):not(:where(.not-prose *)) {
+  margin-top: var(--guide-gap-block);
+  margin-bottom: var(--guide-gap-block);
+}
+
+/* エディタのコードブロックの余白は器（.code-block-wrapper）が持つ */
+.guide-content.prose .code-block-wrapper pre {
+  margin: 0;
+}
+
+/* エディタのコードは TipTap の NodeViewContent が code の中に block の div を入れ（行の高さが code の 21px になり、
+   公開ページの pre の行 24px より低くなる）、white-space: pre-wrap を inline style で付ける（公開ページは pre で折り返さず
+   横スクロール）。div を inline にして pre の行の高さを使い、折り返しも公開ページにそろえる */
+.guide-content.prose .code-block-wrapper pre code {
+  white-space: pre !important;
+}
+.guide-content.prose .code-block-wrapper pre [data-node-view-content-react] {
+  display: inline;
+}
+
+/* 箱の中では塊の段を 0.75rem に下げる（--guide-radius と同じ、子孫へ継承する形。箱自身の余白は外側の値のまま） */
+.guide-content.prose :is(.callout, details, td, th, li, [data-column], .column-editor) > * {
+  --guide-gap-block: 0.75rem;
+}
+
+/* エディタの NodeView は div.react-renderer > div[data-node-view-wrapper] > (見た目の要素) の二重の入れ物で、
+   余白を持つ要素はその内側。内側の余白は入れ物を抜けて外の余白と相殺されるので、構造で 0 にする規則は
+   入れ物の中の先頭（または末尾）の要素と、ラッパー自身（画像・動画は余白をラッパーに持つ）にも当てる。
+   箱の中身（段落・NodeView）は [data-node-view-content-react] の直下に並ぶ */
+
+/* 以下の構造で余白を 0 にする規則は、本文に差し込む React の埋め込み（.not-prose）の中には当てない（本文の段落・見出しの
+   上書きと同じ除外。当たるとテンプレート詳細ページと共有する部品の Tailwind の余白に勝ってしまう）。
+   埋め込みの外枠自身は .not-prose の子孫ではないので、見出しの直後の埋め込みには当たる */
+
+/* 見出しの直下は、直後が何でも 8px（見出しの margin-bottom）。直後の要素の上余白を 0 にする */
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + *:not(:where(.not-prose *)),
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + .react-renderer > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose :is(h1, h2, h3, h4, h5, h6) + .react-renderer > [data-node-view-wrapper] > :first-child:not(:where(.not-prose *)) {
+  margin-top: 0 !important;
+}
+
+/* 公開ページは埋め込みの位置で本文がかたまり（クラスの無い div）に分かれる。見出しで終わるかたまりの直後が
+   埋め込みでも、見出しと埋め込みの間は 8px */
+.guide-content.prose > div:not([class]):has(> :is(h1, h2, h3, h4, h5, h6):last-child) + * {
+  margin-top: 0 !important;
+}
+
+/* 箱（コールアウト・トグル・表のセル・リスト・段組）の中の先頭・末尾は 0 */
+.guide-content.prose :is(.callout, .callout-body, .toggle-content, td, th, li, [data-column], .column-editor, [data-node-view-content-react]) > :first-child:not(:where(.not-prose *)),
+.guide-content.prose details > summary + *:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:first-child > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:first-child > [data-node-view-wrapper] > :first-child:not(:where(.not-prose *)) {
+  margin-top: 0 !important;
+}
+.guide-content.prose :is(.callout, .callout-body, .toggle-content, details, td, th, li, [data-column], .column-editor, [data-node-view-content-react]) > :last-child:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:last-child > [data-node-view-wrapper]:not(:where(.not-prose *)),
+.guide-content.prose [data-node-view-content-react] > .react-renderer:last-child > [data-node-view-wrapper] > :last-child:not(:where(.not-prose *)) {
+  margin-bottom: 0 !important;
+}
+
+/* 本文の最後の要素の下は 0（いいね行との間を広げない。かたまりに分かれる公開ページは最後のかたまりの最後の要素も） */
+.guide-content.prose > :last-child,
+.guide-content.prose > div:not([class]):last-child > :last-child,
+.guide-content.prose .ProseMirror > :last-child,
+.guide-content.prose .ProseMirror > .react-renderer:last-child > [data-node-view-wrapper],
+.guide-content.prose .ProseMirror > .react-renderer:last-child > [data-node-view-wrapper] > :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 表のセル（th も同じ）: 1 行のセルは「文字の高さ＋セルの上下 padding」になる。段落が複数あるときの間は 0.4em */
+.guide-content.prose :is(td, th) > :where(p):not(:where(.not-prose *)) {
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+}
+
+/* 空の段落（作者が入れた空行。公開 HTML では <p></p>）は 1 行ぶんの高さにする。エディタの空段落は
+   ProseMirror の trailing break で 1 行になるので、公開ページと見た目をそろえる（行間はその場の line-height に従う） */
+.guide-content.prose p:empty:not(:where(.not-prose *)) {
+  min-height: 1.8em;
+  min-height: 1lh;
 }
 
 /* エディタ内の段組も公開ビューと同じく横並びに。
@@ -1286,4 +2179,130 @@ body {
 .code-block-wrapper pre::-webkit-scrollbar-thumb:hover,
 .guide-content.prose .table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Guide background palette — 保存データの背景色を、テーマ別の表示色へ置き換える
+   ハイライト（mark）・表のセル色・旧データの span の inline style（background-color）を、
+   保存されている色の部分一致で捕まえ、--guide-bg-*（:root / .dark / .ultra-dark で定義）に差し替える。
+   保存色はライトの淡い色なので、暗いテーマでは前景色（明るい文字）が載らない（約 1.1:1）。
+   - inline style には詳細度で勝てないため !important が必須（見出しの font-size の打ち消しと同じ理由）
+   - 形は hex（サニタイズ後は "background-color:#FDEBEC;"、エディタは "background-color: #FDEBEC"）と、
+     エディタが表のセル色を読み直したときの rgb（"rgb(253, 235, 236)"）、過去データの空白なし rgb の 3 つ。
+     hex は大文字小文字を問わない（i）。文字色パレットとは hex が重ならない
+   - パレットの単一情報源は app/lib/guide-colors.ts（GUIDE_BG_COLOR_TOKENS）。色を足したらここにも足す
+     （lib/__tests__/guide-colors.test.ts がずれを検出する）
+   - エディタ本体も .guide-content を持つので、編集中も同じ色に見える
+   ───────────────────────────────────────────────────────────── */
+.guide-content [style*="#f1f1ef" i],
+.guide-content [style*="rgb(241, 241, 239)"],
+.guide-content [style*="rgb(241,241,239)"] {
+  background-color: var(--guide-bg-gray) !important;
+}
+.guide-content [style*="#fdebec" i],
+.guide-content [style*="rgb(253, 235, 236)"],
+.guide-content [style*="rgb(253,235,236)"] {
+  background-color: var(--guide-bg-red) !important;
+}
+.guide-content [style*="#fbf3db" i],
+.guide-content [style*="rgb(251, 243, 219)"],
+.guide-content [style*="rgb(251,243,219)"] {
+  background-color: var(--guide-bg-yellow) !important;
+}
+.guide-content [style*="#edf3ec" i],
+.guide-content [style*="rgb(237, 243, 236)"],
+.guide-content [style*="rgb(237,243,236)"] {
+  background-color: var(--guide-bg-green) !important;
+}
+.guide-content [style*="#e7f3f8" i],
+.guide-content [style*="rgb(231, 243, 248)"],
+.guide-content [style*="rgb(231,243,248)"] {
+  background-color: var(--guide-bg-blue) !important;
+}
+.guide-content [style*="#f6f3f9" i],
+.guide-content [style*="rgb(246, 243, 249)"],
+.guide-content [style*="rgb(246,243,249)"] {
+  background-color: var(--guide-bg-purple) !important;
+}
+.guide-content [style*="#f9f0f5" i],
+.guide-content [style*="rgb(249, 240, 245)"],
+.guide-content [style*="rgb(249,240,245)"] {
+  background-color: var(--guide-bg-pink) !important;
+}
+.guide-content [style*="#fef08a" i],
+.guide-content [style*="rgb(254, 240, 138)"],
+.guide-content [style*="rgb(254,240,138)"] {
+  background-color: var(--guide-bg-legacy-yellow) !important;
+}
+/* 色を指定しないハイライト（エディタの ==x== 入力規則・Mod-Shift-H は色なしの <mark> を作る）。
+   UA 既定の黄（Mark）のままだと暗いテーマで明るい文字が載って読めないので、旧既定の黄と同じトークンに寄せる。
+   inline style が無いので !important は要らない */
+.guide-content mark:not([style*="background"]) {
+  background-color: var(--guide-bg-legacy-yellow);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Guide text palette — 保存データの文字色を、テーマ別の表示色へ置き換える
+   文字色は生の hex（ライトの白地向け）で保存される。オレンジ・黄・赤は白地でも 4.5:1 に届かず、
+   暗いテーマではほぼ全色が約 3.3:1 になる。上の背景パレットと同じ仕組みで、保存色の部分一致を
+   --guide-fg-*（:root / .dark / .ultra-dark と、各テーマのハイコントラストで定義）に差し替える。
+   - 保存データとサニタイズの許可リスト（hex）は変えない。形は背景パレットと同じ 3 つ（hex / rgb 2 種）
+   - 背景パレットの hex とは重ならないので、1 つの selector が背景を巻き込むことはない
+   - パレットの単一情報源は app/lib/guide-colors.ts（GUIDE_TEXT_COLOR_TOKENS）。色を足したらここにも足す
+   - 保証するのは本文の面（background / card / secondary）に対する比だけ。色付きの背景（ハイライト・セル色）の上の
+     色付き文字の組み合わせは保証しない
+   ───────────────────────────────────────────────────────────── */
+.guide-content [style*="#787774" i],
+.guide-content [style*="rgb(120, 119, 116)"],
+.guide-content [style*="rgb(120,119,116)"] {
+  color: var(--guide-fg-gray) !important;
+}
+.guide-content [style*="#d44c47" i],
+.guide-content [style*="rgb(212, 76, 71)"],
+.guide-content [style*="rgb(212,76,71)"] {
+  color: var(--guide-fg-red) !important;
+}
+.guide-content [style*="#cb7b2c" i],
+.guide-content [style*="rgb(203, 123, 44)"],
+.guide-content [style*="rgb(203,123,44)"] {
+  color: var(--guide-fg-orange) !important;
+}
+.guide-content [style*="#998a2b" i],
+.guide-content [style*="rgb(153, 138, 43)"],
+.guide-content [style*="rgb(153,138,43)"] {
+  color: var(--guide-fg-yellow) !important;
+}
+.guide-content [style*="#448361" i],
+.guide-content [style*="rgb(68, 131, 97)"],
+.guide-content [style*="rgb(68,131,97)"] {
+  color: var(--guide-fg-green) !important;
+}
+.guide-content [style*="#337ea9" i],
+.guide-content [style*="rgb(51, 126, 169)"],
+.guide-content [style*="rgb(51,126,169)"] {
+  color: var(--guide-fg-blue) !important;
+}
+.guide-content [style*="#9065b0" i],
+.guide-content [style*="rgb(144, 101, 176)"],
+.guide-content [style*="rgb(144,101,176)"] {
+  color: var(--guide-fg-purple) !important;
+}
+.guide-content [style*="#c14c8a" i],
+.guide-content [style*="rgb(193, 76, 138)"],
+.guide-content [style*="rgb(193,76,138)"] {
+  color: var(--guide-fg-pink) !important;
+}
+
+/* /me の初回ツアーが指している要素の強調（components/me/me-tour.tsx。brand＝現在地） */
+[data-me-tour-active] {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: var(--radius-lg, 0.5rem);
+}
+/* 変更が無く隠れている保存バーをツアーが指すときは、見える状態にして指す（操作は不可のまま） */
+[data-me-tour="save-bar"][data-me-tour-active] {
+  opacity: 1 !important;
+  /* Tailwind 4 の translate-y-* は transform ではなく translate プロパティ（--tw-translate-y）で動かすので、
+     縦のずれだけ打ち消す（lg の横ずらし --save-bar-shift は残す） */
+  --tw-translate-y: 0px !important;
 }

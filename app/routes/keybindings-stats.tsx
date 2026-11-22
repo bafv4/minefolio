@@ -7,8 +7,12 @@ import { loadKeybindingsStats } from "@/lib/keybindings-stats.server";
 import { StatsView } from "@/components/keybindings/stats-view";
 import { ViewSwitcher } from "@/components/keybindings/view-switcher";
 import { KeybindingsPageTitle } from "@/components/keybindings/keybindings-list-layout";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import {
+  KeybindingsViewSkeleton,
+  skeletonVariantForPath,
+} from "@/components/keybindings/keybindings-view-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
+import { useT } from "@/hooks/use-locale";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
 
@@ -41,17 +45,19 @@ export async function loader() {
 }
 
 export default function KeybindingsStatsPage() {
+  const t = useT();
   const { stats } = useLoaderData<typeof loader>();
   // ビュー切替（→ /keybindings, /keybindings/visual）中は本体をスケルトンに差し替える
   const { isTabSwitching, targetPathname } = useTabNavigation();
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <KeybindingsPageTitle />
-      <ViewSwitcher />
+      <KeybindingsPageTitle
+        title={t("keybindingsStats.title")}
+        description={t("keybindingsStats.description")}
+        trailing={<ViewSwitcher />}
+      />
       {isTabSwitching ? (
-        <TabContentSkeleton
-          variant={targetPathname === "/keybindings" ? "table" : "cards"}
-        />
+        <KeybindingsViewSkeleton variant={skeletonVariantForPath(targetPathname)} />
       ) : (
         <StatsView data={stats} />
       )}

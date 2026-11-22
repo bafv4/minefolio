@@ -236,11 +236,6 @@ export function setCellBackground(editor: Editor, color: string | null): void {
   setTableCellsStyle(editor, "cell", "backgroundColor", color);
 }
 
-/** 現在のセルに文字色を適用する（null で解除） */
-export function setCellTextColor(editor: Editor, color: string | null): void {
-  setTableCellsStyle(editor, "cell", "textColor", color);
-}
-
 /**
  * カーソル位置のテーブル全体をクリップボードへコピーする。
  * text/html はスキーマの toDOM 直列化（エディタへの貼り付けで属性込みの完全復元が可能）、
@@ -338,6 +333,15 @@ export function insertGuideLink(
         coverImageUrl: guide.coverImageUrl,
       },
     })
+    .run();
+}
+
+/** サーチクラフトテンプレート埋め込みを挿入する（属性は templateId のみ） */
+export function insertTemplateEmbed(editor: Editor, templateId: string): void {
+  editor
+    .chain()
+    .focus()
+    .insertContent({ type: "searchCraftTemplateEmbed", attrs: { templateId } })
     .run();
 }
 

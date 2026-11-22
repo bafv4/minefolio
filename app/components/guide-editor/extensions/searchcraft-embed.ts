@@ -21,6 +21,11 @@ export const SearchCraftEmbedExtension = TiptapNode.create({
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute("data-preset-name") || null,
       },
+      // 押すキー（キーバッジ・キー入力順）を記事に出すか。属性なし（既存の記事）は出す
+      showKeys: {
+        default: true,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-hide-keys") !== "true",
+      },
     };
   },
 
@@ -35,6 +40,7 @@ export const SearchCraftEmbedExtension = TiptapNode.create({
         "data-searchcraft-embed": "",
         "data-user-slug": HTMLAttributes.userSlug as string,
         ...(HTMLAttributes.presetName ? { "data-preset-name": HTMLAttributes.presetName as string } : {}),
+        ...(HTMLAttributes.showKeys === false ? { "data-hide-keys": "true" } : {}),
       }),
     ];
   },

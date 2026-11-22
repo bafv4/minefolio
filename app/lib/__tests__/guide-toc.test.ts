@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { buildTableOfContents } from "../guide-toc";
+import {
+  buildTableOfContents,
+  visibleTocItems,
+  tocSectionKeys,
+  tocDisplayedActiveId,
+  tocAllSectionOverrides,
+  TOC_LEAD_SECTION,
+} from "../guide-toc";
 
 // 旧実装（O(n^2) の遅延後方参照版）の逐語コピー。線形版が整形式HTMLに対して
 // バイト一致することを回帰テストで担保するためのリファレンス。
@@ -142,5 +149,167 @@ describe("buildTableOfContents", () => {
 
     expect(toc).toEqual([{ id: "heading-1", text: "末尾", level: 2 }]);
     expect(elapsedMs).toBeLessThan(1000);
+  });
+});
+
+describe("visibleTocItems", () => {
+  const items = [
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "a1x", text: "A1x", level: 3 },
+    { id: "b", text: "B", level: 1 },
+    { id: "b1", text: "B1", level: 2 },
+    { id: "c", text: "C", level: 1 },
+  ];
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+  it("アクティブが無ければ最上位のみ", () => {
+    expect(ids(visibleTocItems(items, null))).toEqual(["a", "b", "c"]);
+    expect(ids(visibleTocItems(items, "nope"))).toEqual(["a", "b", "c"]);
+  });
+
+  it("アクティブを含む最上位の節だけ展開する", () => {
+    expect(ids(visibleTocItems(items, "a1x"))).toEqual(["a", "a1", "a1x", "b", "c"]);
+    expect(ids(visibleTocItems(items, "b"))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("最小レベルが 2 の目次では h2 が最上位", () => {
+    const xs = [
+      { id: "x", text: "X", level: 2 },
+      { id: "x1", text: "X1", level: 3 },
+      { id: "y", text: "Y", level: 2 },
+      { id: "y1", text: "Y1", level: 3 },
+    ];
+    expect(ids(visibleTocItems(xs, "y1"))).toEqual(["x", "y", "y1"]);
+  });
+
+  it("最上位より前の下位見出しがアクティブでも常に見える", () => {
+    const xs = [
+      { id: "o", text: "O", level: 2 },
+      { id: "t", text: "T", level: 1 },
+      { id: "t1", text: "T1", level: 2 },
+    ];
+    // 最上位が t だけなので t の節は既定で開く。先頭の孤立した o はアクティブのときだけ見える
+    expect(ids(visibleTocItems(xs, "o"))).toEqual(["o", "t", "t1"]);
+    expect(ids(visibleTocItems(xs, "t"))).toEqual(["t", "t1"]);
+    expect(ids(visibleTocItems(xs, null))).toEqual(["t", "t1"]);
+  });
+
+  it("最上位が1つだけなら、その節を既定で開く", () => {
+    const xs = [
+      { id: "h", text: "H", level: 1 },
+      { id: "h1", text: "H1", level: 2 },
+      { id: "h1x", text: "H1x", level: 3 },
+      { id: "h2", text: "H2", level: 2 },
+    ];
+    expect(ids(visibleTocItems(xs, null))).toEqual(["h", "h1", "h1x", "h2"]);
+    expect(ids(visibleTocItems(xs, "h2"))).toEqual(["h", "h1", "h1x", "h2"]);
+    // 利用者の開閉は既定より優先する
+    expect(ids(visibleTocItems(xs, "h2", { h: false }))).toEqual(["h"]);
+    expect(ids(visibleTocItems(xs, null, tocAllSectionOverrides(xs, false)))).toEqual(["h"]);
+    expect(ids(visibleTocItems(xs, null, { h: true }))).toEqual(["h", "h1", "h1x", "h2"]);
+    // 「すべて開く／閉じる」の対象にもなる（開閉ボタンを出す）
+    expect(tocAllSectionOverrides(xs, true)).toEqual({ h: true });
+  });
+
+  it("最上位が2つ以上なら、アクティブの無い節は既定で畳んだまま", () => {
+    const xs = [
+      { id: "p", text: "P", level: 1 },
+      { id: "p1", text: "P1", level: 2 },
+      { id: "q", text: "Q", level: 1 },
+    ];
+    expect(ids(visibleTocItems(xs, null))).toEqual(["p", "q"]);
+    expect(ids(visibleTocItems(xs, "q"))).toEqual(["p", "q"]);
+  });
+
+  it("空配列", () => {
+    expect(visibleTocItems([], null)).toEqual([]);
+  });
+});
+
+describe("visibleTocItems（手動の開閉）", () => {
+  const items = [
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "a1x", text: "A1x", level: 3 },
+    { id: "b", text: "B", level: 1 },
+    { id: "b1", text: "B1", level: 2 },
+    { id: "c", text: "C", level: 1 },
+  ];
+  const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+  it("overrides が空なら従来どおり", () => {
+    expect(ids(visibleTocItems(items, "b", {}))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("アクティブの節を畳める（最上位だけ残る）", () => {
+    expect(ids(visibleTocItems(items, "a1x", { a: false }))).toEqual(["a", "b", "c"]);
+  });
+
+  it("アクティブ以外の節を開ける", () => {
+    expect(ids(visibleTocItems(items, "b", { a: true }))).toEqual(["a", "a1", "a1x", "b", "b1", "c"]);
+    expect(ids(visibleTocItems(items, null, { b: true }))).toEqual(["a", "b", "b1", "c"]);
+  });
+
+  it("先頭の孤立した下位見出しは overrides の対象外", () => {
+    const xs = [
+      { id: "o", text: "O", level: 2 },
+      { id: "t", text: "T", level: 1 },
+    ];
+    expect(ids(visibleTocItems(xs, "o", { [TOC_LEAD_SECTION]: false }))).toEqual(["o", "t"]);
+  });
+
+  it("tocAllSectionOverrides: 配下を持つ節だけを全部開く／閉じる", () => {
+    expect(tocAllSectionOverrides(items, true)).toEqual({ a: true, b: true });
+    expect(tocAllSectionOverrides(items, false)).toEqual({ a: false, b: false });
+    // 「すべて閉じる」は読んでいる節も畳む
+    expect(ids(visibleTocItems(items, "a1x", tocAllSectionOverrides(items, false)))).toEqual(["a", "b", "c"]);
+    expect(ids(visibleTocItems(items, null, tocAllSectionOverrides(items, true)))).toEqual(
+      ["a", "a1", "a1x", "b", "b1", "c"],
+    );
+  });
+
+  it("tocAllSectionOverrides: 開閉できる節が無ければ空（先頭の孤立見出しも除く）", () => {
+    expect(tocAllSectionOverrides([], true)).toEqual({});
+    expect(
+      tocAllSectionOverrides(
+        [
+          { id: "a", text: "A", level: 1 },
+          { id: "b", text: "B", level: 1 },
+        ],
+        true,
+      ),
+    ).toEqual({});
+    expect(
+      tocAllSectionOverrides(
+        [
+          { id: "o", text: "O", level: 2 },
+          { id: "t", text: "T", level: 1 },
+        ],
+        true,
+      ),
+    ).toEqual({});
+  });
+});
+
+describe("tocSectionKeys / tocDisplayedActiveId", () => {
+  const items = [
+    { id: "o", text: "O", level: 2 },
+    { id: "a", text: "A", level: 1 },
+    { id: "a1", text: "A1", level: 2 },
+    { id: "b", text: "B", level: 1 },
+  ];
+
+  it("節キーは最上位項目の id（先頭の孤立は空文字）", () => {
+    expect(tocSectionKeys(items)).toEqual([TOC_LEAD_SECTION, "a", "a", "b"]);
+    expect(tocSectionKeys([])).toEqual([]);
+  });
+
+  it("見えているアクティブはそのまま、畳まれた節の中なら節の最上位項目を返す", () => {
+    const visible = visibleTocItems(items, "a1", { a: false });
+    expect(tocDisplayedActiveId(items, visible, "a1")).toBe("a");
+    expect(tocDisplayedActiveId(items, visibleTocItems(items, "a1"), "a1")).toBe("a1");
+    expect(tocDisplayedActiveId(items, visible, null)).toBeNull();
+    expect(tocDisplayedActiveId(items, visible, "nope")).toBeNull();
   });
 });

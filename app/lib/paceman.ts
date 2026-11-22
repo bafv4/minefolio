@@ -1,6 +1,5 @@
 // PaceMan API - ライブペース取得
 
-import type { MessageKey, Translator } from "@/lib/messages";
 import { getCached, setCached, getPaceManCacheKey, CacheTTL } from "./cache";
 
 const PACEMAN_API = "https://paceman.gg/api/ars/liveruns";
@@ -29,9 +28,10 @@ export interface PaceManLiveRun {
 }
 
 /**
- * PaceMan APIからライブペース一覧を取得
+ * PaceMan APIからライブペース一覧を取得。
+ * 上流の失敗（非 2xx・例外）は null（0件の正常応答 [] と区別する。呼び出し側は失敗をキャッシュしない）
  */
-export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
+export async function fetchLiveRuns(): Promise<PaceManLiveRun[] | null> {
   // キャッシュチェック
   const cacheKey = getPaceManCacheKey("liveruns");
   const cached = await getCached<PaceManLiveRun[]>(cacheKey);
@@ -41,8 +41,9 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
 
   try {
     const res = await fetch(PACEMAN_API, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const data = (await res.json()) as PaceManLiveRun[];
+    if (!Array.isArray(data)) return null;
     // 非表示・チート検出されたものを除外
     const filteredData = data.filter((run) => !run.isHidden && !run.isCheated);
 
@@ -52,90 +53,12 @@ export async function fetchLiveRuns(): Promise<PaceManLiveRun[]> {
     return filteredData;
   } catch (error) {
     console.error("PaceMan API error:", error);
-    return [];
+    return null;
   }
 }
 
-/**
- * スプリットIDを日本語ラベルに変換
- */
-export function getSplitLabel(t: Translator, eventId: string): string {
-  const labelKeys: Record<string, MessageKey> = {
-    "rsg.enter_nether": "paces.splitNether",
-    "rsg.enter_bastion": "paces.splitBastion",
-    "rsg.enter_fortress": "paces.splitFortress",
-    "rsg.first_portal": "paces.splitBlind",
-    "rsg.second_portal": "paces.splitSecondPortal",
-    "rsg.enter_stronghold": "paces.splitStronghold",
-    "rsg.enter_end": "paces.splitEnd",
-    "rsg.credits": "paces.splitFinish",
-  };
-  const key = labelKeys[eventId];
-  return key ? t(key) : eventId.replace("rsg.", "").replace(/_/g, " ");
-}
-
-// スプリットIDの正規タイムライン名（SPLIT_MARK_ITEM / pacemanPaces.timeline と同じ語彙）
-const SPLIT_TIMELINES: Record<string, string> = {
-  "rsg.enter_nether": "Enter Nether",
-  "rsg.enter_bastion": "Bastion",
-  "rsg.enter_fortress": "Fortress",
-  "rsg.first_portal": "First Portal",
-  "rsg.second_portal": "Second Portal",
-  "rsg.enter_stronghold": "Enter Stronghold",
-  "rsg.enter_end": "Enter End",
-  "rsg.credits": "Finish",
-};
-
-// 英語表示ラベル（正規タイムライン名との差分は First Portal の口語表記 "Blind" のみ）
-const SPLIT_LABELS_EN: Record<string, string> = {
-  ...SPLIT_TIMELINES,
-  "rsg.first_portal": "Blind",
-};
-
-/**
- * スプリットIDを英語ラベルに変換
- */
-export function getSplitLabelEnglish(eventId: string): string {
-  return SPLIT_LABELS_EN[eventId] || eventId.replace("rsg.", "").replace(/_/g, " ");
-}
-
-/**
- * スプリットIDを PaceManSplitMark（アイコン+名称チップ）等で使う共通タイムライン名に変換する。
- * getSplitLabelEnglish の口語表記（"Blind" 等）ではなく、SPLIT_MARK_ITEM や
- * pacemanPaces.timeline と同じ語彙（"First Portal" 等）に揃える。
- */
-export function getSplitTimeline(eventId: string): string {
-  return SPLIT_TIMELINES[eventId] || getSplitLabelEnglish(eventId);
-}
-
-/**
- * スプリットIDの進行順序を取得（ソート用）
- */
-export function getSplitOrder(eventId: string): number {
-  const order: Record<string, number> = {
-    "rsg.enter_nether": 1,
-    "rsg.enter_bastion": 2,
-    "rsg.enter_fortress": 3,
-    "rsg.first_portal": 4,
-    "rsg.second_portal": 5,
-    "rsg.enter_stronghold": 6,
-    "rsg.enter_end": 7,
-    "rsg.credits": 8,
-  };
-  return order[eventId] || 0;
-}
-
-/**
- * ライブペースの最新スプリットを取得
- */
-export function getLatestSplit(run: PaceManLiveRun): PaceManEvent | null {
-  if (run.eventList.length === 0) return null;
-  // スプリット順でソートして最後のものを取得
-  const sorted = [...run.eventList].sort(
-    (a, b) => getSplitOrder(b.eventId) - getSplitOrder(a.eventId)
-  );
-  return sorted[0];
-}
+// スプリットID → 英語ラベル / タイムライン名の変換は、クライアントからも使うため軽量モジュールに置く（cache・DB を引き込まない）
+export { getSplitLabelEnglish, getSplitTimeline, getSplitOrder, getLatestSplit } from "./pace-splits";
 
 // ============================================
 // PaceMan Stats API - 最近のペース履歴
@@ -171,8 +94,8 @@ export interface PaceManRecentRun {
   bastion: number | null;
   fortress: number | null;
   first_portal: number | null;
-  first_structure: number | null;
-  second_structure: number | null;
+  // ブレイズロッド取得（Fortress 内の区間）。API 応答に obtainRod が無い場合は null（fetchRecentRuns で正規化）
+  obtainRod: number | null;
   stronghold: number | null;
   end: number | null;
   finish: number | null;
@@ -210,8 +133,7 @@ export async function fetchRecentRuns(
       bastion: run.bastion,
       fortress: run.fortress,
       first_portal: run.first_portal,
-      first_structure: null, // APIには含まれない
-      second_structure: null, // APIには含まれない
+      obtainRod: run.obtainRod ?? null,
       stronghold: run.stronghold,
       end: run.end,
       finish: run.finish,
@@ -262,42 +184,4 @@ export async function fetchRecentRunsForUsers(
   await setCached(cacheKey, sortedRuns, CacheTTL.MEDIUM);
 
   return sortedRuns;
-}
-
-/**
- * 最近のペースの最終到達スプリットを取得
- */
-export function getRecentRunFinalSplit(
-  t: Translator,
-  run: PaceManRecentRun,
-): {
-  splitId: string;
-  label: string;
-  igt: number;
-} | null {
-  // 進行順に最後の到達スプリットを探す
-  const splits = [
-    { id: "rsg.credits", key: "finish" as const, label: t("paces.splitFinish") },
-    { id: "rsg.enter_end", key: "end" as const, label: t("paces.splitEnd") },
-    { id: "rsg.enter_stronghold", key: "stronghold" as const, label: t("paces.splitStronghold") },
-    { id: "rsg.first_portal", key: "first_portal" as const, label: t("paces.splitBlind") },
-    { id: "rsg.second_structure", key: "second_structure" as const, label: t("paces.splitSecondStructure") },
-    { id: "rsg.fortress", key: "fortress" as const, label: t("paces.splitFortress") },
-    { id: "rsg.bastion", key: "bastion" as const, label: t("paces.splitBastion") },
-    { id: "rsg.first_structure", key: "first_structure" as const, label: t("paces.splitFirstStructure") },
-    { id: "rsg.enter_nether", key: "nether" as const, label: t("paces.splitNether") },
-  ];
-
-  for (const split of splits) {
-    const time = run[split.key];
-    if (time !== null && time > 0) {
-      return {
-        splitId: split.id,
-        label: split.label,
-        igt: time,
-      };
-    }
-  }
-
-  return null;
 }

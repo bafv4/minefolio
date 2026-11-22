@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { useFetcher, useRevalidator, Link } from "react-router";
-import { Settings, Copy, Check, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import { Settings, Copy, Check, Loader2, AlertCircle, Info, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
 import {
   Select,
   SelectContent,
@@ -10,12 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -32,16 +30,27 @@ interface PresetSelectorProps {
   activePresetId: string | null;
   hasChanges: boolean;
   onCopyFromOther?: () => void;
+  /**
+   * 行の右側（コピーの左）に足す操作（キー配置画面のインポートなど）。
+   * disabled は未保存の変更があるとき（コピーと同じ。理由の文は describedBy の要素）。プリセットが 0 件のときは警告帯の中にも出す
+   */
+  extraActions?: (state: { disabled: boolean; describedBy?: string }) => ReactNode;
   /** プリセット切替（apply-preset の送信＋再検証）中かどうかを親へ通知する */
   onSwitchingChange?: (switching: boolean) => void;
   className?: string;
+}
+
+/** 読み込み中の PresetSelector の場所取り（行の高さを先に確保する） */
+export function PresetSelectorSkeleton() {
+  return <Skeleton className="h-14 w-full max-w-64 max-sm:h-16" />;
 }
 
 /**
  * 「現在編集中のプリセット」表示。
  *
  * - ドロップダウンで編集先プリセットを切り替え（apply-preset を /me/presets に POST）
- * - 未保存変更時はドロップダウン・コピーを非活性化
+ * - 編集中がメインでないときは通知帯で知らせ、「メインに設定」（set-main）を出す
+ * - 未保存変更時はドロップダウン・コピー・メインに設定を非活性化し、理由は見える1文（`aria-describedby` で結ぶ）で示す
  * - プリセットが0件のときは警告のみ表示
  * - タブ復帰（focus / visibilitychange）時に loader を再検証し、
  *   別タブでのプリセット切替による stale 表示を防ぐ
@@ -51,15 +60,35 @@ export function PresetSelector({
   activePresetId,
   hasChanges,
   onCopyFromOther,
+  extraActions,
   onSwitchingChange,
   className,
 }: PresetSelectorProps) {
   const t = useT();
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
   const revalidator = useRevalidator();
+  // 「メインに設定」は編集対象の切替とは別の fetcher（切替中ロックやセレクトの「…」表示を起こさない）
+  const mainFetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
+  const selectId = useId();
+  const hintId = useId();
+  const switchHintId = useId();
   // apply-preset の送信〜再検証の間は fetcher.state が非idle。これを切替中とみなす
   const isSwitching = fetcher.state !== "idle";
   const lastRevalidatedAt = useRef(0);
+
+  // 編集先の切替（apply-preset）が失敗したときは、理由をトーストで知らせる（成功は帯・選択の更新で分かる）
+  const switchResult = fetcher.data;
+  useEffect(() => {
+    if (switchResult?.error) toast.error(switchResult.error);
+  }, [switchResult]);
+
+  // 「メインに設定」の結果をトーストで知らせる（成功後は action 後の再検証で帯が消える）
+  const mainResult = mainFetcher.data;
+  useEffect(() => {
+    if (!mainResult) return;
+    if (mainResult.error) toast.error(mainResult.error);
+    else if (mainResult.message) toast.success(mainResult.message);
+  }, [mainResult]);
 
   // 切替状態を親へ通知（親はキーボードビュー・入力欄をロックする）
   useEffect(() => {
@@ -98,11 +127,12 @@ export function PresetSelector({
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm">{t("mePresets.noPresetWarning")}</span>
-          <Link to="/me/presets" className="shrink-0">
-            <Button size="sm" className="w-full sm:w-auto">
-              {t("mePresets.createPreset")}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {extraActions?.({ disabled: false })}
+            <Button asChild size="sm" className="w-full sm:w-auto max-sm:min-h-11">
+              <Link to="/me/presets">{t("mePresets.createPreset")}</Link>
             </Button>
-          </Link>
+          </div>
         </AlertDescription>
       </Alert>
     );
@@ -120,104 +150,135 @@ export function PresetSelector({
   const copyDisabled = hasChanges || isSwitching;
   const showCopyButton = onCopyFromOther && presets.length > 1;
 
+  const activePreset = presets.find((p) => p.id === activePresetId);
+  // メインが別にあり、編集中がメインでないときだけ「保存しても走者画面には出ない」ことを知らせる
+  const showNotMainNotice =
+    !!activePreset && !activePreset.isMain && presets.some((p) => p.isMain);
+  const setMainDisabled = hasChanges || isSwitching || mainFetcher.state !== "idle";
+
+  const handleSetMain = () => {
+    if (!activePresetId || setMainDisabled) return;
+    const formData = new FormData();
+    formData.set("intent", "set-main");
+    formData.set("presetId", activePresetId);
+    mainFetcher.submit(formData, { method: "post", action: "/me/presets" });
+  };
+
   return (
-    <div
-      className={cn(
-        "rounded-lg border bg-card p-3 sm:p-4 shadow-sm",
-        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Settings className="h-4 w-4" />
-        </div>
-        <div className="flex flex-col gap-1 min-w-0 flex-1">
-          <span className="text-xs font-medium text-muted-foreground">
+    <div data-me-tour="preset-selector" className={cn("space-y-3", className)}>
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1 sm:max-w-64">
+          <Label htmlFor={selectId} className="text-xs font-medium text-muted-foreground">
             {t("mePresets.selectorLabel")}
-          </span>
-          <TooltipProvider delayDuration={150}>
-            <Tooltip open={dropdownDisabled && hasChanges ? undefined : false}>
-              <TooltipTrigger asChild>
-                <div className="w-full sm:w-64">
-                  <Select
-                    value={activePresetId ?? ""}
-                    onValueChange={handleChange}
-                    disabled={dropdownDisabled}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      {isSwitching ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          <span className="truncate">…</span>
-                        </div>
-                      ) : (
-                        <SelectValue placeholder={t("mePresets.selectorPlaceholder")} />
-                      )}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {presets.map((preset) => (
-                        <SelectItem key={preset.id} value={preset.id}>
-                          <div className="flex items-center gap-2">
-                            <span className="truncate">{preset.name}</span>
-                            {preset.isMain && (
-                              <span className="text-xs text-muted-foreground shrink-0">
-                                {t("mePresets.mainSuffix")}
-                              </span>
-                            )}
-                            {preset.isActive && (
-                              <Check className="h-3 w-3 text-primary shrink-0" />
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          </Label>
+          <Select
+            value={activePresetId ?? ""}
+            onValueChange={handleChange}
+            disabled={dropdownDisabled}
+          >
+            <SelectTrigger
+              id={selectId}
+              aria-describedby={hasChanges ? switchHintId : undefined}
+              className="w-full data-[size=default]:max-sm:h-11"
+            >
+              {isSwitching ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="truncate">…</span>
                 </div>
-              </TooltipTrigger>
-              {hasChanges && (
-                <TooltipContent side="bottom" align="start">
-                  <p className="text-xs">{t("mePresets.disabledHint")}</p>
-                </TooltipContent>
+              ) : (
+                <SelectValue placeholder={t("mePresets.selectorPlaceholder")}>
+                  {/* Radix は SSR では選択項目の文字を描けないので、HTML の時点から値が入るよう明示する */}
+                  {activePreset
+                    ? `${activePreset.name}${activePreset.isMain ? t("mePresets.mainSuffix") : ""}`
+                    : undefined}
+                </SelectValue>
               )}
-            </Tooltip>
-          </TooltipProvider>
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate">{preset.name}</span>
+                    {preset.isMain && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {t("mePresets.mainSuffix")}
+                      </span>
+                    )}
+                    {preset.isActive && (
+                      <Check className="h-3 w-3 text-primary shrink-0" />
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="ml-auto flex items-center gap-2">
+        {extraActions?.({ disabled: copyDisabled, describedBy: hasChanges ? switchHintId : undefined })}
         {showCopyButton && (
-          <TooltipProvider delayDuration={150}>
-            <Tooltip open={copyDisabled && hasChanges ? undefined : false}>
-              <TooltipTrigger asChild>
-                <span className="flex-1 sm:flex-none">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onCopyFromOther}
-                    disabled={copyDisabled}
-                    className="w-full sm:w-auto"
-                  >
-                    <Copy className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">{t("mePresets.copyFromOtherPreset")}</span>
-                    <span className="sm:hidden">{t("mePresets.copyShort")}</span>
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {hasChanges && (
-                <TooltipContent side="bottom" align="end">
-                  <p className="text-xs">{t("mePresets.disabledHint")}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCopyFromOther}
+            disabled={copyDisabled}
+            aria-describedby={hasChanges ? switchHintId : undefined}
+            className="flex-1 sm:flex-none sm:w-auto max-sm:min-h-11"
+          >
+            <Copy className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">{t("mePresets.copyFromOtherPreset")}</span>
+            <span className="sm:hidden">{t("mePresets.copyShort")}</span>
+          </Button>
         )}
-        <Link to="/me/presets" className="shrink-0">
-          <Button variant="ghost" size="sm" aria-label={t("mePresets.managePresets")}>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          aria-label={t("mePresets.managePresets")}
+          className="max-sm:size-11"
+        >
+          <Link to="/me/presets">
             <span className="hidden sm:inline">{t("mePresets.managePresets")}</span>
             <Settings className="h-4 w-4 sm:hidden" />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
+      </div>
+      {hasChanges && (
+        <p id={switchHintId} className="text-xs text-muted-foreground">
+          {t("mePresets.disabledHint")}
+        </p>
+      )}
+      {showNotMainNotice && (
+        <NoticeBanner tone="info" icon={Info}>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="min-w-0 space-y-0.5">
+              <p>{t("mePresets.notMainNotice")}</p>
+              {hasChanges && (
+                <p id={hintId} className="text-xs text-muted-foreground">
+                  {t("mePresets.setMainDisabledHint")}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleSetMain}
+              disabled={setMainDisabled}
+              aria-describedby={hasChanges ? hintId : undefined}
+              className="max-sm:min-h-11"
+            >
+              {mainFetcher.state !== "idle" ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Star className="h-4 w-4" aria-hidden />
+              )}
+              {t("mePresets.setMain")}
+            </Button>
+          </div>
+        </NoticeBanner>
+      )}
     </div>
   );
 }

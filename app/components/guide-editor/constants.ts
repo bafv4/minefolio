@@ -14,19 +14,6 @@ export const CELL_COLORS = BG_COLORS;
 /** 文字サイズの段階。単一情報源は app/lib/guide-font-sizes.ts */
 export const FONT_SIZES = GUIDE_FONT_SIZES;
 
-export type ImageAlign = "left" | "center" | "right";
-
-/** コールアウト種別ごとのアイコン（種別と表示名は desktop-toolbar.tsx が持つ） */
-export const CALLOUT_ICONS: Record<string, string> = {
-  tip: "💡",
-  info: "ℹ️",
-  warning: "⚠️",
-  danger: "🚨",
-};
-
-/** オートセーブの debounce（ミリ秒） */
-export const AUTO_SAVE_DEBOUNCE_MS = 2000;
-
 /**
  * エディタ内 UI の z-index 層。
  * 旧実装の z-40 / z-200 / z-9999 のばらつきを 1 箇所に集約。

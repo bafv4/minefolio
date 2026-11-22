@@ -1,5 +1,5 @@
 // /me/edit の action に組み込まれた外部キャッシュ即時リフレッシュ・削除キック
-// （scheduleSocialLinkKicks / set_mcid / delete_link / プロフィール保存の各分岐）の回帰テスト。
+// （一括保存 save_all のリンク作成・更新・削除 / MCID変更 / プロフィール保存の各分岐）の回帰テスト。
 //
 // @/lib/targeted-refresh.server を丸ごとモックし、変更されたフィールドに対応する関数だけが
 // 呼ばれる（他は呼ばれない）ことと、変更が無ければ一切キックされないことを検証する。
@@ -8,7 +8,7 @@
 // 単純なケースは action の await 直後に同期的に検証できる。
 // mcid変更・公開切替のように非同期IIFE経由でDBを読んでから呼ばれるケースは vi.waitFor で待つ。
 //
-// セッション/Mojangのモック方針は edit-mcid-slug-history.test.ts と同じ。
+// セッション/Mojangのモック方針は edit-batch-save.test.ts と同じ。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
@@ -50,6 +50,7 @@ const targetedRefreshMocks = vi.hoisted(() => ({
 vi.mock("@/lib/targeted-refresh.server", () => targetedRefreshMocks);
 
 import { action } from "../edit";
+import type { ProfileChanges } from "@/lib/profile-edit-validation";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -118,19 +119,25 @@ afterEach(() => {
   }
 });
 
-describe("action - create_link のキック", () => {
+/** 一括保存（save_all）の FormData。baseFormData に changes（JSON）を載せる */
+function saveAllForm(changes: ProfileChanges): FormData {
+  const fd = baseFormData({ _action: "save_all" });
+  fd.set("changes", JSON.stringify(changes));
+  return fd;
+}
+
+const noLink = { customLabel: null, customUrl: null } as const;
+
+describe("save_all - リンク作成のキック", () => {
   it("Twitchリンク新規追加はrefreshTwitchVodsForLoginのみ呼ぶ", async () => {
     await seedUser(db, { slug: "runner1", discordId: "discord-runner1" });
     signInAs("discord-runner1");
 
-    const fd = new FormData();
-    fd.set("_action", "create_link");
-    fd.set("platform", "twitch");
-    fd.set("identifier", "newtwitchuser");
+    const res = await callAction(
+      saveAllForm({ links: { create: [{ key: "k", platform: "twitch", identifier: "newtwitchuser", ...noLink }] } }),
+    );
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
+    expect(res).toEqual({ success: true, action: "profile" });
     expect(targetedRefreshMocks.refreshTwitchVodsForLogin).toHaveBeenCalledWith("newtwitchuser");
     expectOnlyCalled("refreshTwitchVodsForLogin");
   });
@@ -139,20 +146,17 @@ describe("action - create_link のキック", () => {
     const user = await seedUser(db, { slug: "runner2", discordId: "discord-runner2" });
     signInAs("discord-runner2");
 
-    const fd = new FormData();
-    fd.set("_action", "create_link");
-    fd.set("platform", "speedruncom");
-    fd.set("identifier", "src-runner");
+    const res = await callAction(
+      saveAllForm({ links: { create: [{ key: "k", platform: "speedruncom", identifier: "src-runner", ...noLink }] } }),
+    );
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
+    expect(res).toEqual({ success: true, action: "profile" });
     expect(targetedRefreshMocks.refreshSrcRankingsForUser).toHaveBeenCalledWith(user.id);
     expectOnlyCalled("refreshSrcRankingsForUser");
   });
 });
 
-describe("action - update_link のキック", () => {
+describe("save_all - リンク更新のキック", () => {
   it("Twitchのidentifier変更は旧chの削除と新chの取得の両方を呼ぶ", async () => {
     const user = await seedUser(db, { slug: "runner3", discordId: "discord-runner3" });
     const [link] = await db
@@ -161,16 +165,12 @@ describe("action - update_link のキック", () => {
       .returning();
     signInAs("discord-runner3");
 
-    const fd = new FormData();
-    fd.set("_action", "update_link");
-    fd.set("id", link.id);
-    fd.set("platform", "twitch");
-    fd.set("identifier", "newtwitchuser");
+    const res = await callAction(
+      saveAllForm({ links: { update: [{ id: link.id, platform: "twitch", identifier: "newtwitchuser", ...noLink }] } }),
+    );
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
-    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("oldtwitchuser");
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(targetedRefreshMocks.deleteTwitchVodsForLogin).toHaveBeenCalledWith("oldtwitchuser", { userId: user.id, mcids: [null, null] });
     expect(targetedRefreshMocks.refreshTwitchVodsForLogin).toHaveBeenCalledWith("newtwitchuser");
     expectOnlyCalled("deleteTwitchVodsForLogin", "refreshTwitchVodsForLogin");
   });
@@ -183,20 +183,16 @@ describe("action - update_link のキック", () => {
       .returning();
     signInAs("discord-runner4");
 
-    const fd = new FormData();
-    fd.set("_action", "update_link");
-    fd.set("id", link.id);
-    fd.set("platform", "twitch");
-    fd.set("identifier", "samechannel");
+    const res = await callAction(
+      saveAllForm({ links: { update: [{ id: link.id, platform: "twitch", identifier: "samechannel", ...noLink }] } }),
+    );
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
+    expect(res).toEqual({ success: true, action: "profile" });
     expectOnlyCalled();
   });
 });
 
-describe("action - delete_link のキック", () => {
+describe("save_all - リンク削除のキック", () => {
   it("YouTubeリンク削除はdeleteYoutubeVideosForChannelIdentifierのみ呼ぶ", async () => {
     const user = await seedUser(db, { slug: "runner5", discordId: "discord-runner5" });
     const [link] = await db
@@ -205,14 +201,13 @@ describe("action - delete_link のキック", () => {
       .returning();
     signInAs("discord-runner5");
 
-    const fd = new FormData();
-    fd.set("_action", "delete_link");
-    fd.set("id", link.id);
+    const res = await callAction(saveAllForm({ links: { delete: [link.id] } }));
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
-    expect(targetedRefreshMocks.deleteYoutubeVideosForChannelIdentifier).toHaveBeenCalledWith("@somechannel");
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(targetedRefreshMocks.deleteYoutubeVideosForChannelIdentifier).toHaveBeenCalledWith("@somechannel", {
+      userId: user.id,
+      mcids: [null, null],
+    });
     expectOnlyCalled("deleteYoutubeVideosForChannelIdentifier");
   });
 
@@ -224,19 +219,15 @@ describe("action - delete_link のキック", () => {
       .returning();
     signInAs("discord-runner6");
 
-    const fd = new FormData();
-    fd.set("_action", "delete_link");
-    fd.set("id", link.id);
+    const res = await callAction(saveAllForm({ links: { delete: [link.id] } }));
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "link" });
+    expect(res).toEqual({ success: true, action: "profile" });
     expect(targetedRefreshMocks.refreshSrcRankingsForUser).toHaveBeenCalledWith(user.id);
     expectOnlyCalled("refreshSrcRankingsForUser");
   });
 });
 
-describe("action - set_mcid のキック", () => {
+describe("save_all - MCID変更のキック", () => {
   it("MCID変更時、既存YouTubeリンクがあればupdateYoutubeCacheMcidとrefreshYoutubeForChannelを呼ぶ", async () => {
     const user = await seedUser(db, {
       slug: "old-mcid-slug",
@@ -249,13 +240,9 @@ describe("action - set_mcid のキック", () => {
     signInAs("discord-runner7");
     mojangMocks.fetchUuidFromMcid.mockResolvedValue("11111111-1111-1111-1111-111111111111");
 
-    const fd = new FormData();
-    fd.set("_action", "set_mcid");
-    fd.set("mcid", "NewMC");
+    const res = await callAction(saveAllForm({ mcid: { op: "set", value: "NewMC" } }));
 
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ success: true, action: "mcid", newSlug: "NewMC" });
+    expect(res).toEqual({ success: true, action: "profile", newSlug: "NewMC" });
 
     await vi.waitFor(() => {
       expect(targetedRefreshMocks.updateYoutubeCacheMcid).toHaveBeenCalledWith("OldMC", "NewMC");
@@ -269,7 +256,7 @@ describe("action - set_mcid のキック", () => {
   });
 });
 
-describe("action - プロフィール保存（default action）のキック", () => {
+describe("プロフィール保存（default action）のキック", () => {
   it("speedruncomUsernameの変更はrefreshSrcRankingsForUserのみ呼ぶ", async () => {
     const user = await seedUser(db, {
       slug: "runner8",

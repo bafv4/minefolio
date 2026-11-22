@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 
 interface LinkDialogProps {
   open: boolean;
@@ -25,6 +26,8 @@ interface LinkDialogProps {
 
 export function LinkDialog({ open, onOpenChange, selectionEmpty, onInsert }: LinkDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   const [url, setUrl] = useState("https://");
   const [text, setText] = useState("");
 
@@ -46,7 +49,7 @@ export function LinkDialog({ open, onOpenChange, selectionEmpty, onInsert }: Lin
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.ui.linkDialogTitle")}</DialogTitle>
         </DialogHeader>

@@ -1,25 +1,18 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
+import { useCallback, useEffect, useRef } from "react";
+import { redirect, useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/template-new";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, searchCrafts, searchCraftLoops, searchCraftTemplates } from "@/lib/schema";
-import { eq, asc } from "drizzle-orm";
-import { serializeSearchCrafts, serializeRemaps, serializeSearchCraftLoops } from "@/lib/preset-utils";
-import { filterRemapsForChat } from "@/lib/remap-utils";
+import { users, searchCraftTemplates } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+import { SEARCH_CRAFT_USER_WITH, loadEditorSettingsFromUser } from "@/lib/search-craft-templates.server";
 import {
-  parseTemplateCrafts,
-  parseTemplateRemaps,
-  parseTemplateLoops,
   parseEditorSubmission,
-  toEditorCrafts,
-  toEditorRemaps,
   toSubmittableLoops,
-  draftId,
   MAX_TEMPLATES_PER_USER,
 } from "@/lib/search-craft-templates";
 import { useT } from "@/hooks/use-locale";
@@ -43,41 +36,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
-    with: {
-      searchCrafts: { orderBy: [asc(searchCrafts.sequence)] },
-      searchCraftLoops: { orderBy: [asc(searchCraftLoops.sequence)] },
-      keyRemaps: true,
-      playerConfig: { columns: { gameLanguage: true, keyboardLayout: true } },
-    },
+    with: SEARCH_CRAFT_USER_WITH,
   });
 
   if (!user) {
-    throw new Response(t("meTemplates.userNotFound"), { status: 404 });
+    return redirect("/onboarding");
   }
 
-  const currentCrafts = toEditorCrafts(parseTemplateCrafts(serializeSearchCrafts(user.searchCrafts)));
-  // ライブの Loop（craftId 参照）を、いったんプリセットと同一の craftSeq 形式に変換してから
-  // craftIndex 形式へデコードし、現在の crafts の draft id へ解決する
-  const currentLoops = parseTemplateLoops(
-    serializeSearchCraftLoops(user.searchCraftLoops, user.searchCrafts),
-    currentCrafts.length,
-  ).map((loop) => ({
-    id: draftId("loop"),
-    steps: loop.steps.map((s) => ({
-      craftId: currentCrafts[s.craftIndex].id,
-      transition: s.transition,
-    })),
-    comment: loop.comment,
-    timing: loop.timing,
-  }));
-
   return {
-    currentSettings: {
-      crafts: currentCrafts,
-      // テンプレートは chat 用途のため、trigger 専用リマップはプレフィルに含めない
-      remaps: toEditorRemaps(filterRemapsForChat(parseTemplateRemaps(serializeRemaps(user.keyRemaps)))),
-      loops: currentLoops,
-    },
+    currentSettings: loadEditorSettingsFromUser(user),
     defaultGameLanguage: user.playerConfig?.gameLanguage ?? "",
     keyboardLayout: user.playerConfig?.keyboardLayout ?? null,
   };
@@ -113,7 +80,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const now = new Date();
-  await db.insert(searchCraftTemplates).values({
+  // 作成すると非公開（公開は編集画面の保存で行う。ガイドの新規作成と同じ）
+  const [created] = await db.insert(searchCraftTemplates).values({
     userId: user.id,
     title: submission.title,
     description: submission.description,
@@ -121,12 +89,13 @@ export async function action({ request }: Route.ActionArgs) {
     craftsData: submission.craftsData,
     remapsData: submission.remapsData,
     loopsData: submission.loopsData,
-    isPublished: true,
+    isPublished: false,
+    publishedAt: null,
     createdAt: now,
     updatedAt: now,
-  });
+  }).returning({ id: searchCraftTemplates.id });
 
-  return { success: true };
+  return { success: true, templateId: created.id };
 }
 
 export default function TemplateNewPage() {
@@ -143,16 +112,22 @@ export default function TemplateNewPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meTemplates.createSuccess"));
-      navigate("/my-guides/templates");
     } else if ("error" in data && data.error) {
       toast.error(data.error);
     }
-  }, [fetcher.data, navigate]);
+  }, [fetcher.data]);
+
+  // 作成後は編集画面へ（ガイドの新規作成と同じ。公開はそこで行う）
+  const createdId = fetcher.data && "templateId" in fetcher.data ? fetcher.data.templateId : null;
+  const handleSaved = useCallback(
+    () => navigate(createdId ? `/my-guides/templates/${createdId}/edit` : "/my-guides/templates"),
+    [navigate, createdId],
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Button variant="ghost" size="sm" asChild className="-ml-2 h-11 sm:h-8">
           <Link to="/my-guides/templates">
             <ArrowLeft className="h-4 w-4 mr-1" />
             {t("meTemplates.backToManagement")}
@@ -176,6 +151,11 @@ export default function TemplateNewPage() {
         currentSettings={currentSettings}
         keyboardLayout={keyboardLayout}
         isSubmitting={fetcher.state === "submitting"}
+        saveResult={fetcher.data}
+        saveSucceeded={!!fetcher.data && "success" in fetcher.data && !!fetcher.data.success}
+        onSaved={handleSaved}
+        submitLabel={t("meTemplates.createSubmit")}
+        submitHint={t("meTemplates.createSubmitHint")}
         onSubmit={(data) => {
           const formData = new FormData();
           formData.set("title", data.title);

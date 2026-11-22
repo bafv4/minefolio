@@ -45,3 +45,22 @@ describe("filterOwnPaces", () => {
     expect(visibleTotal).toBe(1);
   });
 });
+
+describe("ホームのライブ欄での使い方（home.tsx の自分の除外）", () => {
+  // home.tsx: hiddenPaceMcid = getHiddenPaceMcid(currentUser)、ライブランは nickname を小文字にして比較する
+  const liveRuns = [{ nickname: "MyName" }, { nickname: "other" }];
+  const visibleLive = (prefs: { mcid: string | null; showPacemanOnHome: boolean }) => {
+    const hidden = getHiddenPaceMcid(prefs);
+    return liveRuns.filter((run) => !(hidden && run.nickname.toLowerCase() === hidden)).map((r) => r.nickname);
+  };
+
+  it("設定オフなら自分のライブランを大文字小文字を無視して隠し、他人は残す", () => {
+    expect(visibleLive({ mcid: "myname", showPacemanOnHome: false })).toEqual(["other"]);
+    expect(visibleLive({ mcid: "MYNAME", showPacemanOnHome: false })).toEqual(["other"]);
+  });
+
+  it("設定オン・MCID 未設定なら何も隠さない", () => {
+    expect(visibleLive({ mcid: "myname", showPacemanOnHome: true })).toEqual(["MyName", "other"]);
+    expect(visibleLive({ mcid: null, showPacemanOnHome: false })).toEqual(["MyName", "other"]);
+  });
+});

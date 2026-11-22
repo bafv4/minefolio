@@ -1,8 +1,7 @@
-// お気に入りのクライアント側保存先（localStorage / sessionStorage）
+// お気に入りのクライアント側保存先（localStorage）
 // SSR時は no-op／空配列を返す。Cookie同意の確認は呼び出し側の責務。
 
 const LOCAL_KEY = "minefolio_favorites";
-const SESSION_KEY = "minefolio_favorites_cache";
 const MAX_FAVORITES = 50;
 
 function readArray(storage: Storage | null, key: string): string[] {
@@ -32,15 +31,6 @@ function safeLocal(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-function safeSession(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage;
   } catch {
     return null;
   }
@@ -81,16 +71,4 @@ export function removeLocalFavorite(slug: string): string[] {
   const next = current.filter((s) => s !== slug);
   setLocalFavorites(next);
   return next;
-}
-
-// ============================================
-// sessionStorage（ログインユーザーのDBキャッシュ）
-// ============================================
-
-export function getSessionFavorites(): string[] {
-  return readArray(safeSession(), SESSION_KEY);
-}
-
-export function setSessionFavorites(slugs: string[]): void {
-  writeArray(safeSession(), SESSION_KEY, slugs);
 }

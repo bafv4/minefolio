@@ -152,14 +152,14 @@ Dev環境・本番の両方で先行有効化・展開が完了したため、�
 - ピル: `count > 0` の絵文字のみ表示。**表示順は `PROFILE_REACTION_EMOJIS` 固定**（カウント順にすると押すたびに並びが入れ替わって視認性が悪い）。自分が押している絵文字はブランドトークン（`border-brand/40 bg-brand/10 text-brand`、`like-button` と同トークン）でハイライトする。`aria-pressed` / `aria-busy` / `aria-label`（`profileReactions.reactAria` / `unreactAria`）を付与
 - 追加ボタン: lucide `SmilePlus` + shadcn `Popover` 内に `grid grid-cols-4` の固定8絵文字パレット（8件全て表示、押下済みは `bg-brand/10`）。選択でトグルしてパレットを閉じる
 - 未ログイン: ピルは静的な `<span>`（カウントは公開情報のため見える）。`aria-label` は `profileReactions.pillAria`。追加ボタンは `/login` への `Link`（`profileReactions.loginToReact`）
-- **カウント0件かつ未ログインの場合はバー自体を非表示**にする（ログイン済みなら0件でも追加ボタンを出す必要があるため表示する）
+- **カウント0件かつ未ログインの場合**は、ピルと追加ボタンの代わりに短い一文（`profileReactions.loginPrompt`）と `/login` への「ログインしてリアクション」ボタン（`profileReactions.loginToReact`）を出す（ログイン済みなら0件でも追加ボタンを出す必要があるため通常表示する）
 
 ### 組み込み（`app/routes/player/profile.tsx`）
 
 - loader は常に `getProfileReactionCounts` / `getViewerProfileReactions` を呼び、`profileReactions: { counts, viewerReactions, viewerHasAccount }`（非null）を返す。閲覧者が本人ならプロフィール対象の `player.id` をそのまま使い（追加クエリなし）、他人ログイン中は discordId → id を1回引く（未ログインは `null`）
 - **`useProfileReactions()` は `PlayerProfilePage`（Tabs を描画する親コンポーネント）のトップレベルで呼ぶ**（他の hooks と同じ並び、条件分岐の外）。戻り値の `pills`/`toggle` を `<ProfileReactionBar>` に props として渡す（理由は上の「`useProfileReactions`」節の呼び出し位置の説明を参照）
 - 表示はアクションボタン行（編集/お気に入り/シェア/比較）の**閉じタグ直後**。`isLoggedIn` プロップには `viewerHasAccount`（セッションはあるが `users` 行が無い＝未オンボーディングは false 扱い）を渡す
-- i18n: `pages-ja.ts` の `likes` 節近くに `profileReactions` 節（`addLabel` / `loginToReact` / `reactAria` / `unreactAria` / `pillAria`（未ログイン時の静的ピルの aria-label） + `emoji.thumbsUp`〜`emoji.hundred` の8種名）を持つ。`pages-en.ts` にも対訳あり
+- i18n: `pages-ja.ts` の `likes` 節近くに `profileReactions` 節（`addLabel` / `loginToReact` / `loginPrompt`（未ログインで0件のときの一文） / `reactAria` / `unreactAria` / `pillAria`（未ログイン時の静的ピルの aria-label） + `emoji.thumbsUp`〜`emoji.hundred` の8種名）を持つ。`pages-en.ts` にも対訳あり
 
 ---
 

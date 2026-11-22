@@ -31,6 +31,7 @@ const FIXTURES: Record<string, string> = {
   keybindEmbed: `<div data-keybind-embed="" data-user-slug="runner1"></div>`,
   keybindEmbedPreset: `<div data-keybind-embed="" data-user-slug="runner1" data-preset-name="メイン"></div>`,
   searchCraftEmbed: `<div data-searchcraft-embed="" data-user-slug="runner1"></div>`,
+  searchCraftTemplateEmbed: `<div data-sctemplate-embed="" data-template-id="abcdefghijklmnopqrstuvwx"></div>`,
   guideLinkNoCover: `<div data-guide-link="" class="guide-link-card"><a href="/g/x" class="guide-link-inner"><div class="guide-link-body"><span class="guide-link-icon">📄</span><div class="guide-link-text"><span class="guide-link-title">タイトル</span></div></div></a></div>`,
   guideLinkWithCover: `<div data-guide-link="" class="guide-link-card"><a href="/g/x" class="guide-link-inner"><img src="https://example.com/c.png" alt="" class="guide-link-cover"><div class="guide-link-body"><span class="guide-link-icon">📄</span><div class="guide-link-text"><span class="guide-link-title">タイトル</span><span class="guide-link-author">著者</span></div></div></a></div>`,
   columns2: `<div data-columns="2"><div data-column=""><p>左</p></div><div data-column=""><p>右</p></div></div>`,
@@ -82,6 +83,12 @@ describe("guide editor round-trip", () => {
     const out = roundTrip(FIXTURES.searchCraftEmbed);
     expect(out).toContain('data-searchcraft-embed=""');
     expect(out).toContain('data-user-slug="runner1"');
+  });
+
+  it("サーチクラフトテンプレート埋め込みは templateId を保持する（編集→再保存で ID が消えない）", () => {
+    const out = roundTrip(FIXTURES.searchCraftTemplateEmbed);
+    expect(out).toContain('data-sctemplate-embed=""');
+    expect(out).toContain('data-template-id="abcdefghijklmnopqrstuvwx"');
   });
 
   it("ガイドリンクはカバー画像有無の両方で構造を保持する", () => {
@@ -167,5 +174,23 @@ describe("guide editor round-trip", () => {
   it("通常テキストの連続スペースも失われない", () => {
     const html = `<p>a  b</p>`;
     expect(roundTrip(html)).toBe(html);
+  });
+});
+
+describe("埋め込みの「押すキーを表示」属性（showKeys）", () => {
+  const SC = `<div data-searchcraft-embed="" data-user-slug="runner1" data-hide-keys="true"></div>`;
+  const TPL = `<div data-sctemplate-embed="" data-template-id="abcdefghijklmnopqrstuvwx" data-hide-keys="true"></div>`;
+
+  it("属性なし（既存の記事）は出力に data-hide-keys を足さない", () => {
+    expect(roundTrip(FIXTURES.searchCraftEmbed)).not.toContain("data-hide-keys");
+    expect(roundTrip(FIXTURES.searchCraftTemplateEmbed)).not.toContain("data-hide-keys");
+  });
+
+  it("隠す設定は編集→再保存で保たれ、不動点である", () => {
+    for (const html of [SC, TPL]) {
+      const once = roundTrip(html);
+      expect(once).toContain('data-hide-keys="true"');
+      expect(roundTrip(once)).toBe(once);
+    }
   });
 });

@@ -4,6 +4,8 @@ import { relations, sql } from "drizzle-orm";
 import { KEY_REMAP_TYPES } from "./remap-utils";
 // プロフィールタブ値の単一情報源。schema はここから enum を参照する（詳細は profile-tabs.ts 冒頭コメント）
 import { PROFILE_TAB_VALUES } from "./profile-tabs";
+// 年代の値の単一情報源（age-group.ts）。schema はここから enum を参照する
+import { AGE_GROUP_VALUES } from "./age-group";
 
 // ============================================
 // 1. users（ユーザー）
@@ -63,6 +65,8 @@ export const users = sqliteTable("users", {
   showTwitchOnHome: integer("show_twitch_on_home", { mode: "boolean" }).default(true),
   showYoutubeOnHome: integer("show_youtube_on_home", { mode: "boolean" }).default(true),
   showRankedStats: integer("show_ranked_stats", { mode: "boolean" }).default(true),
+  // ホームの欄の並び順（欄 ID の JSON 配列。null は既定順。未知の ID は無視し、欠けた欄は既定順で末尾に補う〈正規化は app/lib/home-sections.ts 側〉）
+  homeSectionOrder: text("home_section_order"),
   showPacemanStats: integer("show_paceman_stats", { mode: "boolean" }).default(true),
 
   // 統計
@@ -99,6 +103,18 @@ export const users = sqliteTable("users", {
   // bio / shortBio の自動翻訳を許可するか（docs/translation.md）。既定オン、オフにすると既存の翻訳行も削除する。
   // DB 既定を true にしているのは、列追加前から存在する全ユーザーを「許可」として扱うため（バックフィル不要）。
   allowAutoTranslation: integer("allow_auto_translation", { mode: "boolean" }).default(true).notNull(),
+
+  // /me の初回ツアーを終えた（またはスキップした）日時。null の間は初めて /me を開いたときに1回だけ出す。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  meTourCompletedAt: integer("me_tour_completed_at", { mode: "timestamp" }),
+  // /me/edit の「はじめに」チェックリストを閉じた日時。null の間は手順が未完のときだけ表示する。
+  meChecklistDismissedAt: integer("me_checklist_dismissed_at", { mode: "timestamp" }),
+
+  // 年代（任意。null は未設定）。値は age-group.ts の AGE_GROUP_VALUES。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  ageGroup: text("age_group", { enum: AGE_GROUP_VALUES }),
+  // 年代を走者画面に出すか。既定は非公開（未成年の区分があるため。本人が明示的に選んだときだけ公開する）
+  ageGroupPublic: integer("age_group_public", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   index("idx_users_discord_id").on(table.discordId),
   index("idx_users_mcid").on(table.mcid),
@@ -761,7 +777,7 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // Minefolioユーザーと紐付け（任意、mcid 経由で再リンク前提）
 
   // ペース情報
-  timeline: text("timeline").notNull(), // "Eye Spy", "Enter Nether", "Obtain Blaze Rods", etc.
+  timeline: text("timeline").notNull(), // "Enter Nether", "Obtain Blaze Rods", etc.
   rta: integer("rta").notNull(), // リアルタイム（ミリ秒）
   igt: integer("igt"), // ゲーム内時間（ミリ秒）
   date: integer("date", { mode: "timestamp" }).notNull(), // ペースの日時
@@ -804,8 +820,9 @@ export type NewPacemanPace = typeof pacemanPaces.$inferInsert;
 // 副作用: 参照先 user の削除で favorites が孤児化する可能性がある。
 //   - GC: 必要に応じて `DELETE FROM favorites WHERE favorite_slug NOT IN (SELECT slug FROM users)` を別途実行
 //   - slug 変更時の旧 slug → 新 slug の追従更新はアプリケーション層で実装済み
-//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。me/edit.tsx の set_mcid / remove_mcid の
-//      トランザクション内で users 更新・slug_history 記録とともに呼ばれる）
+//     （app/lib/favorites.ts の retargetFavoritesOnSlugChange。app/lib/mcid-change.server.ts の
+//      applyMcidSlugChange が、/me/edit の一括保存（save_all）のトランザクション内で
+//      users 更新・slug_history 記録とともに呼ぶ）
 export const favorites = sqliteTable("favorites", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -888,6 +905,9 @@ export const twitchVodCache = sqliteTable("twitch_vod_cache", {
   title: text("title").notNull(),
   thumbnailUrl: text("thumbnail_url"), // サイズ解決済みURL。処理中VODは null
   channelTitle: text("channel_title"), // 配信者の表示名（user_name）
+  // 取り込み時点のチャンネルのカテゴリ（ゲーム）名。Helix の videos API はアーカイブ単位のゲーム名を
+  // 返さないため cron が取り込み時に保存する。既存行・取得不能時は null
+  gameName: text("game_name"),
   durationSeconds: integer("duration_seconds"), // 配信時間（秒）
   publishedAt: integer("published_at", { mode: "timestamp" }).notNull(),
   // キャッシュ管理
@@ -1043,7 +1063,7 @@ export const playerRankings = sqliteTable("player_rankings", {
 
   // ランキング種別
   rankingType: text("ranking_type", {
-    enum: ["speedruncom", "ranked_pb", "ranked_elo"]
+    enum: ["speedruncom", "ranked_pb", "ranked_pb_all_time", "ranked_elo"]
   }).notNull(),
 
   // カテゴリ（Speedrun.comの場合）
@@ -1128,6 +1148,18 @@ export const searchCraftTemplates = sqliteTable("search_craft_templates", {
   // JSON: config_presets.search_craft_loops_data と同一形式（craftsData と同様のスナップショット。craftSeq = craftIndex + 1 が恒等）
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   loopsData: text("loops_data"),
+  // 下書き用（ガイドの draft* と同じ形）。公開版とは独立して編集中の内容を保持する。
+  // 下書きの有無は draftUpdatedAt が NULL かどうかだけで判定する。下書き保存では公開版の列・isPublished・updatedAt を変えない。
+  // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
+  draftTitle: text("draft_title"),
+  draftDescription: text("draft_description"),
+  draftGameLanguage: text("draft_game_language"),
+  draftCraftsData: text("draft_crafts_data"), // JSON: PresetSearchCraftData[]
+  draftRemapsData: text("draft_remaps_data"), // JSON: PresetRemapData[]
+  draftLoopsData: text("draft_loops_data"), // JSON
+  draftUpdatedAt: integer("draft_updated_at", { mode: "timestamp" }),
+  // 初めて公開した日時（公開一覧の新着順）。初回の公開で入れ、以後は変えない。未公開は NULL
+  publishedAt: integer("published_at", { mode: "timestamp" }),
 }, (table) => [
   index("idx_search_craft_templates_user_id").on(table.userId),
   index("idx_search_craft_templates_published_created").on(table.isPublished, table.createdAt),
@@ -1387,6 +1419,34 @@ export type PageViewStat = typeof pageViewStats.$inferSelect;
 export type NewPageViewStat = typeof pageViewStats.$inferInsert;
 
 // ============================================
+// ranked_elo_snapshots（Ranked レートの日次スナップショット）
+// ============================================
+// ホームの「注目の走者」で「直近7日のレート上がり幅」を出すための履歴。cron（update-rankings、12時間ごと）が
+// 各ユーザーのその時点のレートを (userId, snapshotDate) で upsert する（同日に複数回走っても1行）。
+//
+// 【snapshotDate】`YYYY-MM-DD` の text。**UTC 日付**で統一する（サーバー/cron は UTC 動作で、
+//   JST 換算を挟むと境界ずれの余地が増えるため。text なので辞書順比較で期間検索できる）。
+// 【整合性ポリシー】userId は users.id への外部キー（onDelete cascade）。ユーザー削除で履歴も消える。
+export const rankedEloSnapshots = sqliteTable("ranked_elo_snapshots", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** スナップショット日（UTC、`YYYY-MM-DD`） */
+  snapshotDate: text("snapshot_date").notNull(),
+  /** その日（最後の記録時点）の Ranked レート */
+  eloRate: integer("elo_rate").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  // 1ユーザー1日1行（upsert の衝突ターゲット）。userId 先頭なので「ユーザー別の期間検索」もこの索引で引ける
+  uniqueIndex("ranked_elo_snapshots_user_date_uniq").on(table.userId, table.snapshotDate),
+  // 期間検索（直近7日分の全ユーザー取得）用
+  index("idx_ranked_elo_snapshots_date").on(table.snapshotDate),
+]);
+
+export type RankedEloSnapshot = typeof rankedEloSnapshots.$inferSelect;
+export type NewRankedEloSnapshot = typeof rankedEloSnapshots.$inferInsert;
+
+// ============================================
 // playstyles（プレイスタイル）
 // ============================================
 // 1 user : 1 playstyle（`.unique()` 修飾子で保証。player_configs と同じ方式）。
@@ -1449,7 +1509,7 @@ export type NewPlaystyle = typeof playstyles.$inferInsert;
 // ============================================
 // slug_history（旧slugからのリダイレクト解決）
 // ============================================
-// MCID登録（set_mcid）・MCID削除（remove_mcid）で users.slug が変わるたびに旧 slug を記録し、
+// MCID登録・変更・削除（/me/edit の save_all → app/lib/mcid-change.server.ts の applyMcidSlugChange）で users.slug が変わるたびに旧 slug を記録し、
 // /player/:slug 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴。
 // 読み書きは app/lib/slug-history.server.ts に集約する。
 // Mojang API 起点のフォールバック（player-slug-fallback.server.ts）より優先して解決する

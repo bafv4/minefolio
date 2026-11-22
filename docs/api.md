@@ -8,6 +8,14 @@
 
 APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて手動登録されている。レイアウト外のため UIコンポーネントは持たず、`loader`（GET）または `action`（POST等）のみをexportする。
 
+### 共通ヘルパ（`app/lib/api-auth.server.ts`）
+
+- `requireApiUser(db, auth, request, columns?)`: 認証必須の JSON API 用。未ログインは 401、`users` 行が無ければ 404 の `Response` を `response` として返し（両者を区別する）、成功時は `user` を返す。`columns` で取得列を絞れる（`id` は常に含む。省略時は全列）。返す Response のヘッダは Content-Type のみ
+- `getApiUser(db, auth, request)`: 認証できれば `{ id }`、できなければ `null`（401/404 を区別しない簡易版）
+- `plainJsonResponse(body, init?)`: Content-Type のみを付ける素の JSON レスポンス（`Cache-Control` なし）
+- `apiJsonResponse(body, init?)`: `plainJsonResponse` に `Cache-Control: private, no-store` を付けたもの
+- テクスチャ（スキン/マント）の Blob アップロードトークン発行は `app/lib/blob-storage.server.ts` の `handleTextureUploadToken` に共通化
+
 ## 一覧
 
 | エンドポイント | メソッド | 認証 | 用途 |
@@ -20,13 +28,16 @@ APIルートは `app/routes/api/` 配下に配置され、`app/routes.ts` にて
 | `/api/me/cape` | POST/DELETE | 必須 | カスタムマント保存・削除 |
 | `/api/me/cape/upload-token` | POST | 必須 | マントアップロードトークン発行 |
 | `/api/me/guides/upload-image` | POST | 必須 | ガイド画像アップロードトークン発行 |
+| `/api/me/guide` | POST | 必須 | `/me` の初回ツアー・「はじめに」チェックリストの完了/閉じた日時を記録（`kind` は tour か checklist。[me-common.md](./me-common.md)） |
 | `/api/guides/search` | GET | 不要 | ガイド検索 |
+| `/api/guides/embed-resolve` | GET | 不要 | ガイドエディタのキー配置 / サーチクラフト埋め込みの走者の解決（`?user=` slug か MCID。公開ページと同じ規則で、非公開の走者は `null`。全プリセットを、要約に使う項目〔名前・リマップ・サーチクラフト・キーボードの配列〕だけに絞って返す。詳細は [guides.md](./guides.md)「キー配置 / サーチクラフト埋め込み」） |
 | `/api/favorites` | GET/POST/PUT | GETは任意、POST/PUTは必須 | お気に入り管理（DB） |
 | `/api/likes` | POST | 必須 | ガイド・テンプレートのいいね追加/解除 |
 | `/api/users/by-slugs` | POST | 不要 | スラッグ配列からユーザー詳細を取得 |
 | `/api/home-feed` | GET | 不要 | ホームフィードデータ |
 | `/api/videos` | GET | 不要 | 動画一覧（/videos）のページング+検索 |
 | `/api/social-stats` | GET | 不要（privateは本人のみ） | プロフィールのYouTube/Twitch統計 |
+| `/api/paceman-registration` | GET | 不要 | PaceMan登録確認（走者画面のPaceManリンク用） |
 | `/api/keybindings-csv` | GET | 不要 | キー配置CSVエクスポート |
 | `/api/set-locale` | POST | 不要 | ロケール切替（Cookie） |
 | `/api/cron/youtube-update` | GET | CRON_SECRET | YouTube動画キャッシュ更新 |
@@ -216,6 +227,21 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 
 ---
 
+### `GET /api/paceman-registration`
+
+走者画面で PaceMan のリンクを出すかの判定用。paceman.gg のレスポンスには CORS ヘッダーが無くブラウザから直接呼べないため、サーバーから確認する。
+
+**パラメータ:** `name`（必須）= MCID（`[A-Za-z0-9_]{3,16}`。不正なら 400）。上流ホストは固定で、任意URLへのプロキシにはならない
+
+**レスポンス:** `{ "isRegistered": boolean }`。上流の取得失敗（404 以外の非2xx・通信エラー・タイムアウト）は **502**（`{ "error": ... }`、`no-store`）で、未登録とは区別される
+
+- **キャッシュ**: 200 は `max-age=300`（ブラウザ）＋ CDN `s-maxage=10800, stale-while-revalidate=86400`。400/502 は `no-store`
+- クライアントからは `fetchPaceManRegistration(mcid)`（`app/lib/paceman-registration-client.ts`、失敗時は例外）
+
+**関連ファイル:** `app/routes/api/paceman-registration.ts`, `app/lib/external-stats.ts`（`checkPaceManPlayer`）
+
+---
+
 ### `GET /api/keybindings-csv`
 
 キー配置データをCSVでダウンロードする。
@@ -233,10 +259,10 @@ slug 経由でDB保存済みのソーシャルリンクに対してのみ統計�
 | `actions` | Player, 前進, 後退, 左移動, ... (19アクション) |
 | `remaps` | Player, Source Key, Target Key, Type |
 | `custom-actions` | Player, Trigger Key, Action Name |
-| `mouse` | Player, DPI, Sensitivity (%), cm/360, Win Sens Multiplier, Cursor Speed, Raw Input, Mouse Accel |
+| `mouse` | Player, DPI, Sensitivity (%), cm/180°, Win Sens Multiplier, Cursor Speed, Raw Input, Mouse Accel |
 
 - `remaps` の Type 列はリマップ種別（小文字: `all` / `trigger` / `chat`、`unset` は空文字）。末尾列として追加
-- `mouse` の `cm/360` `Cursor Speed` は計算できない場合は空欄。`Win Sens Multiplier` も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` は有効範囲（0〜200%）外の値も生データのまま出力（詳細: [`docs/keybindings.md`](./keybindings.md)）
+- `mouse` の `cm/180°` `Cursor Speed` は計算できない場合は空欄。`Win Sens Multiplier` も `windowsSpeed` / `windowsSpeedMultiplier` が未設定なら空欄（`1` にフォールバックしない）。`Sensitivity (%)` は有効範囲（0〜200%）外の値も生データのまま出力（詳細: [`docs/keybindings.md`](./keybindings.md)）
 - 複数セクション指定時は空行で区切って連結
 - UTF-8 BOM付き（Excel互換）
 - 公開プロフィールのみ対象。キー配置一覧ページと同じ共有ローダー（`loadKeybindingsListPlayers`）を使うため、視聴者ロール除外・キー配置／リマップ／カスタムアクションがすべて空のユーザー除外・メインプリセットのスナップショット優先も一覧と同一
@@ -392,6 +418,8 @@ Vercel Blobへのクライアントアップロード用トークンを発行す
 - サイズ: 最大1MB
 - パス: `skins/{userId}/` 配下のみ許可
 - `addRandomSuffix: true` で毎回一意なblobパスに保存（固定パスへの再アップロードが「既に存在する」で失敗するのを防ぐ。旧blobは `POST /api/me/skin` が削除）
+
+**実装:** 認証・ユーザー解決は各ルートで行い、トークン発行本体は `app/lib/blob-storage.server.ts` の `handleTextureUploadToken(request, { prefix, userId, logLabel })`（スキン `skins/` とマント `capes/` で共通）に委譲する。
 
 **関連ファイル:** `app/routes/api/me/skin/upload-token.ts`
 

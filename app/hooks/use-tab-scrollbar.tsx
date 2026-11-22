@@ -17,20 +17,30 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
  */
 export function useTabScrollbar() {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const [state, setState] = useState({ visible: false, left: 0, width: 100 });
+  const [state, setState] = useState({
+    visible: false,
+    left: 0,
+    width: 100,
+    canScrollStart: false,
+    canScrollEnd: false,
+  });
 
   const update = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
     if (scrollWidth <= clientWidth + 1) {
-      setState((s) => (s.visible ? { ...s, visible: false } : s));
+      setState((s) =>
+        s.visible ? { ...s, visible: false, canScrollStart: false, canScrollEnd: false } : s,
+      );
       return;
     }
     setState({
       visible: true,
       left: (scrollLeft / scrollWidth) * 100,
       width: (clientWidth / scrollWidth) * 100,
+      canScrollStart: scrollLeft > 1,
+      canScrollEnd: scrollWidth - clientWidth - scrollLeft > 1,
     });
   }, []);
 
@@ -48,6 +58,10 @@ export function useTabScrollbar() {
     };
   }, [update]);
 
+  // ドラッグ中のリスナー解除関数。アンマウント時にも呼んで取り残さない
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -61,9 +75,14 @@ export function useTabScrollbar() {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (dragCleanupRef.current === up) dragCleanupRef.current = null;
     };
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }, []);
 
   const scrollbar: ReactNode = state.visible ? (
@@ -81,5 +100,12 @@ export function useTabScrollbar() {
 
   // isScrollable: スクロールが必要なときだけ true。呼び出し側でスクロールバー用の
   // 余白（カードとタブの間の padding）を条件付きで広げるのに使う
-  return { scrollerRef, scrollbar, isScrollable: state.visible };
+  // canScrollStart / canScrollEnd: 左右に続きがあるか（端のフェード表示用）
+  return {
+    scrollerRef,
+    scrollbar,
+    isScrollable: state.visible,
+    canScrollStart: state.canScrollStart,
+    canScrollEnd: state.canScrollEnd,
+  };
 }

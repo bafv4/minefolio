@@ -1,6 +1,6 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
-import { useLoaderData, useSearchParams, Link } from "react-router";
+import { useLoaderData, useSearchParams, Link, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/compare";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
@@ -13,32 +13,48 @@ import {
   type PresetSnapshot,
 } from "@/lib/preset-read";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
-import { getActionLabel, getKeyLabel, normalizeKeyCode } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel } from "@/lib/keybindings";
 import { toSensitivityPercent } from "@/lib/mouse-settings";
 import { rtaCareerLabel, rtaCareerView } from "@/lib/rta-career";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Search, GitCompare, User, Check, X, ArrowRight, Users } from "lucide-react";
-import { useState, useMemo } from "react";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { EmptyState } from "@/components/empty-state";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
+import { NoticeBanner } from "@/components/notice-banner";
+import { ArrowLeftRight, Check, ChevronsUpDown, GitCompare, User, Users, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { getLocalizedDisplayName, pickDisplayName } from "@/lib/slug";
+import { getLocalizedDisplayName } from "@/lib/slug";
+import { minComparableActions, sortSimilarPlayers } from "@/lib/similar-players";
 import type { Translator } from "@/lib/messages";
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
-  const t = createTranslator(localeFromMatches(matches));
-  const title = `${t("compare.title")} - Minefolio`;
+  const locale = localeFromMatches(matches);
+  const t = createTranslator(locale);
+  // 2人とも公開の走者のときだけ名前入りにする。限定公開（URL 指定でだけ見られる）の走者が含まれるときは、
+  // リンクを貼った先のプレビューに名前が出ないよう一般のタイトルにする（loader は非公開の走者を返さない）
+  const bothPublic =
+    loaderData?.player1?.profileVisibility === "public" &&
+    loaderData?.player2?.profileVisibility === "public";
+  const title =
+    bothPublic && loaderData?.player1 && loaderData.player2
+      ? `${t("compare.titleWithPlayers", {
+          a: getLocalizedDisplayName(loaderData.player1, locale),
+          b: getLocalizedDisplayName(loaderData.player2, locale),
+        })} - Minefolio`
+      : `${t("compare.title")} - Minefolio`;
   const description = t("compare.description");
   const appUrl = loaderData?.appUrl || "https://minefolio.app";
   const ogImage = `${appUrl}/icon.png`;
@@ -117,19 +133,20 @@ function applyMainPreset<
   P extends {
     id: string;
     keybindings: unknown;
-    keyRemaps: unknown;
     playerConfig: unknown;
     configPresets: (PresetSnapshot & { id: string; isActive: boolean })[];
+    ageGroup?: unknown;
+    ageGroupPublic?: unknown;
   },
 >(player: P): Omit<P, "configPresets"> {
-  const { configPresets: userPresets, ...rest } = player;
+  // 比較画面は年代を表示しないので、非公開の年代をクライアントへ送らないようここで落とす
+  const { configPresets: userPresets, ageGroup: _ageGroup, ageGroupPublic: _ageGroupPublic, ...rest } = player;
   const main = userPresets[0];
-  if (!shouldUsePresetSnapshot(main)) return rest;
+  if (!shouldUsePresetSnapshot(main)) return rest as unknown as Omit<P, "configPresets">;
   const decoded = decodePresetConfig(main, player.id);
   return {
     ...rest,
     keybindings: decoded.keybindings,
-    keyRemaps: decoded.keyRemaps,
     playerConfig: decoded.playerConfig
       ? {
           ...(player.playerConfig ?? {}),
@@ -138,6 +155,133 @@ function applyMainPreset<
         }
       : null,
   } as unknown as Omit<P, "configPresets">;
+}
+
+// 選択用一覧の列（Select の選択肢に使う分）
+const SELECT_COLUMNS = {
+  mcid: true,
+  uuid: true,
+  slug: true,
+  displayName: true,
+  displayNameAlphabet: true,
+  customSkinUrl: true,
+} as const;
+
+type SelectablePlayer = {
+  mcid: string | null;
+  uuid: string | null;
+  slug: string;
+  displayName: string | null;
+  displayNameAlphabet: string | null;
+  customSkinUrl: string | null;
+};
+
+/**
+ * URL で指定され loader が表示を許した走者が選択用一覧（公開のみ・上限100人）に無いとき、
+ * その走者だけを選択肢の末尾に足す（一覧の方針そのものは変えない）。
+ */
+function withReferencedPlayers<T extends SelectablePlayer>(
+  list: T[],
+  referenced: (SelectablePlayer | null | undefined)[],
+): SelectablePlayer[] {
+  const result: SelectablePlayer[] = [...list];
+  for (const p of referenced) {
+    if (!p || result.some((x) => x.slug === p.slug)) continue;
+    result.push({
+      mcid: p.mcid,
+      uuid: p.uuid,
+      slug: p.slug,
+      displayName: p.displayName,
+      displayNameAlphabet: p.displayNameAlphabet,
+      customSkinUrl: p.customSkinUrl,
+    });
+  }
+  return result;
+}
+
+export type SimilarCandidate = Awaited<ReturnType<typeof similarCandidatesQuery>>[number];
+
+/** 類似度計算の候補（公開走者・p1 を除く。上限50人。類似度計算側はメインプリセットのスナップショットを優先） */
+function similarCandidatesQuery(db: ReturnType<typeof createDb>, p1: string) {
+  return db.query.users.findMany({
+    where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
+    columns: {
+      id: true,
+      mcid: true,
+      uuid: true,
+      slug: true,
+      displayName: true,
+      displayNameAlphabet: true,
+      customSkinUrl: true,
+    },
+    with: {
+      // 類似度計算に使うのは action / keyCode のみ（メイン持ちユーザーでは未使用のため最小限に）
+      keybindings: { columns: { action: true, keyCode: true } },
+      configPresets: {
+        where: eq(configPresets.isMain, true),
+        columns: { id: true, isActive: true, keybindingsData: true },
+      },
+    },
+    limit: 50,
+  });
+}
+
+/**
+ * 2人のキー配置の一致・不一致を数える（比較画面の要約と「似たキー配置の走者」の一致率で共有）。
+ * 両方に設定がある操作だけを分母にする（total = same + different）。片方だけ設定・両方未設定は数えない。
+ * oneSided は片方だけ設定の操作の数（要約の注記用。比較表の行としては「違う」に出る）。
+ */
+export function compareKeyMaps(map1: Record<string, string>, map2: Record<string, string>) {
+  let same = 0;
+  let different = 0;
+  let oneSided = 0;
+  for (const item of COMPARE_ACTIONS) {
+    const k1 = map1[item.action];
+    const k2 = map2[item.action];
+    if (k1 && k2) {
+      if (k1 === k2) same++;
+      else different++;
+    } else if (k1 || k2) {
+      oneSided++;
+    }
+  }
+  const total = same + different;
+  return { same, different, total, oneSided };
+}
+
+// 「比べられる設定が十分ある」とみなす最低の分母（比較対象の操作数の半数以上）。並びは app/lib/similar-players.ts
+const MIN_COMPARABLE_ACTIONS = minComparableActions(COMPARE_ACTIONS.length);
+
+/** p1 のキー配置に近い順に最大10人（比較画面と同じ数え方の一致率。両方に設定のある操作が無い人は除く） */
+export function rankSimilarPlayers(p1KeyMap: Record<string, string>, candidates: SimilarCandidate[]) {
+  const rows = candidates
+    .map((user) => {
+      const mainPreset = user.configPresets[0];
+      const userKeybindings = shouldUsePresetSnapshot(mainPreset)
+        ? (decodePresetKeybindings(mainPreset.keybindingsData, user.id) ?? [])
+        : user.keybindings;
+      const userKeyMap: Record<string, string> = {};
+      for (const kb of userKeybindings) {
+        userKeyMap[kb.action] = kb.keyCode;
+      }
+      const { same, total } = compareKeyMaps(p1KeyMap, userKeyMap);
+      const similarity = total > 0 ? same / total : 0;
+      return {
+        mcid: user.mcid,
+        uuid: user.uuid,
+        slug: user.slug,
+        displayName: user.displayName,
+        displayNameAlphabet: user.displayNameAlphabet,
+        customSkinUrl: user.customSkinUrl,
+        matches: same,
+        total,
+        similarity,
+      };
+    })
+    .filter((p) => p.total > 0 && p.similarity > 0);
+  return sortSimilarPlayers(rows, MIN_COMPARABLE_ACTIONS)
+    .slice(0, 10)
+    .map((p) => ({ ...p, fewComparable: p.total < MIN_COMPARABLE_ACTIONS }));
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -152,8 +296,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const p1 = url.searchParams.get("p1");
   const p2 = url.searchParams.get("p2");
 
-  // 走者一覧（選択用）: 一覧なので公開プロフィールのみ
-  const allPlayers = await db.query.users.findMany({
+  // 同じ走者どうしは比べられない（UI では選べない組み合わせ）。p2 を捨てて1人の表示（類似の走者）へ寄せる
+  if (p1 && p2 && p1 === p2) {
+    const params = new URLSearchParams(url.searchParams);
+    params.delete("p2");
+    throw redirect(`/compare?${params.toString()}`);
+  }
+
+  // 走者一覧（選択用）: 一覧なので公開プロフィールのみ。
+  // drizzle のクエリは await されるまで実行されないので、各分岐の Promise.all に渡して他クエリと並列に走らせる
+  const allPlayersQuery = db.query.users.findMany({
     where: eq(users.profileVisibility, "public"),
     columns: {
       mcid: true,
@@ -169,25 +321,38 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // p1のみ指定の場合、類似走者を検索（slugで検索）
   if (p1 && !p2) {
-    const player1Raw = await db.query.users.findFirst({
-      // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
-      where: and(
-        eq(users.slug, p1),
-        publiclyReferencableCondition,
-      ),
-      with: {
-        keybindings: true,
-        playerConfig: true,
-        keyRemaps: true,
-        configPresets: {
-          where: eq(configPresets.isMain, true),
-          columns: MAIN_PRESET_COLUMNS,
+    // 比較元・類似度計算用の全ユーザー・選択用一覧は互いに独立なので並列に取得する
+    // （類似度計算側はメインプリセットのスナップショットを優先。無いユーザーのみライブ）
+    const [allPlayers, player1Raw, allUsersWithKeybindings] = await Promise.all([
+      allPlayersQuery,
+      db.query.users.findFirst({
+        // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
+        where: and(
+          eq(users.slug, p1),
+          publiclyReferencableCondition,
+        ),
+        with: {
+          keybindings: true,
+          playerConfig: true,
+          configPresets: {
+            where: eq(configPresets.isMain, true),
+            columns: MAIN_PRESET_COLUMNS,
+          },
         },
-      },
-    });
+      }),
+      similarCandidatesQuery(db, p1),
+    ]);
 
     if (!player1Raw) {
-      return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
+      return {
+        allPlayers,
+        player1: null,
+        player2: null,
+        similarPlayers: [],
+        notFoundSlugs: [p1],
+        appUrl,
+        now,
+      };
     }
     const player1Data = applyMainPreset(player1Raw);
 
@@ -197,89 +362,44 @@ export async function loader({ request }: Route.LoaderArgs) {
       p1KeyMap[kb.action] = kb.keyCode;
     }
 
-    // 全ユーザーのキーバインドを取得して類似度を計算
-    // （メインプリセットのスナップショットを優先。無いユーザーのみライブ）
-    const allUsersWithKeybindings = await db.query.users.findMany({
-      where: and(sql`${users.slug} != ${p1}`, eq(users.profileVisibility, "public")),
-      columns: {
-        id: true,
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        customSkinUrl: true,
-      },
-      with: {
-        // 類似度計算に使うのは action / keyCode のみ（メイン持ちユーザーでは未使用のため最小限に）
-        keybindings: { columns: { action: true, keyCode: true } },
-        configPresets: {
-          where: eq(configPresets.isMain, true),
-          columns: { id: true, isActive: true, keybindingsData: true },
-        },
-      },
-      limit: 50,
-    });
-
-    const similarPlayers = allUsersWithKeybindings
-      .map((user) => {
-        const mainPreset = user.configPresets[0];
-        const userKeybindings = shouldUsePresetSnapshot(mainPreset)
-          ? (decodePresetKeybindings(mainPreset.keybindingsData, user.id) ?? [])
-          : user.keybindings;
-        const userKeyMap: Record<string, string> = {};
-        for (const kb of userKeybindings) {
-          userKeyMap[kb.action] = kb.keyCode;
-        }
-
-        // 一致数を計算
-        let matches = 0;
-        let total = 0;
-        for (const item of COMPARE_ACTIONS) {
-          const k1 = p1KeyMap[item.action];
-          const k2 = userKeyMap[item.action];
-          if (k1 && k2) {
-            total++;
-            if (k1 === k2) {
-              matches++;
-            }
-          }
-        }
-
-        const similarity = total > 0 ? matches / total : 0;
-        return {
-          mcid: user.mcid,
-          uuid: user.uuid,
-          slug: user.slug,
-          displayName: user.displayName,
-          displayNameAlphabet: user.displayNameAlphabet,
-          customSkinUrl: user.customSkinUrl,
-          matches,
-          total,
-          similarity,
-        };
-      })
-      .filter((p) => p.total > 0 && p.similarity > 0)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 10);
+    const similarPlayers = rankSimilarPlayers(p1KeyMap, allUsersWithKeybindings);
 
     return {
-      allPlayers,
+      allPlayers: withReferencedPlayers(allPlayers, [player1Data]),
       player1: player1Data,
       player2: null,
       similarPlayers,
+      notFoundSlugs: [] as string[],
       appUrl,
       now,
     };
   }
 
-  // 両方指定されていない場合は選択画面のみ
+  // 両方指定されていない場合は選択画面のみ（p2 だけ指定のときは、その走者の有無だけ確かめる）
   if (!p1 || !p2) {
-    return { allPlayers, player1: null, player2: null, similarPlayers: [], appUrl, now };
+    const [allPlayers, p2Only] = await Promise.all([
+      allPlayersQuery,
+      p2
+        ? db.query.users.findFirst({
+            where: and(eq(users.slug, p2), publiclyReferencableCondition),
+            columns: SELECT_COLUMNS,
+          })
+        : Promise.resolve(undefined),
+    ]);
+    return {
+      allPlayers: withReferencedPlayers(allPlayers, [p2Only]),
+      player1: null,
+      player2: null,
+      similarPlayers: [],
+      notFoundSlugs: p2 && !p2Only ? [p2] : [],
+      appUrl,
+      now,
+    };
   }
 
   // 両走者のデータを取得（slugで検索・メインプリセットのスナップショット優先）
-  const [player1Raw, player2Raw] = await Promise.all([
+  const [allPlayers, player1Raw, player2Raw] = await Promise.all([
+    allPlayersQuery,
     db.query.users.findFirst({
       // 非公開（private）は比較対象にしない。限定公開（unlisted）はURL指定なら可
       where: and(
@@ -289,7 +409,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       with: {
         keybindings: true,
         playerConfig: true,
-        keyRemaps: true,
         configPresets: {
           where: eq(configPresets.isMain, true),
           columns: MAIN_PRESET_COLUMNS,
@@ -304,7 +423,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       with: {
         keybindings: true,
         playerConfig: true,
-        keyRemaps: true,
         configPresets: {
           where: eq(configPresets.isMain, true),
           columns: MAIN_PRESET_COLUMNS,
@@ -315,14 +433,50 @@ export async function loader({ request }: Route.LoaderArgs) {
   const player1Data = player1Raw ? applyMainPreset(player1Raw) : undefined;
   const player2Data = player2Raw ? applyMainPreset(player2Raw) : undefined;
 
+  // 2人目が見つからないとき、1人目が表示できるなら p1 のみ指定と同じく類似走者を出す
+  let similarPlayers: ReturnType<typeof rankSimilarPlayers> = [];
+  if (player1Data && !player2Data) {
+    const p1KeyMap: Record<string, string> = {};
+    for (const kb of player1Data.keybindings) {
+      p1KeyMap[kb.action] = kb.keyCode;
+    }
+    similarPlayers = rankSimilarPlayers(p1KeyMap, await similarCandidatesQuery(db, p1));
+  }
+
   return {
-    allPlayers,
+    allPlayers: withReferencedPlayers(allPlayers, [player1Data, player2Data]),
     player1: player1Data ?? null,
     player2: player2Data ?? null,
-    similarPlayers: [],
+    similarPlayers,
+    notFoundSlugs: [
+      ...(player1Data ? [] : [p1]),
+      ...(player2Data ? [] : [p2]),
+    ],
     appUrl,
     now,
   };
+}
+
+// 「同じ行も表示」（?all=1）だけが変わるナビゲーションではサーバーデータが同一なので再取得しない
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  const strip = (url: URL) => {
+    const p = new URLSearchParams(url.search);
+    p.delete("all");
+    return `${url.pathname}?${p.toString()}`;
+  };
+  if (strip(currentUrl) === strip(nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
+
+/** 比較の行で、違う行に付ける印（前景色の点＋「異なる」）。色やアイコンだけに頼らず文字で示す */
+function DifferentMark() {
+  const t = useT();
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium">
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-foreground" />
+      {t("compare.different")}
+    </span>
+  );
 }
 
 /**
@@ -337,22 +491,270 @@ function RtaCareerLine({ value, now }: { value: string | null; now: number }) {
   return <p className="text-xs text-muted-foreground">{rtaCareerLabel(t, view)}</p>;
 }
 
+/** 案内に出す slug。極端に長い値は切り詰める */
+function truncateSlug(slug: string): string {
+  return slug.length > 40 ? `${slug.slice(0, 40)}…` : slug;
+}
+
 /** ゲーム内感度の表示用ラベル（%表記）。計算できなければ undefined */
 function sensitivityLabel(sensitivity: number | null | undefined): string | undefined {
   const percent = toSensitivityPercent(sensitivity);
   return percent != null ? `${percent}%` : undefined;
 }
 
+/**
+ * 走者を選ぶコンボボックス（検索欄と候補を1つにまとめた物。見た目は ui/combobox と同じ）。
+ * ui/combobox は候補が文字列のラベルだけで、検索が value（slug）にしか当たらないため、ここで Popover＋Command を直接組む。
+ * 検索は表示名・アルファベット表記・MCID・slug（cmdk の keywords）。名前は見出し（labelId）＋選択中の名前で読む
+ */
+function RunnerPicker({
+  labelId,
+  allPlayers,
+  options,
+  value,
+  onValueChange,
+}: {
+  labelId: string;
+  /** 選択中の名前を引く一覧（相手の走者を除く前） */
+  allPlayers: SelectablePlayer[];
+  /** 候補（相手で選ばれている走者を除いた一覧） */
+  options: SelectablePlayer[];
+  value: string;
+  onValueChange: (slug: string) => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  const valueId = `${labelId}-value`;
+  // 選択中の走者は loader の一覧（withReferencedPlayers で URL 指定の走者を含む）から引くので、SSR の時点で名前が出る
+  const selected = allPlayers.find((p) => p.slug === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          role="combobox"
+          aria-expanded={open}
+          aria-labelledby={`${labelId} ${valueId}`}
+          className="min-h-11 w-full justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input sm:min-h-9"
+        >
+          <span id={valueId} className={cn("flex min-w-0 items-center gap-2", !selected && "text-muted-foreground")}>
+            {selected ? (
+              <>
+                <MinecraftAvatar uuid={selected.uuid} size={20} skinUrl={selected.customSkinUrl} alt="" className="shrink-0" />
+                <span className="truncate">{getLocalizedDisplayName(selected, locale)}</span>
+              </>
+            ) : (
+              t("compare.selectRunner")
+            )}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-64 max-w-[calc(100vw-2rem)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={t("compare.searchPlaceholder")} aria-label={t("compare.searchPlaceholder")} />
+          <CommandList>
+            <CommandEmpty>{t("compare.noRunnerMatch")}</CommandEmpty>
+            <CommandGroup>
+              {options.map((p) => (
+                <CommandItem
+                  key={p.slug}
+                  value={p.slug}
+                  keywords={[p.displayName, p.displayNameAlphabet, p.mcid].filter((k): k is string => !!k)}
+                  onSelect={() => {
+                    if (p.slug !== value) onValueChange(p.slug);
+                    setOpen(false);
+                  }}
+                >
+                  <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} alt="" className="shrink-0" />
+                  <span className="min-w-0 truncate">{getLocalizedDisplayName(p, locale)}</span>
+                  {p.mcid && <span className="shrink-0 text-xs text-muted-foreground">@{p.mcid}</span>}
+                  <Check className={cn("ml-auto h-4 w-4", p.slug === value ? "opacity-100" : "opacity-0")} aria-hidden="true" />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** 比較する走者（列見出しに出す分） */
+type CompareColumnPlayer = Pick<SelectablePlayer, "uuid" | "customSkinUrl" | "mcid" | "slug" | "displayName" | "displayNameAlphabet">;
+
+type CompareTableRow = {
+  key: string;
+  label: string;
+  value1: ReactNode;
+  value2: ReactNode;
+  different: boolean;
+};
+
+/**
+ * 2人の値を並べる表（キー配置・デバイスで同じ形）。列は「項目｜走者1｜走者2」、列見出しはアバター＋名前。
+ * 違う行だけ行全体を中立な面＋「異なる」の文字で示す（一致・両方未設定は装飾なし）
+ */
+function CompareTable({
+  labelledBy,
+  firstColumnLabel,
+  player1,
+  player2,
+  rows,
+  markDifferent,
+}: {
+  labelledBy: string;
+  firstColumnLabel: string;
+  player1: CompareColumnPlayer;
+  player2: CompareColumnPlayer;
+  rows: CompareTableRow[];
+  /** 違う行に面と「異なる」を付ける（全行表示のとき。違いだけの表示では全行が違うので付けない） */
+  markDifferent: boolean;
+}) {
+  const locale = useLocale();
+  const columnHeader = (player: CompareColumnPlayer) => {
+    const name = getLocalizedDisplayName(player, locale);
+    return (
+      <span role="columnheader" title={name} className="flex min-w-0 max-w-20 items-center justify-center gap-1.5 sm:max-w-40">
+        <MinecraftAvatar uuid={player.uuid} size={20} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
+        <span className="min-w-0 truncate">{name}</span>
+      </span>
+    );
+  };
+  return (
+    <div
+      role="table"
+      aria-labelledby={labelledBy}
+      className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 sm:gap-x-4 divide-y divide-border/60"
+    >
+      <div
+        role="row"
+        className="col-span-full -mx-2 grid grid-cols-subgrid items-end px-2 pb-2 text-xs font-medium text-muted-foreground"
+      >
+        <span role="columnheader">{firstColumnLabel}</span>
+        {columnHeader(player1)}
+        {columnHeader(player2)}
+      </div>
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          role="row"
+          className={cn(
+            "col-span-full -mx-2 grid grid-cols-subgrid items-center px-2 py-2",
+            markDifferent && row.different && "bg-secondary/50",
+          )}
+        >
+          <div role="rowheader" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-sm">{row.label}</span>
+            {markDifferent && row.different && <DifferentMark />}
+          </div>
+          <div role="cell" className="text-center">{row.value1}</div>
+          <div role="cell" className="text-center">{row.value2}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 違う行の値は `border-primary` の枠で注目させる（面の濃淡や色の良し悪しに頼らない。枠の幅は常に確保して行が揺れないようにする） */
+function KeyChip({ children, highlight }: { children: ReactNode; highlight?: boolean }) {
+  return (
+    <kbd
+      className={cn(
+        "inline-block min-w-16 rounded border bg-secondary/80 px-2.5 py-1 text-center text-sm font-mono",
+        highlight ? "border-primary" : "border-transparent",
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
+/** 値が無いとき。チップにせず muted の文字だけで「未設定」と示す（「-」だとキーに見える） */
+function UnsetText() {
+  const t = useT();
+  return <span className="text-sm text-muted-foreground">{t("compare.notSet")}</span>;
+}
+
+/** 違う行の値（キー以外）。KeyChip と同じく枠で注目させる */
+function ValueText({ children, highlight }: { children: ReactNode; highlight?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-block rounded border px-2 py-0.5 text-sm",
+        highlight ? "border-primary" : "border-transparent",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** 要約の左右に置く走者（左は左寄せ、右は鏡写しで右寄せにして「A vs B」に読める並びにする） */
+function SummaryPlayer({
+  player,
+  now,
+  align,
+}: {
+  player: CompareColumnPlayer & { rtaStartedYearMonth: string | null };
+  now: number;
+  align: "start" | "end";
+}) {
+  const locale = useLocale();
+  return (
+    <Link
+      to={`/player/${player.slug}`}
+      className={cn(
+        "flex min-h-11 min-w-0 items-center gap-2 rounded-md hover:underline",
+        align === "end" && "flex-row-reverse text-right justify-self-end",
+        align === "start" && "justify-self-start",
+      )}
+    >
+      <MinecraftAvatar uuid={player.uuid} size={40} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
+      <div className="min-w-0">
+        <p className="truncate font-bold">{getLocalizedDisplayName(player, locale)}</p>
+        {player.mcid && <p className="truncate text-xs text-muted-foreground">@{player.mcid}</p>}
+        <RtaCareerLine value={player.rtaStartedYearMonth} now={now} />
+      </div>
+    </Link>
+  );
+}
+
 export default function ComparePage() {
   const t = useT();
   const locale = useLocale();
-  const { allPlayers, player1, player2, similarPlayers, now } = useLoaderData<typeof loader>();
+  const { allPlayers, player1, player2, similarPlayers, notFoundSlugs, now } =
+    useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search1, setSearch1] = useState("");
-  const [search2, setSearch2] = useState("");
 
   const selectedP1 = searchParams.get("p1") ?? "";
   const selectedP2 = searchParams.get("p2") ?? "";
+  // loader が「指定されたが表示できなかった」と返した slug（存在しない・非公開は区別しない）
+  const p1Missing = selectedP1 !== "" && notFoundSlugs.includes(selectedP1);
+  const p2Missing = selectedP2 !== "" && notFoundSlugs.includes(selectedP2);
+  // 既定は「違いだけ」。同じ行も出すときだけ URL に ?all=1 を載せる（共有・再読み込みで保つ）
+  const showAll = searchParams.get("all") === "1";
+  const setShowAll = (checked: boolean) => {
+    const params = new URLSearchParams(searchParams);
+    if (checked) {
+      params.set("all", "1");
+    } else {
+      params.delete("all");
+    }
+    setSearchParams(params, { replace: true, preventScrollReset: true });
+  };
+
+  // 類似走者の「比較」で結果が出たら、フォーカスを要約へ移す（押したボタンが消えて BODY に落ちるため）
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const focusSummaryRef = useRef(false);
+  useEffect(() => {
+    if (focusSummaryRef.current && player1 && player2) {
+      focusSummaryRef.current = false;
+      summaryRef.current?.focus();
+    }
+  }, [player1, player2]);
 
   const handleSelectPlayer = (slot: "p1" | "p2", slug: string) => {
     const params = new URLSearchParams(searchParams);
@@ -364,30 +766,19 @@ export default function ComparePage() {
     setSearchParams(params);
   };
 
-  // フィルタリングされた走者一覧
-  const filteredPlayers1 = useMemo(() => {
-    if (!search1) return allPlayers;
-    const lower = search1.toLowerCase();
-    return allPlayers.filter(
-      (p) =>
-        p.slug.toLowerCase().includes(lower) ||
-        p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower) ||
-        p.displayNameAlphabet?.toLowerCase().includes(lower)
-    );
-  }, [allPlayers, search1]);
+  // 走者 1 と 2 を入れ替える（URL の p1 / p2 を入れ替える。片方だけ指定でも入れ替える）
+  const swapPlayers = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("p1");
+    params.delete("p2");
+    if (selectedP2) params.set("p1", selectedP2);
+    if (selectedP1) params.set("p2", selectedP1);
+    setSearchParams(params, { preventScrollReset: true });
+  };
 
-  const filteredPlayers2 = useMemo(() => {
-    if (!search2) return allPlayers;
-    const lower = search2.toLowerCase();
-    return allPlayers.filter(
-      (p) =>
-        p.slug.toLowerCase().includes(lower) ||
-        p.mcid?.toLowerCase().includes(lower) ||
-        p.displayName?.toLowerCase().includes(lower) ||
-        p.displayNameAlphabet?.toLowerCase().includes(lower)
-    );
-  }, [allPlayers, search2]);
+  // もう片方で選ばれている走者は候補から外す（同じ走者どうしを比べない）
+  const options1 = useMemo(() => allPlayers.filter((p) => !selectedP2 || p.slug !== selectedP2), [allPlayers, selectedP2]);
+  const options2 = useMemo(() => allPlayers.filter((p) => !selectedP1 || p.slug !== selectedP1), [allPlayers, selectedP1]);
 
   // キーバインドをマップ化
   const p1Keybindings = useMemo(() => {
@@ -422,30 +813,129 @@ export default function ComparePage() {
     return groups;
   }, []);
 
-  // 一致・不一致の統計
+  // 一致・不一致の統計。両方に設定がある操作だけを数える（片方だけ設定の行は表には出るが、件数には含めない）
   const stats = useMemo(() => {
-    if (!player1 || !player2) return { same: 0, different: 0, total: 0 };
-
-    let same = 0;
-    let different = 0;
-
-    for (const item of COMPARE_ACTIONS) {
-      const k1 = p1Keybindings[item.action];
-      const k2 = p2Keybindings[item.action];
-      if (k1 && k2) {
-        if (k1 === k2) {
-          same++;
-        } else {
-          different++;
-        }
-      }
-    }
-
-    return { same, different, total: same + different };
+    if (!player1 || !player2) return compareKeyMaps({}, {});
+    return compareKeyMaps(p1Keybindings, p2Keybindings);
   }, [player1, player2, p1Keybindings, p2Keybindings]);
 
+  // 2人が選ばれて結果が出ているとき（md 未満）は、選択欄を1行に詰めて最初の1画面に表が入るようにする。
+  // 走者の名前・プロフィールへの導線は要約の帯が担う
+  const resultShown = !!player1 && !!player2;
+
+  const runnerSlot = (slot: "p1" | "p2") => {
+    const labelId = `compare-${slot}-label`;
+    const selected = slot === "p1" ? selectedP1 : selectedP2;
+    const missing = slot === "p1" ? p1Missing : p2Missing;
+    const player = slot === "p1" ? player1 : player2;
+    return (
+      <div className={cn("min-w-0 space-y-2", resultShown && "max-md:space-y-0")}>
+        <h2 id={labelId} className={cn("text-sm font-medium text-muted-foreground", resultShown && "max-md:sr-only")}>
+          {slot === "p1" ? t("compare.runner1") : t("compare.runner2")}
+        </h2>
+        <RunnerPicker
+          labelId={labelId}
+          allPlayers={allPlayers}
+          options={slot === "p1" ? options1 : options2}
+          value={missing ? "" : selected}
+          onValueChange={(v) => handleSelectPlayer(slot, v)}
+        />
+        {missing && (
+          <NoticeBanner tone="warning" icon={TriangleAlert} className="px-3 py-2">
+            <span className="break-all">{t("compare.playerNotFound", { slug: truncateSlug(selected) })}</span>
+          </NoticeBanner>
+        )}
+        {player && (
+          <Link
+            to={`/player/${player.slug}`}
+            className={cn(
+              "inline-flex min-h-11 items-center gap-2 text-sm text-primary hover:underline sm:min-h-6",
+              resultShown && "max-md:hidden",
+            )}
+          >
+            <User className="h-4 w-4" aria-hidden="true" />
+            {t("compare.viewProfile")}
+          </Link>
+        )}
+      </div>
+    );
+  };
+
+  // 比較結果の表（2人が選ばれているときだけ組み立てる）。既定は違う行だけ、?all=1 で同じ行も含める
+  const result = (() => {
+    if (!player1 || !player2) return null;
+    const categories = Object.entries(groupedActions).map(([category, actions]) => {
+      const rows: CompareTableRow[] = actions.map((item) => {
+        const key1 = p1Keybindings[item.action];
+        const key2 = p2Keybindings[item.action];
+        const different = compareValues(key1, key2) === "different";
+        return {
+          key: item.action,
+          label: getActionLabel(t, item.action),
+          value1: key1 ? <KeyChip highlight={showAll && different}>{getKeyLabel(t, key1)}</KeyChip> : <UnsetText />,
+          value2: key2 ? <KeyChip highlight={showAll && different}>{getKeyLabel(t, key2)}</KeyChip> : <UnsetText />,
+          different,
+        };
+      });
+      return { category, rows: showAll ? rows : rows.filter((row) => row.different) };
+    });
+    // 違いの無いカテゴリは、カードを並べずに末尾の1行にまとめる
+    const shownCategories = categories.filter((c) => c.rows.length > 0);
+
+    const onOff = (value: boolean | null | undefined) =>
+      value != null ? (value ? t("common.on") : t("common.off")) : undefined;
+    const deviceRows = [
+      {
+        label: t("compare.mouseDpi"),
+        value1: player1.playerConfig?.mouseDpi?.toString(),
+        value2: player2.playerConfig?.mouseDpi?.toString(),
+      },
+      {
+        label: t("compare.inGameSensitivity"),
+        value1: sensitivityLabel(player1.playerConfig?.gameSensitivity),
+        value2: sensitivityLabel(player2.playerConfig?.gameSensitivity),
+      },
+      {
+        label: t("compare.keyboardLayout"),
+        value1: player1.playerConfig?.keyboardLayout ?? undefined,
+        value2: player2.playerConfig?.keyboardLayout ?? undefined,
+      },
+      {
+        label: t("compare.toggleSprint"),
+        value1: onOff(player1.playerConfig?.toggleSprint),
+        value2: onOff(player2.playerConfig?.toggleSprint),
+      },
+      {
+        label: "Raw Input",
+        value1: onOff(player1.playerConfig?.rawInput),
+        value2: onOff(player2.playerConfig?.rawInput),
+      },
+    ];
+    const allDeviceRows: CompareTableRow[] = deviceRows.map((row) => {
+      const different = compareValues(row.value1, row.value2) === "different";
+      return {
+        key: row.label,
+        label: row.label,
+        value1: row.value1 != null ? <ValueText highlight={showAll && different}>{row.value1}</ValueText> : <UnsetText />,
+        value2: row.value2 != null ? <ValueText highlight={showAll && different}>{row.value2}</ValueText> : <UnsetText />,
+        different,
+      };
+    });
+    const visibleDeviceRows = showAll ? allDeviceRows : allDeviceRows.filter((row) => row.different);
+    // 件数（stats）は両方に設定がある操作だけなので、「違いが無い」の判定は表の行（片方だけ設定も含む）で数える
+    const totalDifferences = categories.reduce((n, c) => n + c.rows.filter((row) => row.different).length, 0) + allDeviceRows.filter((row) => row.different).length;
+    return { shownCategories, hiddenCount: categories.length - shownCategories.length, visibleDeviceRows, totalDifferences };
+  })();
+
+  // 一部の欄だけ違いが無いときの切替の手がかり（全体が0件のときは空状態に同じボタンを置く）
+  const showSameButton = showAll ? null : (
+    <Button type="button" variant="outline" size="sm" onClick={() => setShowAll(true)} className="min-h-11 sm:min-h-8">
+      {t("compare.showSame")}
+    </Button>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <GitCompare className="h-6 w-6" />
@@ -456,225 +946,157 @@ export default function ComparePage() {
         </p>
       </div>
 
-      {/* 走者選択 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("compare.runner1")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t("compare.searchPlaceholder")}
-                value={search1}
-                onChange={(e) => setSearch1(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={selectedP1} onValueChange={(v) => handleSelectPlayer("p1", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("compare.selectRunner")} />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {filteredPlayers1.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{getLocalizedDisplayName(p, locale)}</span>
-                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {player1 && (
-              <Link
-                to={`/player/${player1.slug}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <User className="h-4 w-4" />
-                {t("compare.viewProfile")}
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base">{t("compare.runner2")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={t("compare.searchPlaceholder")}
-                value={search2}
-                onChange={(e) => setSearch2(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={selectedP2} onValueChange={(v) => handleSelectPlayer("p2", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t("compare.selectRunner")} />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {filteredPlayers2.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    <div className="flex items-center gap-2">
-                      <MinecraftAvatar uuid={p.uuid} size={20} skinUrl={p.customSkinUrl} />
-                      <span>{getLocalizedDisplayName(p, locale)}</span>
-                      {p.mcid && <span className="text-muted-foreground text-xs">@{p.mcid}</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {player2 && (
-              <Link
-                to={`/player/${player2.slug}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <User className="h-4 w-4" />
-                {t("compare.viewProfile")}
-              </Link>
-            )}
-          </CardContent>
-        </Card>
+      {/* 走者選択（箱にせず、2つの選択欄と入れ替えボタンを1行に。モバイルは縦に積む） */}
+      <div
+        className={cn(
+          "grid items-start md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-4",
+          resultShown ? "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2" : "grid-cols-1 gap-3",
+        )}
+      >
+        {runnerSlot("p1")}
+        <div className={cn("flex justify-center md:pt-7", resultShown && "max-md:pt-0")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={swapPlayers}
+            disabled={!selectedP1 && !selectedP2}
+            aria-label={t("compare.swapRunners")}
+            title={t("compare.swapRunners")}
+            className="size-11 sm:size-9"
+          >
+            <ArrowLeftRight className={cn(!resultShown && "max-md:rotate-90")} aria-hidden="true" />
+          </Button>
+        </div>
+        {runnerSlot("p2")}
       </div>
 
       {/* 比較結果 */}
-      {player1 && player2 && (
+      {player1 && player2 && result && (
         <>
-          {/* 統計サマリー */}
-          <Card className="gap-3 py-5">
-            <CardContent className="px-5">
-              <div className="flex flex-wrap items-center justify-center gap-6">
-                <div className="flex items-center gap-2">
-                  <MinecraftAvatar uuid={player1.uuid} size={40} skinUrl={player1.customSkinUrl} />
-                  <div>
-                    <p className="font-bold">{getLocalizedDisplayName(player1, locale)}</p>
-                    {player1.mcid && <p className="text-xs text-muted-foreground">@{player1.mcid}</p>}
-                    <RtaCareerLine value={player1.rtaStartedYearMonth} now={now} />
-                  </div>
-                </div>
-                <div className="text-center px-6">
-                  <div className="flex items-center gap-4">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-success">{stats.same}</p>
-                      <p className="text-xs text-muted-foreground">{t("compare.same")}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-destructive">{stats.different}</p>
-                      <p className="text-xs text-muted-foreground">{t("compare.different")}</p>
-                    </div>
-                  </div>
-                  {stats.total > 0 && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {t("compare.matchRate", { rate: Math.round((stats.same / stats.total) * 100) })}
+          {/* 要約。「A vs B」に読める左右対称（モバイルは走者2人を1行、集計をその下に置いて、選んだ直後の1画面目に表が入るよう詰める） */}
+          <div
+            ref={summaryRef}
+            tabIndex={-1}
+            role="group"
+            aria-label={t("compare.titleWithPlayers", {
+              a: getLocalizedDisplayName(player1, locale),
+              b: getLocalizedDisplayName(player2, locale),
+            })}
+            className="grid grid-cols-2 items-center gap-x-4 gap-y-2 border-y border-border/60 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
+          >
+            <SummaryPlayer player={player1} now={now} align="start" />
+            <div className="order-3 col-span-2 text-center md:order-none md:col-span-1 md:px-4">
+              {/* 件数はキー配置の表だけを数える（デバイス・設定の表は含めない）ので、対象を明示する */}
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("compare.keybindingComparison")}
+                {stats.total > 0 && ` · ${t("compare.matchRate", { rate: Math.round((stats.same / stats.total) * 100) })}`}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <span className="text-xl font-bold tabular-nums text-foreground">{stats.same}</span> {t("compare.same")}
+                <span aria-hidden="true"> / </span>
+                <span className="sr-only">、</span>
+                <span className="text-xl font-bold tabular-nums text-foreground">{stats.different}</span> {t("compare.different")}
+              </p>
+              {stats.oneSided > 0 && (
+                <p className="text-xs text-muted-foreground">{t("compare.unsetNotCounted", { count: stats.oneSided })}</p>
+              )}
+              {/* 表示の切替は集計のそばに置く（ラベルごと押せる） */}
+              <label className="mx-auto flex min-h-11 w-fit cursor-pointer items-center gap-2 text-sm sm:min-h-8">
+                <Switch checked={showAll} onCheckedChange={setShowAll} />
+                {t("compare.showSame")}
+              </label>
+            </div>
+            <SummaryPlayer player={player2} now={now} align="end" />
+          </div>
+
+          {result.totalDifferences === 0 && !showAll ? (
+            <EmptyState
+              size="compact"
+              icon={<Check className="h-5 w-5" aria-hidden="true" />}
+              title={t("compare.noDifferences")}
+              description={t("compare.noDifferencesHint")}
+              action={
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowAll(true)} className="min-h-11 sm:min-h-8">
+                  {t("compare.showSame")}
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              {/* キーバインド比較 */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
+                {result.shownCategories.map(({ category, rows }) => {
+                  const titleId = `compare-category-${category}`;
+                  return (
+                    <Card key={category} className="gap-3 py-5">
+                      <CardHeader className="px-5">
+                        <h3 id={titleId} className="text-base font-semibold">
+                          {categoryLabelsOf(t)[category]}
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="px-5">
+                        <CompareTable
+                          labelledBy={titleId}
+                          firstColumnLabel={t("compare.actionColumn")}
+                          player1={player1}
+                          player2={player2}
+                          rows={rows}
+                          markDifferent={showAll}
+                        />
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                {result.hiddenCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                    <p>
+                      {result.shownCategories.length === 0
+                        ? t("compare.noDifferences")
+                        : t("compare.otherCategoriesNoDifferences")}
                     </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <MinecraftAvatar uuid={player2.uuid} size={40} skinUrl={player2.customSkinUrl} />
-                  <div>
-                    <p className="font-bold">{getLocalizedDisplayName(player2, locale)}</p>
-                    {player2.mcid && <p className="text-xs text-muted-foreground">@{player2.mcid}</p>}
-                    <RtaCareerLine value={player2.rtaStartedYearMonth} now={now} />
+                    {showSameButton}
                   </div>
-                </div>
+                )}
               </div>
-            </CardContent>
-          </Card>
 
-          {/* キーバインド比較 */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">{t("compare.keybindingComparison")}</h2>
-            {Object.entries(groupedActions).map(([category, actions]) => (
-              <Card key={category} className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <CardTitle className="text-base">{categoryLabelsOf(t)[category]}</CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
-                  <div className="divide-y">
-                    {actions.map((item) => {
-                      const key1 = p1Keybindings[item.action];
-                      const key2 = p2Keybindings[item.action];
-                      const isSame = key1 && key2 && key1 === key2;
-                      const isDifferent = key1 && key2 && key1 !== key2;
-
-                      return (
-                        <div
-                          key={item.action}
-                          className={cn(
-                            "flex items-center justify-between py-2 px-2 -mx-2",
-                            isSame && "bg-success/10",
-                            isDifferent && "bg-destructive/10"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 flex-1">
-                            {isSame && <Check className="h-4 w-4 text-success" />}
-                            {isDifferent && <X className="h-4 w-4 text-destructive" />}
-                            <span className="text-sm">{getActionLabel(t, item.action)}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key1 ? getKeyLabel(t, key1) : "-"}
-                            </kbd>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            <kbd className="min-w-16 text-center px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono">
-                              {key2 ? getKeyLabel(t, key2) : "-"}
-                            </kbd>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* デバイス・設定の比較 */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
-            <Card className="gap-3 py-5">
-              <CardContent className="px-5">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="font-medium text-sm text-muted-foreground">{t("compare.item")}</div>
-                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player1, locale)}</div>
-                  <div className="font-medium text-sm text-center">{getLocalizedDisplayName(player2, locale)}</div>
-
-                  <CompareRow
-                    label={t("compare.mouseDpi")}
-                    value1={player1.playerConfig?.mouseDpi?.toString()}
-                    value2={player2.playerConfig?.mouseDpi?.toString()}
-                  />
-                  <CompareRow
-                    label={t("compare.inGameSensitivity")}
-                    value1={sensitivityLabel(player1.playerConfig?.gameSensitivity)}
-                    value2={sensitivityLabel(player2.playerConfig?.gameSensitivity)}
-                  />
-                  <CompareRow
-                    label={t("compare.keyboardLayout")}
-                    value1={player1.playerConfig?.keyboardLayout ?? undefined}
-                    value2={player2.playerConfig?.keyboardLayout ?? undefined}
-                  />
-                  <CompareRow
-                    label={t("compare.toggleSprint")}
-                    value1={player1.playerConfig?.toggleSprint != null ? (player1.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
-                    value2={player2.playerConfig?.toggleSprint != null ? (player2.playerConfig.toggleSprint ? t("common.on") : t("common.off")) : undefined}
-                  />
-                  <CompareRow
-                    label="Raw Input"
-                    value1={player1.playerConfig?.rawInput != null ? (player1.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
-                    value2={player2.playerConfig?.rawInput != null ? (player2.playerConfig.rawInput ? t("common.on") : t("common.off")) : undefined}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              {/* デバイス・設定の比較（キー配置と同じ形の表） */}
+              <div className="space-y-4">
+                <h2 id="compare-device-heading" className="text-lg font-semibold">{t("compare.deviceComparison")}</h2>
+                <Card className="gap-3 py-5">
+                  <CardContent className="px-5">
+                    {result.visibleDeviceRows.length === 0 ? (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                        <p>{t("compare.noDifferences")}</p>
+                        {showSameButton}
+                      </div>
+                    ) : (
+                      <CompareTable
+                        labelledBy="compare-device-heading"
+                        firstColumnLabel={t("compare.item")}
+                        player1={player1}
+                        player2={player2}
+                        rows={result.visibleDeviceRows}
+                        markDifferent={showAll}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
         </>
+      )}
+
+      {/* 走者を1人も選んでいないときの案内 */}
+      {!player1 && !player2 && !selectedP1 && !selectedP2 && (
+        <EmptyState
+          size="compact"
+          icon={<GitCompare className="h-5 w-5" aria-hidden="true" />}
+          title={t("compare.emptyTitle")}
+          description={t("compare.emptyDescription")}
+        />
       )}
 
       {/* 類似設定の走者を探す */}
@@ -682,48 +1104,24 @@ export default function ComparePage() {
         <SimilarPlayersSection
           targetPlayer={player1}
           similarPlayers={similarPlayers}
-          onSelectPlayer={(mcid) => handleSelectPlayer("p2", mcid)}
+          onSelectPlayer={(slug) => {
+            focusSummaryRef.current = true;
+            handleSelectPlayer("p2", slug);
+          }}
         />
       )}
     </div>
   );
 }
 
-function CompareRow({
-  label,
-  value1,
-  value2,
-}: {
-  label: string;
-  value1?: string;
-  value2?: string;
-}) {
-  const isSame = value1 && value2 && value1 === value2;
-  const isDifferent = value1 && value2 && value1 !== value2;
-
-  return (
-    <>
-      <div className="text-sm py-1">{label}</div>
-      <div
-        className={cn(
-          "text-sm text-center py-1 rounded",
-          isSame && "bg-success/10",
-          isDifferent && "bg-destructive/10"
-        )}
-      >
-        {value1 ?? "-"}
-      </div>
-      <div
-        className={cn(
-          "text-sm text-center py-1 rounded",
-          isSame && "bg-success/10",
-          isDifferent && "bg-destructive/10"
-        )}
-      >
-        {value2 ?? "-"}
-      </div>
-    </>
-  );
+/**
+ * 2人の値の比べ方（キー配置・デバイスの表、要約の件数、既定の「違いだけ」、「異なる」の印で共有）。
+ * 両方に値があって異なる・片方だけ値がある → "different"、両方に値があって同じ → "same"、両方未設定 → "unset"（違いではない）
+ */
+export function compareValues(value1?: string | null, value2?: string | null): "same" | "different" | "unset" {
+  if (!value1 && !value2) return "unset";
+  if (!value1 || !value2) return "different";
+  return value1 === value2 ? "same" : "different";
 }
 
 function SimilarPlayersSection({
@@ -745,7 +1143,7 @@ function SimilarPlayersSection({
           {t("compare.similarTitle")}
         </CardTitle>
         <CardDescription>
-          {getLocalizedDisplayName(targetPlayer, locale) + t("compare.similarSuffix")}
+          {t("compare.similarDescription", { name: getLocalizedDisplayName(targetPlayer, locale) })}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">
@@ -754,30 +1152,34 @@ function SimilarPlayersSection({
             {similarPlayers.map((player) => (
               <div
                 key={player.slug}
-                className="flex items-center justify-between p-3 rounded-lg border"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border/60"
               >
-                <div className="flex items-center gap-3">
-                  <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} />
-                  <div>
-                    <p className="font-medium">{getLocalizedDisplayName(player, locale)}</p>
-                    {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <MinecraftAvatar uuid={player.uuid} size={32} skinUrl={player.customSkinUrl} alt="" className="shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{getLocalizedDisplayName(player, locale)}</p>
+                    {player.mcid && <p className="truncate text-xs text-muted-foreground">@{player.mcid}</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                   <div className="text-right">
-                    <p className="font-bold text-success">
-                      {Math.round(player.similarity * 100)}%
+                    {/* 一致数/分母を主、% を従にする。良し悪しの色は付けない（前景色） */}
+                    <p className="font-bold">
+                      {t("compare.matched", { matches: player.matches, total: player.total })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {t("compare.matched", { matches: player.matches, total: player.total })}
+                      {Math.round(player.similarity * 100)}%
+                      {player.fewComparable && ` · ${t("compare.fewComparable")}`}
                     </p>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => onSelectPlayer(player.slug)}
+                    className="min-h-11 sm:min-h-8"
                   >
                     {t("compare.compareButton")}
+                    <span className="sr-only">{t("compare.compareTarget", { name: getLocalizedDisplayName(player, locale) })}</span>
                   </Button>
                 </div>
               </div>
@@ -795,25 +1197,24 @@ function SimilarPlayersSection({
 
 export function HydrateFallback() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* 見出し h1（32px）+ 説明（20px）。実物は行間なし */}
       <div>
-        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-8 w-48" />
         <Skeleton className="h-5 w-72" />
       </div>
 
-      {/* 走者選択スケルトン */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* 走者選択スケルトン（本物と同じ: 見出し＋選択欄が2つ、間に入れ替えボタン） */}
+      <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-4">
         {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i} className="gap-3 py-5">
-            <CardHeader className="px-5">
-              <Skeleton className="h-5 w-24" />
-            </CardHeader>
-            <CardContent className="space-y-3 px-5">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </CardContent>
-          </Card>
+          <div key={i} className={cn("space-y-2", i === 1 && "order-3")}>
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-11 w-full sm:h-9" />
+          </div>
         ))}
+        <div className="order-2 flex justify-center md:pt-7">
+          <Skeleton className="size-11 sm:size-9" />
+        </div>
       </div>
 
       {/* 統計サマリースケルトン */}
@@ -866,7 +1267,6 @@ export function HydrateFallback() {
                     <Skeleton className="h-4 w-24" />
                     <div className="flex items-center gap-4">
                       <Skeleton className="h-8 w-20" />
-                      <Skeleton className="h-4 w-4" />
                       <Skeleton className="h-8 w-20" />
                     </div>
                   </div>

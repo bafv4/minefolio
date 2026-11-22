@@ -1,6 +1,7 @@
 import { FilterXSS } from "xss";
 import { isPaletteTextColor, isPaletteBgColor } from "./guide-colors";
 import { isAllowedFontSize } from "./guide-font-sizes";
+import { isValidTemplateId } from "./guide-embed-attrs";
 
 /**
  * ガイド本文（TipTap の getHTML() 出力）のサーバーサイドサニタイズ。
@@ -51,6 +52,10 @@ const TAG_ATTRS: Record<string, string[]> = {
     "data-youtube-video", "data-callout", "data-callout-type", "data-guide-link",
     "data-columns", "data-column", "data-keybind-embed", "data-searchcraft-embed",
     "data-user-slug", "data-preset-name",
+    // サーチクラフトテンプレート埋め込み（data-template-id は onTagAttr で cuid2 形式を検証する）
+    "data-sctemplate-embed", "data-template-id",
+    // サーチクラフト／テンプレート埋め込みで押すキーの表示を隠す（値は "true" のみ。onTagAttr で検証。属性なし＝表示）
+    "data-hide-keys",
   ],
   table: ["style"],
   col: ["style"],
@@ -106,6 +111,12 @@ const guideFilter = new FilterXSS({
   onTagAttr(tag, name, value) {
     if (tag === "iframe" && name === "src" && !isAllowedIframeSrc(value)) {
       return ""; // 属性ごと除去（空文字を返すと出力されない）
+    }
+    if (name === "data-template-id" && !isValidTemplateId(value)) {
+      return ""; // 形式外の ID は属性ごと除去（描画側は ID 無しを「表示できません」にする）
+    }
+    if (name === "data-hide-keys" && value !== "true") {
+      return ""; // "true" 以外は属性ごと除去（＝表示する）
     }
     // undefined を返すと既定処理（safeAttrValue のスキーム検査 + エスケープ）に進む
   },

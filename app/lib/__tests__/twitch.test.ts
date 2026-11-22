@@ -178,4 +178,111 @@ describe("getRecentVods", () => {
     expect(failedLogins.has("missinguser")).toBe(true);
     expect(vods.has("resolvedlogin")).toBe(true);
   });
+  it("現在のカテゴリ名を /channels の1回の一括呼び出しで取得して各VODに付与する", async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const u = url.toString();
+      if (u.includes("/users")) {
+        return makeUsersResponse([
+          { id: "b1", login: "runner1" },
+          { id: "b2", login: "runner2" },
+        ]);
+      }
+      if (u.includes("/channels")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { broadcaster_id: "b1", game_name: "Minecraft" },
+              { broadcaster_id: "b2", game_name: "" },
+            ],
+          }),
+        };
+      }
+      if (u.includes("/videos")) {
+        return makeVideosResponse([makeVideoItem({ id: u.includes("user_id=b1") ? "a" : "b" })]);
+      }
+      throw new Error(`unexpected url: ${u}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { vods } = await getRecentVods("cid", "token", ["runner1", "runner2"], {
+      getKnownVodIds: async () => new Set(),
+    });
+
+    const channelsCalls = fetchMock.mock.calls.filter(([url]) => url.toString().includes("/channels"));
+    expect(channelsCalls).toHaveLength(1);
+    expect(channelsCalls[0][0].toString()).toContain("broadcaster_id=b1&broadcaster_id=b2");
+    expect(vods.get("runner1")?.[0].gameName).toBe("Minecraft");
+    // カテゴリ未設定（空文字）は null
+    expect(vods.get("runner2")?.[0].gameName).toBeNull();
+  });
+
+  it("/channels の取得に失敗しても VOD 取得は続行し、gameName は null になる", async () => {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const u = url.toString();
+      if (u.includes("/users")) return makeUsersResponse([{ id: "b1", login: "runner1" }]);
+      if (u.includes("/channels")) return { ok: false, status: 500, json: async () => ({}) };
+      if (u.includes("/videos")) return makeVideosResponse([makeVideoItem({ id: "v1" })]);
+      throw new Error(`unexpected url: ${u}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { vods, failedLogins } = await getRecentVods("cid", "token", ["runner1"]);
+
+    expect(failedLogins.size).toBe(0);
+    expect(vods.get("runner1")?.map((v) => [v.id, v.gameName])).toEqual([["v1", null]]);
+  });
+  function stubTwoChannels() {
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const u = url.toString();
+      if (u.includes("/users")) {
+        return makeUsersResponse([
+          { id: "b1", login: "runner1" },
+          { id: "b2", login: "runner2" },
+        ]);
+      }
+      if (u.includes("/channels")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { broadcaster_id: "b1", game_name: "Minecraft" },
+              { broadcaster_id: "b2", game_name: "Minecraft" },
+            ],
+          }),
+        };
+      }
+      if (u.includes("/videos")) {
+        return makeVideosResponse([makeVideoItem({ id: u.includes("user_id=b1") ? "a" : "b" })]);
+      }
+      throw new Error(`unexpected url: ${u}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("新規VODが1件も無ければ /channels を呼ばない", async () => {
+    const fetchMock = stubTwoChannels();
+    const { vods } = await getRecentVods("cid", "token", ["runner1", "runner2"], {
+      getKnownVodIds: async (ids) => new Set(ids),
+    });
+    expect(fetchMock.mock.calls.some(([url]) => url.toString().includes("/channels"))).toBe(false);
+    expect(vods.get("runner1")?.[0].gameName).toBeNull();
+  });
+
+  it("新規VODを含むチャンネルだけを /channels の対象にする", async () => {
+    const fetchMock = stubTwoChannels();
+    const { vods } = await getRecentVods("cid", "token", ["runner1", "runner2"], {
+      getKnownVodIds: async () => new Set(["a"]), // runner1 の VOD は既知、runner2 は新規
+    });
+    const channelsCalls = fetchMock.mock.calls.filter(([url]) => url.toString().includes("/channels"));
+    expect(channelsCalls).toHaveLength(1);
+    const q = channelsCalls[0][0].toString();
+    expect(q).toContain("broadcaster_id=b2");
+    expect(q).not.toContain("b1");
+    expect(vods.get("runner1")?.[0].gameName).toBeNull();
+    expect(vods.get("runner2")?.[0].gameName).toBe("Minecraft");
+  });
 });

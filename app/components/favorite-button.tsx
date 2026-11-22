@@ -12,6 +12,9 @@ interface FavoriteButtonProps {
   size?: "sm" | "default" | "lg" | "icon";
   variant?: "default" | "outline" | "ghost";
   showLabel?: boolean;
+  /** 走者の表示名。渡すと読み上げラベル（aria-label）が走者名入りになる */
+  name?: string;
+  className?: string;
 }
 
 export function FavoriteButton({
@@ -19,6 +22,8 @@ export function FavoriteButton({
   size = "sm",
   variant = "outline",
   showLabel = false,
+  name,
+  className,
 }: FavoriteButtonProps) {
   const t = useT();
   const { hasConsent } = useCookieConsent();
@@ -28,6 +33,11 @@ export function FavoriteButton({
 
   const favorite = isFavorite(slug);
   const label = favorite ? t("favorites.remove") : t("favorites.add");
+  const ariaLabel = name
+    ? favorite
+      ? t("favorites.removeNamed", { name })
+      : t("favorites.addNamed", { name })
+    : label;
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -53,11 +63,12 @@ export function FavoriteButton({
         size={size}
         disabled={isPending}
         onClick={handleClick}
-        aria-label={label}
+        aria-label={ariaLabel}
         aria-pressed={favorite}
         className={cn(
-          "transition-colors",
+          "transition-[color,background-color,border-color,scale] duration-150 active:scale-95 motion-reduce:active:scale-100",
           favorite && "text-favorite hover:text-favorite/80",
+          className,
         )}
       >
         <Heart

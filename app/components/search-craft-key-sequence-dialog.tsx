@@ -80,6 +80,7 @@ function SequenceStepBadge({
           isRemapped={step.info.isRemapped}
           needsShift={step.info.needsShift}
           remapDetail={step.info.remapDetail}
+          unavailable={step.info.unavailable}
         />
       );
       break;
@@ -369,7 +370,8 @@ function KeySequencePlayer({
 // トリガー + ダイアログ（クラフト用 / Loop 用）
 // ============================================
 
-function TriggerButton({ onClick, className }: { onClick: () => void; className?: string }) {
+/** subject: 行を識別する名前（サーチ文字列など）。あればボタンの名前に含め、読み上げで行を区別できるようにする */
+function TriggerButton({ onClick, className, subject }: { onClick: () => void; className?: string; subject?: string }) {
   const t = useT();
   return (
     <Tooltip>
@@ -379,6 +381,11 @@ function TriggerButton({ onClick, className }: { onClick: () => void; className?
           variant="ghost"
           size="sm"
           className={cn("h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground", className)}
+          aria-label={
+            subject
+              ? t("searchCraftKeySequence.triggerLabelNamed", { subject })
+              : t("searchCraftKeySequence.triggerLabel")
+          }
           onClick={onClick}
         >
           <Keyboard className="h-3.5 w-3.5" />
@@ -403,6 +410,7 @@ function KeySequenceDialogShell({
   remaps,
   fingerAssignments,
   triggerClassName,
+  triggerSubject,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -412,11 +420,12 @@ function KeySequenceDialogShell({
   remaps: RemapInfo[] | UiRemapInfo[];
   fingerAssignments?: FingerAssignment;
   triggerClassName?: string;
+  triggerSubject?: string;
 }) {
   const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <TriggerButton onClick={() => onOpenChange(true)} className={triggerClassName} />
+      <TriggerButton onClick={() => onOpenChange(true)} className={triggerClassName} subject={triggerSubject} />
       {/* スクロールはキーボードビューのエリア（KeySequencePlayer 内の overflow-auto ラッパ）だけに
           閉じ、ダイアログ全体では発生させない（grid 基底を flex 縦積みに上書きして min-h-0 を効かせる） */}
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -470,6 +479,7 @@ export function CraftKeySequenceButton({
       remaps={remaps}
       fingerAssignments={fingerAssignments}
       triggerClassName={className}
+      triggerSubject={searchStr || undefined}
     />
   );
 }
@@ -482,6 +492,7 @@ export function LoopKeySequenceButton({
   layout,
   fingerAssignments,
   className,
+  label,
 }: {
   steps: ResolvedLoopStep[];
   getCraft: (craftId: string) => { items: string[] } | undefined;
@@ -490,9 +501,17 @@ export function LoopKeySequenceButton({
   layout?: KeyboardLayout;
   fingerAssignments?: FingerAssignment;
   className?: string;
+  /** ボタンの名前に使う Loop の識別名。省略時は各ステップのサーチ文字列を「 → 」でつないだもの */
+  label?: string;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const subject =
+    label ||
+    steps
+      .map((step) => step.searchStr)
+      .filter((str): str is string => !!str)
+      .join(" → ");
   const sequence = useMemo(
     () => (open ? buildLoopKeySequence(t, steps, getCraft, remaps) : EMPTY_SEQUENCE),
     [open, t, steps, getCraft, remaps],
@@ -507,6 +526,7 @@ export function LoopKeySequenceButton({
       remaps={remaps}
       fingerAssignments={fingerAssignments}
       triggerClassName={className}
+      triggerSubject={subject || undefined}
     />
   );
 }

@@ -1,21 +1,23 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { jsonEqual } from "@/lib/loader-synced-draft";
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/playstyle";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { errorSummary } from "@/lib/error-summary";
 import { users, playstyles } from "@/lib/schema";
+import { cn } from "@/lib/utils";
 import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageSection } from "@/components/page-section";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -25,8 +27,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Layers, SlidersHorizontal, Sparkles, AlertCircle, ExternalLink } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import {
   ALL_VERSION_KEYS,
   CATEGORIES,
@@ -67,6 +69,7 @@ import {
   type BastionType,
   type PlaystyleLabelKey,
 } from "@/lib/playstyle";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -128,14 +131,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物は h1 32px ＋ 説明 20px（行間なし） */}
       <div>
-        <Skeleton className="h-8 w-36 mb-2" />
-        <Skeleton className="h-4 w-72" />
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-5 w-72" />
       </div>
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="rounded-lg border bg-card p-6 space-y-4">
-          <Skeleton className="h-6 w-32" />
+        <div key={i} className="space-y-4 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-7 w-32" />
           <div className="space-y-3">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
@@ -165,7 +169,7 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
 
   // 入力方法（users.inputMethod。プレイスタイルとは別テーブルだがこのページでまとめて編集する）。
-  // 検証は me/devices の saveInputMethod と同形（共通ヘルパー parseInputMethodInput）
+  // 検証は me/devices の入力方法の保存と同形（共通ヘルパー parseInputMethodInput）
   const inputMethodResult = parseInputMethodInput(formData.get("inputMethod"));
   if (!inputMethodResult.ok) {
     return { error: t("mePlaystyle.errorInvalidOption") };
@@ -218,21 +222,30 @@ export async function action({ request }: Route.ActionArgs) {
     updatedAt: now,
   };
 
-  await db
-    .insert(playstyles)
-    .values({ id: createId(), userId: user.id, ...playstyleData, createdAt: now })
-    .onConflictDoUpdate({ target: playstyles.userId, set: playstyleData });
+  // playstyles と users の2回の書き込みは1トランザクションにする（片方だけ書かれた状態を残さない）。
+  // 失敗は { error } で返す（throw すると ErrorBoundary に落ちて、入力中の下書きが消える）
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(playstyles)
+        .values({ id: createId(), userId: user.id, ...playstyleData, createdAt: now })
+        .onConflictDoUpdate({ target: playstyles.userId, set: playstyleData });
 
-  // users は1回の update に集約（inputMethod + メインバージョンがあればエディションも更新）。
-  // mainVersion 未設定（""）の場合は mainEdition を触らない（クリア手段は現状なし。仕様どおり）
-  await db
-    .update(users)
-    .set({
-      inputMethod,
-      ...(v.mainVersion ? { mainEdition: editionOfVersion(v.mainVersion) } : {}),
-      updatedAt: now,
-    })
-    .where(eq(users.id, user.id));
+      // users は1回の update に集約（inputMethod + メインバージョンがあればエディションも更新）。
+      // mainVersion 未設定（""）の場合は mainEdition を触らない（クリア手段は現状なし。仕様どおり）
+      await tx
+        .update(users)
+        .set({
+          inputMethod,
+          ...(v.mainVersion ? { mainEdition: editionOfVersion(v.mainVersion) } : {}),
+          updatedAt: now,
+        })
+        .where(eq(users.id, user.id));
+    });
+  } catch (e) {
+    console.error("Playstyle save error:", errorSummary(e));
+    return { error: t("mePlaystyle.saveFailed") };
+  }
 
   return { success: true };
 }
@@ -299,8 +312,14 @@ function PlaystyleSelectField<T extends string>({
     <div className="space-y-2">
       <Label htmlFor={field}>{t(labelKey)}</Label>
       <Select value={value} onValueChange={(v) => onChange(v as T)}>
-        <SelectTrigger id={field} className={className}>
-          <SelectValue placeholder={t("mePlaystyle.select")} />
+        <SelectTrigger id={field} className={cn("data-[size=default]:max-sm:h-11", className)}>
+          {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す */}
+          <SelectValue placeholder={t("mePlaystyle.select")}>
+            {value ? (() => {
+              const selected = options.find((opt) => opt.value === value);
+              return selected ? t(selected.labelKey) : undefined;
+            })() : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((opt) => (
@@ -321,9 +340,10 @@ export default function PlaystylePage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
-  const isSubmitting = fetcher.state === "submitting";
+  // 保存後の再取得が終わるまでを保存中に含める（保存バーの「未保存」のちらつき防止）
+  const isSubmitting = fetcher.state !== "idle";
 
-  const buildFormValues = useCallback(
+  const sourceFormValues = useMemo(
     (): PlaystyleFormValues => ({
       versions: loaderData.versions,
       categories: loaderData.categories,
@@ -346,22 +366,25 @@ export default function PlaystylePage() {
     [loaderData],
   );
 
-  const [formValues, setFormValues] = useState<PlaystyleFormValues>(buildFormValues);
-  const initialFormValues = useRef(formValues);
+  // loader の値が変わったとき（保存後・タブ復帰の再検証）は、未変更の間だけ新しい値へ置き換える。
+  // 保存が失敗して再検証されても、入力中の下書きは消さない
+  const {
+    draft: formValues,
+    setDraft: setFormValues,
+    base: initialFormValues,
+  } = useLoaderSyncedDraft(sourceFormValues, {
+    // 成功した保存の結果。次の loader 更新では編集済みでも保存値（サーバーで正規化された値）へ揃える。
+    // 失敗（error）の結果は null なので、下書きを残す
+    syncToken: successfulSaveToken(fetcher.data),
+  });
 
-  useEffect(() => {
-    const next = buildFormValues();
-    setFormValues(next);
-    initialFormValues.current = next;
-  }, [buildFormValues]);
-
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
   const handleChange = useCallback(
     <K extends keyof PlaystyleFormValues>(field: K, value: PlaystyleFormValues[K]) => {
       setFormValues((prev) => ({ ...prev, [field]: value }));
     },
-    [],
+    [setFormValues],
   );
 
   const handleToggleVersion = useCallback((key: VersionKey) => {
@@ -372,7 +395,7 @@ export default function PlaystylePage() {
         : "";
       return { ...prev, versions, mainVersion };
     });
-  }, []);
+  }, [setFormValues]);
 
   const handleToggleCategory = useCallback((key: CategoryKey) => {
     setFormValues((prev) => {
@@ -382,18 +405,30 @@ export default function PlaystylePage() {
         : "";
       return { ...prev, categories, mainCategory };
     });
-  }, []);
+  }, [setFormValues]);
 
   const handleToggleClickMethod = useCallback((key: ClickMethod) => {
     setFormValues((prev) => ({
       ...prev,
       clickMethods: toggleInOrder(prev.clickMethods, key, CLICK_METHOD_KEYS),
     }));
-  }, []);
+  }, [setFormValues]);
+
+  // 「元に戻す」の間に基準（loader の値）が変わっていないか見るための最新値
+  const latestBaseRef = useRef(initialFormValues);
+  latestBaseRef.current = initialFormValues;
 
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
-  }, []);
+    const prev = formValues;
+    const base = initialFormValues;
+    setFormValues(base);
+    return () => {
+      // 再取得で基準が変わっていたら、古い下書きを新しい基準に被せない
+      if (!jsonEqual(latestBaseRef.current, base)) return false;
+      setFormValues(prev);
+      return true;
+    };
+  }, [formValues, initialFormValues, setFormValues]);
 
   const handleSave = useCallback(() => {
     const formData = new FormData();
@@ -414,34 +449,31 @@ export default function PlaystylePage() {
 
     if ("success" in data && data.success) {
       toast.success(t("mePlaystyle.saveSuccess"));
-      initialFormValues.current = formValues;
     } else if ("error" in data) {
       toast.error(data.error);
     }
-  }, [fetcher.data, formValues, t]);
+  }, [fetcher.data, t]);
 
   const showKbmFields = isKbmPlaystyle(formValues.inputMethod);
   const showJavaRsgRankedFields = playsJavaRsgOrRanked(formValues.versions, formValues.categories);
   const showBastionField = hasBastionVersions(formValues.versions);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 pb-24 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("mePlaystyle.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("mePlaystyle.pageDescription")}</p>
       </div>
 
       {/* プレイ内容 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5" />
-            {t("mePlaystyle.sectionPlayContent")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3">
-            <Label>{t("mePlaystyle.versions")}</Label>
+      <PageSection
+        id="playstyle-content"
+        first
+        title={t("mePlaystyle.sectionPlayContent")}
+        className="space-y-6"
+      >
+          <fieldset className="space-y-3 min-w-0">
+            <legend className="mb-3 text-sm font-medium leading-none">{t("mePlaystyle.versions")}</legend>
             {(
               [
                 ["Java", JAVA_VERSION_KEYS],
@@ -454,7 +486,7 @@ export default function PlaystylePage() {
                   {keys.map((key) => (
                     <label
                       key={key}
-                      className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50"
+                      className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 sm:min-h-0"
                     >
                       <Checkbox
                         checked={formValues.versions.includes(key)}
@@ -466,7 +498,7 @@ export default function PlaystylePage() {
                 </div>
               </div>
             ))}
-          </div>
+          </fieldset>
 
           <div className="space-y-2">
             <Label htmlFor="mainVersion">{t("mePlaystyle.mainVersion")}</Label>
@@ -475,14 +507,18 @@ export default function PlaystylePage() {
               onValueChange={(value) => handleChange("mainVersion", value as VersionKey)}
               disabled={formValues.versions.length === 0}
             >
-              <SelectTrigger id="mainVersion" className="w-full sm:w-72">
+              <SelectTrigger id="mainVersion" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
                 <SelectValue
                   placeholder={
                     formValues.versions.length === 0
                       ? t("mePlaystyle.selectVersionsFirst")
                       : t("mePlaystyle.select")
                   }
-                />
+                >
+                  {formValues.mainVersion
+                    ? `${editionOfVersion(formValues.mainVersion) === "java" ? "Java" : "Bedrock"} ${versionLabel(formValues.mainVersion)}`
+                    : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {formValues.versions.map((v) => (
@@ -495,22 +531,20 @@ export default function PlaystylePage() {
           </div>
 
           <div className="space-y-2">
-            <Label>{t("mePlaystyle.categories")}</Label>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((cat) => {
-                const selected = formValues.categories.includes(cat.value);
-                return (
-                  <Button
-                    key={cat.value}
-                    type="button"
-                    variant={selected ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleToggleCategory(cat.value)}
-                  >
-                    {categoryLabel(t, cat.value)}
-                  </Button>
-                );
-              })}
+            <Label id="categories-label">{t("mePlaystyle.categories")}</Label>
+            <div role="group" aria-labelledby="categories-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {CATEGORIES.map((cat) => (
+                <label
+                  key={cat.value}
+                  className="flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer hover:bg-muted/50 sm:min-h-0"
+                >
+                  <Checkbox
+                    checked={formValues.categories.includes(cat.value)}
+                    onCheckedChange={() => handleToggleCategory(cat.value)}
+                  />
+                  {categoryLabel(t, cat.value)}
+                </label>
+              ))}
             </div>
           </div>
 
@@ -521,14 +555,16 @@ export default function PlaystylePage() {
               onValueChange={(value) => handleChange("mainCategory", value as CategoryKey)}
               disabled={formValues.categories.length === 0}
             >
-              <SelectTrigger id="mainCategory" className="w-full sm:w-72">
+              <SelectTrigger id="mainCategory" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
                 <SelectValue
                   placeholder={
                     formValues.categories.length === 0
                       ? t("mePlaystyle.selectCategoriesFirst")
                       : t("mePlaystyle.select")
                   }
-                />
+                >
+                  {formValues.mainCategory ? categoryLabel(t, formValues.mainCategory) : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {formValues.categories.map((c) => (
@@ -539,18 +575,14 @@ export default function PlaystylePage() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* 操作 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="h-5 w-5" />
-            {t("mePlaystyle.sectionControls")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <PageSection
+        id="playstyle-controls"
+        title={t("mePlaystyle.sectionControls")}
+        className="space-y-6"
+      >
           <div className="space-y-2">
             <Label htmlFor="inputMethod">{t("mePlaystyle.inputMethod")}</Label>
             <Select
@@ -559,8 +591,16 @@ export default function PlaystylePage() {
                 handleChange("inputMethod", value as PlaystyleFormValues["inputMethod"])
               }
             >
-              <SelectTrigger id="inputMethod" className="w-full sm:w-72">
-                <SelectValue placeholder={t("mePlaystyle.select")} />
+              <SelectTrigger id="inputMethod" className="w-full data-[size=default]:max-sm:h-11 sm:w-72">
+                <SelectValue placeholder={t("mePlaystyle.select")}>
+                  {formValues.inputMethod === "keyboard_mouse"
+                    ? t("mePlaystyle.inputMethodKeyboardMouse")
+                    : formValues.inputMethod === "controller"
+                      ? t("mePlaystyle.inputMethodController")
+                      : formValues.inputMethod === "touch"
+                        ? t("mePlaystyle.inputMethodTouch")
+                        : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="keyboard_mouse">{t("mePlaystyle.inputMethodKeyboardMouse")}</SelectItem>
@@ -568,7 +608,17 @@ export default function PlaystylePage() {
                 <SelectItem value="touch">{t("mePlaystyle.inputMethodTouch")}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t("mePlaystyle.inputMethodHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("mePlaystyle.inputMethodHintBefore")}
+              <Link to="/me/keybindings" className="text-primary underline underline-offset-2">
+                {t("meLayout.keybindings")}
+              </Link>
+              {" / "}
+              <Link to="/me/devices" className="text-primary underline underline-offset-2">
+                {t("meLayout.devices")}
+              </Link>
+              {t("mePlaystyle.inputMethodHintAfter")}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -592,10 +642,10 @@ export default function PlaystylePage() {
           {showKbmFields && (
             <>
               <div className="space-y-2">
-                <Label>{t("mePlaystyle.clickMethods")}</Label>
-                <div className="flex flex-wrap gap-4">
+                <Label id="click-methods-label">{t("mePlaystyle.clickMethods")}</Label>
+                <div role="group" aria-labelledby="click-methods-label" className="flex flex-wrap gap-x-4 gap-y-1">
                   {CLICK_METHOD_OPTIONS.map((opt) => (
-                    <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <label key={opt.value} className="flex min-h-11 items-center gap-2 text-sm cursor-pointer sm:min-h-8">
                       <Checkbox
                         checked={formValues.clickMethods.includes(opt.value)}
                         onCheckedChange={() => handleToggleClickMethod(opt.value)}
@@ -643,18 +693,14 @@ export default function PlaystylePage() {
               </PlaystyleSelectField>
             </>
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       {/* テクニック */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            {t("mePlaystyle.sectionTechnique")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <PageSection
+        id="playstyle-technique"
+        title={t("mePlaystyle.sectionTechnique")}
+        className="space-y-6"
+      >
           <PlaystyleSelectField
             field="itemLayoutPolicy"
             labelKey="mePlaystyle.itemLayoutPolicy"
@@ -673,9 +719,9 @@ export default function PlaystylePage() {
             className="w-full sm:w-72"
           >
             <p className="text-xs text-muted-foreground">{t("mePlaystyle.searchCraftHint")}</p>
+            {/* サイト内のリンク（/me/devices）なので外部リンクのアイコンは付けない */}
             {!hidesSearchCraft(formValues.searchCraft) && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <ExternalLink className="h-3 w-3 shrink-0" />
+              <p className="text-xs text-muted-foreground">
                 <Link to="/me/devices" className="underline underline-offset-2">
                   {t("mePlaystyle.gameLanguageLink")}
                 </Link>
@@ -719,12 +765,13 @@ export default function PlaystylePage() {
               className="w-full sm:w-72"
             />
           )}
-        </CardContent>
-      </Card>
+      </PageSection>
 
       <FloatingSaveBar
         hasChanges={hasChanges}
         isSubmitting={isSubmitting}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
         onSave={handleSave}
         onReset={handleReset}
       />
@@ -733,19 +780,5 @@ export default function PlaystylePage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("mePlaystyle.errorTitle")}</h2>
-            <p className="text-muted-foreground">{t("mePlaystyle.errorDescription")}</p>
-            <Button onClick={() => window.location.reload()}>{t("mePlaystyle.reloadPage")}</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

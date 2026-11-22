@@ -2,7 +2,7 @@
 // 3 タブ（speedruncom / ranked-pb / ranked-elo）を全件取得する。
 // 元々ページング対応だったが、UI 側で無限スクロールを採用しなかったため
 // シンプルな全件版に整理した（dead infrastructure 削除）。
-import { and, asc, desc, eq, isNotNull, notExists, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, notExists, or, sql } from "drizzle-orm";
 import {
   categoryRecords,
   playerRankings,
@@ -41,14 +41,6 @@ export interface RankingsArgs {
   rankedType: RankedType;
 }
 
-export function parseRankingsParams(searchParams: URLSearchParams): RankingsArgs {
-  return {
-    tab: (searchParams.get("tab") as RankingsTab) ?? "speedruncom",
-    categorySlug: searchParams.get("category"),
-    rankedType: (searchParams.get("rankedType") as RankedType) ?? "pb",
-  };
-}
-
 /** カテゴリ一覧（speedruncom 用、UI ナビ用） */
 export async function loadRankingCategories(db: Database) {
   const categories = await db.query.speedrunCategories.findMany({
@@ -65,6 +57,17 @@ interface LoadedRankings {
     slug: string;
     name: string;
   } | null;
+  /** 表の行のうち最新の集計時刻（cron が `player_rankings.lastFetched` に書く。UNIX ms）。行が無ければ null */
+  lastFetchedMs: number | null;
+}
+
+function latestFetchedMs(rows: { lastFetched: Date | null }[]): number | null {
+  let max: number | null = null;
+  for (const r of rows) {
+    const ms = r.lastFetched ? r.lastFetched.getTime() : null;
+    if (ms !== null && (max === null || ms > max)) max = ms;
+  }
+  return max;
 }
 
 const playerColumns = {
@@ -110,7 +113,7 @@ export async function loadRankings(
       : speedruncomCategories[0];
 
     if (!selectedCategory) {
-      return { rankings: [], selectedCategory: null };
+      return { rankings: [], selectedCategory: null, lastFetchedMs: null };
     }
 
     const rows = await db
@@ -122,6 +125,7 @@ export async function loadRankings(
         videoUrl: playerRankings.videoUrl,
         runWeblink: playerRankings.runWeblink,
         verificationStatus: playerRankings.verificationStatus,
+        lastFetched: playerRankings.lastFetched,
         ...playerColumns,
       })
       .from(playerRankings)
@@ -173,6 +177,7 @@ export async function loadRankings(
     });
     return {
       rankings,
+      lastFetchedMs: latestFetchedMs(rows),
       selectedCategory: {
         id: selectedCategory.id,
         slug: selectedCategory.slug,
@@ -187,6 +192,7 @@ export async function loadRankings(
         userId: playerRankings.userId,
         timeMs: playerRankings.timeMs,
         timeFormatted: playerRankings.timeFormatted,
+        lastFetched: playerRankings.lastFetched,
         ...playerColumns,
       })
       .from(playerRankings)
@@ -214,7 +220,7 @@ export async function loadRankings(
       winRate: null,
       verificationStatus: null,
     }));
-    return { rankings };
+    return { rankings, lastFetchedMs: latestFetchedMs(rows) };
   }
 
   // ranked elo
@@ -225,6 +231,7 @@ export async function loadRankings(
       wins: playerRankings.wins,
       losses: playerRankings.losses,
       winRate: playerRankings.winRate,
+      lastFetched: playerRankings.lastFetched,
       ...playerColumns,
     })
     .from(playerRankings)
@@ -252,7 +259,7 @@ export async function loadRankings(
     winRate: r.winRate,
     verificationStatus: null,
   }));
-  return { rankings };
+  return { rankings, lastFetchedMs: latestFetchedMs(rows) };
 }
 
 /**
@@ -265,26 +272,25 @@ export async function getMinefolioEloRank(
   db: Database,
   userId: string,
 ): Promise<{ rank: number; total: number } | null> {
-  const rows = await db
+  const eligible = and(
+    eq(playerRankings.rankingType, "ranked_elo"),
+    isNotNull(playerRankings.eloRate),
+    eq(users.profileVisibility, "public"),
+    eq(users.showRankedStats, true),
+  );
+
+  // 全件を取得して JS で数える代わりに、SQL の集計で総数・自分より高い Elo の件数・
+  // 自分の Elo（絞り込みに含まれなければ null）を1往復で求める。同率は同順位（higher + 1）
+  const [row] = await db
     .select({
-      userId: playerRankings.userId,
-      eloRate: playerRankings.eloRate,
+      total: sql<number>`count(*)`,
+      higher: sql<number>`coalesce(sum(case when ${playerRankings.eloRate} > (select max(pr2.elo_rate) from player_rankings pr2 inner join users u2 on pr2.user_id = u2.id where pr2.ranking_type = 'ranked_elo' and pr2.elo_rate is not null and u2.profile_visibility = 'public' and u2.show_ranked_stats = 1 and pr2.user_id = ${userId}) then 1 else 0 end), 0)`,
+      targetElo: sql<number | null>`max(case when ${playerRankings.userId} = ${userId} then ${playerRankings.eloRate} end)`,
     })
     .from(playerRankings)
     .innerJoin(users, eq(playerRankings.userId, users.id))
-    .where(
-      and(
-        eq(playerRankings.rankingType, "ranked_elo"),
-        isNotNull(playerRankings.eloRate),
-        eq(users.profileVisibility, "public"),
-        eq(users.showRankedStats, true),
-      ),
-    )
-    .orderBy(desc(playerRankings.eloRate));
+    .where(eligible);
 
-  const targetRow = rows.find((r) => r.userId === userId);
-  if (!targetRow) return null;
-
-  const rank = rows.filter((r) => (r.eloRate ?? 0) > (targetRow.eloRate ?? 0)).length + 1;
-  return { rank, total: rows.length };
+  if (!row || row.targetElo === null) return null;
+  return { rank: Number(row.higher) + 1, total: Number(row.total) };
 }

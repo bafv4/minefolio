@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createTestDbAt,
   seedUser,
+  seedSearchCraftTemplate,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 import { recordSlugChange } from "@/lib/slug-history.server";
@@ -140,5 +141,51 @@ describe("著者slugの解決（大文字小文字無視の一致 + 404フォー
     expect(thrown).toBeInstanceOf(Response);
     expect((thrown as Response).status).toBe(404);
     expect(mojangMocks.fetchUuidFromMcid).not.toHaveBeenCalled();
+  });
+});
+
+describe("テンプレートの件数（templateCount）", () => {
+  it("公開プロフィールの著者は、公開テンプレートだけを数える", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "public" });
+    const other = await seedUser(db, { slug: "other", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, author.id, { isPublished: true });
+    await seedSearchCraftTemplate(db, author.id, { isPublished: true });
+    await seedSearchCraftTemplate(db, author.id, { isPublished: false });
+    await seedSearchCraftTemplate(db, other.id, { isPublished: true });
+
+    const result = await callLoader("author");
+
+    expect(result.templateCount).toBe(2);
+  });
+
+  it("テンプレートが無ければ 0", async () => {
+    await seedUser(db, { slug: "author", profileVisibility: "public" });
+
+    const result = await callLoader("author");
+
+    expect(result.templateCount).toBe(0);
+  });
+
+  it("限定公開の著者は公開テンプレートがあっても 0（公開一覧に出ないため導線を出さない）", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "unlisted" });
+    await seedSearchCraftTemplate(db, author.id, { isPublished: true });
+
+    const result = await callLoader("author");
+
+    expect(result.templateCount).toBe(0);
+  });
+
+  it("非公開の著者本人が見ても 0", async () => {
+    const author = await seedUser(db, {
+      slug: "author",
+      discordId: "discord-author",
+      profileVisibility: "private",
+    });
+    await seedSearchCraftTemplate(db, author.id, { isPublished: true });
+    sessionMocks.getOptionalSession.mockResolvedValue({ user: { id: "discord-author" } });
+
+    const result = await callLoader("author");
+
+    expect(result.templateCount).toBe(0);
   });
 });

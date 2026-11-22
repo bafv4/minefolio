@@ -1,9 +1,11 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/playground";
 import { createDb } from "@/lib/db";
+import { resolvePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import { createAuth } from "@/lib/auth";
 import { getSession, getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
@@ -38,6 +40,7 @@ import {
 import { remapLoopSteps } from "@/lib/search-craft-loops";
 import { resolveVariations } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,9 +74,11 @@ import {
 } from "@/components/search-craft-workbench";
 import type { SearchCraftDraft } from "@/components/search-craft-editor";
 import type { SearchCraftLoopDraft } from "@/components/search-craft-loop-editor";
+import { NoticeBanner } from "@/components/notice-banner";
 import { cn } from "@/lib/utils";
 import {
   FlaskConical,
+  Info,
   Loader2,
   RotateCcw,
   Save,
@@ -205,6 +210,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (templateId) {
     const template = await db.query.searchCraftTemplates.findFirst({
       where: eq(searchCraftTemplates.id, templateId),
+      // 下書き列は公開側へ読み込まない
+      columns: {
+        draftTitle: false,
+        draftDescription: false,
+        draftGameLanguage: false,
+        draftCraftsData: false,
+        draftRemapsData: false,
+        draftLoopsData: false,
+        draftUpdatedAt: false,
+      },
       with: { user: { columns: { discordId: true } } },
     });
     if (
@@ -330,8 +345,9 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "preset_switch",
-      changeDescription: t("playground.saveNewPresetHistory", { name }),
-      presetId: result.presetId,
+      changeDescription: encodeHistoryDescription("playground.saveNew", { name }),
+      // 新規プリセットがメイン（初回作成）になった場合だけ公開影響あり
+      presetId: await resolvePublicPresetId(db, user.id, result.presetId),
       createdAt: now,
     });
 
@@ -357,8 +373,9 @@ export async function action({ request }: Route.ActionArgs) {
       id: createId(),
       userId: user.id,
       changeType: "game_setting",
-      changeDescription: t("playground.saveToPresetHistory", { name: result.presetName }),
-      presetId: result.presetId,
+      changeDescription: encodeHistoryDescription("playground.saveTo", { name: result.presetName }),
+      // 反映先がメインのときだけ公開影響あり
+      presetId: await resolvePublicPresetId(db, user.id, result.presetId),
       createdAt: now,
     });
 
@@ -445,6 +462,25 @@ function loadDraftFromStorage(): PlaygroundDraft | null {
   }
 }
 
+/** 保存済みの下書きをそのままの文字列で読む（取り消しで書き戻すための退避用。無ければ null） */
+function readRawDraftFromStorage(): string | null {
+  try {
+    return window.localStorage.getItem(DRAFT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** 退避しておいた下書きの文字列を書き戻す（null なら下書きを消す） */
+function restoreRawDraftToStorage(raw: string | null) {
+  try {
+    if (raw === null) window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    else window.localStorage.setItem(DRAFT_STORAGE_KEY, raw);
+  } catch {
+    // 仮保存と同じくベストエフォート
+  }
+}
+
 function saveDraftToStorage(draft: PlaygroundDraft) {
   try {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
@@ -459,6 +495,7 @@ function saveDraftToStorage(draft: PlaygroundDraft) {
 
 export default function PlaygroundPage() {
   const t = useT();
+  const loginHref = useLoginHref();
   const { templateData, myPresets, keyboardLayout, isLoggedIn } = useLoaderData<typeof loader>();
   const saveFetcher = useFetcher<typeof action>();
   const prevSaveDataRef = useRef<typeof saveFetcher.data>(undefined);
@@ -490,15 +527,24 @@ export default function PlaygroundPage() {
         : null,
   );
 
-  // ブラウザの下書き復元（テンプレート指定時は優先しない）。SSRとの表示差異を避けるためマウント後に実行する。
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => {
-    if (templateData) {
-      setIsHydrated(true);
-      return;
-    }
-    const draft = loadDraftFromStorage();
-    if (draft) {
+  // テンプレートを読み込んだ直後の内容（参照で比較する）。利用者が編集するまで下書きを上書きしない判定に使う
+  const [templateBaseline, setTemplateBaseline] = useState<{
+    remaps: WorkbenchRemap[];
+    crafts: SearchCraftDraft[];
+    loops: SearchCraftLoopDraft[];
+    layout: KeyboardLayoutOption;
+  } | null>(() => (templateData ? { remaps, crafts, loops, layout } : null));
+  const isTemplatePristine =
+    templateBaseline !== null &&
+    templateBaseline.remaps === remaps &&
+    templateBaseline.crafts === crafts &&
+    templateBaseline.loops === loops &&
+    templateBaseline.layout === layout;
+  // テンプレート表示中に、空でない下書きが別に保存されているか（マウント後に localStorage から判定）
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+
+  const applyDraft = useCallback(
+    (draft: PlaygroundDraft) => {
       setRemaps(draft.remaps.map((r) => ({ ...r, id: draftId("remap") })));
       // 旧形式の下書き（Loop 機能追加前・バリエーション対応前）には variations や withShift が
       // 無いことがあるため resolveVariations() で正準化する。
@@ -532,28 +578,98 @@ export default function PlaygroundPage() {
       );
       setLayout(draft.layout);
       setLoadedLabel(t("playground.loadedDraft"));
+    },
+    [t],
+  );
+
+  // ブラウザの下書き復元（テンプレート指定時は優先しない）。SSRとの表示差異を避けるためマウント後に実行する。
+  const [isHydrated, setIsHydrated] = useState(false);
+  useEffect(() => {
+    const draft = loadDraftFromStorage();
+    if (templateData) {
+      // テンプレート表示中は下書きを読み込まず、残っているかだけ見る
+      setHasSavedDraft(
+        !!draft && (draft.remaps.length > 0 || draft.crafts.length > 0 || draft.loops.length > 0),
+      );
+    } else if (draft) {
+      applyDraft(draft);
     }
     setIsHydrated(true);
     // 初回マウント時のみ実行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 変更のたびにブラウザへ仮保存する
+  // 変更のたびにブラウザへ仮保存する。テンプレートを読み込んだ状態から編集するまでは書き込まない
   useEffect(() => {
     if (!isHydrated) return;
+    if (isTemplatePristine) return;
     saveDraftToStorage({ remaps, crafts, loops, layout });
-  }, [isHydrated, remaps, crafts, loops, layout]);
+    setHasSavedDraft(false);
+  }, [isHydrated, isTemplatePristine, remaps, crafts, loops, layout]);
+
+  const navigate = useNavigate();
+  const handleOpenDraft = useCallback(() => {
+    const draft = loadDraftFromStorage();
+    if (draft) applyDraft(draft);
+    setTemplateBaseline(null);
+    setHasSavedDraft(false);
+    // クエリを外して、再読み込みでテンプレートに戻らないようにする
+    navigate("/playground", { replace: true });
+  }, [applyDraft, navigate]);
 
   // 保存ペイロード用の有効なリマップ（ワークベンチ内の表示と同じ導出）
   const effectiveRemaps = useMemo(() => effectiveRemapsFrom(remaps), [remaps]);
 
-  const loadData = useCallback((data: PlaygroundData, label: string) => {
-    const nextCrafts = toPlaygroundCrafts(data.crafts);
-    setRemaps(toPlaygroundRemaps(data.remaps));
-    setCrafts(nextCrafts);
-    setLoops(toPlaygroundLoops(data.loops, nextCrafts));
-    setLoadedLabel(label);
-  }, []);
+  // 取り消し用に、置き換え前の内容を常に最新で持っておく
+  const latestRef = useRef({ remaps, crafts, loops, loadedLabel, isTemplatePristine, hasSavedDraft });
+  latestRef.current = { remaps, crafts, loops, loadedLabel, isTemplatePristine, hasSavedDraft };
+
+  /** 編集中の内容を置き換える。置き換え前が空でなければ、取り消しつきのトーストを出す */
+  const replaceContent = useCallback(
+    (apply: () => void, message: string) => {
+      const prev = latestRef.current;
+      const hadContent = prev.remaps.length > 0 || prev.crafts.length > 0 || prev.loops.length > 0;
+      // テンプレートを未編集で表示中は、置き換えると初めて下書きが上書きされる。
+      // 取り消しで下書きと「下書きは残ります」の案内も戻せるよう、置き換え前の下書きを退避する
+      const storedDraft = prev.isTemplatePristine
+        ? { raw: readRawDraftFromStorage(), hasSavedDraft: prev.hasSavedDraft }
+        : null;
+      apply();
+      if (!hadContent && !storedDraft?.hasSavedDraft) return;
+      toast(message, {
+        // 取り消しに気づいて押すまでの余裕を取る（既定の 4 秒では短い）
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => {
+            setRemaps(prev.remaps);
+            setCrafts(prev.crafts);
+            setLoops(prev.loops);
+            setLoadedLabel(prev.loadedLabel);
+            if (storedDraft) {
+              // 内容が置き換え前の参照に戻るので未編集扱いに戻り、仮保存の effect は書き込まない
+              restoreRawDraftToStorage(storedDraft.raw);
+              setHasSavedDraft(storedDraft.hasSavedDraft);
+            }
+          },
+        },
+      });
+    },
+    [t],
+  );
+
+  const loadData = useCallback(
+    (data: PlaygroundData, label: string) => {
+      replaceContent(() => {
+        const nextCrafts = toPlaygroundCrafts(data.crafts);
+        setRemaps(toPlaygroundRemaps(data.remaps));
+        setCrafts(nextCrafts);
+        setLoops(toPlaygroundLoops(data.loops, nextCrafts));
+        setLoadedLabel(label);
+      }, t("playground.replacedToast"));
+    },
+    [replaceContent, t],
+  );
 
   // ========== 読み込み・保存ダイアログ ==========
 
@@ -654,9 +770,20 @@ export default function PlaygroundPage() {
         </p>
       </div>
 
+      {templateData && isTemplatePristine && hasSavedDraft && (
+        <NoticeBanner tone="info" icon={Info}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span>{t("playground.templateViewNotice")}</span>
+            <Button variant="outline" size="sm" onClick={handleOpenDraft}>
+              {t("playground.openDraft")}
+            </Button>
+          </div>
+        </NoticeBanner>
+      )}
+
       {/* データ読み込み・保存バー */}
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">{t("playground.dataSource")}</span>
           {loadedLabel && (
             <Badge variant="secondary" className="text-xs">
@@ -664,93 +791,11 @@ export default function PlaygroundPage() {
             </Badge>
           )}
           <div className="flex flex-wrap items-center gap-2 ml-auto">
-            {templateData && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  loadData(
-                    templateData,
-                    t("playground.loadedTemplate", { title: templateData.title }),
-                  )
-                }
-              >
-                <RotateCcw className="mr-2 size-3.5" />
-                {t("playground.reloadTemplate")}
-              </Button>
-            )}
-
-            {isLoggedIn && myPresets.length > 0 && (
-              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <User className="mr-2 size-3.5" />
-                    {t("playground.loadMySettings")}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
-                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {myPresets.map((preset) => (
-                      <Button
-                        key={preset.id}
-                        variant="outline"
-                        className="w-full justify-start h-auto py-3"
-                        onClick={() => {
-                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
-                          setLoadDialogOpen(false);
-                        }}
-                      >
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium flex items-center gap-2">
-                            {preset.name}
-                            {preset.isActive && (
-                              <Badge variant="outline" className="text-xs">
-                                {t("mePresets.active")}
-                              </Badge>
-                            )}
-                          </span>
-                          <div className="flex gap-1 flex-wrap">
-                            <Badge variant="secondary" className="text-xs">
-                              {t("templates.craftCount", { count: preset.crafts.length })}
-                            </Badge>
-                            {preset.remaps.length > 0 && (
-                              <Badge variant="secondary" className="text-xs">
-                                {t("templates.remapCount", { count: preset.remaps.length })}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setRemaps([]);
-                setCrafts([]);
-                setLoops([]);
-                setLoadedLabel(null);
-              }}
-            >
-              <X className="mr-2 size-3.5" />
-              {t("playground.clearAll")}
-            </Button>
-
             {isLoggedIn && (
               <>
-                <div className="h-4 w-px bg-border mx-1" />
                 <Dialog open={saveDialogOpen} onOpenChange={handleSaveDialogOpenChange}>
                   <DialogTrigger asChild>
-                    <Button size="sm">
+                    <Button size="sm" className="min-h-11 sm:min-h-8">
                       <Save className="mr-2 size-3.5" />
                       {t("mePresets.save")}
                     </Button>
@@ -906,20 +951,115 @@ export default function PlaygroundPage() {
                         }
                       >
                         {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {t("mePresets.save")}
+                        {t("playground.saveSubmit")}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                {/* 折り返すモバイルでは行末に残るので出さない */}
+                <div aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
               </>
             )}
+
+            {templateData && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                onClick={() => {
+                  // 読み込んだままで未編集なら置き換える物が無い（下書きも上書きしない）
+                  if (isTemplatePristine) return;
+                  loadData(
+                    templateData,
+                    t("playground.loadedTemplate", { title: templateData.title }),
+                  );
+                }}
+              >
+                <RotateCcw className="mr-2 size-3.5" />
+                {t("playground.reloadTemplate")}
+              </Button>
+            )}
+
+            {isLoggedIn && myPresets.length > 0 && (
+              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8">
+                    <User className="mr-2 size-3.5" />
+                    {t("playground.loadMySettings")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{t("playground.loadDialogTitle")}</DialogTitle>
+                    <DialogDescription>{t("playground.loadDialogDescription")}</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {myPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => {
+                          loadData(preset, t("playground.loadedPreset", { name: preset.name }));
+                          setLoadDialogOpen(false);
+                        }}
+                      >
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium flex items-center gap-2">
+                            {preset.name}
+                            {preset.isActive && (
+                              <Badge variant="outline" className="text-xs">
+                                {t("mePresets.active")}
+                              </Badge>
+                            )}
+                          </span>
+                          <div className="flex gap-1 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">
+                              {t("templates.craftCount", { count: preset.crafts.length })}
+                            </Badge>
+                            {preset.remaps.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {t("templates.remapCount", { count: preset.remaps.length })}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-8"
+              onClick={() =>
+                replaceContent(() => {
+                  setRemaps([]);
+                  setCrafts([]);
+                  setLoops([]);
+                  setLoadedLabel(null);
+                }, t("playground.clearedToast"))
+              }
+            >
+              <X className="mr-2 size-3.5" />
+              {t("playground.clearAll")}
+            </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{t("playground.autosaveHint")}</p>
+        {/* テンプレートを未編集で表示中は仮保存しない（上の案内と食い違うので出さない） */}
+        {!(templateData && isTemplatePristine) && (
+          <p className="text-xs text-muted-foreground">
+            {t(isLoggedIn ? "playground.autosaveHintLoggedIn" : "playground.autosaveHint")}
+          </p>
+        )}
       </div>
 
-      {/* ワークベンチ（リマップ → キーボード → タイピングテスト → サーチクラフト → Loop） */}
+      {/* ワークベンチ（キーボード〔タイピングテストは欄内のボタン〕 → リマップ → サーチクラフト・Loop） */}
       <SearchCraftWorkbench
+        deleteWithUndo
         crafts={crafts}
         onCraftsChange={setCrafts}
         loops={loops}
@@ -928,34 +1068,35 @@ export default function PlaygroundPage() {
         onRemapsChange={setRemaps}
         layout={layout}
         onLayoutChange={setLayout}
+        sectionHeadingLevel="h2"
       />
 
       {/* 保存への導線 */}
-      <div className="rounded-lg border border-dashed bg-secondary/30 p-4 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {isLoggedIn ? (
           <>
             {t("playground.saveHintLoggedIn")}{" "}
-            <Link to="/me/keybindings" className="text-primary hover:underline">
+            <Link to="/me/keybindings" className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.goToKeybindings")}
             </Link>
             {" / "}
-            <Link to="/me/search-craft" className="text-primary hover:underline">
+            <Link to="/me/search-craft" className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.goToSearchCraft")}
             </Link>
           </>
         ) : (
           <>
             {t("playground.saveHintLoggedOut")}{" "}
-            <Link to="/login" className="text-primary hover:underline">
+            <Link to={loginHref} className="text-primary underline underline-offset-2 hover:text-primary/80">
               {t("playground.loginLink")}
             </Link>
           </>
         )}
         {" · "}
-        <Link to="/guides/templates" className="text-primary hover:underline">
+        <Link to="/guides/templates" className="text-primary underline underline-offset-2 hover:text-primary/80">
           {t("playground.backToTemplates")}
         </Link>
-      </div>
+      </p>
     </div>
   );
 }

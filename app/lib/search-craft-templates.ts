@@ -62,6 +62,57 @@ export type TemplateCraft = {
   variations: SearchCraftVariation[];
 };
 
+/**
+ * 表示用のタイミング解決。null（指定なし）と既知の区分はそのまま返し、
+ * enum 外の値（旧データ・手編集の混入など）は "other" に寄せる。
+ * 描画側のグループ化はこれを通すので、「件数に数えたが描画されない」行が生まれない
+ * （件数 = 描画される行数が常に一致する）。
+ */
+export function resolveCraftTiming(timing: string | null | undefined): SearchCraftTiming | null {
+  if (timing == null) return null;
+  return SEARCH_CRAFT_TIMINGS.includes(timing as SearchCraftTiming)
+    ? (timing as SearchCraftTiming)
+    : "other";
+}
+
+/** クラフトを表示用タイミング（resolveCraftTiming 済み）ごとにグループ化する。全件がいずれかのグループに入る */
+export function groupCraftsByTiming<T extends { timing: string | null }>(
+  crafts: T[],
+): Map<SearchCraftTiming | null, T[]> {
+  const grouped = new Map<SearchCraftTiming | null, T[]>();
+  for (const craft of crafts) {
+    const key = resolveCraftTiming(craft.timing);
+    const list = grouped.get(key);
+    if (list) list.push(craft);
+    else grouped.set(key, [craft]);
+  }
+  return grouped;
+}
+
+/**
+ * 見出し（タイトル）つきのタイミンググループを描画順で返す（null＝「指定なし」。
+ * クラフトの表示用タイミング ∪ loopTimings。順は 指定なし → SEARCH_CRAFT_TIMINGS）。
+ * タイミングが1件も無い（指定なしだけ・クラフト 0 件）1枚表示は見出しが無いので空。
+ * 描画（SearchCraftGroupedList）と、ガイド記事の目次（埋め込みのグループ見出し。guide-embed-toc.ts）が
+ * 同じグループ集合を見るための単一情報源
+ */
+export function searchCraftGroupTimings(
+  crafts: { timing: string | null }[],
+  loopTimings: (string | null)[] = [],
+): (SearchCraftTiming | null)[] {
+  const keys = new Set<SearchCraftTiming | null>([
+    ...crafts.map((c) => resolveCraftTiming(c.timing)),
+    ...loopTimings.map((timing) => resolveCraftTiming(timing)),
+  ]);
+  if (![...keys].some((k) => k !== null)) return [];
+  const sorted: (SearchCraftTiming | null)[] = [];
+  if (keys.has(null)) sorted.push(null);
+  for (const timing of SEARCH_CRAFT_TIMINGS) {
+    if (keys.has(timing)) sorted.push(timing);
+  }
+  return sorted;
+}
+
 function normalizeTiming(value: unknown): TemplateCraft["timing"] {
   return SEARCH_CRAFT_TIMINGS.includes(value as SearchCraftTiming)
     ? (value as SearchCraftTiming)
@@ -388,6 +439,30 @@ export function toSubmittableLoops(
     result.push({ steps, comment: loop.comment, timing: loop.timing });
   }
   return result;
+}
+
+/**
+ * craftIndex 参照の Loop（loopsData のパース結果）を、エディタ用の Loop（craftId 参照・draft id 付き）へ変換する。
+ * crafts は直前に `toEditorCrafts` で id を振ったものを渡す（index が一致している前提）。
+ */
+export function toEditorLoops(
+  loops: TemplateLoop[],
+  crafts: { id: string }[],
+): {
+  id: string;
+  steps: { craftId: string; transition: LoopTransition | null }[];
+  comment: string | null;
+  timing: SearchCraftTiming | null;
+}[] {
+  return loops.map((loop) => ({
+    id: draftId("loop"),
+    steps: loop.steps.map((s) => ({
+      craftId: crafts[s.craftIndex].id,
+      transition: s.transition,
+    })),
+    comment: loop.comment,
+    timing: loop.timing,
+  }));
 }
 
 /** パース済みデータにエディタ用のIDを振る（リマップ） */

@@ -11,6 +11,16 @@ Minecraft Speedrunのランキング表示、プレイヤー統計、外部サ�
 ### ページ
 
 - `/rankings` — スピードランランキング表示
+- **インメモリキャッシュ**（`app/lib/cache.ts`、TTL **60秒**）: `rankings:categories`（カテゴリ一覧）、`rankings:speedruncom:<categoryId|none>`、`rankings:ranked:{pb|elo}`。ランキング自体は12時間毎の cron でしか変わらないが、プロフィール非公開化の反映遅延を `getUserData`（60秒）と同程度に抑えるため TTL は短くしている
+- **表の横スクロール（モバイル）**: 3つの表は角丸の枠の内側の横スクロールの器（`ScrollUpStickyHeader` の `scrollRegionLabel`）に入る。sm 未満は `table-fixed` でヘッダ行の幅だけで列を決め（プレイヤー列は残り幅、長い名前は省略）、MCSR Ranked PB は 375 幅でスクロールなしに収まり、Speedrun.com・Elo は `#`・名前・主な値（タイム／Elo）が最初に見え、残りの列は横スクロールで見る。`#` 列は左に残る。器ははみ出しているときだけ Tab で止まれる region（「表（横にスクロールできます）」）になる。上スクロールで出る固定ヘッダの複製は、器の位置・幅と scrollLeft に追従する
+- **順位の範囲と集計時刻**: `#` は Minefolio の公開走者の中での連番（Speedrun.com 全体・MCSR Ranked 全体の順位ではない）。見出し下にタブごとの範囲文（Speedrun.com ＝公開プロフィールの走者、Ranked ＝Ranked 統計の公開を許可した走者）と公開設定の注記を出す。その下に、表の行の `player_rankings.lastFetched` の最大値（cron の集計時刻。`loadRankings` の `lastFetchedMs`）を相対時刻（`t()` に埋め込むので `formatRelativeTimeInMinutes(t, date, { calendar: hydrated })`、`hydrated` は `useHydrated()`。`docs/i18n.md` 参照）で「集計: ○時間前」と出す。行が無いときは出さない。ログイン中で表に自分の順位付きの行があるときは、カテゴリボタンの下に「あなたは #N（全 M 人中）」のボタン（`<button type="button">`、`rankings.jumpToSelf`、M は順位の付いた行数）を出し、押すと自分の行（`id="ranking-self"`、`tabIndex={-1}`、`aria-current`）へ `focus()` で移す（履歴・URL ハッシュは増えず、フォーカスと読み上げも移る。スクロールは `scroll-padding-top` に任せ `scroll-mt` は足さない。行のフォーカスは内側 2px の不透明 `--ring` の outline）。自分の行は3表とも同じ `isSelf`（自分かつ順位あり）で判定し、名前の横に muted の「あなた」（`rankings.you`、`text-xs`）を添える。面は `bg-brand/10`（現在地）で、固定列の順位セルは背景色に brand を混ぜた不透明色。loader が `viewerUserId`（`users.id`）を返す（表のキャッシュはユーザー非依存のまま）
+- **カテゴリの切替**: ボタンは選択中を `aria-pressed` で伝える（見た目は既定の `Button`＝brand）。高さはモバイル 44px・sm 以上 32px。Speedrun.com のカテゴリが0件のときは、見出し「Speedrun.com」ごと出さない
+- **再取得中**: `/rankings` 内の切替（`navigation.location.pathname === "/rankings"`）のときだけ、表示中の表を差し替えずに `opacity-50`＋`aria-busy` で残す（走者のページへ移るときは薄くしない）。表が無い（空状態から切り替えた）ときだけスケルトンを出し、列数は遷移先の表（Speedrun.com 5列・Ranked PB 3列・Elo 5列）に合わせる
+- **順位の強調**: 上位3位は `font-bold` だけ（色は使わない。金は完走専用で、2位の銀のトークンも無いため）。Elo 表の数値は `tabular-nums`
+- **件数ピル**: 順位の付いた走者数（「N人」。審査待ちを除く）。「全 N 人中」と同じ数。説明文のうち公開設定の注記（`publicityNote`）は sm 未満では出さない
+- **既定のタブ**: `tab` の指定が無く Speedrun.com のカテゴリが0件のときは、loader が Ranked PB を既定にする（`tab=speedruncom` を明示したときは Speedrun.com のまま。`tab` / `rankedType` の不正な値は既定〈speedruncom / pb〉へ戻し、`tab` 無しと同じ扱い）。カテゴリ0件の Speedrun.com の空状態は「Speedrun.com のランキングはまだありません」＋ PB ランキングへ切り替えるボタン。それ以外の空状態は、タブごとの説明文（description は空にしない）。カテゴリ切替のボタン群は `role="group"` ＋ `aria-labelledby`（Speedrun.com / MCSR Ranked の見出し）で結ぶ
+- **注記**: 「記録の公開設定によっては…」（`rankings.publicityNote`）は見出しの下に1回だけ出す（空状態では繰り返さない）
+- **審査待ち（Speedrun.com の `verificationStatus = "new"`）**: 順位の欄に時計（飾り、`aria-hidden`）、名前の下の行に「審査待ち」（`rankings.pendingVerification`、`text-xs text-warning`）。名前とは別の行なので、名前が省略されても切れずに読め、Tooltip に頼らないのでタッチでも分かる
 
 ### categoryRecordsテーブル
 
@@ -64,11 +74,11 @@ APIの `wins + loses` と `playedMatches` は一致しない場合がある（de
 
 #### 国内順位（countryRank）
 
-MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのインデックス（`index + 1`）から算出する（`fetchMCSRRankedStats` 内）。**このAPIは上位150件で結果を打ち切るため、`country === "jp"` かつ国内150位以内のプレイヤーのみ順位を表示し、圏外（151位以下・国コード未設定・jp以外）は非表示**とする割り切り仕様。
+MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのインデックス（`index + 1`）から算出する（`fetchMCSRRankedStats` 内）。**このAPIは上位150件で結果を打ち切るため、`country === "jp"` かつ国内150位以内のプレイヤーのみ順位を表示し、圏外（151位以下・国コード未設定・jp以外）は非表示**とする割り切り仕様。JP リーダーボードの取得結果は `app/lib/external-stats.ts` のモジュール内で5分キャッシュし、プレイヤーごとに再取得しない。
 
 #### Minefolio内順位
 
-`player_rankings`（`ranking_type = 'ranked_elo'`、cron `/api/cron/update-rankings` で更新）を基に、「公開プロフィール（`profile_visibility = 'public'`）かつRanked統計公開（`users.show_ranked_stats = true`）のユーザーの中で、自分より高いEloの人数 + 1」で算出する（同率は同順位）。実装は `getMinefolioEloRank()`（`app/lib/rankings-query.server.ts`）。
+`player_rankings`（`ranking_type = 'ranked_elo'`、cron `/api/cron/update-rankings` で更新）を基に、「公開プロフィール（`profile_visibility = 'public'`）かつRanked統計公開（`users.show_ranked_stats = true`）のユーザーの中で、自分より高いEloの人数 + 1」で算出する（同率は同順位）。実装は `getMinefolioEloRank()`（`app/lib/rankings-query.server.ts`）で、全件を取得せず SQL の件数集計（`count`）で順位を求める。
 
 カード上のEloレート自体はMCSR Ranked APIからのライブ取得値、Minefolio内順位はcronキャッシュ（`player_rankings`）基準のため、両者の更新タイミングにはズレが生じうる（許容仕様）。
 
@@ -80,10 +90,9 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 ## 統計ページ
 
-### /stats — プラットフォーム全体統計
+### /stats — 廃止（`/keybindings/stats` へ統合）
 
-- Minefolio全体の統合統計データを表示
-- 感度分布は `/keybindings/stats` の感度区分（0〜200%基準の10区分・有効範囲外は集計から除外）と揃えている。詳細は [`docs/keybindings.md`](./keybindings.md) の「感度分布（`SENSITIVITY_RANGES`）」を参照
+- `/stats` は `/keybindings/stats` へ統合し、301 でリダイレクトする（`app/routes/stats.ts`。クエリ文字列は引き継がない）。旧ページは非公開の走者も集計に含めていたが、統合後は公開の走者だけを集計する
 
 ### /keybindings/stats — キー配置統計
 
@@ -108,8 +117,8 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | pacemanRunId | string | PaceManのランID |
 | mcid | string | MinecraftプレイヤーID |
 | timeline | string | スプリット名 |
-| rta | integer (ms) | Real Time Attack（ミリ秒） |
-| igt | integer (ms) | In Game Time（ミリ秒） |
+| rta | integer (ms) | 区間タイム（ミリ秒）。**列名に反して中身は IGT**（PaceMan stats API `getRecentRuns` の値は IGT。画面では「IGT」と明記して表示する） |
+| igt | integer (ms) | 未使用（常に null） |
 | date | timestamp | 実行日時 |
 | isNetherEnter | boolean | ネザー入りかどうか |
 | is2ndStructureOrLater | boolean | 2つ目以降のストラクチャーかどうか |
@@ -118,14 +127,20 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 
 ランの進行状況を示すスプリットポイント:
 
-- `"Enter Nether"` — ネザー突入
-- `"Obtain Blaze Rods"` — ブレイズロッド取得
-- `"Eye Spy"` — エンダーアイ使用（要塞発見）
-- その他のマイルストーン
+進行順（`paceman-cache.ts` の `SPLIT_ORDER`）:
+
+1. `"Enter Nether"` — ネザー突入
+2. `"Bastion"` / `"Fortress"` — 各ストラクチャー到達
+3. `"Obtain Blaze Rods"` — ブレイズロッド取得（`getRecentRuns` の `obtainRod` から。他の区間と同じ IGT。`is2ndStructureOrLater` は false で、「主なペース」には含めない。含めるかは未決）
+4. `"First Portal"` — 2つ目のポータル（Blind）
+5. `"Enter Stronghold"` / `"Enter End"` / `"Finish"`
+
+過去に保存された `Obtain Blaze Rods` 行は無い（obtainRod 対応前は一度も保存されていない。埋め直しはしない）。
 
 ### キャッシュ更新
 
 - Cronジョブ `/api/cron/update-paceman-cache` で定期的にデータを取得・更新
+- キャッシュ書き込み（既存ラン行の削除→挿入→プルーニング）は `db.batch`（1トランザクション）で実行する
 
 ---
 
@@ -156,7 +171,7 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | `fetchMCSRRankedStats` | MCSR Rankedの統計取得。今シーズンの `forfeits` / `playedMatches`（Win Rate/FF Rate算出用）と、`country === "jp"` かつ150位以内の場合の `countryRank` を含む |
 | `fetchSpeedrunComStats` | Speedrun.comの統計取得（`personal-bests` APIに動画リンク`run.videos.links`が同梱されるため追加のAPI呼び出しは不要） |
 | `getSpeedrunComVideoEmbedUrl` | Speedrun.com記録の動画リンクのうちYouTube埋め込みに変換できる最初のURLを返す（`youtube-url.ts`の`getYouTubeEmbedUrl`を利用）。Twitch等YouTube以外や動画リンク自体が無い場合はnullを返し、呼び出し側は外部リンク表示にフォールバックする |
-| `checkPaceManPlayer` | PaceManプレイヤーの存在確認 |
+| `checkPaceManPlayer` | PaceManプレイヤーの存在確認。404／`error`フィールド付き200は未登録、それ以外の非2xx・通信エラーは例外（取得失敗）。`fetchAllExternalStats` は失敗を未登録扱いにする。ブラウザからは CORS 非対応のため `/api/paceman-registration`（`fetchPaceManRegistration`）経由 |
 
 ### Speedrun.com記録の動画埋め込み
 
@@ -173,12 +188,24 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 | `/api/cron/youtube-update` | YouTube動画のキャッシュ更新（ライブ配信確認は現在停止中。詳細は [`docs/home-live.md`](./home-live.md#youtubelivecache)） |
 | `/api/cron/twitch-update` | Twitch配信アーカイブ（VOD）のキャッシュ更新（詳細は [`docs/home-live.md`](./home-live.md#twitchvodcache)） |
 | `/api/cron/update-paceman-cache` | PaceManペースデータのキャッシュ更新 |
-| `/api/cron/update-rankings` | ランキングデータの更新 |
+| `/api/cron/update-rankings` | ランキングデータの更新。あわせて Ranked レートを `ranked_elo_snapshots` に日次記録（下記） |
 
 ### 認証
 
 - リクエストヘッダーまたはクエリパラメータで `CRON_SECRET` を検証
 - 不正なリクエストは拒否
+
+### Ranked レート日次スナップショット
+
+`update-rankings` cron が各ユーザーの Ranked レート（eloRate）を取得できたとき、`ranked_elo_snapshots` に `(userId, 当日UTCの YYYY-MM-DD)` で upsert する（`upsertEloSnapshot`、`app/lib/rankings-update.server.ts`）。同日に複数回走っても1行で、`eloRate` と `updatedAt` が後の値に更新される。レートが取れない／uuid 未登録のユーザーは書かない。1ユーザー分の処理（`updateUserRankings`）に入っているため、`targeted-refresh.server.ts` の即時更新でも同様に記録される。
+
+保持期間は30日（`ELO_SNAPSHOT_RETENTION_DAYS`）。cron 1回の最後に `cleanupOldEloSnapshots` が、30日より古い `snapshot_date` を1文の DELETE で削除する（レスポンスの `stats.eloSnapshotsRemoved`）。ホームで使うのは直近7日のみ。
+
+### Ranked PB の recordDate
+
+MCSR Ranked API は PB を出した日時を返さないため、`ranked_pb` 行の `recordDate`（`YYYY-MM-DD`、UTC）は cron が「前回より速くなった」ことを検出した日だけ入れる。PB が変わらない・遅くなる更新では既存値を書き換えない。初回挿入（行がまだ無い）は過去の PB を「今日の更新」と誤認しないよう null のまま。
+
+cron は同じ MCSR Ranked 応答の `statistics.total.bestTime`（数値、または `{ ranked, casual }`）から全期間ベストも `ranking_type = 'ranked_pb_all_time'` の行として保存する（追加の API 呼び出しなし・`recordDate` は常に null・取れない応答では既存行を触らない）。ホームの注目の走者の自己ベストが使う（`ranked_pb` を数える既存の集計には混ざらない）。
 
 ---
 
@@ -187,7 +214,7 @@ MCSR Ranked API `/leaderboard?country=jp` のレスポンス配列内でのイ�
 ### ページ
 
 - `app/routes/rankings.tsx` — ランキングページ
-- `app/routes/stats.tsx` — プラットフォーム統計ページ
+- `app/routes/stats.ts` — 旧 `/stats` から `/keybindings/stats` への 301 リダイレクト
 - `app/routes/player/stats.tsx` — プレイヤー個別統計ページ
 - `app/routes/player/profile.tsx` — プレイヤープロフィール（活動・記録タブでMCSR Ranked等の外部統計カードを表示）
 - `app/routes/keybindings-stats.tsx` — キー配置統計ページ

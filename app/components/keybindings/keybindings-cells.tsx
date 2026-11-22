@@ -4,6 +4,7 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { HintTip } from "@/components/hint-tip";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
@@ -47,54 +48,57 @@ export type PlayerSummary = {
 };
 
 
+/**
+ * 空のセルの印。見える「-」は読み上げさせず（aria-hidden）、代わりに sr-only で意味を伝える。
+ * 色は muted-foreground のまま（薄くしすぎると背景に対して約 2:1 まで落ちて読めない）。
+ * - key: キーが未割り当て　- value: マウスの値が未設定　- none: リマップ・カスタムアクションが無い
+ */
+export function EmptyMark({
+  kind,
+  className,
+}: {
+  kind: "key" | "value" | "none";
+  className?: string;
+}) {
+  const t = useT();
+  const label =
+    kind === "key"
+      ? t("keybindings.unassigned")
+      : kind === "value"
+        ? t("keybindings.notSet")
+        : t("keybindings.noneValue");
+  return (
+    <span className={cn("text-muted-foreground", className)}>
+      <span aria-hidden>-</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 /* ============================================================
  * 走者セル（左端 sticky）
  * ========================================================== */
 
-export function RunnerCell({
-  player,
-  variant = "default",
-}: {
-  player: PlayerSummary;
-  /** compact: モバイル向け縦並び（頭を大きめ＋名前を下に小さく） */
-  variant?: "default" | "compact";
-}) {
+export function RunnerCell({ player }: { player: PlayerSummary }) {
   const locale = useLocale();
   const name = getLocalizedDisplayName(player, locale);
 
-  if (variant === "compact") {
-    return (
-      <Link
-        to={`/player/${player.slug}`}
-        className="flex flex-col items-center gap-1 hover:opacity-80 transition-opacity w-full min-w-0 text-center"
-      >
-        <MinecraftAvatar
-          uuid={player.uuid}
-          skinUrl={player.customSkinUrl}
-          size={40}
-          className="rounded-sm shrink-0"
-        />
-        <span className="w-full truncate text-xs font-medium leading-tight">
-          {name}
-        </span>
-      </Link>
-    );
-  }
-
+  // どの幅でも横並び（頭 32px ＋ 名前 truncate）にして、モバイルの行を低く保つ。名前が隣にあるので alt は空
   return (
     <Link
       to={`/player/${player.slug}`}
-      className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0 w-full"
+      className="group flex w-full min-w-0 items-center gap-2 text-left"
     >
       <MinecraftAvatar
         uuid={player.uuid}
         skinUrl={player.customSkinUrl}
-        size={28}
-        className="rounded-sm shrink-0"
+        size={32}
+        alt=""
+        className="shrink-0 rounded-lg"
       />
-      <div className="min-w-0">
-        <p className="font-medium text-sm truncate">{name}</p>
-      </div>
+      <span className="min-w-0 flex-1 truncate text-xs font-medium leading-snug underline-offset-2 group-hover:underline md:text-sm">
+        {name}
+      </span>
     </Link>
   );
 }
@@ -107,15 +111,18 @@ export function KeyBadge({
   keyCode,
   keyboardLayout,
   customKeyNames,
+  maxWidth = 10,
 }: {
   keyCode: string;
   keyboardLayout?: string | null;
   /** カスタムキー keyCode → 表示名。標準ラベルより優先して使用する。 */
   customKeyNames?: Record<string, string>;
+  /** 表示幅（全角=2）の上限。超えると省略し、全文は HintTip（フォーカス・タップ）で届ける */
+  maxWidth?: number;
 }) {
   const t = useT();
   if (isUnbound(keyCode)) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="key" />;
   }
   // カスタムキー名があれば最優先（正規化前後どちらの keyCode でも引けるようにする）
   const customName =
@@ -125,31 +132,24 @@ export function KeyBadge({
     (keyCode.includes("+")
       ? getKeyCombinationLabel(t, keyCode, keyboardLayout)
       : getKeyLabel(t, keyCode, keyboardLayout));
-  const truncated = truncateByVisualWidth(label);
+  const truncated = truncateByVisualWidth(label, maxWidth);
   const isMouse =
     keyCode.startsWith("Mouse") || keyCode.toLowerCase().includes("mouse");
 
+  // 文字入力キーは角の小さい rounded の四角（ui.md 7 章。search-craft-badges の KeyBadge と同じ語彙）。
+  // マウスボタンだけ info 色を残す
   const badge = (
-    <Badge
-      variant="secondary"
+    <span
       className={cn(
-        "font-mono text-xs px-1.5 py-0.5",
+        "inline-flex h-6 min-w-6 max-w-full items-center justify-center overflow-hidden rounded border border-border/50 bg-secondary/50 px-1.5 font-mono text-xs",
         isMouse && MOUSE_KEY_BADGE_CLASS,
       )}
     >
       {truncated}
-    </Badge>
+    </span>
   );
-  return label !== truncated ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span>{badge}</span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  ) : (
-    badge
-  );
+  // 省略したときは、アクセシブルネームに全文を入れたボタン（キーボード・タップでも全文が届く）
+  return label !== truncated ? <HintTip message={label}>{badge}</HintTip> : badge;
 }
 
 /** 行データからアクションキー1つを取り出して描画 */
@@ -162,7 +162,7 @@ export function ActionKeyCell({
   keyboardLayout?: string | null;
   customKeyNames?: Record<string, string>;
 }) {
-  if (!keyCode) return <span className="text-muted-foreground/40">-</span>;
+  if (!keyCode) return <EmptyMark kind="key" />;
   return (
     <KeyBadge
       keyCode={keyCode}
@@ -212,22 +212,25 @@ export function HotbarSummaryCell({
   }));
 
   if (slots.every((s) => s.keyCode == null)) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="key" />;
   }
 
   return (
-    <div className="flex flex-nowrap items-end gap-1">
+    // スロットの幅は全行で同じ（グリッドの列）にして、1〜9 の縦位置をそろえる。md 未満は 5 + 4 の 2 段。
+    // 長いラベルは省略し、全文は KeyBadge の HintTip で届ける
+    <div className="grid w-full grid-cols-5 gap-x-1 gap-y-1.5 md:grid-cols-9">
       {slots.map(({ n, keyCode }) => (
-        <span key={n} className="inline-flex flex-col items-center gap-0.5">
-          <span className="text-[9px] leading-none text-muted-foreground">{n}</span>
+        <span key={n} className="inline-flex min-w-0 flex-col items-center gap-0.5">
+          <span className="text-[10px] leading-none text-muted-foreground">{n}</span>
           {keyCode ? (
             <KeyBadge
               keyCode={keyCode}
               keyboardLayout={keyboardLayout}
               customKeyNames={customKeyNames}
+              maxWidth={4}
             />
           ) : (
-            <span className="text-muted-foreground/40 text-xs px-1">-</span>
+            <EmptyMark kind="key" className="px-1 text-xs" />
           )}
         </span>
       ))}
@@ -259,7 +262,7 @@ export function RemapCell({
 }) {
   const t = useT();
   if (remaps.length === 0) {
-    return <span className="text-muted-foreground/40 text-sm">-</span>;
+    return <EmptyMark kind="none" className="text-sm" />;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -294,7 +297,7 @@ export function CustomActionCell({
 }) {
   const t = useT();
   if (customActions.length === 0) {
-    return <span className="text-muted-foreground/40 text-sm">-</span>;
+    return <EmptyMark kind="none" className="text-sm" />;
   }
   return (
     <div className="space-y-1.5">
@@ -327,7 +330,7 @@ export type MouseConfig = {
 
 export function DpiCell({ config }: { config: MouseConfig }) {
   if (config?.mouseDpi == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   return <span className="font-mono text-sm">{config.mouseDpi}</span>;
 }
@@ -335,7 +338,7 @@ export function DpiCell({ config }: { config: MouseConfig }) {
 export function SensitivityCell({ config }: { config: MouseConfig }) {
   const display = toSensitivityPercent(config?.gameSensitivity);
   if (display == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   // 有効範囲外（内部値 0..1 = 表示 0..200% の外）は値を出しつつ理由を警告表示する。
   // 振り向きは計算されず、統計の集計からも外れ、ソートでも未設定として扱われる。
@@ -353,7 +356,7 @@ export function SensitivityCell({ config }: { config: MouseConfig }) {
 export function Cm360Cell({ config }: { config: MouseConfig }) {
   const t = useT();
   if (config == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   const cm360 = calculateCm360(
     config.mouseDpi,
@@ -390,15 +393,13 @@ export function WindowsSpeedCell({ config }: { config: MouseConfig }) {
   if (config?.windowsSpeed != null) {
     return <WinSensValue windowsSpeed={config.windowsSpeed} className="font-mono text-sm" />;
   }
-  return (
-    <span className="text-muted-foreground/40">{t("keybindings.noValue")}</span>
-  );
+  return <EmptyMark kind="value" />;
 }
 
 export function CursorSpeedCell({ config }: { config: MouseConfig }) {
   const t = useT();
   if (config == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   const cursor = calculateCursorSpeed(
     config.mouseDpi,
@@ -418,15 +419,13 @@ export function CursorSpeedCell({ config }: { config: MouseConfig }) {
   );
 }
 
+// ON / OFF はどちらも同じ見た目（文字だけで区別する）。設定値に優劣の色を付けない（走者の自由な選択のため）
 export function RawInputCell({ config }: { config: MouseConfig }) {
   if (config?.rawInput == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   return (
-    <Badge
-      variant={config.rawInput ? "default" : "secondary"}
-      className="text-xs"
-    >
+    <Badge variant="secondary" className="text-xs">
       {config.rawInput ? "ON" : "OFF"}
     </Badge>
   );
@@ -434,13 +433,10 @@ export function RawInputCell({ config }: { config: MouseConfig }) {
 
 export function AccelerationCell({ config }: { config: MouseConfig }) {
   if (config?.mouseAcceleration == null) {
-    return <span className="text-muted-foreground/40">-</span>;
+    return <EmptyMark kind="value" />;
   }
   return (
-    <Badge
-      variant={config.mouseAcceleration ? "destructive" : "secondary"}
-      className="text-xs"
-    >
+    <Badge variant="secondary" className="text-xs">
       {config.mouseAcceleration ? "ON" : "OFF"}
     </Badge>
   );

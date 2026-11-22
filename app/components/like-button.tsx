@@ -4,6 +4,7 @@ import { ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLike, type LikeTargetType } from "@/hooks/use-likes";
 import { useT } from "@/hooks/use-locale";
+import { useLoginHref } from "@/hooks/use-login-href";
 
 interface LikeButtonProps {
   targetType: LikeTargetType;
@@ -17,6 +18,8 @@ interface LikeButtonProps {
   isOwn?: boolean;
   /** compact: 一覧カードのメタ行 / detail: 詳細ページのアクション行 */
   variant?: "compact" | "detail";
+  /** detail のみ。sm 未満では文字を sr-only にして、アイコン＋件数だけにする（読み上げ名は変えない） */
+  compactLabel?: boolean;
   className?: string;
 }
 
@@ -35,9 +38,11 @@ export function LikeButton({
   isLiked = false,
   isOwn = false,
   variant = "compact",
+  compactLabel = false,
   className,
 }: LikeButtonProps) {
   const t = useT();
+  const loginHref = useLoginHref();
   const { liked, count, isPending, isLoggedIn, toggle } = useLike(targetType, targetId, {
     liked: isLiked,
     count: likeCount,
@@ -63,7 +68,11 @@ export function LikeButton({
           title={isOwn ? t("likes.ownContent") : t("likes.loginToLike")}
         >
           <ThumbsUp className="h-3 w-3" aria-hidden />
-          <span className="tabular-nums">{count}</span>
+          {/* 裸の数字だけだと読み上げで意味が落ちる。見た目の数字は隠し、sr-only の「いいね N 件」を読ませる */}
+          <span className="tabular-nums" aria-hidden>
+            {count}
+          </span>
+          <span className="sr-only">{t("likes.countAria", { count })}</span>
         </span>
       );
     }
@@ -81,6 +90,8 @@ export function LikeButton({
         className={cn(
           // relative z-10: カード全体を覆うリンクのオーバーレイより手前に置く
           "relative z-10 -mx-1 inline-flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 transition-colors",
+          // 見た目は小さいまま、押せる範囲だけ擬似要素で約 44px 四方に広げる（フッター行の gap-x-3 を超えない横幅）
+          "after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']",
           "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:pointer-events-none",
           liked && "text-brand hover:text-brand",
@@ -98,9 +109,9 @@ export function LikeButton({
   if (!isLoggedIn) {
     return (
       <Button asChild variant="outline" size="sm" className={className}>
-        <Link to="/login">
-          <ThumbsUp className="mr-2 size-4" aria-hidden />
-          {t("likes.loginToLike")}
+        <Link to={loginHref}>
+          <ThumbsUp className={cn("size-4", compactLabel ? "sm:mr-2" : "mr-2")} aria-hidden />
+          <span className={cn(compactLabel && "max-sm:sr-only")}>{t("likes.loginToLike")}</span>
           <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>
         </Link>
       </Button>
@@ -133,8 +144,13 @@ export function LikeButton({
         className,
       )}
     >
-      <ThumbsUp className={cn("mr-2 size-4", liked && "fill-current")} aria-hidden />
-      {liked ? t("likes.labelActive") : t("likes.label")}
+      <ThumbsUp
+        className={cn("size-4", compactLabel ? "sm:mr-2" : "mr-2", liked && "fill-current")}
+        aria-hidden
+      />
+      <span className={cn(compactLabel && "max-sm:sr-only")}>
+        {liked ? t("likes.labelActive") : t("likes.label")}
+      </span>
       <span className="ml-1 tabular-nums">{count}</span>
     </Button>
   );

@@ -5,16 +5,20 @@ import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } fr
 import type { Route } from "./+types/items";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb } from "@/lib/db";
+import { errorSummary } from "@/lib/error-summary";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { formString } from "@/lib/save-limits";
+import { isValidItemLayoutsPayload } from "@/lib/item-layouts-payload";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { itemSegmentLabel } from "@/lib/segment-labels";
+import { NoticeBanner } from "@/components/notice-banner";
+import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,7 +57,7 @@ import {
   Package,
   Plus,
   Trash2,
-  Edit,
+  StickyNote,
   AlertCircle,
   Copy,
   GripVertical,
@@ -82,16 +86,21 @@ import {
   getItemsByCategory,
   type ItemCategory,
 } from "@bafv4/mcitems/1.16/react";
-import { ItemIcon, getLocalizedItemName } from "@/components/item-icon";
+import { ItemIcon, getLocalizedItemName, itemLangForLocale } from "@/components/item-icon";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { EmptyState } from "@/components/empty-state";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
-import { PresetSelector } from "@/components/preset-selector";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -135,21 +144,6 @@ type ItemLayout = {
   offhand: string[];
   notes: string | null;
 };
-
-/**
- * slots 配列内の1エントリが `{ slot: number, items: string[] }`（Slot 型）の形をしているか。
- * action の保存前検証（saveAll）から使う。公開プロフィール側の ItemHotbar（slots.find・
- * items.map／CyclingSlotIcon の items.map）が想定する形で、崩れていると SSR が落ちる。
- */
-function isValidSlotShape(slot: unknown): boolean {
-  if (!slot || typeof slot !== "object") return false;
-  const s = slot as Record<string, unknown>;
-  return (
-    typeof s.slot === "number" &&
-    Array.isArray(s.items) &&
-    (s.items as unknown[]).every((item) => typeof item === "string")
-  );
-}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
@@ -214,15 +208,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Skeleton className="h-8 w-32 mb-2" />
-          <Skeleton className="h-4 w-80" />
-        </div>
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物と同じ間隔・並び: 見出し（h1 32px ＋ 説明 20px）→ プリセット選択 → 欄（罫線 ＋ 見出し 28px ＋ 一覧） */}
+      <div>
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-5 w-80 max-w-full" />
       </div>
+      <PresetSelectorSkeleton />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+      <Skeleton className="h-7 w-40" />
       <div className="rounded-xl border border-border/70 bg-background/80">
         <div className="divide-y divide-border/60">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -250,6 +245,7 @@ export function HydrateFallback() {
           <Skeleton className="h-8 w-32" />
         </div>
       </div>
+      </div>
     </div>
   );
 }
@@ -271,8 +267,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const actionType = formString(formData, "_action");
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -296,30 +292,15 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (actionType === "saveAll") {
-    const layoutsJson = formData.get("layouts") as string;
+    const layoutsJson = formString(formData, "layouts") ?? "";
 
     try {
-      const layoutsRaw = JSON.parse(layoutsJson) as Array<Record<string, unknown>>;
+      const layoutsRaw: unknown = JSON.parse(layoutsJson);
 
-      // slots / offhand の中身の形を検証する。非配列・スロット番号や items が想定外の型のまま
-      // 永続化されると、公開プロフィール側の ItemHotbar（slots.find／items.map）が TypeError を
-      // 投げて SSR が 500 になるため、ここで拒否する
-      // （search-craft.tsx の items が string[] であることの検証と同じ考え方・粒度）
-      if (
-        !Array.isArray(layoutsRaw) ||
-        layoutsRaw.some(
-          (layout) =>
-            !layout ||
-            typeof layout.id !== "string" ||
-            !layout.id ||
-            typeof layout.segment !== "string" ||
-            !Array.isArray(layout.slots) ||
-            (layout.slots as unknown[]).some((slot) => !isValidSlotShape(slot)) ||
-            !Array.isArray(layout.offhand) ||
-            (layout.offhand as unknown[]).some((item) => typeof item !== "string") ||
-            (layout.notes !== null && typeof layout.notes !== "string"),
-        )
-      ) {
+      // 形・件数・文字数・セグメント名（空・重複）・id の重複を検証する（lib/item-layouts-payload.ts）。
+      // slots / offhand の中身の形が崩れたまま永続化されると、公開プロフィール側の ItemHotbar
+      // （slots.find／items.map）が TypeError を投げて SSR が 500 になるため、ここで拒否する
+      if (!isValidItemLayoutsPayload(layoutsRaw)) {
         return { error: t("meItems.invalidLayoutData") };
       }
 
@@ -327,6 +308,17 @@ export async function action({ request }: Route.ActionArgs) {
 
       const now = new Date();
       await db.transaction(async (tx) => {
+        // 送られた id を引き継ぐのは「自分の既存行にある id」だけ。それ以外（new- 始まり・他人の id・任意の文字列）は
+        // 新規採番する（任意の文字列を主キーにできると、他人の id の存在を成功・失敗から判定できてしまう）
+        const ownIds = new Set(
+          (
+            await tx.query.itemLayouts.findMany({
+              where: eq(itemLayouts.userId, user.id),
+              columns: { id: true },
+            })
+          ).map((row) => row.id),
+        );
+
         // 既存のレイアウトを全削除
         await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
 
@@ -334,7 +326,7 @@ export async function action({ request }: Route.ActionArgs) {
         for (let i = 0; i < layouts.length; i++) {
           const layout = layouts[i];
           await tx.insert(itemLayouts).values({
-            id: layout.id.startsWith("new-") ? createId() : layout.id,
+            id: ownIds.has(layout.id) ? layout.id : createId(),
             userId: user.id,
             segment: layout.segment,
             slots: JSON.stringify(layout.slots),
@@ -355,13 +347,14 @@ export async function action({ request }: Route.ActionArgs) {
         id: createId(),
         userId: user.id,
         changeType: "game_setting",
-        changeDescription: t("meItems.itemLayoutChangeHistory"),
+        changeDescription: encodeHistoryDescription("items.update"),
+        presetId: await resolveActivePublicPresetId(db, user.id),
         createdAt: now,
       });
 
       return { success: true };
     } catch (error) {
-      console.error("Save error:", error);
+      console.error("Save error:", errorSummary(error));
       return { error: t("meItems.saveFailed") };
     }
   }
@@ -386,8 +379,8 @@ function ItemSlotEditButton({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<ItemCategory>("all");
-  // mcitems の lang 引数（"en_us" / "ja_jp"）。getLocalizedItemName と同じ判定基準
-  const langCode = locale === "en" ? "en_us" : "ja_jp";
+  // mcitems の lang 引数（"en_us" / "ja_jp"）。getLocalizedItemName と同じ判定（itemLangForLocale）
+  const langCode = itemLangForLocale(locale);
 
   // mcitemsから検索（表示ロケールに追従）
   const filteredItems = search
@@ -438,6 +431,7 @@ function ItemSlotEditButton({
           <div className="flex gap-2">
             <Input
               placeholder={t("meItems.searchItems")}
+              aria-label={t("meItems.searchItems")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1"
@@ -446,8 +440,8 @@ function ItemSlotEditButton({
               value={selectedCategory}
               onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
             >
-              <SelectTrigger className="w-40">
-                <SelectValue />
+              <SelectTrigger aria-label={t("meItems.categoryAria")} className="w-40">
+                <SelectValue>{getCategoryName(selectedCategory, langCode) ?? ITEM_CATEGORIES.find((c) => c.id === selectedCategory)?.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ITEM_CATEGORIES.map((cat) => (
@@ -485,7 +479,9 @@ function ItemSlotEditButton({
                   <button
                     type="button"
                     onClick={() => toggleItem(itemId)}
-                    className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
+                    aria-label={getLocalizedItemName(itemId, locale)}
+                    aria-pressed={isItemSelected(itemId)}
+                    className={`w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded border-2 transition-colors ${
                       isItemSelected(itemId)
                         ? "border-primary bg-primary/20"
                         : "border-transparent hover:border-border hover:bg-secondary/50"
@@ -532,7 +528,7 @@ function SegmentNameInput({
 
   const options = availablePresets.map((preset) => ({
     value: preset,
-    label: preset,
+    label: itemSegmentLabel(preset),
   }));
 
   return (
@@ -540,6 +536,7 @@ function SegmentNameInput({
       options={options}
       value={value}
       onValueChange={onChange}
+      aria-label={t("meItems.segmentLabel")}
       placeholder={t("meItems.segmentPlaceholder")}
       searchPlaceholder={t("meItems.segmentSearch")}
       emptyText={t("meItems.noPresetItems")}
@@ -575,6 +572,8 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
   onDuplicate: (id: string) => void;
 }) {
   const t = useT();
+  // 配置の名前（未入力の行でも読み上げが「の削除」だけにならないよう代わりの語を使う）
+  const layoutName = itemSegmentLabel(segment.trim()) || t("meItems.unnamedLayout");
 
   return (
     <>
@@ -585,27 +584,39 @@ const LayoutRowHeader = memo(function LayoutRowHeader({
           existingSegments={existingSegments}
         />
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="flex shrink-0 gap-1 max-sm:w-full max-sm:justify-end">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onDuplicate(layoutId)}
-              aria-label={t("meItems.duplicate")}
+              aria-label={t("meItems.duplicateAria", { name: layoutName })}
+              className="max-md:size-11"
             >
-              <Copy className="h-4 w-4" />
+              <Copy className="h-4 w-4" aria-hidden="true" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("meItems.duplicate")}</TooltipContent>
         </Tooltip>
-        <Button variant="ghost" size="sm" onClick={onToggleExpanded}>
-          <Edit className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleExpanded}
+          aria-label={t("meItems.toggleNotesAria", { name: layoutName })}
+          className="max-md:size-11"
+        >
+          <StickyNote className="h-4 w-4" aria-hidden="true" />
         </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <Trash2 className="h-4 w-4 text-destructive" />
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={t("meItems.deleteLayoutAria", { name: layoutName })}
+              className="max-md:size-11"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -736,15 +747,15 @@ function EditableLayoutRow({
       style={style}
       className={cn("px-4 py-3", isDragging && "opacity-50")}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
         <button
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meItems.dragHandle")}
-          className="flex shrink-0 items-center justify-center text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing"
+          aria-label={t("meItems.dragHandleAria", { name: itemSegmentLabel(layout.segment.trim()) || t("meItems.unnamedLayout") })}
+          className="flex size-8 max-sm:size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground touch-none cursor-grab hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <LayoutRowHeader
           layoutId={layout.id}
@@ -776,15 +787,14 @@ function EditableLayoutRow({
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meItems.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meItems.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -792,18 +802,23 @@ export default function ItemLayoutsPage() {
   const t = useT();
   const { layouts: initialLayouts, activePreset, hasPresets, presets } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [layouts, setLayouts] = useState<ItemLayout[]>(initialLayouts);
+  // loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、未変更の間だけ置き換える
+  const {
+    draft: layouts,
+    setDraft: setLayouts,
+  } = useLoaderSyncedDraft<ItemLayout[]>(initialLayouts, {
+    resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+    syncToken: successfulSaveToken(fetcher.data),
+  });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
   const [presetSwitching, setPresetSwitching] = useState(false);
 
-  const isSubmitting = fetcher.state === "submitting";
-
-  // loaderデータが更新されたらローカル状態も更新
-  useEffect(() => {
-    setLayouts(initialLayouts);
-  }, [initialLayouts]);
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
 
   // 保存結果の処理
   useEffect(() => {
@@ -907,9 +922,20 @@ export default function ItemLayoutsPage() {
     fetcher.submit(formData, { method: "post" });
   }, [layouts, fetcher, activePreset]);
 
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef(initialLayouts);
+  latestBaseRef.current = initialLayouts;
+
   const handleReset = useCallback(() => {
+    const prev = layouts; // 破棄の前の下書き
+    const baseAtReset = initialLayouts;
     setLayouts(initialLayouts);
-  }, [initialLayouts]);
+    return () => {
+      if (!jsonEqual(latestBaseRef.current, baseAtReset)) return false;
+      setLayouts(prev);
+      return true;
+    };
+  }, [layouts, initialLayouts]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -943,7 +969,7 @@ export default function ItemLayoutsPage() {
   const existingSegments = useMemo(() => layouts.map((l) => l.segment), [layouts]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meItems.pageTitle")}</h1>
@@ -967,7 +993,12 @@ export default function ItemLayoutsPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
+      <div inert={!hasPresets}>
+      <PageSection
+        id="item-layouts"
+        title={t("meItems.layoutListHeading")}
+        className={cn(!hasPresets && "pointer-events-none opacity-50")}
+      >
       {layouts.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-background/80">
           <DndContext
@@ -996,6 +1027,7 @@ export default function ItemLayoutsPage() {
               type="button"
               variant="outline"
               size="sm"
+              className="min-h-11 sm:min-h-8"
               onClick={handleAddLayout}
               disabled={!hasPresets}
             >
@@ -1017,14 +1049,17 @@ export default function ItemLayoutsPage() {
           }
         />
       )}
+      </PageSection>
       </div>
       </PresetSwitchLock>
 
       <FloatingSaveBar
-        hasChanges={hasChanges}
+        hasChanges={hasChanges && hasPresets}
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}
@@ -1086,23 +1121,5 @@ export default function ItemLayoutsPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meItems.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meItems.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meItems.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

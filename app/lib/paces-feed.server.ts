@@ -1,12 +1,13 @@
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createDb } from "./db";
 import { createAuth } from "./auth";
 import { users } from "./schema";
 import { getOptionalSession } from "./session";
 import { getPaceFeedEntries } from "./paceman-cache";
-import { PACE_FEED_SPLITS } from "./pace-splits";
-import { excludeViewersCondition } from "./users-filter";
+import { PACE_FEED_SPLITS, getTimelineProgress } from "./pace-splits";
 import { getCached, setCached } from "./cache";
+import { normalizeDateParam } from "./date-param";
+import { getUserData, type UserDataCache } from "./home-user-data.server";
 
 // フィード全体（区間キー毎）のキャッシュTTL
 // 無限スクロールのページ毎にテーブル全体を走査しないためのもの
@@ -14,7 +15,7 @@ const PACES_FEED_CACHE_TTL = 60 * 1000;
 
 /** フィード全体キャッシュのキー。形状を変えたら版数を上げる（テストからも参照する） */
 export function paceFeedCacheKey(timeline?: string): string {
-  return `paces:feed:v2:${timeline ?? "all"}`;
+  return `paces:feed:v3:${timeline ?? "all"}`;
 }
 
 // /paces ページと /api/paces で共用するフィード項目（クライアント表示用に整形済み）
@@ -22,7 +23,7 @@ export interface PaceFeedItem {
   mcid: string;
   nickname: string;
   timeline: string;
-  rta: number;
+  rta: number; // 名前は rta だが実体は IGT（PaceMan getRecentRuns の区間値は IGT。paceman_paces.rta 列に保存されている）
   pacemanRunId: number;
   time: number; // Unix秒
 }
@@ -34,15 +35,25 @@ export interface PaceSearchFilters {
   from?: Date; // 時期（開始日）
   to?: Date; // 時期（終了日）
   maxRta?: number; // タイム上限（ミリ秒）
+  sort?: PaceSort; // 並び順（未指定は新しい順）
 }
+
+/** /paces の並び順。"time" は進んだ区間ほど上、同じ区間の中は IGT の昇順。未指定・不正値は新しい順 */
+export const PACE_SORTS = ["time"] as const;
+export type PaceSort = (typeof PACE_SORTS)[number];
 
 // 日付文字列（YYYY-MM-DD）をJSTの日付として解釈（アプリは日本語圏向け）。
 // /videos の検索条件（videos-feed.server.ts）も同じ規約を共有する
 export function parseDateParam(value: string | null, endOfDay: boolean): Date | undefined {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  if (!normalizeDateParam(value)) return undefined;
   const time = endOfDay ? "23:59:59.999" : "00:00:00.000";
   const date = new Date(`${value}T${time}+09:00`);
   return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/** 日時を JST の日付文字列（YYYY-MM-DD）にする。日付入力の min / max に使う（parseDateParam と同じ JST 解釈） */
+export function toJstDateString(date: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(date);
 }
 
 // "m:ss" 形式のタイムをミリ秒に変換（例: "10:00" → 600000）
@@ -51,6 +62,20 @@ function parseTimeParamToMs(value: string | null): number | undefined {
   const match = value.trim().match(/^(\d{1,3}):([0-5]?\d)$/);
   if (!match) return undefined;
   return (Number(match[1]) * 60 + Number(match[2])) * 1000;
+}
+
+/**
+ * 「進んだ区間ほど上、同じ区間の中は IGT の速い順」の比較関数（sort=time）。
+ * 区間をまたいで IGT を比べない（早く終わったランが速いとして上に来ないため）。
+ * 同順位は新しい順→ランIDで決定的にし、offset ページングを安定させる
+ */
+export function comparePaceByProgress(a: PaceFeedItem, b: PaceFeedItem): number {
+  return (
+    getTimelineProgress(b.timeline) - getTimelineProgress(a.timeline) ||
+    a.rta - b.rta ||
+    b.time - a.time ||
+    b.pacemanRunId - a.pacemanRunId
+  );
 }
 
 /**
@@ -63,80 +88,62 @@ export function parsePaceSearchParams(searchParams: URLSearchParams): PaceSearch
   const player = searchParams.get("q")?.trim().toLowerCase();
   if (player) filters.player = player;
 
-  const split = searchParams.get("split");
-  if (split && (PACE_FEED_SPLITS as readonly string[]).includes(split)) {
-    filters.timeline = split;
-  }
+  // 区間は大文字小文字を無視して正規名へ（古いブックマーク等の "bastion" も効かせる）
+  const split = searchParams.get("split")?.toLowerCase();
+  const matchedSplit = split ? PACE_FEED_SPLITS.find((s) => s.toLowerCase() === split) : undefined;
+  if (matchedSplit) filters.timeline = matchedSplit;
 
   filters.from = parseDateParam(searchParams.get("from"), false);
   filters.to = parseDateParam(searchParams.get("to"), true);
   filters.maxRta = parseTimeParamToMs(searchParams.get("maxTime"));
 
+  const sort = searchParams.get("sort");
+  if (sort && (PACE_SORTS as readonly string[]).includes(sort)) {
+    filters.sort = sort as PaceSort;
+  }
+
   return filters;
 }
 
+/** 一覧の各ペースに添える、表示に必要な走者情報（そのペースの mcid 分のみ。全ユーザー分のマップは送らない） */
+export interface PaceFeedProfile {
+  uuid?: string;
+  displayName?: string;
+  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
+  displayNameAlphabet?: string;
+  skinUrl?: string;
+}
+
+export type PaceFeedItemWithProfile = PaceFeedItem & { profile?: PaceFeedProfile };
+
 export interface VisiblePaceFeed {
   items: PaceFeedItem[];
-  mcidToUuid: Record<string, string>;
-  mcidToDisplayName: Record<string, string>;
-  /** アルファベット表記の表示名（入力済みのユーザーのみ）。ロケール解決は表示側で行う */
-  mcidToDisplayNameAlphabet: Record<string, string>;
-  mcidToSkinUrl: Record<string, string>;
+  /**
+   * 走者情報の取得元（getUserData の共通キャッシュ。全公開ユーザー分なのでそのままクライアントへ返さない）。
+   * 応答に載せるページ分だけ withPaceProfiles で絞って使う
+   */
+  userData: UserDataCache;
 }
 
 type Db = ReturnType<typeof createDb>;
 type Auth = ReturnType<typeof createAuth>;
 
 /**
- * フィード全体（区間指定のみ反映、他フィルタ未適用）とマップを構築してキャッシュする
+ * フィード全体（区間指定のみ反映、他フィルタ未適用）を構築してキャッシュする
  * 区間はSQLでの行選択（そのランのどのSplitを表示するか）に関わるためキャッシュキーに含める。
  * それ以外の条件（プレイヤー・時期・タイム）はキャッシュ済みリストへのJSフィルタで等価に適用できる。
+ * 対象ユーザー（公開プロフィール・viewer除外・MCID/UUIDあり）は getUserData と共通で、
+ * 公開条件を1箇所（home-user-data.server.ts）に保つ。
  */
-async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFeed> {
+async function getPaceFeedBase(userData: UserDataCache, timeline?: string): Promise<PaceFeedItem[]> {
   const cacheKey = paceFeedCacheKey(timeline);
-  const cached = await getCached<VisiblePaceFeed>(cacheKey);
+  const cached = await getCached<PaceFeedItem[]>(cacheKey);
   if (cached) return cached;
 
-  const usersWithMcid = await db
-    .select({
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(users)
-    .where(
-      and(
-        isNotNull(users.mcid),
-        isNotNull(users.uuid),
-        excludeViewersCondition,
-        // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴・表示名・スキンを
-        // 未認証で配信される公開フィードに露出させない。/paces はディスカバリ一覧なので、
-        // 一覧系と同じ「公開のみ」ルール（browse-query.server.ts と同一）に揃える。
-        eq(users.profileVisibility, "public"),
-      ),
-    );
-
-  const registeredMcidSet = new Set(usersWithMcid.map((u) => u.mcid!.toLowerCase()));
-  const mcidToUuid = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.uuid!])
-  );
-  const mcidToDisplayName = Object.fromEntries(
-    usersWithMcid.map((u) => [u.mcid!.toLowerCase(), u.displayName || u.mcid!])
-  );
-  const mcidToDisplayNameAlphabet = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.displayNameAlphabet)
-      .map((u) => [u.mcid!.toLowerCase(), u.displayNameAlphabet!])
-  );
-  const mcidToSkinUrl = Object.fromEntries(
-    usersWithMcid
-      .filter((u) => u.customSkinUrl !== null)
-      .map((u) => [u.mcid!.toLowerCase(), u.customSkinUrl!])
-  );
-
-  const paces = await getPaceFeedEntries(registeredMcidSet, { timeline });
+  // 非公開(private)・限定公開(unlisted)プロフィールのラン履歴を未認証で配信される公開フィードに
+  // 露出させない（getUserData が公開のみ）。getPaceFeedEntries は対象 mcid 集合を引数に取るため、
+  // ユーザー取得（60秒キャッシュ。呼び出し側で取得済み）の後にペース取得を行う。
+  const paces = await getPaceFeedEntries(new Set(userData.registeredMcids), { timeline });
 
   const items = paces.map((p) => ({
     mcid: p.mcid,
@@ -147,9 +154,29 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
     time: Math.floor(p.date.getTime() / 1000),
   }));
 
-  const base: VisiblePaceFeed = { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
-  await setCached(cacheKey, base, PACES_FEED_CACHE_TTL);
-  return base;
+  await setCached(cacheKey, items, PACES_FEED_CACHE_TTL);
+  return items;
+}
+
+/**
+ * ペースに走者情報（uuid・表示名・スキン）を添える。ページに含まれる分だけ付くため、
+ * 全ユーザー分のマップを SSR/API 応答に載せずに済む。userData に無い mcid（非公開化など）は profile なし
+ */
+export function withPaceProfiles(
+  items: PaceFeedItem[],
+  userData: Pick<UserDataCache, "mcidToUuid" | "mcidToDisplayName" | "mcidToDisplayNameAlphabet" | "mcidToSkinUrl">,
+): PaceFeedItemWithProfile[] {
+  return items.map((item) => {
+    const key = item.mcid.toLowerCase();
+    if (!Object.hasOwn(userData.mcidToUuid, key)) return item;
+    const profile: PaceFeedProfile = { uuid: userData.mcidToUuid[key] };
+    if (Object.hasOwn(userData.mcidToDisplayName, key)) profile.displayName = userData.mcidToDisplayName[key];
+    if (Object.hasOwn(userData.mcidToDisplayNameAlphabet, key)) {
+      profile.displayNameAlphabet = userData.mcidToDisplayNameAlphabet[key];
+    }
+    if (Object.hasOwn(userData.mcidToSkinUrl, key)) profile.skinUrl = userData.mcidToSkinUrl[key];
+    return { ...item, profile };
+  });
 }
 
 /**
@@ -161,13 +188,13 @@ async function getPaceFeedBase(db: Db, timeline?: string): Promise<VisiblePaceFe
  *   getViewerPacePrefs の結果を使ってクライアント側でフィルタする（ホームと同じ挙動）
  */
 export async function getPublicPaceFeed(
-  db: Db,
   filters: PaceSearchFilters = {},
 ): Promise<VisiblePaceFeed> {
-  const base = await getPaceFeedBase(db, filters.timeline);
-  const { mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl } = base;
+  const userData = await getUserData();
+  const baseItems = await getPaceFeedBase(userData, filters.timeline);
+  const { mcidToDisplayName, mcidToDisplayNameAlphabet } = userData;
 
-  let items = base.items;
+  let items = baseItems;
 
   // 時期（ランは同一日時の行しか持たないため、ラン単位のJSフィルタでSQL条件と等価）
   if (filters.from) {
@@ -179,7 +206,7 @@ export async function getPublicPaceFeed(
     items = items.filter((p) => p.time <= toSec);
   }
 
-  // タイム上限（表示される区間のRTAに対して適用）
+  // タイム上限（各ランの表示される区間＝区間未指定なら到達区間の IGT に対して適用）
   if (filters.maxRta !== undefined) {
     const maxRta = filters.maxRta;
     items = items.filter((p) => p.rta <= maxRta);
@@ -196,7 +223,13 @@ export async function getPublicPaceFeed(
     });
   }
 
-  return { items, mcidToUuid, mcidToDisplayName, mcidToDisplayNameAlphabet, mcidToSkinUrl };
+  // タイム順（進んだ区間ほど上、同じ区間の中は IGT 昇順）。
+  // base の items を破壊しないようコピーしてからソートする（キャッシュ共有のため）
+  if (filters.sort === "time") {
+    items = [...items].sort(comparePaceByProgress);
+  }
+
+  return { items, userData };
 }
 
 /**

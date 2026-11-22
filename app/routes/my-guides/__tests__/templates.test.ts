@@ -1,9 +1,12 @@
-// /my-guides/templates の action（サーチクラフトテンプレートの公開切替・削除）の回帰テスト。
+// /my-guides/templates の action（サーチクラフトテンプレートの削除）の回帰テスト。
 //
 // 所有権チェック（userId AND templateId の where 条件）が、無条件 update/delete に対する
 // 唯一の防壁になっている。他人の templateId を渡しても行を変更・削除できないことを実DBで検証する
 // （app/routes/me/__tests__/edit.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -90,24 +93,7 @@ describe("action - 所有権チェック（他人のテンプレート）", () =
     expect(await findTemplate(template.id)).toBeDefined();
   });
 
-  it("他人の templateId の toggle-publish は拒否され、isPublished は不変", async () => {
-    const owner = await seedUser(db, { slug: "owner", discordId: "discord-owner" });
-    await seedUser(db, { slug: "attacker", discordId: "discord-attacker" });
-    const template = await seedSearchCraftTemplate(db, owner.id, {
-      title: "Owner's Template",
-      isPublished: true,
-    });
-    signInAs("discord-attacker");
-
-    const res = await callAction(actionFormData("toggle-publish", template.id));
-
-    expect(res).toEqual({ error: "テンプレートが見つかりません" });
-    expect((await findTemplate(template.id))?.isPublished).toBe(true);
-  });
-});
-
-describe("action - 本人操作は成功する", () => {
-  it("toggle-publish は成功し isPublished が反転する", async () => {
+  it("toggle-publish は廃止された（公開は編集画面の保存で行う）。不明な操作として拒否され、isPublished は不変", async () => {
     const owner = await seedUser(db, { slug: "owner", discordId: "discord-owner" });
     const template = await seedSearchCraftTemplate(db, owner.id, {
       title: "My Template",
@@ -117,10 +103,12 @@ describe("action - 本人操作は成功する", () => {
 
     const res = await callAction(actionFormData("toggle-publish", template.id));
 
-    expect(res).toEqual({ success: true, action: "toggle-publish", published: false });
-    expect((await findTemplate(template.id))?.isPublished).toBe(false);
+    expect(res).toEqual({ error: t("meTemplates.unknownAction") });
+    expect((await findTemplate(template.id))?.isPublished).toBe(true);
   });
+});
 
+describe("action - 本人操作は成功する", () => {
   it("delete は成功し行が削除される", async () => {
     const owner = await seedUser(db, { slug: "owner", discordId: "discord-owner" });
     const template = await seedSearchCraftTemplate(db, owner.id, { title: "My Template" });

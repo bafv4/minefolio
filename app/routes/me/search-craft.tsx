@@ -5,16 +5,19 @@ import { useLoaderData, useFetcher, Link, type ShouldRevalidateFunctionArgs } fr
 import type { Route } from "./+types/search-craft";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb } from "@/lib/db";
+import { errorSummary } from "@/lib/error-summary";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCrafts, searchCraftLoops, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { isValidCraftRow, isValidLoopRow, hasValidUniqueIds, parseTimingInput } from "@/lib/search-craft-payload";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { PageSection } from "@/components/page-section";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -28,9 +31,7 @@ import { toast } from "sonner";
 import {
   Search,
   AlertCircle,
-  Settings,
-  Copy,
-  Share2,
+  FilePlus,
 } from "lucide-react";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import { SearchCraftTimingBoard } from "@/components/search-craft-editor";
@@ -49,10 +50,15 @@ import {
   type SearchCraftVariation,
 } from "@/lib/search-craft-variations";
 import { useT } from "@/hooks/use-locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
-import { PresetSelector } from "@/components/preset-selector";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -179,22 +185,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 // ブロックカード群）に合わせた骨組みにする（旧フラット行UIの骨組みは使わない）。
 export function HydrateFallback() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Skeleton className="h-8 w-36 mb-2" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <Skeleton className="h-11 sm:h-10 w-full sm:w-20" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物と同じ間隔・並び: 見出し（h1 32px ＋ 説明 20px。右のテンプレート公開ボタンは保存済みがあるときだけなので描かない）
+          → プリセット選択（ラベル 16px ＋ gap 4px ＋ セレクト 36px、sm 未満は 44px）→ 欄（罫線 ＋ 見出し 28px ＋ ブロック） */}
+      <div>
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-5 w-72 max-w-full" />
       </div>
 
-      {/* PresetSelector 相当の帯 */}
-      <div className="rounded-lg border bg-card p-3 sm:p-4 shadow-sm">
-        <Skeleton className="h-10 w-full sm:w-80" />
-      </div>
+      <PresetSelectorSkeleton />
 
       {/* タイミングブロックカード */}
-      <div className="space-y-4">
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+      <Skeleton className="h-7 w-40" />
         {Array.from({ length: 2 }).map((_, i) => (
           <div key={i} className="rounded-xl border border-border/70 bg-background/80">
             <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
@@ -230,8 +233,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const actionType = formString(formData, "_action");
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -255,28 +258,42 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (actionType === "saveAll") {
-    const craftsJson = formData.get("crafts") as string;
+    const craftsJson = formString(formData, "crafts") ?? "";
     // loops フィールド自体が未送信（null）＝ Loop 機能追加前の古いタブ等からの保存。
     // これを "[]" 相当に倒すと、保存のたびに既存 Loop が無警告で全消去されてしまうため、
     // フィールドが本当に存在しない場合は DB の既存 loops をフォールバックとして採用する
     // （明示的に "[]" が送信された場合＝新しいクライアントでの全削除は、従来どおり尊重する）。
-    const loopsField = formData.get("loops") as string | null;
+    const loopsField = formString(formData, "loops");
 
     try {
+      // 自分の既存行（id・timing・comment）。検証で「保存値と同じなら通す」ために使い、id の引き継ぎにも使う。
+      // 送られた id を引き継ぐのは「自分の既存行にある id」だけ。それ以外（new- 始まり・他人の id・任意の文字列）は
+      // 新規採番する（任意の文字列を主キーにできると、他人の id の存在を成功・失敗から判定できてしまう）。
+      const [ownCraftRows, ownLoopRows] = await Promise.all([
+        db.query.searchCrafts.findMany({
+          where: eq(searchCrafts.userId, user.id),
+          columns: { id: true, timing: true, comment: true },
+        }),
+        db.query.searchCraftLoops.findMany({
+          where: eq(searchCraftLoops.userId, user.id),
+          columns: { id: true, timing: true, comment: true },
+        }),
+      ]);
+      const ownCraftIds = new Set(ownCraftRows.map((r) => r.id));
+      const ownLoopIds = new Set(ownLoopRows.map((r) => r.id));
+      const storedCrafts = new Map(ownCraftRows.map((r) => [r.id, r]));
+      const storedLoops = new Map(ownLoopRows.map((r) => [r.id, r]));
+
       const craftsRaw = JSON.parse(craftsJson) as Array<Record<string, unknown>>;
 
-      // items が string[] であることを保証する。非配列・非文字列要素のまま永続化されると、
-      // 公開ガイド埋め込みの SSR が items.map で TypeError を投げて 500 になるため、ここで拒否する。
+      // 形・件数・文字数・timing の許可リスト・id の重複を検証する（lib/search-craft-payload.ts）。
+      // items が string[] でないまま永続化されると、公開ガイド埋め込みの SSR が items.map で
+      // TypeError を投げて 500 になるため、ここで拒否する。
       if (
         !Array.isArray(craftsRaw) ||
-        craftsRaw.some(
-          (craft) =>
-            !craft ||
-            typeof craft.id !== "string" ||
-            !craft.id ||
-            !Array.isArray(craft.items) ||
-            (craft.items as unknown[]).some((item) => typeof item !== "string"),
-        )
+        craftsRaw.length > SAVE_LIMITS.searchCrafts ||
+        craftsRaw.some((craft) => !craft || typeof craft !== "object" || !isValidCraftRow(craft, storedCrafts.get(craft.id as string))) ||
+        !hasValidUniqueIds(craftsRaw)
       ) {
         return { error: t("meSearchCraft.invalidCraftData") };
       }
@@ -289,7 +306,7 @@ export async function action({ request }: Route.ActionArgs) {
         items: craft.items as string[],
         keys: [],
         comment: typeof craft.comment === "string" ? craft.comment : null,
-        timing: (craft.timing ?? null) as SearchCraftItem["timing"],
+        timing: parseTimingInput(craft.timing, storedCrafts.get(craft.id as string)?.timing) ?? null,
         variations: resolveRowVariations({
           variations: craft.variations,
           searchStr: typeof craft.searchStr === "string" ? craft.searchStr : null,
@@ -321,25 +338,32 @@ export async function action({ request }: Route.ActionArgs) {
         // （削除済みエントリの参照はこの後 remapLoopSteps の安全網で除去する）。
         if (
           !Array.isArray(loopsRaw) ||
+          loopsRaw.length > SAVE_LIMITS.searchCraftLoops ||
           loopsRaw.some(
             (loop) =>
               !loop ||
               typeof loop !== "object" ||
               typeof (loop as { id?: unknown }).id !== "string" ||
               !(loop as { id: string }).id ||
+              !isValidLoopRow(loop as Record<string, unknown>, storedLoops.get((loop as { id: string }).id)) ||
               !isValidLoopStepsShape((loop as { steps?: unknown }).steps),
-          )
+          ) ||
+          !hasValidUniqueIds(loopsRaw as Array<{ id?: unknown }>)
         ) {
           return { error: t("meSearchCraft.invalidCraftData") };
         }
-        loops = loopsRaw as SearchCraftLoopItem[];
+        loops = (loopsRaw as SearchCraftLoopItem[]).map((loop) => ({
+          ...loop,
+          timing: parseTimingInput(loop.timing, storedLoops.get(loop.id)?.timing) ?? null,
+        }));
       }
 
-      // crafts の submittedId→finalId マップを挿入前に確定する（"new-" 始まりのみ新規採番）。
+      // crafts の submittedId→finalId マップを挿入前に確定する（引き継げない id は新規採番）。
       // Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングで id を振り直せない。
+      // 振り直した分も含めて「送信 id → 最終 id」を全件登録する（id の重複は検証で拒否済み）
       const craftIdMap = new Map<string, string>();
       const finalCrafts = crafts.map((craft) => {
-        const finalId = craft.id.startsWith("new-") ? createId() : craft.id;
+        const finalId = ownCraftIds.has(craft.id) ? craft.id : createId();
         craftIdMap.set(craft.id, finalId);
         return { ...craft, id: finalId };
       });
@@ -351,7 +375,7 @@ export async function action({ request }: Route.ActionArgs) {
           const steps = remapLoopSteps(loop.steps, craftIdMap);
           if (!steps) return null;
           return {
-            id: loop.id.startsWith("new-") ? createId() : loop.id,
+            id: ownLoopIds.has(loop.id) ? loop.id : createId(),
             steps,
             comment: loop.comment,
             timing: loop.timing,
@@ -409,13 +433,14 @@ export async function action({ request }: Route.ActionArgs) {
         id: createId(),
         userId: user.id,
         changeType: "game_setting",
-        changeDescription: t("meSearchCraft.searchCraftChangeHistory"),
+        changeDescription: encodeHistoryDescription("searchCraft.update"),
+        presetId: await resolveActivePublicPresetId(db, user.id),
         createdAt: now,
       });
 
       return { success: true };
     } catch (error) {
-      console.error("Save error:", error);
+      console.error("Save error:", errorSummary(error));
       return { error: t("meSearchCraft.saveFailed") };
     }
   }
@@ -432,15 +457,14 @@ export async function action({ request }: Route.ActionArgs) {
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meSearchCraft.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meSearchCraft.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -455,20 +479,30 @@ export default function SearchCraftPage() {
     presets,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [crafts, setCrafts] = useState<SearchCraftItem[]>(initialCrafts);
-  const [loops, setLoops] = useState<SearchCraftLoopItem[]>(initialLoops);
+  // loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、未変更の間だけ置き換える
+  const {
+    draft: crafts,
+    setDraft: setCrafts,
+  } = useLoaderSyncedDraft<SearchCraftItem[]>(initialCrafts, {
+    resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。新規行の ID 採番など、保存後の値へ揃えるため次の loader 更新では編集済みでも置き換える
+    syncToken: successfulSaveToken(fetcher.data),
+  });
+  const {
+    draft: loops,
+    setDraft: setLoops,
+  } = useLoaderSyncedDraft<SearchCraftLoopItem[]>(initialLoops, {
+    resetKey: activePreset?.id ?? null,
+    syncToken: successfulSaveToken(fetcher.data),
+  });
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   // プリセット切替（apply-preset）中は入力欄をロックする
   const [presetSwitching, setPresetSwitching] = useState(false);
 
-  const isSubmitting = fetcher.state === "submitting";
-
-  // loaderデータが更新されたらローカル状態も更新
-  useEffect(() => {
-    setCrafts(initialCrafts);
-    setLoops(initialLoops);
-  }, [initialCrafts, initialLoops]);
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
 
   // 保存結果の処理
   useEffect(() => {
@@ -556,10 +590,27 @@ export default function SearchCraftPage() {
     fetcher.submit(formData, { method: "post" });
   }, [crafts, loops, fetcher, activePreset, t]);
 
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef({ initialCrafts, initialLoops });
+  latestBaseRef.current = { initialCrafts, initialLoops };
+
   const handleReset = useCallback(() => {
+    const prevCrafts = crafts;
+    const prevLoops = loops;
+    const baseCrafts = initialCrafts;
+    const baseLoops = initialLoops;
     setCrafts(initialCrafts);
     setLoops(initialLoops);
-  }, [initialCrafts, initialLoops]);
+    return () => {
+      const latest = latestBaseRef.current;
+      if (!jsonEqual(latest.initialCrafts, baseCrafts) || !jsonEqual(latest.initialLoops, baseLoops)) {
+        return false;
+      }
+      setCrafts(prevCrafts);
+      setLoops(prevLoops);
+      return true;
+    };
+  }, [crafts, loops, initialCrafts, initialLoops]);
 
   // プリセットからコピー
   const handleCopyFromPreset = useCallback((presetId: string) => {
@@ -609,7 +660,7 @@ export default function SearchCraftPage() {
   }, [presets]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t("meSearchCraft.pageTitle")}</h1>
@@ -617,14 +668,16 @@ export default function SearchCraftPage() {
             {t("meSearchCraft.pageDescription")}
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
+        {/* 保存済みのエントリが無いうちは公開できる物が無いので、ボタンは出さない（空状態が理由を伝える）。
+            未保存の下書きでは出さない（公開側は保存済みの内容を読むため。loader の件数で判定する） */}
+        {initialCrafts.length > 0 && (
           <Button asChild variant="outline" className="w-full sm:w-auto h-11 sm:h-10">
             <Link to="/my-guides/templates">
-              <Share2 className="mr-2 h-4 w-4" />
+              <FilePlus className="mr-2 h-4 w-4" />
               {t("meSearchCraft.publishAsTemplate")}
             </Link>
           </Button>
-        </div>
+        )}
       </div>
 
       {/* プリセットセレクター */}
@@ -641,7 +694,12 @@ export default function SearchCraftPage() {
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className={cn(!hasPresets && "pointer-events-none opacity-50")}>
+      <div inert={!hasPresets}>
+      <PageSection
+        id="search-craft-list"
+        title={t("meSearchCraft.listTitle")}
+        className={cn(!hasPresets && "pointer-events-none opacity-50")}
+      >
       <SearchCraftTimingBoard
         crafts={crafts}
         onCraftsChange={setCrafts}
@@ -650,15 +708,20 @@ export default function SearchCraftPage() {
         remaps={remaps}
         createCraft={createCraft}
         createLoop={createLoop}
+        emptyState
+        collapseEmptyBlocks
       />
+      </PageSection>
       </div>
       </PresetSwitchLock>
 
       <FloatingSaveBar
-        hasChanges={hasChanges}
+        hasChanges={hasChanges && hasPresets}
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}
@@ -720,23 +783,5 @@ export default function SearchCraftPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meSearchCraft.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meSearchCraft.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meSearchCraft.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

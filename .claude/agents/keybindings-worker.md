@@ -17,7 +17,7 @@ tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob, TaskCreate, TaskUpdate
 - **キー配置**: `/keybindings`, `/keybindings/visual`, `/keybindings/stats`, `/me/keybindings`
 - **デバイス/マウス設定**: `/me/devices`
 - **プリセット・リマップ**: `/me/presets`、プリセット切替ロック、リマップ表
-- **設定インポート**: `/me/import`
+- **設定インポート**: `app/components/import-dialog.tsx`（`/me/keybindings` のプリセット行）と `/me/import` の action（ページは `/me/keybindings?import=1` への転送）
 - **アイテム / サーチクラフト**: `/me/items`, `/me/search-craft`、公開テンプレート `/guides/templates`, `/my-guides/templates`
 - **API**: `api/keybindings-csv`
 - **コンポーネント**: `app/components/keybindings/`, `virtual-keyboard.tsx`, `remap-*.tsx`, `key-capture-button.tsx`,

@@ -12,10 +12,13 @@ import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { GuideEditor } from "@/components/guide-editor";
 import { normalizeSlug } from "@/lib/guide-slug";
+import { parseGuideTags } from "@/lib/guide-tags";
 import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content-translation.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { GuideRouteNotFound } from "@/components/guide-route-not-found";
+import { useT } from "@/hooks/use-locale";
 
 // 公開ガイド本文の最大文字数（多層防御。下書きには適用しない）
 const MAX_PUBLISHED_CONTENT_LENGTH = 500_000;
@@ -33,14 +36,15 @@ export function meta({
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);
 
+  // user はクライアントへ渡す列（画像パスの userId と公開 URL の slug）だけ引く
   const user = await db.query.users.findFirst({
     where: eq(users.discordId, session.user.id),
+    columns: { id: true, slug: true },
   });
   if (!user) return redirect("/onboarding");
 
@@ -50,7 +54,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       eq(guides.authorId, user.id)
     ),
   });
-  if (!guide) return redirect("/my-guides");
+  if (!guide) {
+    throw new Response(createTranslator(resolveLocale(request))("guides.notFoundGuide"), { status: 404 });
+  }
 
   // 未コミットのドラフトがあれば、編集対象としてドラフトを優先する。
   const hasDraft = guide.draftUpdatedAt !== null;
@@ -84,7 +90,21 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // .server の関数はコンポーネントから使えないため、真偽値だけをエディタへ渡す
   const translationEnabled = isTranslationEnabled();
 
-  return { guide: { ...guide, ...resolved }, user, hasDraft, published, translationEnabled };
+  // ガイドの行をそのまま展開しない（content と draftContent など、同じ本文を二重に送ってしまう）。
+  // エディタが使う列だけ返す
+  return {
+    guide: {
+      id: guide.id,
+      slug: guide.slug,
+      isPublished: guide.isPublished,
+      allowAutoTranslation: guide.allowAutoTranslation,
+      ...resolved,
+    },
+    user,
+    hasDraft,
+    published,
+    translationEnabled,
+  };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -131,7 +151,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return { success: true, mode: "discard", slug: guide.slug };
   }
 
-  // "draft" = 仮保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
+  // "draft" = 下書き保存（ドラフト列へ）, "publish" = 保存（公開版を書き換え）。
   // _action は allowlist で判定する（discard は上で処理済み）。未知・欠落値は
   // publish に倒さず拒否する — 誤って publish 扱いすると公開版を意図せず
   // 上書きしてしまうため（クライアント側の _action typo・送信漏れ対策）。
@@ -140,7 +160,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
   const saveMode = action;
 
-  // 自動翻訳の許可（ライブ列。仮保存・保存のどちらでも反映する）。未送信なら上書きしない。
+  // 自動翻訳の許可（ライブ列。下書き保存・保存のどちらでも反映する）。未送信なら上書きしない。
   // "true" / "false" 以外は拒否する（不正値を黙って false 扱いにして翻訳を消さない）
   const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
   const allowAutoTranslation =
@@ -220,12 +240,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // 公開時のみ本文の長さ上限を適用する（下書きは work 温存のため無制限）。
   if (saveMode !== "draft" && content.length > MAX_PUBLISHED_CONTENT_LENGTH) {
-    return { error: t("meGuides.errorContentTooLong") };
+    // 公開版が無いガイドのエディタには下書き保存が無い（hasDraftSave）ので、「下書きとしては保存できます」とは言わない
+    return { error: t(guide.isPublished ? "meGuides.errorContentTooLong" : "meGuides.errorContentTooLongNoDraft") };
   }
 
   if (saveMode === "draft") {
-    // 仮保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
-    // スラッグはライブ列なので仮保存でも反映する。
+    // 下書き保存: ドラフト列のみ更新。公開版（content 等）と isPublished は変更しない。
+    // スラッグはライブ列なので下書き保存でも反映する。
     await db
       .update(guides)
       .set({
@@ -265,7 +286,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // 自動翻訳（docs/translation.md）。オフなら既存の訳文を確実に消す（機能無効でも消す）。
   // オンのときは、公開版を更新する保存、またはオフ→オンに戻した保存で翻訳を依頼する
-  // （仮保存はドラフト列だけを書き換えるので、許可を戻したとき以外は翻訳しない）。
+  // （下書き保存はドラフト列だけを書き換えるので、許可を戻したとき以外は翻訳しない）。
   // 翻訳はレスポンス後に走り、失敗しても保存結果には影響しない
   const effectiveAllow = allowAutoTranslation ?? guide.allowAutoTranslation;
   if (!effectiveAllow) {
@@ -275,17 +296,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   return { success: true, mode: saveMode, slug: nextSlug };
-}
-
-/** tags は JSON 文字列だが、データ不整合があってもクラッシュしないよう防御的に解析する */
-function safeParseTags(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed.filter((t) => typeof t === "string") as string[]) : [];
-  } catch {
-    return [];
-  }
 }
 
 export default function GuideEditPage() {
@@ -298,7 +308,7 @@ export default function GuideEditPage() {
       initialTitle={guide.title}
       initialContent={guide.content}
       initialSummary={guide.summary ?? ""}
-      initialTags={safeParseTags(guide.tags)}
+      initialTags={parseGuideTags(guide.tags)}
       initialIsPublished={guide.isPublished}
       initialAllowAutoTranslation={guide.allowAutoTranslation}
       translationEnabled={translationEnabled}
@@ -309,11 +319,23 @@ export default function GuideEditPage() {
         summary: published.summary,
         content: published.content,
         coverImageUrl: published.coverImageUrl,
-        tags: safeParseTags(published.tags),
+        tags: parseGuideTags(published.tags),
         isPublished: published.isPublished,
       }}
       authorSlug={user.slug}
       guideSlug={guide.slug}
+    />
+  );
+}
+
+export function ErrorBoundary() {
+  const t = useT();
+  return (
+    <GuideRouteNotFound
+      title={t("guides.notFoundGuide")}
+      description={t("guides.notFoundHint")}
+      backTo="/my-guides"
+      backLabel={t("meGuides.backToManagement")}
     />
   );
 }

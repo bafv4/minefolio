@@ -1,19 +1,23 @@
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useLoaderData, useFetcher, useRevalidator, type ShouldRevalidateFunctionArgs } from "react-router";
+import { flushSync } from "react-dom";
+import { lazy, Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useLoaderData, useFetcher, useRevalidator, useSearchParams, type ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/keybindings";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeKeybindingUpdate, type KeybindingChangeId } from "@/lib/history-description";
 import { users, keybindings, playerConfigs, keyRemaps, customKeys, configHistory, configPresets, customActions } from "@/lib/schema";
-import { eq, asc, and, inArray } from "drizzle-orm";
-import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, getKeyCombinationLabel, parseKeyCombination, isSingleKey, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
+import { eq, asc, and, inArray, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
+import { countAssignedToKey, getActionAssignmentStatus } from "@/lib/keybindings-assignment";
+import { getActionLabel, getKeyLabel, normalizeKeyCode, normalizeKeyCombination, parseKeyCombination, UNBOUND_KEY, isUnbound, type FingerType, CONTROLLER_ACTIONS, KEYBOARD_MOUSE_ACTIONS, isControllerKeyCode } from "@/lib/keybindings";
 import { importFromLegacy } from "@/lib/legacy-import";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,23 +38,68 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, Loader2, AlertCircle, Settings, Copy, Gamepad2, TriangleAlert } from "lucide-react";
+import { Keyboard, X, Plus, Trash2, ArrowRight, Download, Save, FileInput, Check, Loader2, AlertCircle, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { PageSection } from "@/components/page-section";
+import { NoticeBanner } from "@/components/notice-banner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { KeyDialogSection } from "@/components/keybindings/key-dialog-section";
+import { KeyActionPicker } from "@/components/keybindings/key-action-picker";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { RemapRow, DialogRemapRow, ModifierToggleGroup } from "@/components/remap-row";
 import { KeyCaptureButton, keyCaptureEscapeGuard } from "@/components/key-capture-button";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
+import { KeyboardScaledPreview, LEFT_HAND_CROP } from "@/components/keyboard-scaled-preview";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { FingerToggleGroup, sortFingers } from "@/components/finger-toggle-group";
 import { createId } from "@paralleldrive/cuid2";
 import { useT } from "@/hooks/use-locale";
-import type { Translator } from "@/lib/messages";
+import { jsonEqual } from "@/lib/loader-synced-draft";
+import { useLoaderSyncedDraft } from "@/hooks/use-loader-synced-draft";
+import type { MessageKey, Translator } from "@/lib/messages";
 import { isKeyRemapTarget, sanitizeRemapTargetKey, normalizeKeyRemapType, findRemapConflict, getRemapSourceLabel, remapSourceMatchKey, filterRemapsForContext, type KeyRemapType, type RemapConflict, type RemapContext } from "@/lib/remap-utils";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetSyncKind } from "@/lib/preset-utils";
-import { PresetSelector } from "@/components/preset-selector";
+import { syncActivePresetSnapshot, type PresetSyncKind } from "@/lib/preset-utils";
+import { parseFingerAssignments } from "@/lib/preset-read";
+import { validateFingerAssignmentsJson } from "@/lib/finger-assignments";
+import { SAVE_LIMITS, formString } from "@/lib/save-limits";
+import { isValidRemapInputs, isValidCustomKeyInputs, isValidCustomActionInputs } from "@/lib/keybindings-payload";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
 import { RemapViewToggle } from "@/components/remap-view-toggle";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
+
+/** カスタムアクションのカテゴリに対応する翻訳キー（SelectValue と SelectItem で共用） */
+const CUSTOM_ACTION_CATEGORIES = ["other", "macro", "tool"] as const;
+const CUSTOM_ACTION_CATEGORY_LABEL_KEYS: Record<(typeof CUSTOM_ACTION_CATEGORIES)[number], MessageKey> = {
+  other: "meKeybindings.categoryOther",
+  macro: "meKeybindings.categoryMacro",
+  tool: "meKeybindings.categoryTool",
+};
+
+/** プリセットのコピー対象に対応する翻訳キー（SelectValue と SelectItem で共用） */
+const COPY_TARGET_OPTIONS = ["all", "keybindings", "remaps", "fingers"] as const;
+const COPY_TARGET_LABEL_KEYS: Record<(typeof COPY_TARGET_OPTIONS)[number], MessageKey> = {
+  all: "meKeybindings.all",
+  keybindings: "meKeybindings.keybindingsOnly",
+  remaps: "meKeybindings.remapsOnly",
+  fingers: "meKeybindings.fingersOnly",
+};
+
+// 設定インポートのダイアログは開くときだけ読む（import-parser ごと別チャンクにする）
+const ImportDialog = lazy(() =>
+  import("@/components/import-dialog").then((m) => ({ default: m.ImportDialog })),
+);
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -59,12 +108,13 @@ export const meta: Route.MetaFunction = ({ matches }) => {
 
 // 再検証を制御：actionの結果に応じてのみ再検証
 export function shouldRevalidate({ actionResult, defaultShouldRevalidate, formAction, currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) {
-  // 自ルートのアクション結果がある場合はデフォルトの動作に従う
+  // action の結果がある場合はデフォルトの動作に従う（/me/presets・/me/import の action は常に値を返すので、
+  // プリセット切替・作成・削除と、プリセット行のインポート後の再検証はここで1回だけ走る）
   if (actionResult !== undefined) {
     return defaultShouldRevalidate;
   }
-  // /me/presets でのアクション（プリセット切替・作成・削除）の後は再検証する
-  if (formAction === "/me/presets") {
+  // action が結果を返さずに終わった（throw した）場合の保険。/me/presets・/me/import への送信後は必ず取り直す
+  if (formAction === "/me/presets" || formAction === "/me/import") {
     return true;
   }
   // フォーム送信を伴わない同一 URL の再検証（useRevalidator 起点）はデフォルトに従う。
@@ -151,36 +201,40 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
+  // 本物（下の default export）と同じ並び・高さ: 見出し（h1 32px ＋ 説明 20px）→ プリセット選択（ラベル 16px ＋ gap 4px ＋ セレクト 36px、
+  // sm 未満は 44px）→ キーボードの欄（罫線 ＋ 見出し 28px ＋ 説明 20px ＋ 凡例 ＋ キーボード）→ フォルダ型タブ（帯 42px、sm 未満 50px、
+  // 中身は p-4 sm:p-6、先頭の欄は罫線なし）
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="h-8 w-32 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="flex gap-2">
-          <div className="h-9 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-9 w-24 bg-muted rounded animate-pulse" />
-        </div>
+      <div>
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="mt-0 h-5 w-64 max-w-full" />
       </div>
 
-      {/* Virtual Keyboard Card */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        <div className="h-80 w-full bg-muted rounded-lg animate-pulse" />
+      {/* プリセットセレクター */}
+      <PresetSelectorSkeleton />
+
+      {/* キーボードの欄（上罫線＋見出し＋説明＋凡例＋中身） */}
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-5 w-72 max-w-full" />
+        <Skeleton className="h-6 w-56 max-w-full" />
+        <Skeleton className="h-80 w-full rounded-xl" />
       </div>
 
-      {/* Tabs */}
-      <div className="h-10 w-96 bg-muted rounded animate-pulse" />
-
-      {/* Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
+      {/* タブ（帯 ＋ 内容は一体のカード） */}
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <Skeleton className="h-[42px] w-full rounded-none max-sm:h-[50px]" />
+        <div className="space-y-4 border-t p-4 sm:p-6">
+          <Skeleton className="h-7 w-32" />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -248,6 +302,9 @@ type DbClient = Db | DbTransaction;
 /** save-all のトランザクションをユーザー向けエラーメッセージ付きで中断するための例外 */
 class SaveAllAbortError extends Error {}
 
+/** 保存後の総数が上限を超えるときにトランザクションを中断する例外（削除だけ commit されるのを防ぐ） */
+class SaveLimitExceededError extends Error {}
+
 async function persistRemaps(
   t: Translator,
   db: DbClient,
@@ -313,6 +370,11 @@ async function persistRemaps(
         });
       }
 
+      // 保存後の総数で上限を判定する（ペイロード件数だけでは、id 無しの行を繰り返し送って増やせる）。
+      // existingRows は上の削除の後に読んでいるので、削除分は数えない
+      const finalIds = new Set([...existingRows.map((r) => r.id), ...resolved.map((r) => r.id)]);
+      if (finalIds.size > SAVE_LIMITS.remaps) throw new SaveLimitExceededError();
+
       if (resolved.length > 0) {
         await tx.delete(keyRemaps).where(
           and(
@@ -337,6 +399,9 @@ async function persistRemaps(
     if (isUniqueConstraintError(e)) {
       return { error: t("meKeybindings.remapConflictError") };
     }
+    if (e instanceof SaveLimitExceededError) {
+      return { error: t("meKeybindings.limitExceeded") };
+    }
     throw e;
   }
 
@@ -350,22 +415,44 @@ async function persistKeybindingUpdates(
   now: Date,
   options: { normalizeEmptyToUnbound: boolean }
 ) {
+  // 行ごとの UPDATE（Turso では 1 件 = 1 HTTP 往復）を避け、CASE 式の単一 UPDATE にまとめる。
+  // 同一 id が複数あれば後勝ち（従来の逐次 UPDATE と同じ最終状態）。
+  const keyCodeById = new Map<string, string>();
   for (const update of updates) {
     if (options.normalizeEmptyToUnbound) {
-      const keyCode = update.keyCode || "_UNBOUND";
-      await db
-        .update(keybindings)
-        .set({ keyCode, updatedAt: now })
-        .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
+      keyCodeById.set(update.id, update.keyCode || "_UNBOUND");
       continue;
     }
-
     if (!update.keyCode) continue;
-    await db
-      .update(keybindings)
-      .set({ keyCode: update.keyCode, updatedAt: now })
-      .where(and(eq(keybindings.id, update.id), eq(keybindings.userId, userId)));
+    keyCodeById.set(update.id, update.keyCode);
   }
+  if (keyCodeById.size === 0) return;
+
+  const keyCodeCase = sql.join(
+    [
+      sql`CASE ${keybindings.id}`,
+      ...Array.from(keyCodeById, ([id, keyCode]) => sql`WHEN ${id} THEN ${keyCode}`),
+      sql`END`,
+    ],
+    sql` `
+  );
+  await db
+    .update(keybindings)
+    .set({ keyCode: keyCodeCase, updatedAt: now })
+    .where(and(eq(keybindings.userId, userId), inArray(keybindings.id, Array.from(keyCodeById.keys()))));
+}
+
+/**
+ * 書き込み文をまとめて実行する。トップレベルの DB では db.batch（1 HTTP リクエスト・原子的）、
+ * トランザクション内では（呼び出し側のトランザクションに任せて）順次実行する。
+ */
+async function runWrites(db: DbClient, statements: BatchItem<"sqlite">[]) {
+  if (statements.length === 0) return;
+  if ("batch" in db) {
+    await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    return;
+  }
+  for (const statement of statements) await statement;
 }
 
 async function upsertFingerAssignments(
@@ -374,25 +461,75 @@ async function upsertFingerAssignments(
   fingerAssignmentsJson: string,
   now: Date
 ) {
-  const existingConfig = await db.query.playerConfigs.findFirst({
-    where: eq(playerConfigs.userId, userId),
-  });
+  // player_configs.user_id は UNIQUE。select → update/insert の 2 往復を 1 文の upsert にする
+  await db
+    .insert(playerConfigs)
+    .values({
+      id: createId(),
+      userId,
+      fingerAssignments: fingerAssignmentsJson,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: playerConfigs.userId,
+      set: { fingerAssignments: fingerAssignmentsJson, updatedAt: now },
+    });
+}
 
-  if (existingConfig) {
-    await db
-      .update(playerConfigs)
-      .set({ fingerAssignments: fingerAssignmentsJson, updatedAt: now })
-      .where(eq(playerConfigs.userId, userId));
-    return;
+async function persistCustomKeys(
+  db: DbClient,
+  userId: string,
+  keysData: CustomKeyMutationInput[],
+  now: Date,
+  /** 検証のために読んだ自分の既存行（往復を増やさず使い回す） */
+  existing: Array<{ id: string }>
+): Promise<{ limitExceeded: boolean }> {
+  // 保存後の総数（既存 − 削除 + 新規）で上限を判定する。超過なら何も書かない
+  const existingIds = new Set(existing.map((r) => r.id));
+  const deletedIds = new Set(
+    keysData.filter((ck) => ck._delete && ck.id && existingIds.has(ck.id)).map((ck) => ck.id!),
+  );
+  const inserts = keysData.filter((ck) => !ck._delete && !ck.id && ck.keyCode && ck.keyName).length;
+  if (existing.length - deletedIds.size + inserts > SAVE_LIMITS.customKeys) {
+    return { limitExceeded: true };
   }
 
-  await db.insert(playerConfigs).values({
-    id: createId(),
-    userId,
-    fingerAssignments: fingerAssignmentsJson,
-    createdAt: now,
-    updatedAt: now,
-  });
+  const statements: BatchItem<"sqlite">[] = [];
+  for (const ck of keysData) {
+    if (ck._delete && ck.id) {
+      statements.push(
+        db
+          .delete(customKeys)
+          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, userId)))
+      );
+    } else if (ck.id) {
+      statements.push(
+        db.update(customKeys)
+          .set({
+            keyCode: ck.keyCode,
+            keyName: ck.keyName,
+            category: ck.category,
+            updatedAt: now,
+          })
+          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, userId)))
+      );
+    } else if (ck.keyCode && ck.keyName) {
+      statements.push(
+        db.insert(customKeys).values({
+          id: createId(),
+          userId,
+          keyCode: ck.keyCode,
+          keyName: ck.keyName,
+          category: ck.category,
+          createdAt: now,
+          updatedAt: now,
+        })
+      );
+    }
+  }
+  await runWrites(db, statements);
+  return { limitExceeded: false };
 }
 
 async function persistCustomActions(
@@ -400,12 +537,28 @@ async function persistCustomActions(
   userId: string,
   actionsData: CustomActionMutationInput[],
   now: Date
-) {
+): Promise<{ limitExceeded: boolean }> {
+  const existing = await db.query.customActions.findMany({
+    where: eq(customActions.userId, userId),
+    columns: { id: true },
+  });
+  const existingIds = new Set(existing.map((r) => r.id));
+  const deletedIds = new Set(
+    actionsData.filter((a) => a._delete && a.id && existingIds.has(a.id)).map((a) => a.id!),
+  );
+  const inserts = actionsData.filter((a) => !a._delete && !a.id && a.actionName && a.triggerKey).length;
+  if (existing.length - deletedIds.size + inserts > SAVE_LIMITS.customActions) {
+    return { limitExceeded: true };
+  }
+
+  const statements: BatchItem<"sqlite">[] = [];
   for (const action of actionsData) {
     if (action._delete && action.id) {
-      await db
-        .delete(customActions)
-        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
+      statements.push(
+        db
+          .delete(customActions)
+          .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)))
+      );
     }
   }
 
@@ -417,32 +570,38 @@ async function persistCustomActions(
     const triggerKeyNormalized = normalizeKeyCombination(action.triggerKey);
 
     if (action.id) {
-      await db
-        .update(customActions)
-        .set({
-          actionName: action.actionName,
-          description: action.description || null,
-          category: action.category,
-          triggerKey: triggerKeyNormalized,
-          displayOrder: order++,
-          updatedAt: now,
-        })
-        .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)));
+      statements.push(
+        db
+          .update(customActions)
+          .set({
+            actionName: action.actionName,
+            description: action.description || null,
+            category: action.category,
+            triggerKey: triggerKeyNormalized,
+            displayOrder: order++,
+            updatedAt: now,
+          })
+          .where(and(eq(customActions.id, action.id), eq(customActions.userId, userId)))
+      );
       continue;
     }
 
-    await db.insert(customActions).values({
-      id: createId(),
-      userId,
-      actionName: action.actionName,
-      description: action.description || null,
-      category: action.category,
-      triggerKey: triggerKeyNormalized,
-      displayOrder: order++,
-      createdAt: now,
-      updatedAt: now,
-    });
+    statements.push(
+      db.insert(customActions).values({
+        id: createId(),
+        userId,
+        actionName: action.actionName,
+        description: action.description || null,
+        category: action.category,
+        triggerKey: triggerKeyNormalized,
+        displayOrder: order++,
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
   }
+  await runWrites(db, statements);
+  return { limitExceeded: false };
 }
 
 /** formData 由来の JSON 配列を安全にパースする（不正なら null）。 */
@@ -458,29 +617,29 @@ function parseJsonArray<T>(raw: string | null | undefined): T[] | null {
   }
 }
 
-/** fingerAssignments の JSON 文字列がオブジェクトとして妥当か検証する。 */
-function isValidFingerAssignmentsJson(raw: string): boolean {
-  try {
-    const v = JSON.parse(raw);
-    return v !== null && typeof v === "object" && !Array.isArray(v);
-  } catch {
-    return false;
-  }
+/**
+ * キーバインド更新の上限件数。CASE 式 UPDATE のバインド変数が件数に比例するため、
+ * SQLite の変数上限に当たる前に弾く（実際のキー数は数百件未満）。
+ */
+const MAX_KEYBINDING_UPDATES = SAVE_LIMITS.keybindingUpdates;
+
+/** キーバインド更新 payload を検証してパースする（不正・過大なら null）。 */
+function parseKeybindingUpdates(raw: string | null | undefined): KeybindingUpdateInput[] | null {
+  const updates = parseJsonArray<KeybindingUpdateInput>(raw);
+  if (!updates || updates.length > MAX_KEYBINDING_UPDATES) return null;
+  const valid = updates.every(
+    (u) =>
+      typeof u.id === "string" &&
+      u.id.length <= SAVE_LIMITS.shortText &&
+      typeof u.keyCode === "string" &&
+      u.keyCode.length <= SAVE_LIMITS.shortText,
+  );
+  return valid ? updates : null;
 }
 
-/** fingerAssignments を安全にパースする（不正・未設定なら {}）。表示側で使用。 */
-function parseFingerAssignments(
-  raw: string | null | undefined,
-): Record<string, FingerType[]> {
-  if (!raw) return {};
-  try {
-    const v = JSON.parse(raw);
-    return v && typeof v === "object" && !Array.isArray(v)
-      ? (v as Record<string, FingerType[]>)
-      : {};
-  } catch {
-    return {};
-  }
+/** fingerAssignments の JSON 文字列を検証する（値は有効な指の配列、件数・長さの上限つき）。 */
+function isValidFingerAssignmentsJson(raw: string): boolean {
+  return validateFingerAssignmentsJson(raw) !== null;
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -503,13 +662,15 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent") as string;
   const presetId = (formData.get("presetId") as string | null) || null;
 
-  try {
-    await assertPresetIsActive(db, user.id, presetId);
-  } catch (e) {
-    if (e instanceof PresetMismatchError) {
-      return { error: t("mePresets.staleSession") };
-    }
-    throw e;
+  // アクティブプリセットは 1 回だけ引き、競合検証（assertPresetIsActive 相当）・プリセット必須ゲート・
+  // スナップショット同期（syncActivePresetSnapshot の activePresetId）で共有する
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  // 送信 presetId が現在のアクティブと異なる（別タブでプリセット切替が起きた等）場合は弾く
+  if (presetId && activePresetRow?.id !== presetId) {
+    return { error: t("mePresets.staleSession") };
   }
 
   // このアクションの全 intent はライブ設定への書き込み＝アクティブプリセットの
@@ -517,24 +678,18 @@ export async function action({ request }: Route.ActionArgs) {
   // （既存データの読み込みは可能）。プリセットが無いまま書き込むと
   // syncActivePresetSnapshot が無言でスキップされ、後からプリセットを作るまで
   // どのプリセットにも属さないデータになってしまう。
-  const activePresetRow = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-    columns: { id: true },
-  });
   if (!activePresetRow) {
     return { error: t("meKeybindings.presetRequired") };
   }
 
   // キーバインド保存
   if (intent === "save-keybindings") {
-    const updates = parseJsonArray<KeybindingUpdateInput>(
-      formData.get("keybindings") as string,
-    );
+    const updates = parseKeybindingUpdates(formData.get("keybindings") as string);
     if (!updates) return { error: t("meKeybindings.invalidPayload") };
     await persistKeybindingUpdates(db, user.id, updates, new Date(), {
       normalizeEmptyToUnbound: true,
     });
-    await syncActivePresetSnapshot(db, user.id, ["keybindings"]);
+    await syncActivePresetSnapshot(db, user.id, ["keybindings"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveKeybindings") };
   }
@@ -542,14 +697,14 @@ export async function action({ request }: Route.ActionArgs) {
   // リマップ保存
   if (intent === "save-remaps") {
     const remapsData = parseJsonArray<RemapMutationInput>(
-      formData.get("remaps") as string,
+      formString(formData, "remaps"),
     );
-    if (!remapsData) return { error: t("meKeybindings.invalidPayload") };
+    if (!remapsData || !isValidRemapInputs(remapsData)) return { error: t("meKeybindings.invalidPayload") };
 
     const now = new Date();
     const remapError = await persistRemaps(t, db, user.id, remapsData, now);
     if (remapError) return { error: remapError.error };
-    await syncActivePresetSnapshot(db, user.id, ["remaps"]);
+    await syncActivePresetSnapshot(db, user.id, ["remaps"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveRemaps") };
   }
@@ -564,7 +719,7 @@ export async function action({ request }: Route.ActionArgs) {
     await upsertFingerAssignments(db, user.id, fingerAssignmentsJson, now);
     // upsertFingerAssignments はライブ playerConfig 行を新規作成しうるため playerConfig も同期する
     // （fingers のみだと fingerAssignmentsData だけ非 null の非対称スナップショットになる）
-    await syncActivePresetSnapshot(db, user.id, ["fingers", "playerConfig"]);
+    await syncActivePresetSnapshot(db, user.id, ["fingers", "playerConfig"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveFingers") };
   }
@@ -575,14 +730,17 @@ export async function action({ request }: Route.ActionArgs) {
     const remapsJson = formData.get("remaps") as string;
     const fingerAssignmentsJson = formData.get("fingerAssignments") as string;
     const customActionsJson = formData.get("customActions") as string;
+    const customKeysJson = formData.get("customKeys") as string;
     const now = new Date();
 
     // 事前パース・バリデーション（書き込みを始める前に不正 payload をすべて弾く）
     const remapsData = remapsJson ? parseJsonArray<RemapMutationInput>(remapsJson) : null;
-    if (remapsJson && !remapsData) return { error: t("meKeybindings.invalidPayload") };
+    if (remapsJson && (!remapsData || !isValidRemapInputs(remapsData))) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     const keybindingUpdates = keybindingsJson
-      ? parseJsonArray<KeybindingUpdateInput>(keybindingsJson)
+      ? parseKeybindingUpdates(keybindingsJson)
       : null;
     if (keybindingsJson && !keybindingUpdates) return { error: t("meKeybindings.invalidPayload") };
 
@@ -593,14 +751,34 @@ export async function action({ request }: Route.ActionArgs) {
     const customActionsData = customActionsJson
       ? parseJsonArray<CustomActionMutationInput>(customActionsJson)
       : null;
-    if (customActionsJson && !customActionsData) return { error: t("meKeybindings.invalidPayload") };
+    if (customActionsJson && (!customActionsData || !isValidCustomActionInputs(customActionsData))) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
+
+    const customKeysData = customKeysJson
+      ? parseJsonArray<CustomKeyMutationInput>(customKeysJson)
+      : null;
+    // 自分の既存のカスタムキー。検証で「保存値と同じ値は通す」ために使い、上限の判定にも使い回す
+    const existingCustomKeys = customKeysData
+      ? await db.query.customKeys.findMany({
+          where: eq(customKeys.userId, user.id),
+          columns: { id: true, keyCode: true, keyName: true },
+        })
+      : [];
+    if (
+      customKeysJson &&
+      (!customKeysData || !isValidCustomKeyInputs(customKeysData, new Map(existingCustomKeys.map((r) => [r.id, r]))))
+    ) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     // 変更履歴の内容
-    const changes: string[] = [];
-    if (keybindingsJson) changes.push(t("meKeybindings.tabActions"));
-    if (remapsJson) changes.push(t("meKeybindings.tabRemaps"));
-    if (fingerAssignmentsJson) changes.push(t("meKeybindings.tabFingers"));
-    if (customActionsJson) changes.push(t("meKeybindings.tabCustomActions"));
+    const changes: KeybindingChangeId[] = [];
+    if (keybindingsJson) changes.push("actions");
+    if (remapsJson) changes.push("remaps");
+    if (fingerAssignmentsJson) changes.push("fingers");
+    if (customActionsJson) changes.push("customActions");
+    if (customKeysJson) changes.push("customKeys");
 
     // persist 系すべて + 変更履歴の挿入を単一トランザクションで実行し、
     // 途中で失敗（UNIQUE 制約違反等）した場合に部分適用状態にならないようにする
@@ -627,7 +805,14 @@ export async function action({ request }: Route.ActionArgs) {
 
         // カスタムアクション
         if (customActionsData) {
-          await persistCustomActions(tx, user.id, customActionsData, now);
+          const result = await persistCustomActions(tx, user.id, customActionsData, now);
+          if (result.limitExceeded) throw new SaveAllAbortError(t("meKeybindings.limitExceeded"));
+        }
+
+        // カスタムキー
+        if (customKeysData) {
+          const result = await persistCustomKeys(tx, user.id, customKeysData, now, existingCustomKeys);
+          if (result.limitExceeded) throw new SaveAllAbortError(t("meKeybindings.limitExceeded"));
         }
 
         // 変更履歴を記録
@@ -636,8 +821,9 @@ export async function action({ request }: Route.ActionArgs) {
             id: createId(),
             userId: user.id,
             changeType: "keybinding",
-            changeDescription: t("meKeybindings.updatedChanges", { changes: changes.join(t("common.listSeparator")) }),
-            newData: JSON.stringify({ keybindings: keybindingsJson, remaps: remapsJson, fingerAssignments: fingerAssignmentsJson, customActions: customActionsJson }),
+            changeDescription: encodeKeybindingUpdate(changes),
+            // クライアントの生ペイロードは保存しない（読む側が無く、保存のたびに DB が膨らむため）
+            presetId: await resolveActivePublicPresetId(tx, user.id),
             createdAt: now,
           });
         }
@@ -656,8 +842,9 @@ export async function action({ request }: Route.ActionArgs) {
     // upsertFingerAssignments はライブ playerConfig 行を新規作成しうるため playerConfig も同期する
     if (fingerAssignmentsJson) syncKinds.push("fingers", "playerConfig");
     if (customActionsJson) syncKinds.push("customActions");
+    if (customKeysJson) syncKinds.push("customKeys");
     if (syncKinds.length > 0) {
-      await syncActivePresetSnapshot(db, user.id, syncKinds);
+      await syncActivePresetSnapshot(db, user.id, syncKinds, { activePresetId: activePresetRow.id });
     }
 
     return { success: true, message: t("meKeybindings.saveSettings") };
@@ -677,18 +864,8 @@ export async function action({ request }: Route.ActionArgs) {
 
     const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
     if (result.success) {
-      // importFromLegacy が書き込みうるライブテーブルをすべて同期する
-      // （itemLayouts / searchCrafts を欠くとスナップショットが古いままになる）
-      await syncActivePresetSnapshot(db, user.id, [
-        "keybindings",
-        "remaps",
-        "fingers",
-        "customKeys",
-        "playerConfig",
-        "itemLayouts",
-        "searchCrafts",
-        "customActions",
-      ]);
+      // 取り込みは importFromLegacy が新しいプリセット（編集先）を作って完結する。
+      // 旧アクティブへの同期は、非アクティブ化済みで no-op になるため呼ばない
       return {
         success: true,
         message: t("meKeybindings.importSummary", {
@@ -705,57 +882,19 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
-  // カスタムキー保存
-  if (intent === "save-custom-keys") {
-    const customKeysData = parseJsonArray<CustomKeyMutationInput>(
-      formData.get("customKeys") as string,
-    );
-    if (!customKeysData) return { error: t("meKeybindings.invalidPayload") };
-
-    const now = new Date();
-
-    for (const ck of customKeysData) {
-      if (ck._delete && ck.id) {
-        await db
-          .delete(customKeys)
-          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
-      } else if (ck.id) {
-        await db.update(customKeys)
-          .set({
-            keyCode: ck.keyCode,
-            keyName: ck.keyName,
-            category: ck.category,
-            updatedAt: now,
-          })
-          .where(and(eq(customKeys.id, ck.id), eq(customKeys.userId, user.id)));
-      } else if (ck.keyCode && ck.keyName) {
-        await db.insert(customKeys).values({
-          id: createId(),
-          userId: user.id,
-          keyCode: ck.keyCode,
-          keyName: ck.keyName,
-          category: ck.category,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
-
-    await syncActivePresetSnapshot(db, user.id, ["customKeys"]);
-
-    return { success: true, message: t("meKeybindings.saveCustomKeys") };
-  }
-
   // カスタムアクション保存
   if (intent === "save-custom-actions") {
     const customActionsData = parseJsonArray<CustomActionMutationInput>(
-      formData.get("customActions") as string,
+      formString(formData, "customActions"),
     );
-    if (!customActionsData) return { error: t("meKeybindings.invalidPayload") };
+    if (!customActionsData || !isValidCustomActionInputs(customActionsData)) {
+      return { error: t("meKeybindings.invalidPayload") };
+    }
 
     const now = new Date();
-    await persistCustomActions(db, user.id, customActionsData, now);
-    await syncActivePresetSnapshot(db, user.id, ["customActions"]);
+    const persisted = await persistCustomActions(db, user.id, customActionsData, now);
+    if (persisted.limitExceeded) return { error: t("meKeybindings.limitExceeded") };
+    await syncActivePresetSnapshot(db, user.id, ["customActions"], { activePresetId: activePresetRow.id });
 
     return { success: true, message: t("meKeybindings.saveCustomActions") };
   }
@@ -771,13 +910,6 @@ const categoryLabelsOf = (t: Translator): Record<string, string> => ({
   ui: t("meKeybindings.categoryUi"),
 });
 
-const categoryColors: Record<string, string> = {
-  movement: "text-category-movement",
-  combat: "text-category-combat",
-  inventory: "text-category-inventory",
-  ui: "text-category-ui",
-};
-
 // 廃止済みアクション（表示から除外）
 const deprecatedActions = ["toggleHud"];
 
@@ -788,13 +920,11 @@ const KEYBINDING_DISPLAY_GROUPS = [
   {
     key: "movement",
     labelKey: "playerProfile.movement",
-    color: "text-category-movement",
     actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
   },
   {
     key: "inventory",
     labelKey: "playerProfile.inventory",
-    color: "text-category-inventory",
     actions: [
       "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
       "hotbar6", "hotbar7", "hotbar8", "hotbar9",
@@ -804,10 +934,39 @@ const KEYBINDING_DISPLAY_GROUPS = [
   {
     key: "combat-ui",
     labelKey: "playerProfile.combatAndUi",
-    color: "text-category-combat",
     actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
   },
 ] as const;
+
+/** コントローラーの操作の並び（DB カテゴリ準拠） */
+const CONTROLLER_CATEGORY_ORDER = ["movement", "combat", "inventory", "ui"];
+
+/**
+ * 操作の表示グループ。ページの「操作割り当て」一覧とキー設定ダイアログの両方がこれを使い、
+ * 分類・並び順をそろえる。キーボード/マウスはプロフィールと同一の3グループ（移動 / インベントリ /
+ * 戦闘・UI）・意味順、コントローラーは DB カテゴリ準拠
+ */
+function groupKeybindingsForDisplay<KB extends { action: string; category: string }>(
+  t: Translator,
+  kbs: KB[],
+  isControllerMode: boolean,
+): { key: string; label: string; bindings: KB[] }[] {
+  if (isControllerMode) {
+    return CONTROLLER_CATEGORY_ORDER.map((category) => ({
+      key: category,
+      label: categoryLabelsOf(t)[category],
+      bindings: kbs.filter((kb) => kb.category === category),
+    }));
+  }
+  const byAction = new Map(kbs.map((kb) => [kb.action, kb]));
+  return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
+    key: group.key,
+    label: t(group.labelKey),
+    bindings: group.actions
+      .map((action) => byAction.get(action))
+      .filter((kb): kb is KB => kb !== undefined),
+  }));
+}
 
 // =====================================
 // リマップ関連の型定義
@@ -906,6 +1065,11 @@ type CustomKeyEntry = {
 // キーキャプチャボタンは @/components/key-capture-button、
 // リマップ行（RemapRow / DialogRemapRow）は @/components/remap-row に抽出済み
 
+const MODIFIER_CODES = new Set([
+  "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
+  "AltLeft", "AltRight", "MetaLeft", "MetaRight",
+]);
+
 // キーバインド行コンポーネント（フォーカス状態をローカルで持つため独立コンポーネントに分割。
 // .map() コールバック内での useState 呼び出しは Rules of Hooks 違反になるため避ける）
 function KeybindingRow({
@@ -913,17 +1077,59 @@ function KeybindingRow({
   isControllerMode,
   updateKeybindingKey,
   getKeyLabelWithCustom,
+  getSharedActionLabels,
+  onAnnounce,
 }: {
   kb: { id: string; action: string; keyCode: string };
   isControllerMode: boolean;
   updateKeybindingKey: (keybindingId: string, newKeyCode: string) => void;
   getKeyLabelWithCustom: (keyCode: string) => string;
+  /** 指定キーを、この行以外で使っている操作の名前（キー編集ダイアログの共有判定と同じ「同じキー」） */
+  getSharedActionLabels: (keybindingId: string, keyCode: string) => string[];
+  /** 確定結果をページ共通のライブ領域へ伝える（行ごとに領域を持たない） */
+  onAnnounce: (message: string) => void;
 }) {
   const t = useT();
-  const [isFocused, setIsFocused] = useState(false);
+  // フォーカスだけではキャプチャしない。クリック / Enter / Space で明示的に開始する
+  const [isCapturing, setIsCapturing] = useState(false);
+  const actionLabel = getActionLabel(t, kb.action);
+  const currentKeyLabel = isUnbound(kb.keyCode)
+    ? t("meKeybindings.notUsed")
+    : kb.keyCode
+      ? getKeyLabelWithCustom(kb.keyCode)
+      : t("meKeybindings.unassigned");
+  // 確定結果をスクリーンリーダーへ伝える（フォーカスはボタンに残す）
+  const commitKey = (keyCode: string) => {
+    updateKeybindingKey(kb.id, keyCode);
+    setIsCapturing(false);
+    const key = getKeyLabelWithCustom(keyCode);
+    const shared = getSharedActionLabels(kb.id, keyCode);
+    onAnnounce(
+      shared.length > 0
+        ? t("meKeybindings.keyAssignedSharedAnnounce", {
+            action: actionLabel,
+            key,
+            actions: shared.join(t("common.listSeparatorComma")),
+          })
+        : t("meKeybindings.keyAssignedAnnounce", { action: actionLabel, key })
+    );
+  };
+  const sharedLabels = kb.keyCode ? getSharedActionLabels(kb.id, kb.keyCode) : [];
   return (
     <div className="flex items-center justify-between gap-2 py-2.5">
-      <span className="text-sm">{getActionLabel(t, kb.action)}</span>
+      <div className="min-w-0">
+        <span className="text-sm">{actionLabel}</span>
+        {sharedLabels.length > 0 && (
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-warning">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              {t("meKeybindings.sharedKeyConflictWith", {
+                actions: sharedLabels.join(t("common.listSeparatorComma")),
+              })}
+            </span>
+          </p>
+        )}
+      </div>
       <div className="flex items-center gap-1">
         {isControllerMode ? (
           /* コントローラーモード: ドロップダウンでボタン選択 */
@@ -931,7 +1137,7 @@ function KeybindingRow({
             value={kb.keyCode || ""}
             onValueChange={(value) => updateKeybindingKey(kb.id, value)}
           >
-            <SelectTrigger className="w-32 h-8">
+            <SelectTrigger aria-label={actionLabel} className="w-32 h-8 max-sm:h-11">
               <SelectValue placeholder={t("meKeybindings.unassigned")}>
                 {isUnbound(kb.keyCode) ? (
                   <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
@@ -955,28 +1161,60 @@ function KeybindingRow({
           /* キーボード/マウスモード: キーキャプチャ */
           <button
             type="button"
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+            aria-label={
+              isCapturing
+                ? t("meKeybindings.pressKeyToAssign")
+                : t("meKeybindings.keyRowAriaLabel", { action: actionLabel, key: currentKeyLabel })
+            }
+            onClick={() => {
+              onAnnounce("");
+              setIsCapturing(true);
+            }}
+            onBlur={() => setIsCapturing(false)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                // ESCキーで不使用に設定
-                e.preventDefault();
-                updateKeybindingKey(kb.id, UNBOUND_KEY);
-                (e.target as HTMLElement).blur();
-              } else if (!["Tab", "Enter"].includes(e.key)) {
-                e.preventDefault();
-                updateKeybindingKey(kb.id, e.code);
-                (e.target as HTMLElement).blur();
+              if (!isCapturing) {
+                // 開始は Enter / Space のみ（他のキーは何もしない）
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsCapturing(true);
+                }
+                return;
               }
+              if (e.key === "Tab") {
+                // Tab / Shift+Tab はキャプチャせず、キャプチャを抜けてフォーカス移動に任せる
+                setIsCapturing(false);
+                return;
+              }
+              e.preventDefault();
+              if (e.repeat) return;
+              if (e.key === "Escape") {
+                // Esc はキャンセル（何も変更しない）。解除は × ボタンから
+                setIsCapturing(false);
+                return;
+              }
+              // 修飾キーは keyup まで確定しない（他のキーとの併用で誤って割り当てないため）
+              if (MODIFIER_CODES.has(e.code)) return;
+              commitKey(e.code);
+            }}
+            onKeyUp={(e) => {
+              // Space で確定した直後の keyup で Firefox が click を発火し、キャプチャが再開するのを防ぐ
+              // （確定後もフォーカスを残すため）
+              if (!isCapturing) {
+                if (e.key === " ") e.preventDefault();
+                return;
+              }
+              if (!MODIFIER_CODES.has(e.code)) return;
+              e.preventDefault();
+              commitKey(e.code);
             }}
             className={cn(
-              "min-w-32 h-8 px-3 rounded-md border text-sm transition-colors",
+              "min-w-32 h-8 max-sm:h-11 px-3 rounded-md border text-sm transition-colors",
               "bg-secondary/50 hover:bg-secondary/70",
               "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-              isFocused ? "border-primary" : "border-input"
+              isCapturing ? "border-primary" : "border-input"
             )}
           >
-            {isFocused ? (
+            {isCapturing ? (
               <span className="text-muted-foreground text-xs">{t("meKeybindings.pressKeyToAssign")}</span>
             ) : isUnbound(kb.keyCode) ? (
               <span className="text-muted-foreground">{t("meKeybindings.notUsed")}</span>
@@ -991,12 +1229,12 @@ function KeybindingRow({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={t("meKeybindings.unassignAction")}
-          title={t("meKeybindings.unassignAction")}
+          aria-label={t("meKeybindings.unassignAction", { action: actionLabel })}
+          title={t("meKeybindings.unassignAction", { action: actionLabel })}
           onClick={() => updateKeybindingKey(kb.id, UNBOUND_KEY)}
           disabled={!kb.keyCode || isUnbound(kb.keyCode)}
           className={cn(
-            "h-8 w-8 shrink-0 text-destructive hover:text-destructive",
+            "size-8 max-sm:size-11 shrink-0 text-muted-foreground hover:text-destructive focus-visible:text-destructive",
             (!kb.keyCode || isUnbound(kb.keyCode)) && "invisible"
           )}
         >
@@ -1030,6 +1268,7 @@ function CustomActionRow({
             value={action.actionName}
             onChange={(e) => onUpdate(index, { actionName: e.target.value })}
             placeholder={t("meKeybindings.actionNamePlaceholder")}
+            aria-label={t("meKeybindings.actionNameAria")}
             className="text-sm"
           />
         </div>
@@ -1037,13 +1276,15 @@ function CustomActionRow({
           value={action.category}
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
-          <SelectTrigger className="w-28">
-            <SelectValue />
+          <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28">
+            <SelectValue>
+              {t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[action.category])}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
-            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
-            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+            {CUSTOM_ACTION_CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>{t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[category])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button
@@ -1051,9 +1292,10 @@ function CustomActionRow({
           variant="ghost"
           size="icon"
           onClick={() => onDelete(index)}
-          className="text-destructive hover:text-destructive shrink-0"
+          aria-label={t("meKeybindings.deleteCustomActionAria")}
+          className="text-destructive hover:text-destructive shrink-0 max-sm:size-11"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -1066,6 +1308,7 @@ function CustomActionRow({
           onCapture={(keyCode) => onUpdate(index, { triggerKey: keyCode })}
           allowModifiers={true}
           className="min-w-40 h-8"
+          ariaLabel={t("meKeybindings.triggerKey")}
         />
       </div>
       <div>
@@ -1073,6 +1316,7 @@ function CustomActionRow({
           value={action.description || ""}
           onChange={(e) => onUpdate(index, { description: e.target.value || null })}
           placeholder={t("meKeybindings.descriptionOptional")}
+          aria-label={t("meKeybindings.descriptionOptional")}
           className="text-sm"
         />
       </div>
@@ -1115,10 +1359,11 @@ function DialogCustomActionRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive ml-auto"
+          aria-label={t("meKeybindings.deleteCustomActionAria")}
+          className="size-7 max-sm:size-11 p-0 text-destructive hover:text-destructive ml-auto"
           onClick={() => onDelete(index)}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -1129,20 +1374,23 @@ function DialogCustomActionRow({
             value={action.actionName}
             onChange={(e) => onUpdate(index, { actionName: e.target.value })}
             placeholder={t("meKeybindings.actionNamePlaceholder")}
-            className="text-sm h-8"
+            aria-label={t("meKeybindings.actionNameAria")}
+            className="text-sm h-8 max-sm:h-11"
           />
         </div>
         <Select
           value={action.category}
           onValueChange={(value: "other" | "macro" | "tool") => onUpdate(index, { category: value })}
         >
-          <SelectTrigger className="w-28 h-8 text-sm">
-            <SelectValue />
+          <SelectTrigger aria-label={t("meKeybindings.categoryAria")} className="w-28 h-8 max-sm:h-11 text-sm">
+            <SelectValue>
+              {t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[action.category])}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="other">{t("meKeybindings.categoryOther")}</SelectItem>
-            <SelectItem value="macro">{t("meKeybindings.categoryMacro")}</SelectItem>
-            <SelectItem value="tool">{t("meKeybindings.categoryTool")}</SelectItem>
+            {CUSTOM_ACTION_CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>{t(CUSTOM_ACTION_CATEGORY_LABEL_KEYS[category])}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -1151,7 +1399,8 @@ function DialogCustomActionRow({
         value={action.description || ""}
         onChange={(e) => onUpdate(index, { description: e.target.value || null })}
         placeholder={t("meKeybindings.descriptionOptional")}
-        className="text-sm h-8"
+        aria-label={t("meKeybindings.descriptionOptional")}
+        className="text-sm h-8 max-sm:h-11"
       />
     </div>
   );
@@ -1164,110 +1413,84 @@ function DialogCustomActionRow({
 function PresetRequiredNotice() {
   const t = useT();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meKeybindings.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meKeybindings.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
 export default function KeybindingsPage() {
   const t = useT();
-  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, mcid, legacyApiUrl, activePreset, hasPresets, presets, inputMethod } = useLoaderData<typeof loader>();
+  const { keybindings: kbs, playerConfig, keyRemaps: initialRemaps, customKeys: initialCustomKeys, customActions: initialCustomActions, legacyApiUrl, activePreset, presets, inputMethod } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
-  const customKeyFetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
+  // プリセット行のインポートダイアログ。旧 URL /me/import は ?import=1 付きでここへ転送され、開いた状態で始まる
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 開閉は「ボタンで開いた」か「URL に ?import=1 が付いている」かの導出（クライアント遷移で付いたときも開く）
+  const [manualImportOpen, setManualImportOpen] = useState(false);
+  const importParamOn = searchParams.get("import") === "1";
+  // ?import=1 で開いたダイアログを閉じた直後は、URL から import が消えるまでのあいだ閉じたままにする
+  const [importParamDismissed, setImportParamDismissed] = useState(false);
+  if (importParamDismissed && !importParamOn) setImportParamDismissed(false);
+  const importDialogOpen = manualImportOpen || (importParamOn && !importParamDismissed);
+  // 初めて開くときにだけダイアログ（と import-parser）を読み込み、閉じたあとはマウントしたままにして閉じる演出・フォーカス復帰を保つ
+  const [importDialogMounted, setImportDialogMounted] = useState(false);
+  if (importDialogOpen && !importDialogMounted) setImportDialogMounted(true);
+  // 閉じたあとのフォーカスの戻り先。0件の警告帯と通常の行のどちらの位置でも同じ ref を付ける
+  const importTriggerRef = useRef<HTMLButtonElement>(null);
+  const handleImportDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setManualImportOpen(open);
+      if (!open && searchParams.has("import")) {
+        setImportParamDismissed(true);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("import");
+            return next;
+          },
+          { replace: true, preventScrollReset: true },
+        );
+      }
+    },
+    [searchParams, setSearchParams],
+  );
   // リマップ・カスタムキー・カスタムアクションはプリセットに紐づくため、
   // アクティブなプリセットが無い間は閲覧のみ（サーバー側でも同じ判定で拒否する）
   const canEditPresetData = !!activePreset;
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
   const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
-  const prevCustomKeyDataRef = useRef<typeof customKeyFetcher.data>(undefined);
   const isInitializedRef = useRef(false);
 
   // ========== State ==========
   // キーバインドのローカル変更
   const [keybindingChanges, setKeybindingChanges] = useState<Record<string, string>>({});
-  // リマップのローカル状態
-  const [localRemaps, setLocalRemaps] = useState<RemapEntry[]>(() => dbRemapsToUiRemaps(initialRemaps));
-  // 指割り当てのローカル状態
-  const [localFingerAssignments, setLocalFingerAssignments] = useState<FingerAssignmentMap>(() =>
-    parseFingerAssignments(playerConfig?.fingerAssignments)
+  // リマップ・指割り当て・カスタムキー・カスタムアクションのローカル下書き。
+  // loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、
+  // 未変更の間だけ新しい値へ置き換える（入力中の編集を黙って消さない）
+  const remapsSource = useMemo(() => dbRemapsToUiRemaps(initialRemaps), [initialRemaps]);
+  const fingerAssignmentsSource = useMemo(
+    () => parseFingerAssignments(playerConfig?.fingerAssignments),
+    [playerConfig?.fingerAssignments],
   );
-  // カスタムキーのローカル状態
-  const [localCustomKeys, setLocalCustomKeys] = useState<CustomKeyEntry[]>(() =>
-    initialCustomKeys.map((ck) => ({
-      id: ck.id,
-      keyCode: ck.keyCode,
-      keyName: ck.keyName,
-      category: ck.category as "mouse" | "keyboard",
-    }))
-  );
-  // カスタムアクションのローカル状態
-  const [localCustomActions, setLocalCustomActions] = useState<CustomActionEntry[]>(() =>
-    initialCustomActions.map((ca) => ({
-      id: ca.id,
-      actionName: ca.actionName,
-      description: ca.description,
-      category: ca.category as "other" | "macro" | "tool",
-      triggerKey: ca.triggerKey,
-      displayOrder: ca.displayOrder,
-    }))
-  );
-
-  // ダイアログ関連
-  const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [modalDraftKeybindingChanges, setModalDraftKeybindingChanges] = useState<Record<string, string> | null>(null);
-  const [modalDraftRemaps, setModalDraftRemaps] = useState<RemapEntry[] | null>(null);
-  const [modalDraftFingerAssignments, setModalDraftFingerAssignments] = useState<FingerAssignmentMap | null>(null);
-  const [modalDraftCustomActions, setModalDraftCustomActions] = useState<CustomActionEntry[] | null>(null);
-
-  // タブの状態
-  const [activeTab, setActiveTab] = useState("keybindings");
-
-  // コピー元プリセット選択ダイアログ
-  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
-  const [copyTarget, setCopyTarget] = useState<"keybindings" | "remaps" | "fingers" | "all">("all");
-
-  const isSubmitting = fetcher.state === "submitting";
-  const data = fetcher.data;
-
-  // 初期化済みフラグを設定（初回レンダリング後）
-  useEffect(() => {
-    isInitializedRef.current = true;
-  }, []);
-
-  // loaderデータが変わったらローカル状態を再同期（プリセット切替時など）
-  useEffect(() => {
-    setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
-  }, [initialRemaps]);
-
-  useEffect(() => {
-    setLocalFingerAssignments(
-      parseFingerAssignments(playerConfig?.fingerAssignments),
-    );
-  }, [playerConfig?.fingerAssignments]);
-
-  useEffect(() => {
-    setLocalCustomKeys(
+  const customKeysSource = useMemo<CustomKeyEntry[]>(
+    () =>
       initialCustomKeys.map((ck) => ({
         id: ck.id,
         keyCode: ck.keyCode,
         keyName: ck.keyName,
         category: ck.category as "mouse" | "keyboard",
       })),
-    );
-  }, [initialCustomKeys]);
-
-  useEffect(() => {
-    setLocalCustomActions(
+    [initialCustomKeys],
+  );
+  const customActionsSource = useMemo<CustomActionEntry[]>(
+    () =>
       initialCustomActions.map((ca) => ({
         id: ca.id,
         actionName: ca.actionName,
@@ -1276,12 +1499,71 @@ export default function KeybindingsPage() {
         triggerKey: ca.triggerKey,
         displayOrder: ca.displayOrder,
       })),
-    );
-  }, [initialCustomActions]);
+    [initialCustomActions],
+  );
+  const { draft: localRemaps, setDraft: setLocalRemaps } = useLoaderSyncedDraft<RemapEntry[]>(remapsSource, { resetKey: activePreset?.id ?? null });
+  const { draft: localFingerAssignments, setDraft: setLocalFingerAssignments } =
+    useLoaderSyncedDraft<FingerAssignmentMap>(fingerAssignmentsSource, { resetKey: activePreset?.id ?? null });
+  const { draft: localCustomKeys, setDraft: setLocalCustomKeys } =
+    useLoaderSyncedDraft<CustomKeyEntry[]>(customKeysSource, { resetKey: activePreset?.id ?? null });
+  const { draft: localCustomActions, setDraft: setLocalCustomActions } =
+    useLoaderSyncedDraft<CustomActionEntry[]>(customActionsSource, { resetKey: activePreset?.id ?? null });
 
-  // キーバインドが loader で更新されたらローカル変更（差分）をクリア
-  useEffect(() => {
+  // ダイアログ関連
+  const [editingKeyCode, setEditingKeyCode] = useState<string | null>(null);
+  const keyModalReturnFocusRef = useRef<{ el: HTMLElement | null; keyCode: string } | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  // 行ごとの確定結果を読み上げるページ共通のライブ領域（行ごとに持つと空の aria-live が行数だけ並ぶ）
+  const [keyAnnouncement, setKeyAnnouncement] = useState("");
+  const [modalDraftKeybindingChanges, setModalDraftKeybindingChanges] = useState<Record<string, string> | null>(null);
+  const [modalDraftRemaps, setModalDraftRemaps] = useState<RemapEntry[] | null>(null);
+  const [modalDraftFingerAssignments, setModalDraftFingerAssignments] = useState<FingerAssignmentMap | null>(null);
+  const [modalDraftCustomActions, setModalDraftCustomActions] = useState<CustomActionEntry[] | null>(null);
+
+  // 編集先プリセットが変わったら（別タブでの切替など）、別のプリセットの内容を引き継がないよう
+  // hook 以外の下書き（操作割り当ての差分・キーのダイアログの下書き）も捨て、開いているダイアログを閉じる
+  const activePresetId = activePreset?.id ?? null;
+  const [draftPresetId, setDraftPresetId] = useState(activePresetId);
+  if (draftPresetId !== activePresetId) {
+    setDraftPresetId(activePresetId);
     setKeybindingChanges({});
+    setEditingKeyCode(null);
+    setIsCapturing(false);
+    setModalDraftKeybindingChanges(null);
+    setModalDraftRemaps(null);
+    setModalDraftFingerAssignments(null);
+    setModalDraftCustomActions(null);
+  }
+
+  // タブの状態
+  const [activeTab, setActiveTab] = useState("keybindings");
+  // md 未満のキーボード表示。既定は左手側を大きく見せる（キーを押せる）。true で全体を横スクロールで見る
+  const [mobileFullKeyboard, setMobileFullKeyboard] = useState(false);
+
+  // コピー元プリセット選択ダイアログ
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyTarget, setCopyTarget] = useState<"keybindings" | "remaps" | "fingers" | "all">("all");
+
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
+  const data = fetcher.data;
+
+  // 初期化済みフラグを設定（初回レンダリング後）
+  useEffect(() => {
+    isInitializedRef.current = true;
+  }, []);
+
+  // キーバインドが loader で更新されたら、保存値と同じになった変更だけを下書き（差分）から外す。
+  // 未保存の編集は残す（タブ復帰の再検証で消さない）。保存成功時は下の効果がすべてクリアする
+  useEffect(() => {
+    setKeybindingChanges((prev) => {
+      const entries = Object.entries(prev);
+      if (entries.length === 0) return prev;
+      const saved = new Map(kbs.map((kb) => [kb.id, kb.keyCode]));
+      const kept = entries.filter(([id, keyCode]) => saved.has(id) && saved.get(id) !== keyCode);
+      return kept.length === entries.length ? prev : Object.fromEntries(kept);
+    });
   }, [kbs]);
 
   // トースト通知 + 保存完了時のローカル状態リセット
@@ -1295,32 +1577,14 @@ export default function KeybindingsPage() {
       // 保存完了後、すべてのローカル状態を最新の loader データから再構築
       // （hasUnsavedChanges を確実に false にして FloatingSaveBar を非表示にする）
       setKeybindingChanges({});
-      setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
-      setLocalFingerAssignments(
-        parseFingerAssignments(playerConfig?.fingerAssignments),
-      );
-      setLocalCustomActions(
-        initialCustomActions.map((ca) => ({
-          id: ca.id,
-          actionName: ca.actionName,
-          description: ca.description,
-          category: ca.category as "other" | "macro" | "tool",
-          triggerKey: ca.triggerKey,
-          displayOrder: ca.displayOrder,
-        })),
-      );
-      setLocalCustomKeys(
-        initialCustomKeys.map((ck) => ({
-          id: ck.id,
-          keyCode: ck.keyCode,
-          keyName: ck.keyName,
-          category: ck.category as "mouse" | "keyboard",
-        })),
-      );
+      setLocalRemaps(remapsSource);
+      setLocalFingerAssignments(fingerAssignmentsSource);
+      setLocalCustomActions(customActionsSource);
+      setLocalCustomKeys(customKeysSource);
     } else if ("error" in data) {
       toast.error(data.error);
     }
-  }, [data, fetcher.state, initialRemaps, playerConfig?.fingerAssignments, initialCustomActions, initialCustomKeys]);
+  }, [data, fetcher.state, remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource]);
 
   // ========== Computed Values ==========
   const isControllerMode = inputMethod === "controller";
@@ -1353,46 +1617,32 @@ export default function KeybindingsPage() {
     [keybindingsWithLocalChanges]
   );
 
-  // Group by category
-  const byCategory = useMemo(() =>
-    keybindingsWithLocalChanges.reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) {
-          acc[kb.category] = [];
-        }
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof keybindingsWithLocalChanges>
-    ),
-    [keybindingsWithLocalChanges]
+  // 操作割り当てタブの表示グループ（キー設定ダイアログと同じ定義。groupKeybindingsForDisplay）
+  const displayGroups = useMemo(
+    () => groupKeybindingsForDisplay(t, keybindingsWithLocalChanges, isControllerMode),
+    [t, keybindingsWithLocalChanges, isControllerMode],
   );
 
-  const categoryOrder = ["movement", "combat", "inventory", "ui"];
-
-  // 操作割り当てタブの表示グループ:
-  // キーボード/マウスはプロフィールと同一の3グループ（移動 / インベントリ / 戦闘・UI）・意味順、
-  // コントローラーは従来どおり DB カテゴリ準拠
-  const displayGroups = useMemo(() => {
-    if (isControllerMode) {
-      return categoryOrder.map((category) => ({
-        key: category,
-        label: categoryLabelsOf(t)[category],
-        color: categoryColors[category],
-        bindings: byCategory[category] ?? [],
-      }));
+  // 操作割り当てタブの行で「同じキーを他の操作も使っている」を出すための、キー → 操作名の対応（未割り当ては除く）
+  const actionLabelsByKey = useMemo(() => {
+    const map = new Map<string, { id: string; label: string }[]>();
+    for (const kb of keybindingsWithLocalChanges) {
+      if (!kb.keyCode || isUnbound(kb.keyCode)) continue;
+      const list = map.get(kb.keyCode) ?? [];
+      list.push({ id: kb.id, label: getActionLabel(t, kb.action) });
+      map.set(kb.keyCode, list);
     }
-    const byAction = new Map(keybindingsWithLocalChanges.map((kb) => [kb.action, kb]));
-    return KEYBINDING_DISPLAY_GROUPS.map((group) => ({
-      key: group.key,
-      label: t(group.labelKey),
-      color: group.color,
-      bindings: group.actions
-        .map((action) => byAction.get(action))
-        .filter((kb): kb is (typeof keybindingsWithLocalChanges)[number] => kb !== undefined),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isControllerMode, byCategory, keybindingsWithLocalChanges]);
+    return map;
+  }, [keybindingsWithLocalChanges, t]);
+  const getSharedActionLabels = useCallback(
+    (keybindingId: string, keyCode: string) => {
+      if (isUnbound(keyCode)) return [];
+      return (actionLabelsByKey.get(keyCode) ?? [])
+        .filter((e) => e.id !== keybindingId)
+        .map((e) => e.label);
+    },
+    [actionLabelsByKey],
+  );
 
   // キーボードレイアウト
   const keyboardLayout = (playerConfig?.keyboardLayout as "US" | "JIS") || "US";
@@ -1454,59 +1704,33 @@ export default function KeybindingsPage() {
     return false;
   }, [localCustomActions, initialCustomActions]);
 
-  const hasUnsavedChanges = hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges;
+  const hasCustomKeyChanges = useMemo(() => {
+    const originalKeyMap = new Map(initialCustomKeys.map((k) => [k.id, k]));
+    for (const ck of localCustomKeys) {
+      if (ck._isNew) return true;
+      if (ck._delete) return true;
+      if (!ck.id) return true;
+      const original = originalKeyMap.get(ck.id);
+      if (!original) return true;
+      if (
+        original.keyCode !== ck.keyCode ||
+        original.keyName !== ck.keyName ||
+        original.category !== ck.category
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [localCustomKeys, initialCustomKeys]);
 
-  // 未保存の変更があるままページを離れようとしたら警告（タブを閉じる/リロード等）
-  useEffect(() => {
-    if (!hasUnsavedChanges) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [hasUnsavedChanges]);
+  const hasUnsavedChanges =
+    hasKeybindingChanges || hasRemapChanges || hasFingerChanges || hasCustomActionChanges || hasCustomKeyChanges;
 
   // 現在選択中のキーに関するデータ
   // 複数の操作が同じキーに割り当てられている場合はすべて取得
   const selectedKeyBindings = editingKeyCode
     ? keybindingsWithLocalChanges.filter((kb) => kb.keyCode === editingKeyCode)
     : [];
-  // 選択したキーに関連するすべてのリマップ（修飾キー組み合わせを含む）
-  const selectedKeyRemaps = useMemo(() => {
-    if (!editingKeyCode) return [];
-    // editingKeyCode をベースキーとして持つすべてのリマップを検索
-    // 例: editingKeyCode が "KeyA" の場合、"KeyA", "Shift+KeyA", "Ctrl+KeyA" などすべて
-    return localRemaps
-      .map((r, index) => ({ ...r, _index: index }))
-      .filter((r) => {
-        if (r._delete) return false;
-        const parsed = parseKeyCombination(r.sourceKey);
-        return parsed.keyCode === editingKeyCode;
-      });
-  }, [editingKeyCode, localRemaps]);
-
-  const selectedKeyCustomActions = useMemo(() => {
-    if (!editingKeyCode) return [];
-    return localCustomActions
-      .map((a, index) => ({ ...a, _index: index }))
-      .filter((a) => {
-        if (a._delete || !a.triggerKey) return false;
-        const parsed = parseKeyCombination(a.triggerKey);
-        return parsed.keyCode === editingKeyCode;
-      });
-  }, [editingKeyCode, localCustomActions]);
-
-  // 各操作がどのキーに割り当てられているかをマップ化
-  const actionToKeyMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const kb of keybindingsWithLocalChanges) {
-      if (kb.keyCode) {
-        map[kb.action] = kb.keyCode;
-      }
-    }
-    return map;
-  }, [keybindingsWithLocalChanges]);
 
   // 有効なカスタムキー（削除されていないもの）
   const activeCustomKeys = useMemo(
@@ -1554,11 +1778,6 @@ export default function KeybindingsPage() {
     return getKeyLabel(t, keyCode);
   }, [customKeyNameMap]);
 
-  // 現在選択中のキーに割り当てられている操作のIDセット
-  const selectedActionIds = useMemo(() => {
-    return new Set(selectedKeyBindings.map((kb) => kb.id));
-  }, [selectedKeyBindings]);
-
   const modalKeybindingChanges = modalDraftKeybindingChanges ?? keybindingChanges;
   const modalRemaps = modalDraftRemaps ?? localRemaps;
   const modalFingerAssignments = modalDraftFingerAssignments ?? localFingerAssignments;
@@ -1602,16 +1821,15 @@ export default function KeybindingsPage() {
     [validKeybindings, modalKeybindingChanges]
   );
 
-  const modalByCategory = useMemo(() =>
-    modalKeybindingsWithLocalChanges.reduce(
-      (acc, kb) => {
-        if (!acc[kb.category]) acc[kb.category] = [];
-        acc[kb.category].push(kb);
-        return acc;
-      },
-      {} as Record<string, typeof modalKeybindingsWithLocalChanges>
-    ),
-    [modalKeybindingsWithLocalChanges]
+  // キー設定ダイアログの操作の一覧。ページの「操作割り当て」と同じ分類・並び順で出す
+  const modalDisplayGroups = useMemo(
+    () => groupKeybindingsForDisplay(t, modalKeybindingsWithLocalChanges, isControllerMode),
+    [t, modalKeybindingsWithLocalChanges, isControllerMode],
+  );
+
+  const modalAssignedCountOnKey = useMemo(
+    () => (editingKeyCode ? countAssignedToKey(modalKeybindingsWithLocalChanges, editingKeyCode) : 0),
+    [editingKeyCode, modalKeybindingsWithLocalChanges],
   );
 
   const modalActionToKeyMap = useMemo(() => {
@@ -1653,6 +1871,27 @@ export default function KeybindingsPage() {
     setModalDraftCustomActions(null);
   }, []);
 
+  // ダイアログを開いた時点（＝ページ状態の複製）から下書きが変わっているか
+  const isKeyModalDirty =
+    (modalDraftKeybindingChanges !== null &&
+      JSON.stringify(modalDraftKeybindingChanges) !== JSON.stringify(keybindingChanges)) ||
+    (modalDraftRemaps !== null && JSON.stringify(modalDraftRemaps) !== JSON.stringify(localRemaps)) ||
+    (modalDraftFingerAssignments !== null &&
+      JSON.stringify(modalDraftFingerAssignments) !== JSON.stringify(localFingerAssignments)) ||
+    (modalDraftCustomActions !== null &&
+      JSON.stringify(modalDraftCustomActions) !== JSON.stringify(localCustomActions));
+
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+
+  // Esc / 外側クリック / キャンセルからの閉じ。下書きが変わっていれば破棄確認を挟む
+  const requestCloseKeyModal = useCallback(() => {
+    if (isKeyModalDirty) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeKeyModal();
+  }, [isKeyModalDirty, closeKeyModal]);
+
   const saveKeyModalChanges = useCallback(() => {
     if (modalDraftKeybindingChanges) setKeybindingChanges(modalDraftKeybindingChanges);
     if (modalDraftRemaps) setLocalRemaps(modalDraftRemaps);
@@ -1671,6 +1910,12 @@ export default function KeybindingsPage() {
 
   // 仮想キーボードでキーをクリック
   const handleKeyClick = useCallback((keyCode: string) => {
+    // Dialog は trigger を持たない（open を state で制御）ので、閉じたときの戻り先をここで覚える
+    const active = document.activeElement;
+    keyModalReturnFocusRef.current = {
+      el: active instanceof HTMLElement && active !== document.body ? active : null,
+      keyCode,
+    };
     setEditingKeyCode(keyCode);
     setIsCapturing(false);
   }, []);
@@ -1716,30 +1961,6 @@ export default function KeybindingsPage() {
       [keybindingId]: newKeyCode,
     }));
   }, []);
-
-  // 操作のON/OFFを切り替え（ダイアログからの操作用）
-  const toggleActionForKey = useCallback((keybindingId: string, targetKeyCode: string, isCurrentlyAssigned: boolean, previousKeyCode?: string) => {
-    setKeybindingChanges((prev) => {
-      const original = validKeybindings.find((kb) => kb.id === keybindingId);
-      if (!original) return prev;
-
-      if (isCurrentlyAssigned) {
-        // 割り当てを解除（不使用にする）
-        return {
-          ...prev,
-          [keybindingId]: UNBOUND_KEY,
-        };
-      } else {
-        // このキーに割り当てる
-        // 他のキーに割り当て済みの場合、そのキーから削除する処理は
-        // keybindingChangesにtargetKeyCodeを設定することで自動的に上書きされる
-        return {
-          ...prev,
-          [keybindingId]: targetKeyCode,
-        };
-      }
-    });
-  }, [validKeybindings]);
 
   // リマップを追加
   const addRemap = useCallback((sourceKey: string) => {
@@ -1787,20 +2008,6 @@ export default function KeybindingsPage() {
         description: null,
         category: "other" as const,
         triggerKey: "",
-        displayOrder: prev.length,
-        _isNew: true,
-      },
-    ]);
-  }, []);
-
-  const addCustomActionForKey = useCallback((keyCode: string) => {
-    setLocalCustomActions((prev) => [
-      ...prev,
-      {
-        actionName: "",
-        description: null,
-        category: "other" as const,
-        triggerKey: keyCode,
         displayOrder: prev.length,
         _isNew: true,
       },
@@ -1933,24 +2140,53 @@ export default function KeybindingsPage() {
     });
   }, []);
 
-  // 変更を取り消す
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBasesRef = useRef({ remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource });
+  latestBasesRef.current = { remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource };
+
+  // 変更を取り消す（取り消し前の下書きをまとめて取っておき、元に戻す関数を返す）
   const resetChanges = useCallback(() => {
+    const prev = {
+      keybindingChanges,
+      remaps: localRemaps,
+      fingerAssignments: localFingerAssignments,
+      customActions: localCustomActions,
+      customKeys: localCustomKeys,
+    };
+    const bases = { remapsSource, fingerAssignmentsSource, customActionsSource, customKeysSource };
     setKeybindingChanges({});
-    setLocalRemaps(dbRemapsToUiRemaps(initialRemaps));
-    setLocalFingerAssignments(
-      parseFingerAssignments(playerConfig?.fingerAssignments)
-    );
-    setLocalCustomActions(
-      initialCustomActions.map((ca) => ({
-        id: ca.id,
-        actionName: ca.actionName,
-        description: ca.description,
-        category: ca.category as "other" | "macro" | "tool",
-        triggerKey: ca.triggerKey,
-        displayOrder: ca.displayOrder,
-      }))
-    );
-  }, [initialRemaps, playerConfig?.fingerAssignments, initialCustomActions]);
+    setLocalRemaps(remapsSource);
+    setLocalFingerAssignments(fingerAssignmentsSource);
+    setLocalCustomActions(customActionsSource);
+    setLocalCustomKeys(customKeysSource);
+    return () => {
+      const latest = latestBasesRef.current;
+      if (
+        !jsonEqual(latest.remapsSource, bases.remapsSource) ||
+        !jsonEqual(latest.fingerAssignmentsSource, bases.fingerAssignmentsSource) ||
+        !jsonEqual(latest.customActionsSource, bases.customActionsSource) ||
+        !jsonEqual(latest.customKeysSource, bases.customKeysSource)
+      ) {
+        return false;
+      }
+      setKeybindingChanges(prev.keybindingChanges);
+      setLocalRemaps(prev.remaps);
+      setLocalFingerAssignments(prev.fingerAssignments);
+      setLocalCustomActions(prev.customActions);
+      setLocalCustomKeys(prev.customKeys);
+      return true;
+    };
+  }, [
+    keybindingChanges,
+    localRemaps,
+    localFingerAssignments,
+    localCustomActions,
+    localCustomKeys,
+    remapsSource,
+    fingerAssignmentsSource,
+    customActionsSource,
+    customKeysSource,
+  ]);
 
   // 保存
   const handleSave = useCallback(() => {
@@ -1990,26 +2226,13 @@ export default function KeybindingsPage() {
     // 指割り当てをJSON化
     formData.set("fingerAssignments", JSON.stringify(localFingerAssignments));
 
-    fetcher.submit(formData, { method: "post" });
-  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, activePreset, keyboardLayout]);
-
-  // デバッグ: 現在のデータを表示
-  const handleDebugLog = useCallback(() => {
-    console.log("[Debug] keybindings count:", kbs.length);
-    console.log("[Debug] keyRemaps count:", initialRemaps.length);
-    console.log("[Debug] keyRemaps:", initialRemaps);
-    console.log("[Debug] playerConfig:", playerConfig);
-    console.log("[Debug] fingerAssignments:", playerConfig?.fingerAssignments);
-    if (playerConfig?.fingerAssignments) {
-      try {
-        const parsed = JSON.parse(playerConfig.fingerAssignments);
-        console.log("[Debug] fingerAssignments (parsed):", parsed);
-        console.log("[Debug] fingerAssignments keys:", Object.keys(parsed));
-      } catch (e) {
-        console.error("[Debug] fingerAssignments parse error:", e);
-      }
+    // カスタムキーは変更があるときだけ送る（変更履歴に「カスタムキー」を毎回残さない）
+    if (hasCustomKeyChanges) {
+      formData.set("customKeys", JSON.stringify(localCustomKeys));
     }
-  }, [kbs, initialRemaps, playerConfig]);
+
+    fetcher.submit(formData, { method: "post" });
+  }, [fetcher, keybindingChanges, localRemaps, localFingerAssignments, localCustomActions, localCustomKeys, hasCustomKeyChanges, activePreset, keyboardLayout]);
 
   // データを再読み込み
   const handleRevalidate = useCallback(() => {
@@ -2075,7 +2298,7 @@ export default function KeybindingsPage() {
     // 指割り当てをコピー
     if ((target === "fingers" || target === "all") && preset.fingerAssignmentsData) {
       try {
-        const fingerAssignmentsDataParsed = JSON.parse(preset.fingerAssignmentsData) as FingerAssignmentMap;
+        const fingerAssignmentsDataParsed = parseFingerAssignments(preset.fingerAssignmentsData);
         setLocalFingerAssignments(fingerAssignmentsDataParsed);
         copiedItems.push(t("meKeybindings.tabFingers"));
       } catch (e) {
@@ -2112,21 +2335,6 @@ export default function KeybindingsPage() {
     }
   }, [importFetcher.data, importFetcher.state, revalidator]);
 
-  // カスタムキー保存結果を表示
-  useEffect(() => {
-    const data = customKeyFetcher.data;
-    if (!data || data === prevCustomKeyDataRef.current) return;
-    if (customKeyFetcher.state !== "idle") return;
-    prevCustomKeyDataRef.current = data;
-
-    if ("error" in data && data.error) {
-      toast.error(data.error);
-    } else if ("success" in data && data.success && data.message) {
-      toast.success(data.message);
-      revalidator.revalidate();
-    }
-  }, [customKeyFetcher.data, customKeyFetcher.state, revalidator]);
-
   // カスタムキーの追加
   const addCustomKey = useCallback(() => {
     const newKey: CustomKeyEntry = {
@@ -2154,21 +2362,11 @@ export default function KeybindingsPage() {
     );
   }, []);
 
-  // カスタムキーの保存
-  const saveCustomKeys = useCallback(() => {
-    if (!activePreset) {
-      toast.error(t("meKeybindings.presetRequired"));
-      return;
-    }
-    const formData = new FormData();
-    formData.set("intent", "save-custom-keys");
-    formData.set("presetId", activePreset.id);
-    formData.set("customKeys", JSON.stringify(localCustomKeys));
-    customKeyFetcher.submit(formData, { method: "post" });
-  }, [customKeyFetcher, localCustomKeys, activePreset]);
-
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {keyAnnouncement}
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("meKeybindings.pageTitle")}</h1>
@@ -2176,25 +2374,18 @@ export default function KeybindingsPage() {
             {t("meKeybindings.pageDescription")}
           </p>
         </div>
-        {/* 開発用デバッグボタン */}
+        {/* 開発用デバッグボタン（旧 API からの取り込み。プリセット行の「インポート」＝ファイルからの取り込みとは別物） */}
         {import.meta.env.DEV && (
           <div className="flex gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleDebugLog}
-            >
-              Debug
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
               onClick={handleRevalidate}
               disabled={revalidator.state === "loading"}
+              className="max-sm:min-h-11"
             >
-              Reload
+              Reload (dev)
             </Button>
             <Button
               type="button"
@@ -2202,9 +2393,10 @@ export default function KeybindingsPage() {
               size="sm"
               onClick={handleImportLegacy}
               disabled={importFetcher.state !== "idle" || !legacyApiUrl || !canEditPresetData}
+              className="max-sm:min-h-11"
             >
               <Download className={cn("mr-1 h-4 w-4", importFetcher.state !== "idle" && "animate-pulse")} />
-              Import
+              Legacy API import (dev)
             </Button>
           </div>
         )}
@@ -2216,31 +2408,50 @@ export default function KeybindingsPage() {
         activePresetId={activePreset?.id ?? null}
         hasChanges={hasUnsavedChanges}
         onSwitchingChange={setPresetSwitching}
+        extraActions={({ disabled, describedBy }) => (
+          // ダイアログ本体は下で1回だけ置く。ここはトリガーのボタンだけ（0件の警告帯と通常の行で位置が変わっても、ダイアログは再マウントされない）
+          <Button
+            ref={importTriggerRef}
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            aria-describedby={disabled ? describedBy : undefined}
+            onClick={() => handleImportDialogOpenChange(true)}
+            className="max-sm:min-h-11"
+          >
+            <FileInput className="h-4 w-4 sm:mr-2" aria-hidden />
+            <span>{t("meImport.importButton")}</span>
+          </Button>
+        )}
         onCopyFromOther={presets.length > 1 ? () => {
           setCopyTarget("all");
           setCopyDialogOpen(true);
         } : undefined}
       />
+      {importDialogMounted && (
+        <Suspense fallback={null}>
+          <ImportDialog
+            open={importDialogOpen}
+            onOpenChange={handleImportDialogOpenChange}
+            returnFocusRef={importTriggerRef}
+            targetPresetName={activePreset?.name ?? null}
+            targetPresetId={activePreset?.id ?? null}
+            // 取り込み後の再検証は shouldRevalidate が /me/import の action 結果で行うので、ここでは呼ばない
+          />
+        </Suspense>
+      )}
 
       {/* プリセット切替中はキーボードビュー・入力欄をロックする */}
       <PresetSwitchLock locked={presetSwitching}>
       {/* キーボードビューとタブの間の余白（ページ直下の space-y-6 相当）を維持する */}
-      <div className="space-y-6">
+      <div className="space-y-7 sm:space-y-8">
       {/* コントローラーモード: コントローラービュー */}
       {isControllerMode ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Gamepad2 className="h-5 w-5" />
-                {t("meKeybindings.controllerView")}
-              </CardTitle>
-            </div>
-            <CardDescription>
-              {t("meKeybindings.controllerViewDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <PageSection
+          id="controller-view"
+          title={t("meKeybindings.controllerView")}
+        >
+            <p className="text-sm text-muted-foreground">{t("meKeybindings.controllerViewDesc")}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 左側: フェイスボタン・バンパー・トリガー */}
               <div className="space-y-4">
@@ -2252,15 +2463,15 @@ export default function KeybindingsPage() {
                       <button
                         key={keyCode}
                         type="button"
-                        onClick={() => setEditingKeyCode(keyCode)}
+                        onClick={() => handleKeyClick(keyCode)}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
                           binding ? "border-primary/30" : "border-input"
                         )}
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
-                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                        <span className={cn("text-xs", !binding && "text-muted-foreground")}>
                           {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
@@ -2278,15 +2489,15 @@ export default function KeybindingsPage() {
                       <button
                         key={keyCode}
                         type="button"
-                        onClick={() => setEditingKeyCode(keyCode)}
+                        onClick={() => handleKeyClick(keyCode)}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                          "flex items-center justify-between p-3 rounded-xl border transition-colors",
                           "bg-secondary/30 hover:bg-secondary/50",
                           binding ? "border-primary/30" : "border-input"
                         )}
                       >
                         <span className="font-mono text-sm font-medium">{getKeyLabel(t, keyCode)}</span>
-                        <span className={cn("text-xs", binding ? categoryColors[binding.category] : "text-muted-foreground")}>
+                        <span className={cn("text-xs", !binding && "text-muted-foreground")}>
                           {binding ? getActionLabel(t, binding.action) : t("meKeybindings.unassigned")}
                         </span>
                       </button>
@@ -2294,39 +2505,92 @@ export default function KeybindingsPage() {
                   })}
                 </div>
                 {/* スティックの説明 */}
-                <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                <NoticeBanner tone="info" className="mt-4">
                   <div className="font-medium mb-1">{t("meKeybindings.stickFixed")}</div>
                   <ul className="list-disc list-inside space-y-1 text-xs">
                     <li>{t("meKeybindings.leftStickDesc")}</li>
                     <li>{t("meKeybindings.rightStickDesc")}</li>
                   </ul>
-                </div>
+                </NoticeBanner>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
       ) : (
         /* キーボード/マウスモード: 仮想キーボード */
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.keyboardView")}</CardTitle>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
-                {hasTypedRemaps && (
-                  <RemapViewToggle value={remapView} onChange={setRemapView} />
-                )}
-                <FingerLegend />
-              </div>
+        <PageSection id="keyboard-view" title={t("meKeybindings.keyboardView")}>
+            <p className="text-sm text-muted-foreground">{t("meKeybindings.keyboardViewDesc")}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ。プロフィールと同条件） */}
+              {hasTypedRemaps && (
+                <RemapViewToggle value={remapView} onChange={setRemapView} />
+              )}
+              <FingerLegend />
             </div>
-            <CardDescription>
-              {t("meKeybindings.keyboardViewDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
             <div className="flex flex-col items-start gap-4">
-              {/* メインキーボード */}
-              <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
+              {/* 仮想キー約100個を飛ばして操作割り当てへ移動するスキップリンク */}
+              <a
+                href="#keybindings-actions-heading"
+                onClick={(e) => {
+                  e.preventDefault();
+                  flushSync(() => setActiveTab("keybindings"));
+                  document.getElementById("keybindings-actions-heading")?.focus();
+                }}
+                className="sr-only rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
+              >
+                {t("meKeybindings.skipToActions")}
+              </a>
+              {/* メインキーボード。md 未満は左手側だけを大きく見せてキーを押せるようにし、
+                  全体は横スクロール表示へ切り替えられる。2つの表示は CSS で出し分ける（md 以上は常に横スクロール表示） */}
+              {!mobileFullKeyboard && (
+                <div className="w-full min-w-0 space-y-2 md:hidden">
+                  <KeyboardScaledPreview
+                    interactive
+                    dialogTitle={t("meKeybindings.keyboardView")}
+                    // 押せる表示はキーを 44px 以上にする。公開側の 478.5px だと 375 幅（枠 343px）で 43.0px になるので、
+                    // 左手側の最右の B（447.5px）が収まる 466px まで詰める（343/466×60 ≒ 44.2px）
+                    crop={{ ...LEFT_HAND_CROP, width: 466, surface: "background" }}
+                    unmeasuredClassName="max-md:aspect-[479/370]"
+                  >
+                    <VirtualKeyboard
+                      layout={keyboardLayout}
+                      keybindings={keybindingsMap}
+                      fingerAssignments={localFingerAssignments}
+                      remaps={keyboardRemaps}
+                      customKeys={keyboardCustomKeys}
+                      onKeyClick={handleKeyClick}
+                      showActionLabels
+                      showFingerAssignments
+                      showRemaps
+                      hideNumpad
+                    />
+                  </KeyboardScaledPreview>
+                  <p className="text-xs text-muted-foreground">{t("meKeybindings.mobileKeyboardRightNote")}</p>
+                </div>
+              )}
+              {/* xl 以上は、表示幅が実寸（約 1120px）に足りないとき（1280〜1535px）だけ全体を幅に合わせて縮め、
+                  ナビゲーション列まで一度に見せる。幅が足りるなら縮まない。xl 未満は横スクロール表示。
+                  計測前（SSR 直後）は実寸の縦横比（テンキーなし 1120×370）で高さを確保して、跳ねないようにする */}
+              <div className="w-full min-w-0 max-xl:hidden">
+                <KeyboardScaledPreview
+                  interactive
+                  dialogTitle={t("meKeybindings.keyboardView")}
+                  unmeasuredClassName="aspect-[1120/370] max-h-[370px]"
+                >
+                  <VirtualKeyboard
+                    layout={keyboardLayout}
+                    keybindings={keybindingsMap}
+                    fingerAssignments={localFingerAssignments}
+                    remaps={keyboardRemaps}
+                    customKeys={keyboardCustomKeys}
+                    onKeyClick={handleKeyClick}
+                    showActionLabels
+                    showFingerAssignments
+                    showRemaps
+                    hideNumpad
+                  />
+                </KeyboardScaledPreview>
+              </div>
+              <HorizontalScrollArea showHint wrapperClassName={cn("xl:hidden", !mobileFullKeyboard && "max-md:hidden")}>
                 <VirtualKeyboard
                   layout={keyboardLayout}
                   keybindings={keybindingsMap}
@@ -2339,9 +2603,19 @@ export default function KeybindingsPage() {
                   showRemaps
                   hideNumpad
                 />
-              </div>
-              {/* テンキーとマウスを横並び */}
-              <div className="flex items-start gap-6">
+              </HorizontalScrollArea>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 md:hidden"
+                aria-pressed={mobileFullKeyboard}
+                onClick={() => setMobileFullKeyboard((v) => !v)}
+              >
+                {t(mobileFullKeyboard ? "meKeybindings.mobileKeyboardLeftHand" : "meKeybindings.mobileKeyboardFull")}
+              </Button>
+              {/* テンキーとマウスを横並び（狭い画面では折り返して縦積み） */}
+              <div className="flex max-w-full flex-wrap items-start gap-x-6 gap-y-4">
                 <VirtualNumpad
                   keybindings={keybindingsMap}
                   fingerAssignments={localFingerAssignments}
@@ -2363,8 +2637,7 @@ export default function KeybindingsPage() {
                 />
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </PageSection>
       )}
 
       {/* タブ分け設定セクション */}
@@ -2374,18 +2647,18 @@ export default function KeybindingsPage() {
         className="w-full"
       >
         <TabsList>
-          <TabsTrigger value="keybindings">
+          <TabsTrigger value="keybindings" className="max-sm:h-11">
             {t("meKeybindings.tabActions")}
           </TabsTrigger>
           {!isControllerMode && (
             <>
-              <TabsTrigger value="remaps">
+              <TabsTrigger value="remaps" className="max-sm:h-11">
                 {t("meKeybindings.tabRemaps")}
               </TabsTrigger>
-              <TabsTrigger value="custom-actions">
+              <TabsTrigger value="custom-actions" className="max-sm:h-11">
                 {t("meKeybindings.tabCustomActions")}
               </TabsTrigger>
-              <TabsTrigger value="custom-keys">
+              <TabsTrigger value="custom-keys" className="max-sm:h-11">
                 {t("meKeybindings.tabCustomKeys")}
               </TabsTrigger>
             </>
@@ -2395,19 +2668,19 @@ export default function KeybindingsPage() {
         {/* 操作割り当てタブ */}
         <TabsContent value="keybindings" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
-          <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-4", !canEditPresetData && "pointer-events-none opacity-50")}>
+          {/* 見出し（h1 > h2 > h3）。id は `keybindings-actions-heading` になり、スキップリンクの移動先を兼ねる */}
+          <PageSection id="keybindings-actions" first title={t("meKeybindings.tabActions")} className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {displayGroups.map((group) => {
               const bindings = group.bindings;
               if (!bindings || bindings.length === 0) return null;
 
               return (
-                <Card key={group.key}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className={`text-base font-semibold ${group.color}`}>
-                      {group.label}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
+                <section key={group.key}>
+                  <h3 className="border-b border-border/60 pb-2 text-base font-semibold">
+                    {group.label}
+                  </h3>
+                  <div>
                     <div className="divide-y">
                       {bindings.map((kb) => (
                         <KeybindingRow
@@ -2416,14 +2689,17 @@ export default function KeybindingsPage() {
                           isControllerMode={isControllerMode}
                           updateKeybindingKey={updateKeybindingKey}
                           getKeyLabelWithCustom={getKeyLabelWithCustom}
+                          getSharedActionLabels={getSharedActionLabels}
+                          onAnnounce={setKeyAnnouncement}
                         />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </section>
               );
             })}
           </div>
+          </PageSection>
         </TabsContent>
 
         {/* リマップタブ（コントローラーモード以外） */}
@@ -2431,12 +2707,18 @@ export default function KeybindingsPage() {
         <TabsContent value="remaps" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.remapsTitle")}</CardTitle>
-              <CardDescription>{t("meKeybindings.remapsDescription")}</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <PageSection id="remaps" first title={t("meKeybindings.remapsTitle")}>
+            <div className="space-y-1.5 text-sm text-muted-foreground">
+              <p>{t("meKeybindings.remapsDescription")}</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                <li>{t("meKeybindings.remapsGuideSource")}</li>
+                <li>{t("meKeybindings.remapsGuideTarget")}</li>
+                <li>{t("meKeybindings.remapsGuideTrigger")}</li>
+                <li>{t("meKeybindings.remapsGuideChat")}</li>
+                <li>{t("meKeybindings.remapsGuideAll")}</li>
+              </ul>
+            </div>
+            <div>
               {localRemaps.filter((r) => !r._delete).length > 0 ? (
                 <div className="divide-y border-y">
                   {localRemaps.map((remap, index) => {
@@ -2474,8 +2756,8 @@ export default function KeybindingsPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 {t("meKeybindings.addRemap")}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2485,14 +2767,11 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-keys" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.customKeysTitle")}</CardTitle>
-              <CardDescription>
-                {t("meKeybindings.customKeysDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <PageSection id="custom-keys" first title={t("meKeybindings.customKeysTitle")}>
+            <p className="text-sm text-muted-foreground">
+              {t("meKeybindings.customKeysDescription")}
+            </p>
+            <div className="space-y-4">
               {activeCustomKeys.length > 0 ? (
                 <div className="space-y-2">
                   {localCustomKeys.map((ck, index) => {
@@ -2504,20 +2783,22 @@ export default function KeybindingsPage() {
                             value={ck.keyCode}
                             onChange={(e) => updateCustomKey(index, { keyCode: e.target.value })}
                             placeholder={t("meKeybindings.keyCode")}
-                            className="font-mono text-sm"
+                            aria-label={t("meKeybindings.keyCode")}
+                            className="font-mono text-sm max-sm:h-11"
                           />
                           <Input
                             value={ck.keyName}
                             onChange={(e) => updateCustomKey(index, { keyName: e.target.value })}
                             placeholder={t("meKeybindings.displayName")}
-                            className="text-sm"
+                            aria-label={t("meKeybindings.displayName")}
+                            className="text-sm max-sm:h-11"
                           />
                           <Select
                             value={ck.category}
                             onValueChange={(value: "mouse" | "keyboard") => updateCustomKey(index, { category: value })}
                           >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
+                            <SelectTrigger aria-label={t("meKeybindings.customKeyCategoryAria")} className="w-full max-sm:h-11">
+                              <SelectValue>{t(ck.category === "mouse" ? "meKeybindings.mouse" : "meKeybindings.keyboard")}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="keyboard">{t("meKeybindings.keyboard")}</SelectItem>
@@ -2530,9 +2811,10 @@ export default function KeybindingsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => deleteCustomKey(index)}
-                          className="text-destructive hover:text-destructive"
+                          aria-label={t("meKeybindings.deleteCustomKeyAria")}
+                          className="text-destructive hover:text-destructive max-sm:size-11"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </div>
                     );
@@ -2544,28 +2826,13 @@ export default function KeybindingsPage() {
                 </p>
               )}
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button type="button" variant="outline" onClick={addCustomKey} className="w-full sm:w-auto">
+                <Button type="button" variant="outline" onClick={addCustomKey} className="w-full sm:w-auto max-sm:min-h-11">
                   <Plus className="mr-1 h-4 w-4" />
                   {t("meKeybindings.addCustomKey")}
                 </Button>
-                {localCustomKeys.some((ck) => ck._isNew || ck._delete || !initialCustomKeys.some((ic) => ic.id === ck.id && ic.keyCode === ck.keyCode && ic.keyName === ck.keyName && ic.category === ck.category)) && (
-                  <Button
-                    type="button"
-                    onClick={saveCustomKeys}
-                    disabled={customKeyFetcher.state !== "idle"}
-                    className="w-full sm:w-auto"
-                  >
-                    {customKeyFetcher.state !== "idle" ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="mr-1 h-4 w-4" />
-                    )}
-                    {t("meKeybindings.saveCustomKeys")}
-                  </Button>
-                )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2575,14 +2842,11 @@ export default function KeybindingsPage() {
         <TabsContent value="custom-actions" className="space-y-4">
           {!canEditPresetData && <PresetRequiredNotice />}
           <div className={cn(!canEditPresetData && "pointer-events-none opacity-50")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">{t("meKeybindings.customActionsTitle")}</CardTitle>
-              <CardDescription>
-                {t("meKeybindings.customActionsDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <PageSection id="custom-actions" first title={t("meKeybindings.customActionsTitle")}>
+            <p className="text-sm text-muted-foreground">
+              {t("meKeybindings.customActionsDescription")}
+            </p>
+            <div className="space-y-4">
               {localCustomActions.filter((a) => !a._delete).length > 0 ? (
                 <div className="space-y-3">
                   {localCustomActions.map((action, index) => {
@@ -2608,8 +2872,8 @@ export default function KeybindingsPage() {
                 <Plus className="mr-1 h-4 w-4" />
                 {t("meKeybindings.addCustomAction")}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </PageSection>
           </div>
         </TabsContent>
         )}
@@ -2623,6 +2887,8 @@ export default function KeybindingsPage() {
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={resetChanges}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* キー編集ダイアログ */}
@@ -2630,16 +2896,27 @@ export default function KeybindingsPage() {
         open={!!editingKeyCode}
         onOpenChange={(open) => {
           if (!open) {
-            closeKeyModal();
+            requestCloseKeyModal();
           }
         }}
       >
         <DialogContent
-          className="sm:max-w-lg max-h-[80vh] p-0 overflow-hidden flex flex-col"
+          className="sm:max-w-lg max-h-[calc(100dvh-2rem)] p-0 overflow-hidden flex flex-col"
           onKeyDown={isCapturing ? handleKeyCapture : undefined}
           onMouseDown={isCapturing ? handleMouseCapture : undefined}
           onContextMenu={isCapturing ? (e) => e.preventDefault() : undefined}
           onEscapeKeyDown={keyCaptureEscapeGuard}
+          onCloseAutoFocus={(e) => {
+            // 開いたキーのボタン（仮想キーボードのそのキー）へ戻す。要素が差し替わっていたら roving key の属性で探す
+            const ret = keyModalReturnFocusRef.current;
+            if (!ret) return;
+            e.preventDefault();
+            const target =
+              ret.el && ret.el.isConnected
+                ? ret.el
+                : document.querySelector<HTMLElement>(`[data-roving-key$=":${CSS.escape(ret.keyCode)}"]`);
+            target?.focus({ preventScroll: true });
+          }}
         >
           <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
             <DialogTitle className="flex items-center gap-2">
@@ -2652,29 +2929,30 @@ export default function KeybindingsPage() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="space-y-6">
+          <div className="space-y-3">
+            {/* 段階的に見せる: 操作割り当ては常に開き、関係の薄い段（リマップ・指・カスタムアクション）は中身があるときだけ開く */}
             {/* 操作割り当て（複数選択可能） */}
-            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <Label>{t("meKeybindings.actionAssignment")}</Label>
-              <p className="text-xs text-muted-foreground mb-2">
+            <KeyDialogSection
+              key={`assign-${editingKeyCode}`}
+              defaultOpen
+              title={t("meKeybindings.actionAssignment")}
+              summary={t("meKeybindings.sectionCount", { count: modalAssignedCountOnKey })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
+              <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.actionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-              <div className="max-h-64 overflow-y-auto border rounded-md p-2">
-                {categoryOrder.map((category) => {
-                  const bindings = modalByCategory[category];
-                  if (!bindings || bindings.length === 0) return null;
-
-                  return (
-                    <div key={category} className="mb-3 last:mb-0">
-                      <p className={`text-xs font-medium mb-1.5 ${categoryColors[category]}`}>
-                        {categoryLabelsOf(t)[category]}
-                      </p>
-                      <div className="space-y-1.5 pl-2">
-                        {bindings.map((kb) => {
+              <KeyActionPicker
+                groups={modalDisplayGroups}
+                editingKeyCode={editingKeyCode}
+                getLabel={(kb) => getActionLabel(t, kb.action)}
+                renderRow={(kb) => {
                           const isAssignedToThisKey = kb.keyCode === editingKeyCode;
-                          const isAssignedToOtherKey = !!(kb.keyCode && kb.keyCode !== editingKeyCode);
+                          const assignmentStatus = editingKeyCode
+                            ? getActionAssignmentStatus(kb, editingKeyCode, modalAssignedCountOnKey)
+                            : "none";
                           const assignedTo = modalActionToKeyMap[kb.action];
 
                           return (
@@ -2693,9 +2971,16 @@ export default function KeybindingsPage() {
                                 className="text-sm cursor-pointer select-none"
                               >
                                 {getActionLabel(t, kb.action)}
-                                {isAssignedToOtherKey && (
+                                {assignmentStatus === "conflict" && (
                                   <span className="ml-2 inline-flex items-center gap-1 text-xs text-warning">
-                                    <TriangleAlert className="h-3.5 w-3.5" />
+                                    <span className="sr-only">{t("common.listSeparatorComma")}</span>
+                                    <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {t("meKeybindings.sharedKeyConflict")}
+                                  </span>
+                                )}
+                                {assignmentStatus === "moves" && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    <span className="sr-only">{t("common.listSeparatorComma")}</span>
                                     {t("meKeybindings.assignedToOtherKey", {
                                       key: getKeyLabelWithCustom(assignedTo),
                                     })}
@@ -2704,41 +2989,26 @@ export default function KeybindingsPage() {
                               </label>
                             </div>
                           );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                }}
+              />
+            </KeyDialogSection>
 
             {/* リマップ（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <div className="flex items-center justify-between">
-                <Label>{t("meKeybindings.keyRemapSetting")}</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canEditPresetData}
-                  onClick={() => {
-                    // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
-                    modalAddRemapForKey(editingKeyCode);
-                  }}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  {t("meKeybindings.add")}
-                </Button>
-              </div>
+            <KeyDialogSection
+              key={`remap-${editingKeyCode}`}
+              defaultOpen={modalSelectedKeyRemaps.length > 0}
+              title={t("meKeybindings.keyRemapSetting")}
+              summary={t("meKeybindings.sectionCount", { count: modalSelectedKeyRemaps.length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.remapsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-
               {modalSelectedKeyRemaps.length > 0 ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2">
                   {modalSelectedKeyRemaps.map((remap) => {
                     // 同一 sourceKey の行が他にある場合は All を選択不可にする（リマップ全体で判定）
                     const hasSameSourceSibling =
@@ -2764,49 +3034,58 @@ export default function KeybindingsPage() {
                   {t("meKeybindings.remapsNotConfigured")}
                 </p>
               )}
-            </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-sm:min-h-11"
+                disabled={!canEditPresetData}
+                onClick={() => {
+                  // 新しいリマップを追加（ベースキーのみ、修飾キーなし）
+                  modalAddRemapForKey(editingKeyCode);
+                }}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {t("meKeybindings.add")}
+              </Button>
+            </KeyDialogSection>
             )}
 
             {/* 指割り当て（コントローラーボタン以外のみ表示） */}
             {editingKeyCode && !isControllerKeyCode(editingKeyCode) && (
-            <div className={cn("space-y-2", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <Label>{t("meKeybindings.fingerAssignment")}</Label>
+            <KeyDialogSection
+              key={`finger-${editingKeyCode}`}
+              defaultOpen={(modalFingerAssignments[editingKeyCode] ?? []).length > 0}
+              title={t("meKeybindings.fingerAssignment")}
+              summary={t("meKeybindings.sectionCount", { count: (modalFingerAssignments[editingKeyCode] ?? []).length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <FingerToggleGroup
-                value={editingKeyCode ? modalFingerAssignments[editingKeyCode] ?? [] : []}
+                value={modalFingerAssignments[editingKeyCode] ?? []}
                 disabled={!canEditPresetData}
                 onChange={(next) => {
-                  if (editingKeyCode) {
-                    modalUpdateFingerAssignment(editingKeyCode, next);
-                  }
+                  modalUpdateFingerAssignment(editingKeyCode, next);
                 }}
               />
-            </div>
+            </KeyDialogSection>
             )}
 
             {/* カスタムアクション（コントローラーモード以外） */}
             {editingKeyCode && !isControllerMode && (
-            <div className={cn("space-y-3", !canEditPresetData && "pointer-events-none opacity-50")}>
-              <div className="flex items-center justify-between">
-                <Label>{t("meKeybindings.customActionsTitle")}</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canEditPresetData}
-                  onClick={() => modalAddCustomActionForKey(editingKeyCode)}
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  {t("meKeybindings.add")}
-                </Button>
-              </div>
+            <KeyDialogSection
+              key={`custom-${editingKeyCode}`}
+              defaultOpen={modalSelectedKeyCustomActions.length > 0}
+              title={t("meKeybindings.customActionsTitle")}
+              summary={t("meKeybindings.sectionCount", { count: modalSelectedKeyCustomActions.length })}
+              className={cn(!canEditPresetData && "pointer-events-none opacity-50")}
+            >
               <p className="text-xs text-muted-foreground">
                 {canEditPresetData
                   ? t("meKeybindings.customActionsHelp")
                   : t("meKeybindings.presetRequired")}
               </p>
-
               {modalSelectedKeyCustomActions.length > 0 ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-2">
                   {modalSelectedKeyCustomActions.map((action) => (
                     <DialogCustomActionRow
                       key={action.id || `new-${action._index}`}
@@ -2824,23 +3103,57 @@ export default function KeybindingsPage() {
                   {t("meKeybindings.noCustomActions")}
                 </p>
               )}
-            </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-sm:min-h-11"
+                disabled={!canEditPresetData}
+                onClick={() => modalAddCustomActionForKey(editingKeyCode)}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                {t("meKeybindings.add")}
+              </Button>
+            </KeyDialogSection>
             )}
           </div>
           </div>
 
           <DialogFooter className="px-6 py-4 border-t bg-background sticky bottom-0 z-10">
-            <Button variant="outline" onClick={closeKeyModal}>
+            {/* 2段階の確定（ここの「適用」はページへの反映、保存はページ下のバー）をダイアログ内で示す */}
+            <p className="text-xs text-muted-foreground sm:mr-auto sm:self-center">{t("meKeybindings.applyNote")}</p>
+            <Button variant="outline" onClick={requestCloseKeyModal}>
               <X className="mr-2 h-4 w-4" />
               {t("meKeybindings.cancel")}
             </Button>
             <Button onClick={saveKeyModalChanges} disabled={!canEditPresetData}>
-              <Save className="mr-2 h-4 w-4" />
-              {t("meKeybindings.saveLabel")}
+              <Check className="mr-2 h-4 w-4" />
+              {t("meKeybindings.applyLabel")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* キー編集ダイアログの破棄確認 */}
+      <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("meKeybindings.discardDraftTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("meKeybindings.discardDraftDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("meKeybindings.discardDraftKeepEditing")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDiscardConfirmOpen(false);
+                closeKeyModal();
+              }}
+            >
+              {t("meKeybindings.discardDraftConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* プリセットからコピーダイアログ */}
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
@@ -2861,13 +3174,14 @@ export default function KeybindingsPage() {
                 onValueChange={(value: "keybindings" | "remaps" | "fingers" | "all") => setCopyTarget(value)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {t(COPY_TARGET_LABEL_KEYS[copyTarget])}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{t("meKeybindings.all")}</SelectItem>
-                  <SelectItem value="keybindings">{t("meKeybindings.keybindingsOnly")}</SelectItem>
-                  <SelectItem value="remaps">{t("meKeybindings.remapsOnly")}</SelectItem>
-                  <SelectItem value="fingers">{t("meKeybindings.fingersOnly")}</SelectItem>
+                  {COPY_TARGET_OPTIONS.map((target) => (
+                    <SelectItem key={target} value={target}>{t(COPY_TARGET_LABEL_KEYS[target])}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2944,23 +3258,5 @@ export default function KeybindingsPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meKeybindings.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meKeybindings.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meKeybindings.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

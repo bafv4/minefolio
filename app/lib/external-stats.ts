@@ -56,6 +56,8 @@ export interface SpeedrunComPersonalBest {
         data?: {
           id: string;
           name: string;
+          /** サブカテゴリ変数か（embed=category.variables で返る変数リソースの項目） */
+          "is-subcategory"?: boolean;
           values: {
             values: Record<string, { label: string }>;
           };
@@ -66,12 +68,21 @@ export interface SpeedrunComPersonalBest {
   // 表示用に追加
   platformName?: string;
   versionName?: string;
+  /** バージョン以外のサブカテゴリ変数の値（"2 Players" 等）。同名カテゴリの見分けに使う */
+  subcategoryName?: string;
 }
+
+/**
+ * 外部統計の取得失敗の種類（表示文言ではなくコード。表示側が `t()` で自分のロケールに訳す）。
+ * - apiError: 外部 API が非2xx（レート制限・5xx）／ネットワーク例外
+ * - recordsFetchFailed: ユーザーは取れたが記録（personal-bests）の取得に失敗
+ */
+export type ExternalStatsError = "apiError" | "recordsFetchFailed";
 
 export interface SpeedrunComStats {
   user: SpeedrunComUser | null;
   personalBests: SpeedrunComPersonalBest[];
-  error?: string;
+  error?: ExternalStatsError;
 }
 
 // PaceMan（登録確認のみ）
@@ -127,7 +138,7 @@ export interface MCSRRankedStats {
   recentMatches: MCSRRankedMatch[];
   /** 国内（`country === "jp"`）Eloランキングの順位。取得不可・非対象はnull */
   countryRank: number | null;
-  error?: string;
+  error?: ExternalStatsError;
 }
 
 export interface MCSRRankedMatch {
@@ -153,14 +164,20 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
   try {
     // ユーザー情報を取得
     const userRes = await fetch(`${SPEEDRUN_API_BASE}/users?lookup=${encodeURIComponent(username)}`, { signal: AbortSignal.timeout(30000) });
+    // 404・400 は未登録（error なし。400 はクライアント側の要求の問題で再試行しても直らない）。
+    // それ以外の非2xx（420 レート制限・5xx 等）は取得失敗として error を付ける
+    if (userRes.status === 404 || userRes.status === 400) {
+      return { user: null, personalBests: [] };
+    }
     if (!userRes.ok) {
-      return { user: null, personalBests: [], error: "ユーザーが見つかりません" };
+      return { user: null, personalBests: [], error: "apiError" };
     }
     const userData = (await userRes.json()) as { data: SpeedrunComUser[] };
     const users = userData.data;
 
+    // 正常応答で該当なしは未登録（error なし）
     if (!users || users.length === 0) {
-      return { user: null, personalBests: [], error: "ユーザーが見つかりません" };
+      return { user: null, personalBests: [] };
     }
 
     const user = users[0];
@@ -171,7 +188,7 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
       { signal: AbortSignal.timeout(30000) }
     );
     if (!pbRes.ok) {
-      return { user, personalBests: [], error: "記録の取得に失敗しました" };
+      return { user, personalBests: [], error: "recordsFetchFailed" };
     }
     const pbData = (await pbRes.json()) as { data?: SpeedrunComPersonalBest[] };
     const rawPersonalBests = pbData.data ?? [];
@@ -206,10 +223,25 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
         }
       }
 
+      // バージョン以外のサブカテゴリ変数（人数など）の値。同名カテゴリの見分け用。
+      // is-subcategory が true の変数だけ（サブカテゴリでない変数は名前に足さない）
+      const subcategoryLabels: string[] = [];
+      if (pb.run.values && pb.category?.data?.variables?.data) {
+        for (const variable of pb.category.data.variables.data) {
+          if (variable["is-subcategory"] !== true) continue;
+          const varName = variable.name.toLowerCase();
+          if (varName.includes("version") || varName.includes("バージョン")) continue;
+          const valueId = pb.run.values[variable.id];
+          const label = valueId ? variable.values.values[valueId]?.label : undefined;
+          if (label) subcategoryLabels.push(label);
+        }
+      }
+
       return {
         ...pb,
         platformName,
         versionName,
+        subcategoryName: subcategoryLabels.length > 0 ? subcategoryLabels.join(", ") : undefined,
       };
     });
 
@@ -222,7 +254,7 @@ export async function fetchSpeedrunComStats(username: string): Promise<SpeedrunC
     return { user, personalBests: minecraftPbs.length > 0 ? minecraftPbs : personalBests };
   } catch (error) {
     console.error("Speedrun.com API error:", error);
-    return { user: null, personalBests: [], error: "APIエラーが発生しました" };
+    return { user: null, personalBests: [], error: "apiError" };
   }
 }
 
@@ -246,40 +278,73 @@ export function getSpeedrunComVideoEmbedUrl(pb: SpeedrunComPersonalBest): string
 // ============================================
 const PACEMAN_API_BASE = "https://paceman.gg/stats/api";
 
-// PaceManプレイヤー登録確認
+/**
+ * PaceManプレイヤー登録確認。
+ * 登録済み＝200でerrorフィールドなし、未登録＝404または200でerrorフィールドあり（{"error":"Unknown user"}）。
+ * それ以外の非2xx・ネットワーク例外・タイムアウトは「取得失敗」として例外を投げる（未登録と区別するため）。
+ */
 export async function checkPaceManPlayer(playerName: string): Promise<PaceManStats> {
-  try {
-    // getSessionStats APIはプレイヤーが存在しない場合 {"error":"Unknown user"} を返す
-    const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return { isRegistered: false };
-    const data = await res.json() as { error?: string } | Record<string, unknown> | null;
-    // エラーレスポンスの場合は未登録
-    if (data && typeof data === "object" && "error" in data) {
-      return { isRegistered: false };
-    }
-    return { isRegistered: true };
-  } catch {
+  const res = await fetch(`${PACEMAN_API_BASE}/getSessionStats/?name=${encodeURIComponent(playerName)}&hours=24`, { signal: AbortSignal.timeout(10000) });
+  if (res.status === 404) return { isRegistered: false };
+  if (!res.ok) throw new Error(`PaceMan HTTP ${res.status}`);
+  const data = await res.json() as { error?: string } | Record<string, unknown> | null;
+  if (data && typeof data === "object" && "error" in data) {
     return { isRegistered: false };
   }
+  return { isRegistered: true };
 }
 
 // ============================================
 // MCSR Ranked API
 // ============================================
-const RANKED_API_BASE = "https://mcsrranked.com/api";
+export const RANKED_API_BASE = "https://mcsrranked.com/api";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RankedApiResponse = { status: string; data: any };
 
 // マッチタイプ定数
-const MATCH_TYPE_RANKED = 2;
+export const MATCH_TYPE_RANKED = 2;
+
+// JP リーダーボードは全員共通のため、モジュールスコープで短時間共有する（ranked-stats-cache.ts と同じ方針）。
+// 成功した（HTTP 200 かつ JSON として解釈できた）取得結果のみキャッシュし、失敗は次回再取得する。
+const JP_LEADERBOARD_TTL_MS = 5 * 60_000;
+type JpLeaderboardResponse = { status: string; data?: { users?: { uuid?: string }[] } } | null;
+let jpLeaderboardCache: { at: number; promise: Promise<JpLeaderboardResponse> } | null = null;
+
+/** テスト用: JP リーダーボードのキャッシュを破棄する */
+export function resetJpLeaderboardCache(): void {
+  jpLeaderboardCache = null;
+}
+
+function fetchJpLeaderboardCached(): Promise<JpLeaderboardResponse> {
+  if (jpLeaderboardCache && Date.now() - jpLeaderboardCache.at < JP_LEADERBOARD_TTL_MS) {
+    return jpLeaderboardCache.promise;
+  }
+  const promise = (async (): Promise<JpLeaderboardResponse> => {
+    const res = await fetch(`${RANKED_API_BASE}/leaderboard?country=jp`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`leaderboard HTTP ${res.status}`);
+    return (await res.json()) as JpLeaderboardResponse;
+  })();
+  const entry = { at: Date.now(), promise };
+  jpLeaderboardCache = entry;
+  // 失敗はキャッシュしない
+  promise.catch(() => {
+    if (jpLeaderboardCache === entry) jpLeaderboardCache = null;
+  });
+  return promise;
+}
 
 export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRankedStats> {
   try {
     // ユーザー情報を取得（存在確認を兼ねる）
     const userRes = await fetch(`${RANKED_API_BASE}/users/${encodeURIComponent(identifier)}`, { signal: AbortSignal.timeout(10000) });
-    if (!userRes.ok) {
+    // 404・400 は未登録（error なし。実測で未登録ユーザーは 400 {"status":"error"} を返す。本文は読まない）。
+    // それ以外の非2xx（429・5xx 等）は取得失敗として error を付ける
+    if (userRes.status === 404 || userRes.status === 400) {
       return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null };
+    }
+    if (!userRes.ok) {
+      return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "apiError" };
     }
 
     const userData = (await userRes.json()) as RankedApiResponse | null;
@@ -399,12 +464,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     const fetchCountryRank = async (): Promise<number | null> => {
       if (user.country !== "jp" || user.eloRate === null) return null;
       try {
-        const leaderboardRes = await fetch(`${RANKED_API_BASE}/leaderboard?country=jp`, { signal: AbortSignal.timeout(10000) });
-        if (!leaderboardRes.ok) return null;
-
-        const leaderboardData = (await leaderboardRes.json()) as
-          | { status: string; data?: { users?: { uuid?: string }[] } }
-          | null;
+        const leaderboardData = await fetchJpLeaderboardCached();
         if (!leaderboardData || leaderboardData.status !== "success") return null;
 
         const leaderboardUsers = leaderboardData.data?.users;
@@ -423,7 +483,7 @@ export async function fetchMCSRRankedStats(identifier: string): Promise<MCSRRank
     return { isRegistered: true, user, seasonData, recentMatches, countryRank };
   } catch (error) {
     console.error("MCSR Ranked API error:", error);
-    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "APIエラーが発生しました" };
+    return { isRegistered: false, user: null, seasonData: null, recentMatches: [], countryRank: null, error: "apiError" };
   }
 }
 
@@ -456,9 +516,14 @@ export async function fetchAllExternalStats(
 
   // PaceMan（MCIDで検索、登録確認のみ）
   promises.push(
-    checkPaceManPlayer(mcid).then((data) => {
-      results.paceman = data;
-    })
+    checkPaceManPlayer(mcid)
+      .then((data) => {
+        results.paceman = data;
+      })
+      // 取得失敗は従来どおり未登録扱い
+      .catch(() => {
+        results.paceman = { isRegistered: false };
+      })
   );
 
   // MCSR Ranked（MCIDで検索）

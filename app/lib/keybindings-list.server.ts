@@ -118,9 +118,18 @@ async function fetchKeybindingsListPlayers(
           columns: { id: true },
           with: {
             keybindings: {
+              columns: { id: true, action: true, keyCode: true, category: true },
               orderBy: [asc(keybindings.category), asc(keybindings.action)],
             },
             keyRemaps: {
+              columns: {
+                id: true,
+                sourceKey: true,
+                targetKey: true,
+                software: true,
+                notes: true,
+                remapType: true,
+              },
               orderBy: [asc(keyRemaps.sourceKey)],
             },
             playerConfig: {
@@ -136,9 +145,17 @@ async function fetchKeybindingsListPlayers(
               },
             },
             customKeys: {
+              columns: { keyCode: true, keyName: true, category: true },
               orderBy: [asc(customKeys.category), asc(customKeys.keyName)],
             },
             customActions: {
+              columns: {
+                id: true,
+                actionName: true,
+                category: true,
+                triggerKey: true,
+                description: true,
+              },
               orderBy: [
                 asc(customActions.displayOrder),
                 asc(customActions.actionName),
@@ -174,10 +191,33 @@ async function fetchKeybindingsListPlayers(
     const cfg = decoded.playerConfig;
     return {
       ...rest,
-      keybindings: decoded.keybindings,
-      keyRemaps: decoded.keyRemaps,
-      customKeys: decoded.customKeys,
-      customActions: decoded.customActions,
+      // 一覧が使う列だけに絞る（userId / createdAt 等は送らない）
+      keybindings: decoded.keybindings.map((k) => ({
+        id: k.id,
+        action: k.action,
+        keyCode: k.keyCode,
+        category: k.category,
+      })),
+      keyRemaps: decoded.keyRemaps.map((r) => ({
+        id: r.id,
+        sourceKey: r.sourceKey,
+        targetKey: r.targetKey,
+        software: r.software,
+        notes: r.notes,
+        remapType: r.remapType,
+      })),
+      customKeys: decoded.customKeys.map((k) => ({
+        keyCode: k.keyCode,
+        keyName: k.keyName,
+        category: k.category,
+      })),
+      customActions: decoded.customActions.map((a) => ({
+        id: a.id,
+        actionName: a.actionName,
+        category: a.category,
+        triggerKey: a.triggerKey,
+        description: a.description,
+      })),
       playerConfig: cfg
         ? {
             keyboardLayout: cfg.keyboardLayout ?? null,
@@ -200,7 +240,3 @@ async function fetchKeybindingsListPlayers(
       p.customActions.length > 0,
   );
 }
-
-export type KeybindingsListPlayer = Awaited<
-  ReturnType<typeof loadKeybindingsListPlayers>
->[number];

@@ -33,16 +33,39 @@ function ItemIconSpinner({ size, className }: { size: number; className?: string
 }
 
 /**
+ * UI ロケール → mcitems の言語コード。言語を足したら型エラーで足し忘れが分かる。
+ * 足すときのコードは zh_cn / zh_tw / ko_kr（docs/i18n.md「言語を追加する手順」）。
+ * 辞書ファイル（public/mcitems の言語ファイル）が存在するコードを指定すること。
+ */
+const ITEM_LANGS = {
+  ja: "ja_jp",
+  en: "en_us",
+} as const satisfies Record<Locale, string>;
+
+export type ItemLang = (typeof ITEM_LANGS)[Locale];
+
+/** UI ロケールに対応する mcitems の言語コード */
+export function itemLangForLocale(locale: Locale): ItemLang {
+  return ITEM_LANGS[locale];
+}
+
+/**
  * アイテム名をアプリの UI ロケール（"en"/"ja"）に合わせて取得する。
  * 英語ロケールは formatItemName の英語表記を優先し、日本語ロケールは和名（getItemNameJa）優先
  * → 無ければ英語にフォールバックする（player/profile.tsx・guide-embeds.tsx で共用）。
  */
 export function getLocalizedItemName(itemId: string, locale: Locale): string {
-  if (locale === "en") return formatItemName(itemId, "en_us");
-  return getItemNameJa(itemId) || formatItemName(itemId);
+  // 和名辞書（getItemNameJa）があるのは日本語だけ。ほかの言語は formatItemName に言語コードを渡す
+  const lang = itemLangForLocale(locale);
+  if (lang === "ja_jp") return getItemNameJa(itemId) || formatItemName(itemId);
+  return formatItemName(itemId, lang);
 }
 
-export type ItemIconProps = Omit<MinecraftItemIconProps, "textureBaseUrl">;
+/**
+ * `alt` は @bafv4/mcitems の型では除外されているが、実装は `...props` を img の後ろに展開するため
+ * 渡せば上書きされる（未指定時は itemId）。翻訳済みの名前や、重複 img 用の空文字を渡す。
+ */
+export type ItemIconProps = Omit<MinecraftItemIconProps, "textureBaseUrl"> & { alt?: string };
 
 /**
  * Minecraft アイテムアイコン。テクスチャ配信元・ピクセル描画・読み込み中の

@@ -1,28 +1,27 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type RefObject } from "react";
 import { useT } from "@/hooks/use-locale";
 import { useFetcher } from "react-router";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
-  Upload,
   FileText,
-  Keyboard,
-  Settings,
+  FileInput,
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Info,
+  X,
 } from "lucide-react";
 import {
   parseAutoHotkeyScript,
@@ -32,17 +31,40 @@ import {
 } from "@/lib/import-parser";
 import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
 
+type ImportSource = "remap" | "minecraft";
+
 interface ImportDialogProps {
-  onSuccess?: () => void;
+  /** 開閉（キー配置画面が持つ。/me/import からの転送 `?import=1` で開いた状態にするため） */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** 閉じたあとにフォーカスを戻す先（トリガーのボタン。ダイアログは親が1回だけ置き、トリガーはプリセット行の位置で付け替わるため ref で受ける） */
+  returnFocusRef: RefObject<HTMLElement | null>;
+  /** 取り込み先（編集中）のプリセット名。null はプリセットが無く、取り込みで新規作成される */
+  targetPresetName: string | null;
+  /** 取り込み先（編集中）のプリセット id。送り返して、別タブで編集先が切り替わっていないかサーバーが確認する */
+  targetPresetId: string | null;
 }
 
-type ImportStep = "select" | "preview" | "done";
+type ImportStep = "source" | "select" | "preview" | "done";
 
-export function ImportDialog({ onSuccess }: ImportDialogProps) {
+/**
+ * 設定インポートのダイアログ（キー配置画面のプリセット行から開く）。
+ * 取り込み元（リマップ＝AutoHotkey／Minecraft 設定）はダイアログの最初の手順で選ぶ。
+ * 書き込みは /me/import の action（リソースルート）へ送る。取り込み先は編集中のプリセット。
+ */
+export function ImportDialog({
+  open,
+  onOpenChange,
+  returnFocusRef,
+  targetPresetName,
+  targetPresetId,
+}: ImportDialogProps) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<ImportStep>("select");
-  const [activeTab, setActiveTab] = useState<"remap" | "minecraft">("remap");
+  // 取り込み元が空のあいだが最初の手順（"source"）。選んだあとの手順だけ phase が持つ
+  const [source, setSource] = useState<ImportSource | null>(null);
+  const [phase, setPhase] = useState<Exclude<ImportStep, "source">>("select");
+  const step: ImportStep = source === null ? "source" : phase;
+  const activeTab = source;
 
   // リマップインポート状態
   const [parsedRemaps, setParsedRemaps] = useState<ParsedRemap[]>([]);
@@ -59,9 +81,21 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
   const fetcher = useFetcher();
 
   const isSubmitting = fetcher.state === "submitting";
+  // 送信中〜応答の反映中（loading を含む）は閉じる操作を受け付けない
+  const isBusy = fetcher.state !== "idle";
+
+  // 手順が変わると押したボタンが消えてフォーカスが DialogContent へ戻るので、次の手順の見出しへ移す
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const prevStepRef = useRef<ImportStep>("source");
+  useEffect(() => {
+    if (prevStepRef.current === step) return;
+    prevStepRef.current = step;
+    if (open) stepHeadingRef.current?.focus();
+  }, [step, open]);
 
   const resetState = useCallback(() => {
-    setStep("select");
+    setSource(null);
+    setPhase("select");
     setParsedRemaps([]);
     setSelectedRemaps(new Set());
     setParsedMcSettings(null);
@@ -72,8 +106,12 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
 
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+      const input = event.target;
+      const file = input.files?.[0];
       if (!file) return;
+      // 途中で return しても、同じファイルを選び直せば onChange が発火するよう先に空にする
+      // （File は保持しているので読み込みには影響しない）
+      input.value = "";
 
       setError(null);
 
@@ -96,7 +134,7 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
           }
           setParsedRemaps(remaps);
           setSelectedRemaps(new Set(remaps.map((_, i) => i)));
-          setStep("preview");
+          setPhase("preview");
         } else {
           // Minecraft設定解析
           const settings = parseMinecraftSettings(content, file.name);
@@ -105,15 +143,10 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
             return;
           }
           setParsedMcSettings(settings);
-          setStep("preview");
+          setPhase("preview");
         }
       } catch {
         setError(t("meImport.readFailed"));
-      }
-
-      // ファイル入力をリセット
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
       }
     },
     [activeTab]
@@ -127,8 +160,9 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
         {
           intent: "import-remaps",
           remaps: JSON.stringify(selectedRemapData),
+          ...(targetPresetId ? { presetId: targetPresetId } : {}),
         },
-        { method: "post" }
+        { method: "post", action: "/me/import" }
       );
     } else {
       // Minecraft設定をインポート
@@ -138,11 +172,12 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
           intent: "import-minecraft",
           keybindings: importKeybindings ? JSON.stringify(parsedMcSettings.keybindings) : "[]",
           gameSettings: importGameSettings ? JSON.stringify(parsedMcSettings.gameSettings) : "{}",
+          ...(targetPresetId ? { presetId: targetPresetId } : {}),
         },
-        { method: "post" }
+        { method: "post", action: "/me/import" }
       );
     }
-  }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, fetcher]);
+  }, [activeTab, parsedRemaps, selectedRemaps, parsedMcSettings, importKeybindings, importGameSettings, targetPresetId, fetcher]);
 
   // fetcher完了時の処理。サーバーがエラーを返した場合（プリセット未作成・
   // 別タブでの切替検知等）は完了画面に遷移せず、エラーをダイアログ内に表示する
@@ -152,15 +187,15 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
     if (fetcher.data === prevFetcherDataRef.current) return;
     prevFetcherDataRef.current = fetcher.data;
     if (step !== "preview") return;
-    const data = fetcher.data as { error?: string };
-    if (data.error) {
-      setError(data.error);
+    const data = fetcher.data as { success?: boolean; error?: string };
+    // success が true でなければ失敗として扱う（エラー文言が無くても完了画面へ進めない）
+    if (data.success !== true) {
+      setError(data.error ?? t("meImport.importFailed"));
     } else {
       setError(null);
-      setStep("done");
-      onSuccess?.();
+      setPhase("done");
     }
-  }, [fetcher.state, fetcher.data, step, onSuccess]);
+  }, [fetcher.state, fetcher.data, step, t]);
 
   const toggleRemapSelection = (index: number) => {
     setSelectedRemaps((prev) => {
@@ -182,98 +217,141 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
     setSelectedRemaps(new Set());
   };
 
+  // 閉じる経路（Esc・×・完了画面の「閉じる」）をすべてここに通し、状態を初期化する
+  const handleOpenChange = (value: boolean) => {
+    // 送信中は閉じない（resetState が走ると、成功しても完了画面が出ない）
+    if (!value && isBusy) return;
+    onOpenChange(value);
+    if (!value) resetState();
+  };
+
+  // 手順を変えるときはエラーの帯を消す
+  const goToStep = (next: ImportStep) => {
+    setError(null);
+    if (next === "source") {
+      setSource(null);
+      setPhase("select");
+    } else setPhase(next);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(value) => {
-        setOpen(value);
-        if (!value) resetState();
-      }}
-    >
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <Upload className="h-4 w-4 mr-2" />
-          {t("meImport.pageTitle")}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{t("meImport.dialogTitle")}</DialogTitle>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-2xl max-h-[80vh] overflow-y-auto"
+        onCloseAutoFocus={(event) => {
+          // DialogTrigger を持たないので、フォーカスはトリガーのボタンへ明示的に戻す
+          event.preventDefault();
+          returnFocusRef.current?.focus();
+        }}
+      >
+        {/* 閉じるボタン: 共有の DialogContent の既定は 16px。md 未満は 44px の押せる範囲にする */}
+        <DialogClose disabled={isBusy} className="ring-offset-background disabled:pointer-events-none disabled:opacity-40 focus-visible:ring-ring absolute top-1.5 right-1.5 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden md:top-3 md:right-3 md:size-8">
+          <X className="size-4" aria-hidden />
+          <span className="sr-only">{t("common.close")}</span>
+        </DialogClose>
+        <DialogHeader className="pr-10">
+          <DialogTitle>
+            {source
+              ? `${t("meImport.dialogTitle")}: ${source === "remap" ? t("meImport.remapTitle") : t("meImport.minecraftTitle")}`
+              : t("meImport.dialogTitle")}
+          </DialogTitle>
           <DialogDescription>
-            {t("meImport.pageDescription")}
+            {source === null
+              ? t("meImport.chooseSourceDescription")
+              : source === "remap"
+              ? t("meImport.ahkDescription")
+              : t("meImport.mcSettingsDescription")}
           </DialogDescription>
         </DialogHeader>
 
-        {step === "select" && (
-          // Dialog 内デグレード: カード化・タブ帯の面は打ち消し、ベースラインのみ残す
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "remap" | "minecraft")} className="overflow-visible rounded-none border-0 bg-transparent">
-            <TabsList className="bg-transparent p-0">
-              <TabsTrigger value="remap" className="gap-2 data-[state=active]:bg-background">
-                <Keyboard className="h-4 w-4" />
-                {t("meImport.remapTitle")}
-              </TabsTrigger>
-              <TabsTrigger value="minecraft" className="gap-2 data-[state=active]:bg-background">
-                <Settings className="h-4 w-4" />
-                {t("meImport.minecraftTitle")}
-              </TabsTrigger>
-            </TabsList>
+        <p className="text-sm text-muted-foreground">
+          {targetPresetName
+            ? t("meImport.targetPreset", { name: targetPresetName })
+            : t("meImport.targetPresetNone")}
+        </p>
 
-            <TabsContent value="remap" className="rounded-none border-0 border-t bg-transparent p-0 pt-4 sm:p-0 sm:pt-4 space-y-4">
-              <div className="rounded-lg border p-4 space-y-3">
-                <h4 className="font-medium">{t("meImport.ahkHeading")}</h4>
-                <p className="text-sm text-muted-foreground">
-                  {t("meImport.ahkDescription")}
-                </p>
-                <div className="text-xs text-muted-foreground bg-muted p-2 rounded font-mono">
-                  {t("meImport.ahkFormatExample")}
+        {step !== "done" && (
+          <h3 ref={stepHeadingRef} tabIndex={-1} className="sr-only">
+            {step === "source"
+              ? t("meImport.stepSource")
+              : step === "select"
+              ? t("meImport.stepSelect")
+              : t("meImport.stepPreview")}
+          </h3>
+        )}
+
+        {(step === "source" || step === "select") && (
+          <NoticeBanner tone="info" icon={Info}>
+            <p className="font-medium">{t("meImport.importInfoTitle")}</p>
+            <p>{t("meImport.importInfoDescription")}</p>
+          </NoticeBanner>
+        )}
+
+        {step === "source" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(["remap", "minecraft"] as const).map((value) => (
+              <Button
+                key={value}
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setError(null);
+                  setSource(value);
+                }}
+                className="h-auto min-h-11 flex-col items-start gap-1 whitespace-normal py-3 text-left"
+              >
+                <span className="font-medium">
+                  {value === "remap" ? t("meImport.remapTitle") : t("meImport.minecraftTitle")}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {value === "remap" ? t("meImport.remapDescription") : t("meImport.minecraftDescription")}
+                </span>
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {step === "select" && source && (
+          <div className="space-y-4">
+            <div className="text-sm">
+              <p className="mb-2 text-muted-foreground">
+                {source === "remap" ? t("meImport.supportedFormat") : t("meImport.supportedFiles")}
+              </p>
+              {source === "remap" ? (
+                <div className="rounded bg-muted p-2 font-mono text-xs">
+                  CapsLock::Ctrl<br />
+                  a::b<br />
+                  XButton1::e ; {t("meImport.ahkCommentExample")}
                 </div>
-              </div>
-
-              <div className="flex justify-center">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".ahk,.txt"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <Button onClick={() => fileInputRef.current?.click()}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  {t("meImport.selectAhkFile")}
-                </Button>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="minecraft" className="rounded-none border-0 border-t bg-transparent p-0 pt-4 sm:p-0 sm:pt-4 space-y-4">
-              <div className="rounded-lg border p-4 space-y-3">
-                <h4 className="font-medium">{t("meImport.mcSettingsHeading")}</h4>
-                <p className="text-sm text-muted-foreground">
-                  {t("meImport.mcSettingsDescription")}
-                </p>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>{t("meImport.supportedFiles")}</p>
-                  <ul className="list-disc list-inside ml-2">
-                    <li><code>options.txt</code> - {t("meImport.minecraftFolder")}</li>
-                    <li><code>standardsettings.json</code> - StandardSettings Mod</li>
+              ) : (
+                <>
+                  <ul className="list-inside list-disc space-y-1 text-xs">
+                    <li><code className="rounded bg-muted px-1">options.txt</code> - {t("meImport.minecraftFolder")}</li>
+                    <li><code className="rounded bg-muted px-1">standardsettings.json</code> - StandardSettings Mod</li>
                   </ul>
-                </div>
-              </div>
-
-              <div className="flex justify-center">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.json"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <Button onClick={() => fileInputRef.current?.click()}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  {t("meImport.selectFile")}
-                </Button>
-              </div>
-            </TabsContent>
-          </Tabs>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("meImport.minecraftScopeNote")}</p>
+                </>
+              )}
+            </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button variant="outline" onClick={() => goToStep("source")} className="max-sm:min-h-11">
+              {t("meImport.back")}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={source === "remap" ? ".ahk,.txt" : ".txt,.json"}
+              onChange={handleFileSelect}
+              className="hidden"
+              aria-label={source === "remap" ? t("meImport.selectAhkFile") : t("meImport.selectFile")}
+            />
+            <Button onClick={() => fileInputRef.current?.click()} className="max-sm:min-h-11">
+              <FileText className="h-4 w-4 mr-2" />
+              {source === "remap" ? t("meImport.selectAhkFile") : t("meImport.selectFile")}
+            </Button>
+          </div>
+          </div>
         )}
 
         {step === "preview" && activeTab === "remap" && (
@@ -318,10 +396,10 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setStep("select")}>
+              <Button variant="outline" onClick={() => goToStep("select")} className="max-sm:min-h-11">
                 {t("meImport.back")}
               </Button>
-              <Button onClick={handleImport} disabled={selectedRemaps.size === 0 || isSubmitting}>
+              <Button onClick={handleImport} disabled={selectedRemaps.size === 0 || isSubmitting} className="max-sm:min-h-11">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -329,7 +407,7 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
                   </>
                 ) : (
                   <>
-                    <Upload className="h-4 w-4 mr-2" />
+                    <FileInput className="h-4 w-4 mr-2" />
                     {t("meImport.importCount", { count: selectedRemaps.size })}
                   </>
                 )}
@@ -416,11 +494,12 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setStep("select")}>
+              <Button variant="outline" onClick={() => goToStep("select")} className="max-sm:min-h-11">
                 {t("meImport.back")}
               </Button>
               <Button
                 onClick={handleImport}
+                className="max-sm:min-h-11"
                 disabled={(!importKeybindings && !importGameSettings) || isSubmitting}
               >
                 {isSubmitting ? (
@@ -430,7 +509,7 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
                   </>
                 ) : (
                   <>
-                    <Upload className="h-4 w-4 mr-2" />
+                    <FileInput className="h-4 w-4 mr-2" />
                     {t("meImport.importButton")}
                   </>
                 )}
@@ -441,25 +520,23 @@ export function ImportDialog({ onSuccess }: ImportDialogProps) {
 
         {step === "done" && (
           <div className="space-y-4">
-            <Alert>
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <AlertTitle>{t("meImport.completed")}</AlertTitle>
-              <AlertDescription>
-                {t("meImport.importedSuccessfully")}
-              </AlertDescription>
-            </Alert>
+            <NoticeBanner tone="success" icon={CheckCircle2}>
+              <h3 ref={stepHeadingRef} tabIndex={-1} className="font-medium outline-hidden">
+                {t("meImport.completed")}
+              </h3>
+              <p>{t("meImport.importedSuccessfully")}</p>
+            </NoticeBanner>
             <div className="flex justify-end">
-              <Button onClick={() => setOpen(false)}>{t("common.close")}</Button>
+              <Button onClick={() => handleOpenChange(false)} className="max-sm:min-h-11">{t("common.close")}</Button>
             </div>
           </div>
         )}
 
         {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>{t("meImport.errorTitle")}</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <NoticeBanner tone="error" icon={AlertCircle}>
+            <p className="font-medium">{t("meImport.errorTitle")}</p>
+            <p>{error}</p>
+          </NoticeBanner>
         )}
       </DialogContent>
     </Dialog>

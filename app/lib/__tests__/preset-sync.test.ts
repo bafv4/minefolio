@@ -29,6 +29,8 @@ import {
   createPresetFromImport,
   PresetMismatchError,
 } from "../preset-utils";
+import { createTranslator } from "../messages";
+import { encodeHistoryDescription } from "../history-description";
 
 let db: TestDb;
 
@@ -324,7 +326,7 @@ describe("createPresetFromImport", () => {
     const user = await seedUser(db);
     const { keybinding, playerConfig, remap } = await seedImportSource(user.id);
 
-    const preset = await createPresetFromImport(db, user.id, [keybinding], playerConfig, [remap]);
+    const preset = await createPresetFromImport(createTranslator("ja"), db, user.id, [keybinding], playerConfig, [remap]);
 
     expect(preset.name).toMatch(/^インポート \(\d{4}\/\d{2}\/\d{2}\)$/);
     expect(preset.description).toBe("インポートされた設定から自動作成されたプリセット");
@@ -347,7 +349,7 @@ describe("createPresetFromImport", () => {
     });
     expect(history).toHaveLength(1);
     expect(history[0].changeType).toBe("preset_switch");
-    expect(history[0].changeDescription).toBe(`プリセット「${preset.name}」をインポートから作成`);
+    expect(history[0].changeDescription).toBe(encodeHistoryDescription("preset.createFromImport", { name: preset.name }));
     expect(history[0].presetId).toBe(preset.id);
   });
 
@@ -355,7 +357,7 @@ describe("createPresetFromImport", () => {
     const user = await seedUser(db);
     const { keybinding } = await seedImportSource(user.id);
 
-    const preset = await createPresetFromImport(db, user.id, [keybinding], null, []);
+    const preset = await createPresetFromImport(createTranslator("ja"), db, user.id, [keybinding], null, []);
 
     expect(preset.isMain).toBe(true);
     expect((await findPreset(preset.id))!.isMain).toBe(true);
@@ -366,7 +368,7 @@ describe("createPresetFromImport", () => {
     const existingMain = await seedConfigPreset(db, user.id, { name: "Main", isMain: true });
     const { keybinding } = await seedImportSource(user.id);
 
-    const preset = await createPresetFromImport(db, user.id, [keybinding], null, []);
+    const preset = await createPresetFromImport(createTranslator("ja"), db, user.id, [keybinding], null, []);
 
     expect(preset.isMain).toBe(false);
     expect((await findPreset(preset.id))!.isMain).toBe(false);
@@ -378,7 +380,7 @@ describe("createPresetFromImport", () => {
     const previous = await seedConfigPreset(db, user.id, { name: "Previous", isActive: true });
     const { keybinding } = await seedImportSource(user.id);
 
-    const preset = await createPresetFromImport(db, user.id, [keybinding], null, []);
+    const preset = await createPresetFromImport(createTranslator("ja"), db, user.id, [keybinding], null, []);
 
     expect((await findPreset(previous.id))!.isActive).toBe(false);
     expect((await findPreset(preset.id))!.isActive).toBe(true);
@@ -394,7 +396,7 @@ describe("createPresetFromImport", () => {
     const user = await seedUser(db);
     const { keybinding } = await seedImportSource(user.id);
 
-    const preset = await createPresetFromImport(db, user.id, [keybinding], null, []);
+    const preset = await createPresetFromImport(createTranslator("ja"), db, user.id, [keybinding], null, []);
 
     const stored = await findPreset(preset.id);
     expect(stored!.playerConfigData).toBeNull();

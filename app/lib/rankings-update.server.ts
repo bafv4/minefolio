@@ -3,12 +3,13 @@
 // targeted-refresh.server.ts の refreshSrcRankingsForUser から1ユーザー単位でも呼べる。
 
 import { createId } from "@paralleldrive/cuid2";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, lt } from "drizzle-orm";
 import type { Database } from "./db";
-import { users, speedrunCategories, playerRankings } from "./schema";
+import { toUtcDateString } from "./time-utils";
+import { RANKED_API_BASE } from "./external-stats";
+import { users, speedrunCategories, playerRankings, rankedEloSnapshots } from "./schema";
 
 const SPEEDRUN_API_BASE = "https://www.speedrun.com/api/v1";
-const RANKED_API_BASE = "https://mcsrranked.com/api";
 
 // ============================================
 // 型定義
@@ -74,6 +75,10 @@ interface RankedUserResponse {
         wins?: number | { ranked?: number };
         loses?: number | { ranked?: number };
       };
+      // 全期間。bestTime は数値、または { ranked, casual } のオブジェクトで返ることがある（external-stats.ts と同じ扱い）
+      total?: {
+        bestTime?: number | { ranked?: number | null } | null;
+      };
     };
   };
 }
@@ -129,6 +134,47 @@ function formatTimeSeconds(seconds: number): string {
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ============================================
+// Ranked レート日次スナップショット
+// ============================================
+
+/** スナップショットの保持日数（ホームで使うのは直近7日だけ） */
+export const ELO_SNAPSHOT_RETENTION_DAYS = 30;
+
+// 日付キーの実装は軽量モジュール time-utils（クライアント・他サーバーモジュールと共用）。既存の import 元を保つため re-export
+export { toUtcDateString };
+
+/**
+ * 取得できた Ranked レートを (userId, 当日UTC日付) で upsert する（同日に複数回走っても1行・レートは後の値）。
+ * updateUserRankings（cron の全ユーザー走査と targeted-refresh の1ユーザー即時更新の共通部品）から呼ぶ。
+ */
+export async function upsertEloSnapshot(
+  db: Database,
+  userId: string,
+  eloRate: number,
+  now: Date = new Date()
+): Promise<void> {
+  await db
+    .insert(rankedEloSnapshots)
+    .values({ userId, snapshotDate: toUtcDateString(now), eloRate })
+    .onConflictDoUpdate({
+      target: [rankedEloSnapshots.userId, rankedEloSnapshots.snapshotDate],
+      set: { eloRate, updatedAt: now },
+    });
+}
+
+/**
+ * 保持期間（30日）より古いスナップショットを1文の DELETE で削除する（cron 1回の最後に呼ぶ）。
+ * 戻り値は削除件数
+ */
+export async function cleanupOldEloSnapshots(db: Database, now: Date = new Date()): Promise<number> {
+  const cutoff = toUtcDateString(
+    new Date(now.getTime() - ELO_SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+  );
+  const result = await db.delete(rankedEloSnapshots).where(lt(rankedEloSnapshots.snapshotDate, cutoff));
+  return result.rowsAffected;
 }
 
 // ============================================
@@ -254,7 +300,7 @@ async function fetchRankedUserData(uuid: string): Promise<RankedUserResponse["da
 // 判定ソースとし、DBへの読み取りは行わない（書き込みSQLは従来どおり都度実行する）。
 interface LocalRankingRow {
   id: string;
-  rankingType: "speedruncom" | "ranked_pb" | "ranked_elo";
+  rankingType: "speedruncom" | "ranked_pb" | "ranked_pb_all_time" | "ranked_elo";
   categoryId: string | null;
   speedruncomRunId: string | null;
   verificationStatus: "verified" | "new" | "rejected" | null;
@@ -562,11 +608,17 @@ export async function updateUserRankings(
           const existingPb = userRankings.find((r) => r.rankingType === "ranked_pb");
 
           if (existingPb) {
+            // MCSR Ranked API は PB を出した日時を返さない（statistics は数値のみ）ため、
+            // 「前回より速くなった」ことを検出できた日（UTC）を recordDate にする。
+            // PB が変わらない定期更新・遅くなった場合（シーズン切替等）は recordDate を触らない。
+            // 既存行の timeMs が null の場合は比較不能なので日付を入れない
+            const improved = existingPb.timeMs !== null && bestTime < existingPb.timeMs;
             await db
               .update(playerRankings)
               .set({
                 timeMs: bestTime,
                 timeFormatted: formatTimeMs(bestTime),
+                ...(improved ? { recordDate: toUtcDateString(new Date()) } : {}),
                 lastFetched: new Date(),
                 updatedAt: new Date(),
               })
@@ -582,6 +634,8 @@ export async function updateUserRankings(
               rankingType: "ranked_pb",
               timeMs: bestTime,
               timeFormatted: formatTimeMs(bestTime),
+              // 初回挿入は過去の PB を「今日の更新」と誤認させないため recordDate は null のまま
+              recordDate: null,
               lastFetched: new Date(),
             });
 
@@ -597,6 +651,45 @@ export async function updateUserRankings(
           }
 
           rankedPbUpdates++;
+        }
+
+        // 全期間ベスト（ranked_pb_all_time）。同じ応答の statistics.total から取る。シーズン PB と同じく
+        // 値が取れなかったときは既存行に触らない。recordDate は使わない（ホームの出来事の対象外）
+        const rawAllTime = userData.statistics?.total?.bestTime;
+        const allTimeBest = typeof rawAllTime === "number" ? rawAllTime : rawAllTime?.ranked;
+        if (allTimeBest) {
+          const existingAllTime = userRankings.find((r) => r.rankingType === "ranked_pb_all_time");
+          if (existingAllTime) {
+            await db
+              .update(playerRankings)
+              .set({
+                timeMs: allTimeBest,
+                timeFormatted: formatTimeMs(allTimeBest),
+                lastFetched: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(playerRankings.id, existingAllTime.id));
+            existingAllTime.timeMs = allTimeBest;
+          } else {
+            const newId = createId();
+            await db.insert(playerRankings).values({
+              id: newId,
+              userId: user.id,
+              rankingType: "ranked_pb_all_time",
+              timeMs: allTimeBest,
+              timeFormatted: formatTimeMs(allTimeBest),
+              recordDate: null,
+              lastFetched: new Date(),
+            });
+            userRankings.push({
+              id: newId,
+              rankingType: "ranked_pb_all_time",
+              categoryId: null,
+              speedruncomRunId: null,
+              verificationStatus: "verified",
+              timeMs: allTimeBest,
+            });
+          }
         }
 
         // Eloランキング
@@ -651,6 +744,13 @@ export async function updateUserRankings(
           }
 
           rankedEloUpdates++;
+
+          // 日次スナップショット（失敗しても Ranked 更新結果には影響させない）
+          try {
+            await upsertEloSnapshot(db, user.id, userData.eloRate);
+          } catch (error) {
+            console.error(`Elo snapshot error for ${user.mcid}:`, error);
+          }
         }
       }
 

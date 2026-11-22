@@ -1,5 +1,4 @@
 import {
-  isRouteErrorResponse,
   Links,
   Meta,
   Outlet,
@@ -10,12 +9,13 @@ import {
 import { Analytics } from "@vercel/analytics/react";
 
 import type { Route } from "./+types/root";
+import { CONTRAST_INIT_SCRIPT } from "@/lib/contrast";
 import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
-import { buttonVariants } from "@/components/ui/button";
+import { loadLocaleMessages } from "@/lib/messages";
+import { ErrorView } from "@/components/layout/error-view";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
 import { BackgroundPattern } from "@/components/layout/background-pattern";
-import { useT } from "@/hooks/use-locale";
 import "./app.css";
 
 /**
@@ -25,6 +25,17 @@ import "./app.css";
  */
 export function loader({ request }: Route.LoaderArgs) {
   return { locale: resolveLocale(request) };
+}
+
+/**
+ * 遷移・送信のたびに root ローダーが再実行され、別タブで言語を切り替えた後などに
+ * ロケールが変わりうる。英語カタログが未読み込みのまま描画しないよう、描画前に読み込む。
+ * 初回（ハイドレーション）は app/entry.client.tsx が担うので `hydrate` は付けない。
+ */
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  const data = await serverLoader();
+  await loadLocaleMessages(data.locale).catch(() => undefined);
+  return data;
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -39,6 +50,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" type="image/png" href="/icon.png" />
+        {/* ハイコントラストの属性を描画前に付ける（ちらつき防止）。判定は @/lib/contrast の resolveContrast と同じ */}
+        <script dangerouslySetInnerHTML={{ __html: CONTRAST_INIT_SCRIPT }} />
         <Meta />
         <Links />
       </head>
@@ -62,42 +75,13 @@ export default function App() {
   );
 }
 
+// 最後の砦。共通レイアウト（routes/_layout.tsx の ErrorBoundary）が受けられない
+// root / _layout 自身の loader の失敗で使う。ルーターが壊れている可能性があるので `<a href>` を使う。
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const t = useT();
-  let message = t("errorPage.title");
-  let details = t("errorPage.genericDetails");
-  let stack: string | undefined;
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : t("errorPage.errorTitle");
-    details =
-      error.status === 404
-        ? t("errorPage.notFoundDetails")
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
-  }
-
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <main className="flex-1 flex flex-col items-center justify-center p-4 container mx-auto">
-        <div className="max-w-2xl w-full text-center space-y-6">
-          <div className="space-y-2">
-            <h1 className="text-6xl font-bold">{message}</h1>
-            <p className="text-xl text-muted-foreground">{details}</p>
-          </div>
-          {stack && (
-            <pre className="w-full p-4 overflow-x-auto text-left bg-secondary rounded-lg border">
-              <code className="text-sm">{stack}</code>
-            </pre>
-          )}
-          <div className="pt-4">
-            <a href="/" className={buttonVariants()}>
-              {t("common.backToHome")}
-            </a>
-          </div>
-        </div>
+        <ErrorView error={error} plainLinks />
       </main>
     </div>
   );

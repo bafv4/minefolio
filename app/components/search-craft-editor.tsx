@@ -1,6 +1,8 @@
 import {
+  createContext,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -9,6 +11,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +50,7 @@ import {
   X,
   GripVertical,
   Repeat,
+  Search,
 } from "lucide-react";
 import {
   DndContext,
@@ -97,6 +101,7 @@ import type { SearchCraftTiming } from "@/lib/search-craft-templates";
 import type { KeyboardLayout } from "@/lib/keybindings";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { toast } from "sonner";
 
 /**
  * サーチクラフト編集UI（/me/search-craft とワークベンチ〈Playground・テンプレートエディタ〉で共通）。
@@ -113,6 +118,13 @@ import { useT } from "@/hooks/use-locale";
  * 「useSortable を持つ薄いシェル」と「React.memo した重い中身」に分け、行へ渡す
  * コールバックは id を引数に取る安定な関数に統一している。
  */
+
+/**
+ * エントリ削除の作法。既定は確認ダイアログ（保存するまで確定しない画面向け）。true のときは
+ * 確認なしで削除し、「元に戻す」つきのトーストを出す（編集が即時に反映される Playground 向け）。
+ * 行は memo されているので、props を増やさずコンテキストで渡す
+ */
+const DeleteWithUndoContext = createContext(false);
 
 /** SSR では no-op（useLayoutEffect の警告を避ける）。最新値 ref の反映に使う */
 const useIsomorphicLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
@@ -186,7 +198,7 @@ function ItemSelectDialog({
               onValueChange={(v) => setSelectedCategory(v as ItemCategory)}
             >
               <SelectTrigger className="w-40">
-                <SelectValue />
+                <SelectValue>{ITEM_CATEGORIES.find((c) => c.id === selectedCategory)?.name}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ITEM_CATEGORIES.map((cat) => (
@@ -208,7 +220,7 @@ function ItemSelectDialog({
                   className="cursor-pointer flex items-center gap-1 pl-1"
                   onClick={() => toggleItem(itemId)}
                 >
-                  <ItemIcon itemId={itemId} size={16} />
+                  <ItemIcon itemId={itemId} size={16} alt="" />
                   {formatItemName(itemId)}
                   <X className="ml-1 h-3 w-3 text-muted-foreground" />
                 </Badge>
@@ -230,7 +242,7 @@ function ItemSelectDialog({
                         : "border-transparent hover:border-border hover:bg-secondary/50"
                     }`}
                   >
-                    <ItemIcon itemId={itemId} size={28} />
+                    <ItemIcon itemId={itemId} size={28} alt={formatItemName(itemId)} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>{formatItemName(itemId)}</TooltipContent>
@@ -287,6 +299,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
   // （Loop を後から追加しても「Loopで使用中」が出ない／削除後も残る）
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteWarning, setDeleteWarning] = useState<string | null>(null);
+  const deleteWithUndo = useContext(DeleteWithUndoContext);
   const rowId = useId();
 
   const removeItem = (itemIndex: number) => {
@@ -324,11 +337,11 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
               key={itemIndex}
               className="flex items-center gap-1.5 bg-secondary/50 rounded px-2 py-1 group"
             >
-              <ItemIcon itemId={itemId} size={20} />
+              <ItemIcon itemId={itemId} size={20} alt="" />
               <span className="text-sm">{formatItemName(itemId)}</span>
               <button
                 type="button"
-                aria-label={t("meSearchCraft.removeItem")}
+                aria-label={t("meSearchCraft.removeItem", { item: formatItemName(itemId) })}
                 onClick={() => removeItem(itemIndex)}
                 className="p-1.5 rounded text-muted-foreground hover:text-destructive opacity-60 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
               >
@@ -339,7 +352,8 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           <Button
             variant="outline"
             size="sm"
-            className="h-7"
+            className="h-7 max-sm:min-h-11"
+            aria-label={t("meSearchCraft.addItemAria")}
             onClick={() => setIsItemDialogOpen(true)}
           >
             <Plus className="size-3 mr-1" />
@@ -364,13 +378,14 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                       value={variation.str}
                       onChange={(e) => updateVariation(variationIndex, { str: e.target.value })}
                       placeholder="scr"
-                      className="font-mono h-8 w-32"
+                      aria-label={t("meSearchCraft.searchLabel")}
+                      className="font-mono h-8 max-sm:h-11 w-32"
                     />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground max-sm:size-11"
                       disabled={craft.variations.length <= 1}
                       onClick={() => removeVariation(variationIndex)}
                       aria-label={t("meSearchCraft.removeVariation")}
@@ -390,7 +405,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
                   />
                   <Label
                     htmlFor={checkboxId}
-                    className="text-xs text-muted-foreground cursor-pointer"
+                    className="flex min-h-11 items-center text-xs text-muted-foreground cursor-pointer sm:min-h-0"
                   >
                     {t("meSearchCraft.withShift")}
                   </Label>
@@ -421,7 +436,7 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7"
+            className="h-7 max-sm:min-h-11"
             disabled={craft.variations.length >= MAX_SEARCH_VARIATIONS}
             onClick={addVariation}
           >
@@ -435,11 +450,34 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           value={craft.comment || ""}
           onChange={(e) => onUpdate(craft.id, { ...craft, comment: e.target.value || null })}
           placeholder={t("meSearchCraft.commentOptional")}
-          className="h-8 text-sm"
+          aria-label={t("meSearchCraft.commentOptional")}
+          className="h-8 max-sm:h-11 text-sm"
         />
       </div>
 
       {/* Delete button */}
+      {deleteWithUndo ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={t("meSearchCraft.deleteEntryAria")}
+          data-craft-delete=""
+          className="shrink-0 max-sm:size-11"
+          onClick={(e) => {
+            // 押した行は消えるので、フォーカスは先に次のエントリ（無ければ区間の追加ボタン）へ移す
+            const row = e.currentTarget.closest("[data-craft-row]");
+            const next = row?.nextElementSibling?.matches("[data-craft-row]")
+              ? row.nextElementSibling.querySelector<HTMLElement>("[data-craft-delete]")
+              : null;
+            const add = row?.closest("[data-craft-block]")?.querySelector<HTMLElement>("[data-add-craft]");
+            (next ?? add)?.focus();
+            onDelete(craft.id);
+          }}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+        </Button>
+      ) : (
       <AlertDialog
         open={isDeleteDialogOpen}
         onOpenChange={(open) => {
@@ -448,8 +486,13 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
         }}
       >
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="shrink-0">
-            <Trash2 className="h-4 w-4 text-destructive" />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t("meSearchCraft.deleteEntryAria")}
+            className="shrink-0 max-sm:size-11"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
           </Button>
         </AlertDialogTrigger>
         <AlertDialogContent>
@@ -462,11 +505,12 @@ function SearchCraftRowContentInner<T extends SearchCraftDraft>({
           <AlertDialogFooter>
             <AlertDialogCancel>{t("meSearchCraft.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={() => onDelete(craft.id)}>
-              {t("meSearchCraft.delete")}
+              {t("meSearchCraft.deleteCraftConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      )}
 
       {/* アイテム選択ダイアログ（DialogPortal 経由で body へ描画されるため、
           この位置に DOM は生えない） */}
@@ -527,6 +571,7 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
     <div
       ref={setNodeRef}
       style={style}
+      data-craft-row=""
       className={cn(
         "py-3 flex items-start gap-2",
         isDragging && "opacity-50 bg-secondary/30 rounded-lg shadow-lg",
@@ -538,10 +583,10 @@ function EditableSearchCraftRow<T extends SearchCraftDraft>({
           {...attributes}
           {...listeners}
           type="button"
-          aria-label={t("meSearchCraft.dragHandle")}
-          className="flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+          aria-label={`${t("meSearchCraft.dragHandle")} (${index + 1})`}
+          className="flex size-8 max-sm:size-11 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <GripVertical className="h-5 w-5" />
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
         <span className="w-5 text-xs font-mono text-muted-foreground/60 text-right">
           {index + 1}
@@ -715,6 +760,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   onAddLoop,
 }: TimingBlockProps<T, L>) {
   const t = useT();
+  const deleteWithUndo = useContext(DeleteWithUndoContext);
   const meta = timing ? TIMING_META.find((m) => m.id === timing) : undefined;
   const label = meta ? timingLabel(t, meta) : t("meSearchCraft.timingNone");
 
@@ -728,10 +774,10 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
   const showLoopSection = loops.length > 0 || isLoopDragging;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-background/80">
+    <div data-craft-block={timing ?? "none"} className="rounded-xl border border-border/70 bg-background/80">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
         {meta && <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />}
-        <span className="text-sm font-semibold">{label}</span>
+        <h3 className="text-sm font-semibold">{label}</h3>
         <span className="text-xs text-muted-foreground">{crafts.length}</span>
       </div>
 
@@ -761,14 +807,23 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                   isCraftZoneOver && "border-primary bg-primary/5 text-primary",
                 )}
               >
-                {t("meSearchCraft.emptyBlockHint")}
+                {t("meSearchCraft.emptyBlockMark")}
               </div>
             )}
           </SortableContext>
         </div>
 
-        <Button type="button" variant="outline" size="sm" onClick={() => onAddCraft(timing)}>
-          <Plus className="mr-2 h-4 w-4" />
+        {/* 見える文言は「アイテム追加」のまま。7区間に同じ名前のボタンが並ぶので、読み上げ名にだけ区間名を入れる */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="max-sm:min-h-11"
+          aria-label={t("meSearchCraft.addCraftAria", { timing: label })}
+          data-add-craft=""
+          onClick={() => onAddCraft(timing)}
+        >
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           {t("meSearchCraft.addCraft")}
         </Button>
 
@@ -793,6 +848,7 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
                         keyboardLayout={keyboardLayout}
                         onUpdate={onUpdateLoop}
                         onDelete={onDeleteLoop}
+                        deleteWithUndo={deleteWithUndo}
                       />
                     ))}
                   </div>
@@ -811,21 +867,21 @@ function TimingBlockInner<T extends SearchCraftDraft, L extends SearchCraftLoopD
           </div>
         )}
 
-        <div className="space-y-1">
+        {/* Loop はエントリが2件以上で作れる。足りない間は押せないボタンを7区間に並べず、ボード上部の説明1文に任せる */}
+        {totalCraftCount >= 2 && (
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="max-sm:min-h-11"
+            aria-label={t("meSearchCraft.addLoopAria", { timing: label })}
+            data-add-loop=""
             onClick={() => onAddLoop(timing)}
-            disabled={totalCraftCount < 2}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
             {t("meSearchCraft.addLoop")}
           </Button>
-          {totalCraftCount < 2 && (
-            <p className="text-xs text-muted-foreground">{t("meSearchCraft.loopNeedTwoEntries")}</p>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -859,7 +915,22 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
   keyboardLayout,
   createCraft,
   createLoop,
+  emptyState = false,
+  deleteWithUndo = false,
+  collapseEmptyBlocks = false,
 }: {
+  /**
+   * true のとき、中身のある区間だけをブロックで出し、空の区間は「区間に追加」の1行のチップにまとめる。
+   * ドラッグ中だけ、ドロップ先として全区間のブロックを出す（/me/search-craft 用。既定は7区間を常時表示）
+   */
+  collapseEmptyBlocks?: boolean;
+  /** true のとき、エントリの削除は確認ダイアログではなく「元に戻す」つきのトースト（Playground 用） */
+  deleteWithUndo?: boolean;
+  /**
+   * true のとき、クラフトが0件の間は区間のブロックを出さず、最初の1件を足す入口だけの
+   * 空状態を出す（true は /me/search-craft 用の既定サイズ、"compact" は Playground・テンプレートエディタ用の小さい空状態）
+   */
+  emptyState?: boolean | "compact";
   crafts: T[];
   onCraftsChange: (next: T[]) => void;
   loops: L[];
@@ -1066,6 +1137,28 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     [],
   );
 
+  // 確認なしの削除。置き換え前の crafts / loops を持っておき、トーストの「元に戻す」で戻す
+  const handleDeleteCraftWithUndo = useCallback(
+    (id: string) => {
+      const prev = latest.current;
+      const prevCrafts = prev.crafts;
+      const prevLoops = prev.loops;
+      handleDeleteCraft(id);
+      toast(t("playground.entryDeletedToast"), {
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => {
+            const { onCraftsChange, onLoopsChange } = latest.current;
+            onCraftsChange(prevCrafts);
+            onLoopsChange(prevLoops);
+          },
+        },
+      });
+    },
+    [handleDeleteCraft, t],
+  );
+
   // 指定した craftId を参照している Loop 数に応じて、削除確認ダイアログの説明文を差し替える
   const getDeleteWarning = useCallback(
     (craftId: string): string | null => {
@@ -1097,10 +1190,78 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
     onLoopsChange(reorderByBlock(loops.filter((l) => l.id !== id)));
   }, []);
 
+  // 確認なしの削除。置き換え前の loops を持っておき、トーストの「元に戻す」で戻す
+  const handleDeleteLoopWithUndo = useCallback(
+    (id: string) => {
+      const prevLoops = latest.current.loops;
+      handleDeleteLoop(id);
+      toast(t("playground.loopDeletedToast"), {
+        duration: 10000,
+        action: {
+          label: t("playground.undo"),
+          onClick: () => latest.current.onLoopsChange(prevLoops),
+        },
+      });
+    },
+    [handleDeleteLoop, t],
+  );
+
   const isLoopDragging = activeDrag?.type === "loop";
   const totalCraftCount = crafts.length;
 
+  // 空状態の「最初のアイテムを追加」を押すとボタンごと消えるので、フォーカスを新しい1件目の入力欄へ移す
+  const boardRef = useRef<HTMLDivElement>(null);
+  const focusFirstEntryRef = useRef(false);
+  useEffect(() => {
+    if (!focusFirstEntryRef.current || totalCraftCount === 0) return;
+    focusFirstEntryRef.current = false;
+    boardRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, [totalCraftCount]);
+
+  // 「区間に追加」のチップに並べる、中身の無い区間
+  const emptyTimings = BLOCK_TIMINGS.filter(
+    (timing) =>
+      (craftsByBlock.get(timing)?.length ?? 0) === 0 && (loopsByBlock.get(timing)?.length ?? 0) === 0,
+  );
+  // チップから足すとそのチップが消える。フォーカスを、できた区間の最初の入力欄へ移す
+  const focusTimingRef = useRef<SearchCraftTiming | null | undefined>(undefined);
+  useEffect(() => {
+    if (focusTimingRef.current === undefined) return;
+    const timing = focusTimingRef.current;
+    focusTimingRef.current = undefined;
+    boardRef.current
+      ?.querySelector<HTMLInputElement>(`[data-craft-block="${timing ?? "none"}"] input`)
+      ?.focus();
+  }, [crafts]);
+
+  if (emptyState && totalCraftCount === 0) {
+    return (
+      <EmptyState
+        size={emptyState === "compact" ? "compact" : "default"}
+        icon={<Search className={emptyState === "compact" ? "h-5 w-5" : "h-12 w-12"} aria-hidden="true" />}
+        title={t(emptyState === "compact" ? "playground.emptyCraftTitle" : "meSearchCraft.emptyBoardTitle")}
+        description={t(
+          emptyState === "compact" ? "playground.emptyCraftDescription" : "meSearchCraft.emptyBoardDescription",
+        )}
+        action={
+          <Button
+            type="button"
+            className="max-sm:min-h-11"
+            onClick={() => {
+              focusFirstEntryRef.current = true;
+              handleAddCraft(null);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            {t("meSearchCraft.addFirstEntry")}
+          </Button>
+        }
+      />
+    );
+  }
+
   return (
+    <DeleteWithUndoContext.Provider value={deleteWithUndo}>
     <DndContext
       id={dndContextId}
       sensors={sensors}
@@ -1110,8 +1271,19 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="space-y-4">
-        {BLOCK_TIMINGS.map((timing) => (
+      <div ref={boardRef} className="space-y-4">
+        {/* 操作の説明は区間ごとに繰り返さず、ここで1回だけ出す */}
+        <p className="text-xs text-muted-foreground">
+          {t("meSearchCraft.boardHint")}
+          {totalCraftCount < 2 && ` ${t("meSearchCraft.loopNeedTwoEntries")}`}
+        </p>
+        {BLOCK_TIMINGS.filter(
+          (timing) =>
+            !collapseEmptyBlocks ||
+            activeDrag !== null ||
+            (craftsByBlock.get(timing)?.length ?? 0) > 0 ||
+            (loopsByBlock.get(timing)?.length ?? 0) > 0,
+        ).map((timing) => (
           <TimingBlock
             key={timing ?? "__none"}
             timing={timing}
@@ -1124,14 +1296,45 @@ export function SearchCraftTimingBoard<T extends SearchCraftDraft, L extends Sea
             totalCraftCount={totalCraftCount}
             isLoopDragging={isLoopDragging}
             onUpdateCraft={handleUpdateCraft}
-            onDeleteCraft={handleDeleteCraft}
+            onDeleteCraft={deleteWithUndo ? handleDeleteCraftWithUndo : handleDeleteCraft}
             onAddCraft={handleAddCraft}
             onUpdateLoop={handleUpdateLoop}
-            onDeleteLoop={handleDeleteLoop}
+            onDeleteLoop={deleteWithUndo ? handleDeleteLoopWithUndo : handleDeleteLoop}
             onAddLoop={handleAddLoop}
           />
         ))}
+        {collapseEmptyBlocks && emptyTimings.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2" data-add-to-block="">
+            <span className="text-xs font-medium text-muted-foreground">{t("meSearchCraft.addToBlock")}</span>
+            {emptyTimings.map((timing) => {
+              const meta = timing ? TIMING_META.find((m) => m.id === timing) : undefined;
+              const label = meta ? timingLabel(t, meta) : t("meSearchCraft.timingNone");
+              return (
+                <Button
+                  key={timing ?? "__none"}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 sm:min-h-8"
+                  aria-label={t("meSearchCraft.addCraftAria", { timing: label })}
+                  onClick={() => {
+                    focusTimingRef.current = timing;
+                    handleAddCraft(timing);
+                  }}
+                >
+                  {meta ? (
+                    <span aria-hidden="true" className={cn("h-2 w-2 shrink-0 rounded-full", meta.dot)} />
+                  ) : (
+                    <Plus className="size-3" aria-hidden="true" />
+                  )}
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </DndContext>
+    </DeleteWithUndoContext.Provider>
   );
 }

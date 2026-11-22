@@ -25,6 +25,11 @@ MinefolioはDiscord OAuthによるソーシャルログインを採用してい�
    - `callbackURL: "/onboarding"`（`returnTo` があれば `/onboarding?returnTo=<encodeReturnToForCallback済みの値>`）
 5. Discord OAuth認可後、better-authがコールバックを処理し、セッションを作成
 6. `/onboarding` へリダイレクト（`returnTo` はクエリで引き継がれる）
+7. Discord 側の拒否・取り消し・コールバック失敗のときは、`signIn.social` の `errorCallbackURL`
+   （`/login`、`returnTo` があれば `/login?returnTo=<…>`）へ better-auth が `?error=…` を付けて戻す。
+   `/login` は `error` の有無だけを見て `NoticeBanner`（error）で「ログインできませんでした」を出す
+   （コード・説明文は画面にもログにも出さない）。`signIn.social` 自体がエラーを返した／例外のときも
+   ボタンを元に戻して同じ帯を出す
 
 ### OAuthスコープ
 
@@ -60,11 +65,23 @@ identify, email
 
 ### 発生源（returnTo を生成する箇所）
 
-- ヘッダーのログインリンク（`app/components/layout/header.tsx`）: 現在の
-  `location.pathname + location.search` を `sanitizeReturnTo` した値
+- ページ内のログイン導線はすべて `useLoginHref()`（`app/hooks/use-login-href.ts`。中身は純粋関数
+  `buildLoginHref(pathname, search)`＝`app/lib/return-to.ts`）の href を使う。現在の
+  `location.pathname + location.search` を `sanitizeReturnTo` した値を `/login?returnTo=…` に付ける
+  （戻せない場所では素の `/login`）。素の `"/login"` を直書きしない
+  - 使用箇所: ヘッダー（`layout/header.tsx`）・`LikeButton`・テンプレート詳細の「ログインして反映」・
+    `ProfileReactionBar`・Playground の保存案内
+  - 例外: ホームのゲストヒーロー（`home/guest-hero.tsx`）は現在地が `/` で戻す意味が薄いため素の `/login`
+    （ログイン後は自分のプロフィールへ）
 - `getSession()`（`app/lib/session.ts`）が未認証時に `throw redirect("/login")` する際、
   `request.url` の pathname + search から導出（`getCurrentUser` / `getCurrentUserOrOnboarding` も
   内部で `getSession` を使うため同じ挙動になる）
+- `getCurrentUser()` が「未登録（users 行なし・初期設定未完了）」で `throw redirect("/onboarding")` する際も、
+  同じく `request.url` から導出した `returnTo` を `/onboarding?returnTo=…`（`sanitizeReturnTo` 済み）で付ける
+  （`/me/*` ミドルウェア・`getCurrentUser` を使う各ページ。`/api/*` は `sanitizeReturnTo` が拒否するので付かず、
+  `/api/me/*` に登録完了のゲートをかけない決まりも変わらない）
+- ヘッダーのユーザーメニュー・モバイルメニューは、初期設定が未完了の人（`_layout` loader の `onboardingPending`）には
+  「設定」（`/me/edit`）の代わりに「初期設定を続ける」（`/onboarding`）を出す
 
 ### 消費先（returnTo を使って遷移する箇所）
 
@@ -73,7 +90,7 @@ identify, email
 - `/dev/login` の loader（セッション済み時の `/login` へのリダイレクト）・action（ログイン成功後の
   `/login` へのリダイレクト。フォームの hidden input 経由で受け渡す）
 - `/onboarding` の loader（登録済み＝`onboardingCompleted === true` なら `returnTo` へ即リダイレクト）・
-  action（最終ステップ `save_visibility` が完了画面の「プロフィールを見る」の遷移先として
+  action（最終ステップ `save_visibility` が完了画面の遷移先（主ボタン）として
   `returnTo`（無ければ `/player/{slug}`）を返す。フォームの hidden input 経由で受け渡す。
   新規ユーザーであっても、元々アクセスしようとしていたページへ自然に戻せるため意図的に対応している）
 
@@ -132,10 +149,10 @@ better-auth は `expiresAt` を過ぎた `authSessions` / `authVerifications` �
 - 認証必須 + オンボーディング（初期設定ウィザード）完了必須
 - セッション取得後、`users` テーブルから `discordId` で検索
 - 未登録（`isRegistered(user)` が偽＝レコードが無い、またはウィザード未完了）なら `/onboarding` へリダイレクト
-  （途中離脱したユーザーはウィザードのステップ1から再開する。各ステップはスキップできるため実質ロックにはならない）
+  （途中離脱したユーザーは、保存済みの内容から推定した手順から再開する〔下の「途中からの再開」〕。各ステップはスキップできるため実質ロックにはならない）
 - 戻り値: `{ session, user }`
 - 注: 現状、アプリのルートは `getCurrentUser` を直接使っておらず（`getSession` ＋独自の `users` 検索が主）、
-  `/me/*` のレイアウト（`app/routes/me/_layout.tsx`）も同じ `isRegistered(user)` で判定して `/onboarding` へ送る
+  `/me/*` のレイアウト（`app/routes/me/_layout.tsx`）も `getCurrentUser` で判定して `/onboarding` へ送る（下の「`/me/*` の保護」）
 
 ### `getCurrentUserOrOnboarding(request, auth, db)`
 
@@ -170,9 +187,19 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 - 判定は `app/lib/session.ts` の `isRegistered(user)` に集約している
 - `/login` の loader: セッション済みで未登録なら `/onboarding` へ（returnTo 引き継ぎ）
 - `/onboarding` の loader: 登録済みなら `returnTo || /player/{slug}` へリダイレクト。
-  行が無ければようこそ画面から、行があり未完了ならステップ1から再開する（保存済みの値を各入力の初期値に使う）
+  行が無ければようこそ画面から、行があり未完了なら保存済みの内容から推定した手順から再開する（保存済みの値を各入力の初期値に使う。下の「途中からの再開」）
 - `getCurrentUser` も `isRegistered` で判定し、未完了なら `/onboarding` へリダイレクトする（`getCurrentUserOrOnboarding` は行の有無も見ない）。
   ウィザードの各ステップはスキップでき、公開範囲を選べば完了するため、実質的なロックにはならない
+- 共通レイアウト（`routes/_layout.tsx`）の loader が `onboardingPending`（ログイン済みで未完了。`users` 行がまだ無い場合も含む）を返し、true のあいだヘッダーの下に「初期設定を続ける」（`/onboarding` へ）の案内を出す。`/onboarding`・`/login`・`/dev/login` では出さない。
+  案内には残りを一言添える: 行があれば「ステップ n / 5 から再開します。公開範囲がまだ選ばれていないため、プロフィールは非公開のままです。」（n は下の推定。完了の保存が公開範囲と `onboardingCompleted` を同時に書くので、未完了なら公開範囲は必ず未選択）、行が無ければ「プロフィールの登録がまだ始まっていません。」
+
+### 途中からの再開
+
+進み具合の列は持たない（DB の列は足さない）。`app/lib/onboarding-progress.ts` の `estimateOnboardingResumeStep` が保存済みの内容から推定し、`/onboarding` の loader と共通レイアウトの再開案内の両方が使う。
+
+- 入力の痕跡がある最も後の手順の「次」から再開する（最初の未入力の手順ではない。わざと空のまま進んだ手順に何度も戻さないため）
+- 痕跡: ステップ1 = 表示名が Discord の表示名と違う、またはひとこと・自己紹介・所在地・代名詞のどれか（`start` が表示名に Discord の表示名を入れるので、それだけでは数えない）／ステップ2 = Java版・Bedrock版 MCID のどちらか／ステップ3 = カスタムスキン・カスタムマントのどちらか／ステップ4 = 連携のリンク（YouTube / Twitch / X / Speedrun.com）が1件以上
+- 何も入れずに進んだ手順は痕跡が残らないので、推定はその手前に戻ることがある（例: ステップ1〜4 をすべて空で進んで離れた人はステップ1から）
 
 ### 前提条件
 
@@ -181,9 +208,13 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 ### ステップ構成
 
 各ステップは「タイトル＋説明」→ フォーム → フッター（左「戻る」、右「スキップ」「次へ」）。
+Minecraft・連携ステップで入力が保存済みの値から変わっている（dirty）ときは、「戻る」は今の入力を保存してから前の手順へ戻る（保存中はスピナー・二重送信防止。検証エラーなら戻らずその手順にエラーを出す）。変えていなければそのまま戻る。
 ステップ遷移はクライアント側の state、保存は各ステップの `useFetcher` POST（`_action` で分岐）。
 保存に成功（＋ loader の再検証完了）したら次のステップへ進み、失敗ならフォーム内にエラーを表示する。
-**「スキップ」は保存せずに次へ進むだけ**（サーバー呼び出しなし）。
+**「スキップ」は保存せずに次へ進むだけ**（サーバー呼び出しなし）。そのため、手順の入力が保存済みの値から変わっているあいだは「スキップ」を出さない（黙って入力を捨てない。「次へ」で保存して進む）。
+各手順のタイトルはページの h1。手順を切り替えたら新しい手順のタイトルへフォーカスを移す（ページを開いた直後は移さない）。
+ステップ2の MCID（Java版・Bedrock版）は欄を離れたときに形式（長さ）を確かめ、エラーは欄の下に出して `aria-invalid`・`aria-describedby` で結ぶ。サーバーの照合（存在・重複）のエラーも action が `field` を返し、同じ欄に結ぶ。
+ステップ5の表示設定のトグル5個は `details` に畳み、要約の1行（すべてオン など）だけを出す（既定値は従来どおりオン）。
 
 | ステップ | `_action` | 内容 |
 |---|---|---|
@@ -210,15 +241,13 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 
 #### ステップ2: MCID
 
-- Java版 MCID: 入力があり現在値と異なれば `/me/edit` の `set_mcid` と同じ処理（3〜16 文字・他ユーザー重複チェック・
-  Mojang API で UUID 取得・`generateSlug(mcid, discordId)`・トランザクション内で `recordSlugChange` と
-  `retargetFavoritesOnSlugChange`）。空欄で現在 MCID があれば `remove_mcid` 相当で解除（slug は `@{discordId}` に戻る）
-- Bedrock版 MCID: `set_bedrock_mcid` と同じ検証（3〜24 文字・制御文字禁止）。空欄なら `null`
-- ウィザード中は常に非公開のため、`set_mcid` が行う YouTube 動画キャッシュの追従は行わない（公開への切替時に追いつかせる）
+- Java版 MCID: 入力があり現在値と異なれば `/me/edit` の一括保存と共通の `app/lib/mcid-change.server.ts`（`verifyMcidForUser`: 3〜16 文字・他ユーザー重複チェック〈uuid 重複も含む〉・Mojang API で UUID 取得 ／ `applyMcidSlugChange`: `generateSlug(mcid, discordId)`・トランザクション内で `recordSlugChange` と `retargetFavoritesOnSlugChange`）を使う。空欄で現在 MCID があれば解除（slug は `@{discordId}` に戻る）
+- Bedrock版 MCID: `/me/edit` と同じ検証（`app/lib/profile-edit-validation.ts`。3〜24 文字・制御文字禁止）。空欄なら `null`
+- ウィザード中は常に非公開のため、`/me/edit` の MCID 変更が行う YouTube 動画キャッシュの追従は行わない（公開への切替時に追いつかせる）
 
 #### ステップ4: 連携
 
-- 各 ID は `/me/edit` の `create_link` と同じ形式検証（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
+- 各 ID は `/me/edit` のリンク作成と同じ形式検証（`validateLinkInput`）（100 文字以内、YouTube は禁止文字方式、それ以外は `/^[\w\-]+$/`）
 - `social_links` へプラットフォーム単位で upsert（あれば identifier 更新、無ければ作成、空欄なら該当プラットフォームの行を削除）。カスタムリンクは扱わない
 - Speedrun.com は `users.speedruncomUsername` にも同期し、値が変わったら `speedruncomId` を `null` にリセットする
 - SRC ランキング・Twitch VOD・YouTube 動画キャッシュの取得はここでは行わない（非公開中は cron 対象外。
@@ -229,7 +258,7 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 - 公開範囲を enum 検証し、表示設定トグルと合わせて更新。同じ update で **`onboardingCompleted: true`** にする
 - 非公開→公開に切り替わる場合は `/me/edit` と同じく Twitch / YouTube / SRC のキャッシュを `runAfterResponse` で追いつかせる
 - 限定公開（`unlisted`）を選んだ場合は SRC ランキングだけ `runAfterResponse` で即時取得する（ランキングの cron は
-  `public` のみが対象で追いつかないため。`/me/edit` の `create_link` なら限定公開でも即時取得される挙動に揃える）
+  `public` のみが対象で追いつかないため。`/me/edit` の一括保存でリンクを追加した場合は限定公開でも即時取得される挙動に揃える）
 - リダイレクトせず `{ success: true, action: "complete" }` だけを返し、クライアントが完了画面を表示する
   （この action の後だけ loader の再検証を抑止する。再検証すると「登録済み → リダイレクト」で完了画面が飛ぶため）
 - 公開設定のトグルは uncontrolled の `Switch`（オンのときだけ `name=true` が送信される）
@@ -237,7 +266,9 @@ SNS（X / Instagram 風）のウィザード式初期設定。公開レイアウ
 ### 完了画面
 
 - 「設定が完了しました」＋「ようこそ、{保存済みの表示名}さん！」（英語ロケールでは `displayNameAlphabet ?? displayName`）
-- CTA:「プロフィールを見る」（`returnTo` があればそこ、無ければ `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
+- 主ボタン（1段目、既定の brand）は1つ。`returnTo` があるときは「{ページ名}に戻る」（ページ名は `returnToPageKey`〔`app/lib/return-to.ts`。ログイン画面の「ログインすると〜に戻ります」と共有〕。名前で言えない行き先は「元のページに戻る」）。無いときは「キー配置を登録する」（`/me/keybindings`。製品の核へつなぐため）。
+  副次（2段目、`outline`、sm 以上は横並びで折り返し可）は「キー配置を登録する」（`returnTo` があるときだけ。無いときは主ボタン）・「プロフィールを見る」（常に `/player/{slug}`）・「さらに詳しく設定する」（`/me/edit`）
+- 顔: MCID が登録されているときは、先頭の `CheckCircle2` の代わりに作ったプロフィールの顔（`MinecraftAvatar` 64px・`rounded-xl`・`alt=""`。隣に名前の見出しがある）を出す。未登録のときはチェックのアイコンのまま
 - 遷移先と表示名はクライアントが loader の値（`returnTo` と `user`。各ステップの保存後に再検証済み）から組む
 
 > 旧サイト (mchotkeys) からのデータ引き継ぎボタンは登録フローから削除済み。
@@ -280,6 +311,22 @@ const session = await getSession(request, auth);
 ```
 
 使用箇所: `/onboarding`, `/me/edit`, その他認証必須ページ
+
+### `/me/*` の保護（ルートのミドルウェア）
+
+`app/routes/me/_layout.tsx` が `middleware`（React Router 8 の server middleware。8.5.0 では future フラグ不要）で
+`getCurrentUser` を呼ぶ。ミドルウェアは配下の loader **と action の前**に走るので、ウィザード未完了のアカウントが
+`/me/*` の action を直接 POST して書き込む（登録完了前に公開にする等）ことはできない。
+未ログインは `/login`、未登録は `/onboarding` へ redirect。解決した users 行は `registeredUserContext`
+（`app/lib/session.ts`）経由でレイアウトの loader が再利用する（DB の往復は増えない）。
+`/api/me/*` は別ルートでこのゲートの外（オンボーディングのスキン手順が登録完了前に使うため）。各 action 側に同じ確認を書く必要はない。
+
+### `/api/me/*` の Origin 確認
+
+resource route には React Router の Origin 確認（`throwIfPotentialCSRFAttack`）が効かないため、`requireApiUser`
+（`app/lib/api-auth.server.ts`）が POST / PUT / PATCH / DELETE に限り、認証より前に `rejectCrossOriginMutation` で確認する。
+`origin` ヘッダなしは通す。あれば `new URL(origin).origin` が `request.url` の origin と一致しなければ 403
+（`"null"`・不正な形も 403）。GET は確認しない。`APP_URL` とは比べない（フレームワーク自身の比較と同じ）。
 
 ### パターン2: 認証任意ページ
 

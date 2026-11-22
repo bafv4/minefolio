@@ -1,6 +1,7 @@
 // ガイド設定モーダル（タイトル / 概要 / カバー画像 / タグ / 公開設定）。
 // モーダル内はローカル State を持ち、「反映」で親 State へコミット、「キャンセル」で破棄する。
-// ※ 反映は保存・仮保存ではなく、あくまで全体 State への反映のみ。
+// ※ 反映は保存（下書き保存・公開）ではなく、あくまで全体 State への反映のみ。
+// 公開前の確認はこのモーダルではなく publish-dialog.tsx（確認専用。欄の編集はここに集める）。
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -16,7 +17,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MetadataFields } from "./metadata-fields";
 import { normalizeSlug, softNormalizeSlug } from "@/lib/guide-slug";
+import { getPublishAction, hasDraftSave, publishToggleDescKey, PUBLISH_ACTION_MESSAGES } from "../hooks/use-guide-save";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 
 export interface GuideSettingsValues {
   title: string;
@@ -37,11 +40,13 @@ interface SettingsDialogProps {
   authorSlug: string;
   /** 自動翻訳の機能が有効か。無効なら許可スイッチを描画しない */
   translationEnabled: boolean;
+  /** いま読者に公開されているか（保存済みの isPublished）。説明文のボタン名と言い方を決める */
+  livePublished: boolean;
   /** カバー画像を Blob へアップロードし URL を返す（即時アップロード） */
   uploadCover: (file: File) => Promise<string | null>;
   isUploadingCover: boolean;
   uploadError: string | null;
-  /** 反映: モーダル内 State を親 State へコミット（保存はしない） */
+  /** 適用: モーダル内 State を親 State へコミット（保存はしない） */
   onApply: (values: GuideSettingsValues) => void;
 }
 
@@ -51,12 +56,15 @@ export function SettingsDialog({
   initialValues,
   authorSlug,
   translationEnabled,
+  livePublished,
   uploadCover,
   isUploadingCover,
   uploadError,
   onApply,
 }: SettingsDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   // ── モーダル内ローカル State ──
   const [title, setTitle] = useState(initialValues.title);
   const [summary, setSummary] = useState(initialValues.summary);
@@ -88,18 +96,28 @@ export function SettingsDialog({
   // 確定スラッグ（厳密正規化）。空になる入力は現在のスラッグを維持する。
   const resolvedSlug = normalizeSlug(slug) || initialValues.slug;
 
+  // 説明文はボタンの位置ではなく、いまのボタンの文言で指す。保存ボタンの文言はこのモーダルのスイッチの値
+  // （適用したあとの状態）で決まる。下書き保存は公開版があるときだけ出る（hasDraftSave）
+  const draftSaveAvailable = hasDraftSave(livePublished);
+  const saveLabel = t(PUBLISH_ACTION_MESSAGES[getPublishAction(livePublished, isPublished)].label);
+  const draftLabel = t("guideEditor.toolbar.saveDraft");
+  const publishDescKey = publishToggleDescKey(isPublished, livePublished);
+
   const apply = () => {
-    onApply({ title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation });
+    const values = { title, summary, tags, coverImageUrl, isPublished, slug: resolvedSlug, allowAutoTranslation };
+    onApply(values);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.toolbar.settings")}</DialogTitle>
           <DialogDescription>
-            {t("guideEditor.ui.settingsDesc")}
+            {draftSaveAvailable
+              ? t("guideEditor.ui.settingsDesc", { draft: draftLabel, save: saveLabel })
+              : t("guideEditor.ui.settingsDescSingle", { save: saveLabel })}
           </DialogDescription>
         </DialogHeader>
 
@@ -137,21 +155,21 @@ export function SettingsDialog({
           <p className="text-xs text-muted-foreground">{t("guideEditor.slugHint")}</p>
         </div>
 
-        {/* 公開設定（トグル） */}
-        <div className="flex items-center justify-between rounded-lg border p-3 mt-1">
+        {/* 公開設定（トグル）。名前は見えるラベル「公開する」（Label htmlFor）で、オン/オフは role=switch の状態で伝える */}
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-3 mt-1">
           <div className="space-y-0.5">
-            <Label htmlFor="guide-publish-toggle">{t("guideEditor.published")}</Label>
-            <p className="text-xs text-muted-foreground">
-              {isPublished
-                ? t("guideEditor.ui.publishOn")
-                : t("guideEditor.ui.publishOff")}
+            <Label htmlFor="guide-publish-toggle">{t("guideEditor.ui.publishLabel")}</Label>
+            <p id="guide-publish-toggle-desc" className="text-xs text-muted-foreground">
+              {t(publishDescKey, { save: saveLabel, draft: draftLabel })}
             </p>
           </div>
+          {/* オンの色は brand（ui.md 1 章: brand ＝選択中。基底の Switch は primary のまま） */}
           <Switch
             id="guide-publish-toggle"
             checked={isPublished}
             onCheckedChange={setIsPublished}
-            aria-label={t("guideEditor.published")}
+            aria-describedby="guide-publish-toggle-desc"
+            className="data-[state=checked]:bg-brand"
           />
         </div>
 
@@ -170,6 +188,13 @@ export function SettingsDialog({
             />
           </div>
         )}
+
+        {/* 「反映」は編集中の内容に入るだけで、保存ではないことを、スクロールしても見える下部に固定で示す */}
+        <p className="text-xs text-muted-foreground">
+          {draftSaveAvailable
+            ? t("guideEditor.ui.applyNote", { draft: draftLabel, save: saveLabel })
+            : t("guideEditor.ui.applyNoteSingle", { save: saveLabel })}
+        </p>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

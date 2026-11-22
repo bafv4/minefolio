@@ -63,7 +63,8 @@ NOT NULL 列の追加でテーブル再作成（＝データ損失）を提案�
 `scripts/add-search-craft-loops.ts`, `scripts/fix-unique-index-names.ts`,
 `scripts/fix-missing-indexes.ts`, `scripts/add-player-rankings-table.ts`,
 `scripts/add-app-meta-table.ts`, `scripts/drop-orphan-favorites-index.ts`,
-`scripts/fix-paceman-expression-index.ts`
+`scripts/fix-paceman-expression-index.ts`,
+`scripts/add-search-craft-template-draft-columns.ts`
 
 ```ts
 // <何を追加するか> の一回限りのスクリプト。

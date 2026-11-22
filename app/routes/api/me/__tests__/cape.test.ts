@@ -35,10 +35,10 @@ vi.mock("@vercel/blob", () => blobMocks);
 
 import { action } from "../cape";
 
-const OLD_BLOB_URL = "https://store123.public.blob.vercel-storage.com/capes/old/cape-old.png";
-const NEW_BLOB_URL = "https://store123.public.blob.vercel-storage.com/capes/new/cape-new.png";
+const OLD_BLOB_URL = "https://store123.public.blob.vercel-storage.com/capes/u-runner/old.png";
+const NEW_BLOB_URL = "https://store123.public.blob.vercel-storage.com/capes/u-runner/new.png";
 
-const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
+const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL", "BLOB_READ_WRITE_TOKEN"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
 let db: TestDb;
@@ -63,6 +63,7 @@ function signInAs(discordId: string) {
 /** カスタムマント設定済みのユーザーを用意してログインする */
 async function setupUser(customCapeUrl: string | null = OLD_BLOB_URL) {
   const user = await seedUser(db, {
+    id: "u-runner",
     slug: "runner",
     discordId: "discord-runner",
     customCapeUrl,
@@ -83,6 +84,7 @@ beforeEach(async () => {
   process.env.TURSO_DATABASE_URL = SHARED_MEMORY_URL;
   process.env.BETTER_AUTH_SECRET = "test-secret";
   process.env.APP_URL = "https://minefolio.app";
+  delete process.env.BLOB_READ_WRITE_TOKEN;
   db = await createTestDbAt(SHARED_MEMORY_URL);
   authMocks.getSession.mockResolvedValue(null);
   blobMocks.del.mockResolvedValue(undefined);
@@ -299,6 +301,85 @@ describe("DELETE", () => {
     const res = await callAction("DELETE");
 
     expect(res.status).toBe(200);
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+});
+
+describe("他人の Blob の保存・削除（所有判定）", () => {
+  const HOST = "https://store123.public.blob.vercel-storage.com";
+  const OTHER_STORE = "https://other999.public.blob.vercel-storage.com";
+  const OTHERS_URL = `${HOST}/capes/u-other/x.png`;
+
+  it.each([
+    ["他人のディレクトリ", `${HOST}/capes/u-other/x.png`],
+    ["他人のガイド画像", `${HOST}/guides/u-other/g1/cover.png`],
+    ["別種別のディレクトリ", `${HOST}/skins/u-runner/x.png`],
+    [".. を含むパス", `${HOST}/capes/u-runner/%2e%2e/u-other/x.png`],
+    ["自分のディレクトリ直下に名前が無い", `${HOST}/capes/u-runner/`],
+  ])("%s は 400 で DB・Blob に触れない", async (_label, url) => {
+    const user = await setupUser(OLD_BLOB_URL);
+
+    const res = await callAction("POST", { url });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Invalid blob URL" });
+    expect((await findUser(user.id))?.customCapeUrl).toBe(OLD_BLOB_URL);
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  describe("BLOB_READ_WRITE_TOKEN があるとき（ストア ID の確認）", () => {
+    beforeEach(() => {
+      process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_store123_secret";
+    });
+
+    it("他ストアのホストは自分のパスでも 400", async () => {
+      const user = await setupUser(OLD_BLOB_URL);
+
+      const res = await callAction("POST", { url: `${OTHER_STORE}/capes/u-runner/x.png` });
+
+      expect(res.status).toBe(400);
+      expect((await findUser(user.id))?.customCapeUrl).toBe(OLD_BLOB_URL);
+      expect(blobMocks.del).not.toHaveBeenCalled();
+    });
+
+    it("自ストア・自分のパスは通り、旧 Blob を削除する", async () => {
+      const user = await setupUser(OLD_BLOB_URL);
+
+      const res = await callAction("POST", { url: NEW_BLOB_URL });
+
+      expect(res.status).toBe(200);
+      expect((await findUser(user.id))?.customCapeUrl).toBe(NEW_BLOB_URL);
+      expect(blobMocks.del).toHaveBeenCalledWith(OLD_BLOB_URL);
+    });
+
+    it("他ストアの既存 URL は DELETE でも del() せず、列だけクリアする", async () => {
+      const user = await setupUser(`${OTHER_STORE}/capes/u-runner/x.png`);
+
+      const res = await callAction("DELETE");
+
+      expect(res.status).toBe(200);
+      expect((await findUser(user.id))?.customCapeUrl).toBeNull();
+      expect(blobMocks.del).not.toHaveBeenCalled();
+    });
+  });
+
+  it("既存の行が他人のパスなら、解除（DELETE）で del() を呼ばず列だけクリアする", async () => {
+    const user = await setupUser(OTHERS_URL);
+
+    const res = await callAction("DELETE");
+
+    expect(res.status).toBe(200);
+    expect((await findUser(user.id))?.customCapeUrl).toBeNull();
+    expect(blobMocks.del).not.toHaveBeenCalled();
+  });
+
+  it("既存の行が他人のパスなら、差し替え（POST）で del() を呼ばず新しい URL を保存する", async () => {
+    const user = await setupUser(OTHERS_URL);
+
+    const res = await callAction("POST", { url: NEW_BLOB_URL });
+
+    expect(res.status).toBe(200);
+    expect((await findUser(user.id))?.customCapeUrl).toBe(NEW_BLOB_URL);
     expect(blobMocks.del).not.toHaveBeenCalled();
   });
 });

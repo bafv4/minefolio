@@ -40,6 +40,8 @@ Minefolioにおけるアイテム配置（ホットバー構成）とサーチ�
 
 カスタムセグメント（`custom_*` 形式）もユーザーが自由に追加可能。
 
+**表示名**: 保存値（上表のセグメント名）は変えず、区間の表示名だけをサーチクラフトのタイミングと共有する。辞書は `app/lib/segment-labels.ts`（`SEGMENT_LABELS` / `itemSegmentLabel()`）で、`/me/items` のセグメント選択では `Overworld` を「OW」、`Bastion → Fort` を「Bastion→Fort」と表示する（`TIMING_META` も同じ辞書を参照）。辞書に無い値（Common・カスタム名など）は保存値のまま表示する。
+
 ### スロット構造
 
 各スロットは以下の構造を持つ。
@@ -86,10 +88,11 @@ import {
 
 ### 編集UI
 
-全レイアウトを1枚のカード（`rounded-xl border border-border/70 bg-background/80`）にまとめ、セグメントごとに `divide-y divide-border/60` の行として表示する。各行は操作行（D&Dドラッグハンドル → セグメント名 Combobox → 複製/メモ展開/削除ボタン）+ `ItemHotbar` によるホットバー編集 + メモで構成し、カード最下部（`border-t` 区切り）に「配置を追加」ボタン（outline / sm）を置く。
+ページは `PageSection`（h2「アイテム配置」）の欄区切りの中に置く。全レイアウトを1枚のカード（`rounded-xl border border-border/70 bg-background/80`）にまとめ、セグメントごとに `divide-y divide-border/60` の行として表示する。各行は操作行（D&Dドラッグハンドル → セグメント名 Combobox → 複製/メモ展開/削除ボタン）+ `ItemHotbar` によるホットバー編集 + メモで構成し、カード最下部（`border-t` 区切り）に「配置を追加」ボタン（outline / sm）を置く。
 
 - **アイテム選択**: スロットタイルをクリックすると Dialog が開き、検索 Input + カテゴリ別フィルタでアイテムを複数選択できる
 - **セグメント**: Combobox（プリセット名 + カスタム入力）で選択・入力する。既に使用中のプリセット名は自分自身を除き候補から除外される
+- **名前**: 複製・メモ開閉・削除・並べ替えハンドルは「「{セグメント名}」の…」の名前を持つ（`meItems.*Aria`）。スロットのアイテム選択ダイアログの各アイテムボタンもアイテム名を名前に持つ（`aria-pressed`）。md 未満は 44px
 - **並べ替え**: `@dnd-kit` によるドラッグハンドル（GripVertical）で行単位の縦並べ替え。保存時の配列順がそのまま `displayOrder` として永続化される
 - **複製**: 行の複製ボタン（Copy アイコン）でセグメントを複製する。複製後の行はセグメント名を空にした状態で直後に挿入され、保存時の「セグメント名必須・重複禁止」バリデーションが再命名を強制する
 - **削除**: 確認 `AlertDialog` を経て削除する
@@ -168,13 +171,13 @@ Shift 成分の解決順は「**左Shift → 右Shift** の順で、各々の中
 
 | エクスポート | 説明 |
 |---|---|
-| `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` は re-export で既存 import 元を保つ |
+| `renderVisibleSpaces(text, spaceClassName)` / `SearchStringText` | 半角スペースを「␣」（U+2423）可視化して描画する。`renderVisibleSpaces` の re-export は無く、利用側（Loop表示・キー入力順ダイアログ）は本モジュールから直接 import する。`SearchStringText` のみ `search-craft-template-view.tsx` が re-export で既存 import 元を保つ |
 | `KeyBadge` | 実入力キーのバッジ（指割り当て色・リマップring・Shift琥珀・ツールチップ付き）。`search-craft-template-view.tsx` は re-export |
 | `ShiftKeyGroup` | 「Shiftを押しながら」入力するキー列全体を囲むラッパー。`search-craft-template-view.tsx` は re-export |
 | `getFingersForKeyCode(keyCode, fingerAssignments)` | キーコード（修飾キー込み表記を含む）から指割り当てを検索する共通ヘルパー（ベースキー＝最後のセグメントで引く）。以前は `search-craft-template-view.tsx`（`ActualKeyBadges`）とダイアログ（`SequenceStepBadge`）でほぼ同じロジックが重複していた |
 | `ControlKeyKind` / `CONTROL_KEY_META` | 制御キー（backspace/arrowLeft/selectAll/home）の種別と、種別ごとの keyCode・短縮ラベル・逆引き対象キーのメタ |
 | `ControlKeyBadgeView({ kind, info, count })` | 制御キーのバッジ描画部。解決済み `ActualControlKeyInfo` を直接受け取って描画するだけ（二重解決しない）。キー入力順ダイアログは既に解決済みの info を持つためこちらを直接使う |
-| `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持） |
+| `ControlKeyBadge({ kind, count, remaps? })` | `ControlKeyBadgeView` の remaps 解決ラッパー。`remaps` を渡すと `getActualControlKeyInfo()` で逆引きしてから描画部に委譲する（`search-craft-template-view.tsx`/`search-craft-loop-view.tsx` の既存呼び出し方を維持。`search-craft-loop-view.tsx` は re-export も残す） |
 | `CraftMarker({ items, content, showItemBreakdown? })` | クラフト実行マーカーのチップ（ItemIcon 24px＋サーチ文字列部分）。`content` は呼び出し側が用意した描画済み ReactNode（`renderVisibleSpaces` の素の描画、または Loop 表示側の `SegmentedSearchString` 等、用途に応じて異なる）。`showItemBreakdown: true` のときだけ、複数アイテム（2件以上）の Tooltip に UI ロケール依存の表示名（`getLocalizedItemName`）で内訳を追加する。省略時（キー入力順ダイアログ）は内訳なしの単純表示のまま |
 
 ### Shiftを押しながらクラフト（withShift）
@@ -223,7 +226,10 @@ const MAX_SEARCH_VARIATIONS = 5; // 1エントリあたりの上限（並べ替�
 - **クラフト行**: アイテムチップ + 追加ボタン、サーチ文字列 `Input`、「Shiftを押しながら」チェックボックス、入力キーのライブプレビュー（`remaps` 指定時）、コメント、削除（`AlertDialog`）。行UI自体に timing の選択コントロールは無い（timing はブロック帰属で決まる）
 - **タイミングの変更＝ブロック間D&D**: `@dnd-kit` のマルチコンテナ Sortable パターン（単一 `DndContext` + ブロックごとの `SortableContext` + 空ブロック用 `useDroppable` ゾーン）。ブロック間へドロップすると対象クラフトの `timing` が移動先ブロックの値に更新される。クラフトと繋ぎ方（Loop）は同一 `DndContext` を共有し、`collisionDetection` をドラッグ中の対象と同じドメイン（craft/loop）に絞り込むことで互いの干渉を防ぐ（`useDraggable`/`useDroppable` は最も近い祖先の `DndContext` にしか束縛できないため、ブロックカード内でクラフト行と Loop 行を同居させたまま完全に別の `DndContext` に分離することはできない）
 - **繋ぎ方（Loop）サブセクション**: 各ブロック内、クラフトリストの下に配置。Loop 行の編集UI（`LoopEditorRow`、`app/components/search-craft-loop-editor.tsx` からエクスポート）はステップ選択・遷移行・プレビュー・コメント・削除を持つが、行ヘッダーに timing Select は無い（timing の変更はやはりブロック間D&D）。0件のブロックでは通常サブセクション自体を出さず、**Loop のドラッグ中のみ**全ブロックに破線のドロップゾーンを表示する
-- **ブロック内の追加ボタン**: 各ブロックに「クラフトを追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満なら disabled）を配置
+- **ブロック内の追加ボタン**: 各ブロックに「アイテム追加」（新規クラフトの `timing` にそのブロック値を設定）と「Loopを追加」（新規 Loop の `timing` にそのブロック値を設定。全体のクラフト数が2未満の間は**ボタン自体を出さない**）を配置。見える文言は変えず、読み上げ名にだけ区間名を入れる（`meSearchCraft.addCraftAria` / `addLoopAria`、例「OW にアイテム追加」）。ブロック名は h3 の見出し
+- **操作の説明は1回だけ**: ボード上部に説明1文（`boardHint`。エントリが2件未満のときは `loopNeedTwoEntries` を続ける）を出し、区間ごとに繰り返さない。0件のブロックは「なし」の短い印（`emptyBlockMark`）の破線ゾーン（ドロップ先は維持）
+- `/me/search-craft` は、エントリが0件のとき区間のブロックを出さず、最初の1件を足す入口だけの空状態（`EmptyState`、`SearchCraftTimingBoard` の `emptyState` prop。Playground・テンプレートエディタのワークベンチは `emptyState="compact"` で、同じ入口を compact の EmptyState で出す）を出し、「テンプレートを作成」は**保存済み**（loader の値）が1件以上のときだけ出す（未保存の下書きが1件あるだけでは出さない。公開側は保存済みの内容を読むため）。ボードは `PageSection`（h2）の中に置く。`/me/search-craft` は `collapseEmptyBlocks` を付け、中身（クラフト・Loop）のある区間だけをブロックで出す。空の区間は「区間に追加:」の1行のチップ（押すとその区間にエントリを足し、新しいエントリの入力欄へフォーカスを移す）にまとめ、ドラッグ中だけ全区間をドロップ先として出す（既定は7区間を常時表示）。追加ボタンの文言は、区間は「最初のサーチクラフトを追加」、エントリ内は「アイテムを追加」（`aria-label` はどのエントリ・区間か分かる文）。サーチ文字列・コメント・削除・並べ替えハンドルには名前（aria-label）を付け、md 未満は 44px
+- **表示側（テンプレート詳細などの閲覧ビュー）の未知 timing**: enum 外の `timing` を持つクラフトは「その他（`other`）」グループとして描画し、件数と描画数を一致させる（`resolveCraftTiming()` / `groupCraftsByTiming()`、`app/lib/search-craft-templates.ts`。`search-craft-template-view.tsx` が使用）。`null` は従来どおり「指定なし」
 - **空ブロック**: クラフト0件のブロックは破線のプレースホルダを表示し、そのままドロップ先として機能する
 - **未知の timing**: 通常は起こらないが、`crafts`/`loops` の `timing` が7ブロックのいずれにも一致しない値だった場合、「指定なし」ブロックへ正規化して表示する（データは残るが未知キーのまま非表示になる、という黙った消失を避けるための防御）
 - 保存時の `sequence` は「ブロック表示順にグループを連結したフラット配列」になる。ユーザー操作（D&D・追加・削除・更新）のたびに正規化される（初期ロード時点では再emitしないため、ブロック順に並んでいない既存データを開いてもそれだけでは変更扱いにならない）
@@ -313,7 +319,7 @@ type LoopStepData = {
 Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（`app/components/search-craft-editor.tsx`、上記「[編集UI（タイミングブロック型）](#編集ui)」参照）に統合されている。各タイミングブロック内、クラフトリストの下に「繋ぎ方（Loop）」サブセクションとして表示・編集する。
 
 - 行UI本体は `app/components/search-craft-loop-editor.tsx` がエクスポートする **`LoopEditorRow`** をボード側から再利用する（旧 `SearchCraftLoopListEditor`〈単一フラットリスト＋行ヘッダーの timing Select〉は廃止）
-- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除の AlertDialog。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー。遷移ごとのライブプレビューは持たず、遷移が成立しない場合のみエラーテキストを表示する — キー操作の確認は行末尾の Loop 全体プレビューが担う）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
+- 各行（`LoopEditorRow`）: ヘッダ（並べ替えハンドル・連番・削除。既定は AlertDialog、`deleteWithUndo`〔Playground〕のときは確認なしで消して「元に戻す」つきトースト〔10秒〕を出し、フォーカスは次の Loop 行の削除ボタン→無ければ区間の「Loop を追加」へ移す。timing Select は無い）→ ステップ行（エントリ選択の shadcn `Select`。将来エントリ数が増えたら `ui/combobox.tsx` への差替えを想定）→ 遷移行（ステップ2以降。方式 Select + BS/← `[-][n][+]` ステッパー。遷移ごとのライブプレビューは持たず、遷移が成立しない場合のみエラーテキストを表示する — キー操作の確認は行末尾の Loop 全体プレビューが担う）→ ステップ追加ボタン → Loop 全体プレビュー → コメント入力
 - **ステップ選択（`EntrySelect`）はエントリ×バリエーションを展開**した選択肢を持つ。value は `${craftId}:${variationIndex}` の複合キー、ラベルは全アイテムのアイコン＋全アイテム名（`/` 区切り。同じサーチ文字列で複数アイテムが出せるクラフトも、最初の1件だけでなく全件を表示する）＋`(str)`＋（`withShift` の場合）⇧マーク
 - BS ステッパーの範囲は `minBackspaceCount(prev, next)`〜`prev.length`（TransitionRow が自前で算出する。`deriveTransition()` の戻り値に min/max は含まれない）。← ステッパーの範囲は `1`〜`prev.length`（妥当な `k` は連続とは限らないため固定範囲のみをステッパーの min/max とし、範囲内の無効値は invalid 表示に倒す）。**回数は常に「最小回数を初期表示」する**: 遷移方式や前後エントリ・バリエーションの変更時、および**参照先エントリのサーチ文字列を編集した時**（`resetTransitionCountsForCraft()`、`SearchCraftTimingBoard` の行更新ハンドラから呼ぶ）に、`bsCount`/`arrowCount` を新しい最小値（`minBackspaceCount()`/`minArrowLeftCount()`、後者が見つからなければ `1`）にリセットする。編集セッション外で生じた矛盾（保存済みデータの読み込み時など）は値を保持したまま invalid 表示に倒す
 - 保存をブロックする条件は「未選択ステップ」「2ステップ未満」のみ。意味的無効（BS範囲外・←範囲外・挿入不成立・home不成立等）は警告表示のみで保存できる
@@ -340,7 +346,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 
 `/me/search-craft` の `saveAll` アクション（`app/routes/me/search-craft.tsx`）は crafts・loops を毎回全削除→全挿入する。
 
-1. crafts の submittedId→finalId マップを**挿入前に**構築する（`new-` 始まりの id のみ `createId()` で新規採番）。Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングでは id を振り直せない
+1. crafts の submittedId→finalId マップを**挿入前に**構築する（**自分の既存行にある id だけ引き継ぎ**、それ以外〔`new-` 始まり・他人の id・任意の文字列〕は `createId()` で新規採番。送信 id → 最終 id は全件登録する。Loop の id も同じ規則）。Loop の craftId 引き換えにも同じマップを使うため、挿入と同じタイミングでは id を振り直せない
 2. `remapLoopSteps()` で loops の craftId を最終idへ引き換える。削除済みエントリへの参照はステップ除去、残りが2件未満になった Loop は破棄する（保存自体は拒否しない安全網）
 3. トランザクション内で `loops 削除 → crafts 削除 → crafts 挿入 → loops 挿入`（sequence は挿入順の連番）の順に実行する
 
@@ -410,7 +416,7 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
   - 行見出しはセグメント名のみ。既知のセグメント名（Overworld / Bastion / Bastion → Fort / Fortress / Blinded / Stronghold）は色ドット、それ以外（Common / Enter Nether / Enter End 系・カスタム名）は searchcraft の「その他」と同じグレードット（bg-muted-foreground）が付く
   - 行内容はホットバー（`ItemHotbar`。詳細は「[ホットバー表示コンポーネント](#ホットバー表示コンポーネント)」参照）+ メモのみ。アイテム名はタイルの Tooltip でのみ提示する（スロットごとの詳細チップ一覧・サマリーバー・埋まりスロット数は v1.12 系の改修で廃止）
 - サーチクラフト（v1.6.0 で表示刷新）:
-  - **サマリーバー**: ゲーム内言語（日本語名併記）・総件数・キーバッジの凡例（リマップ済み / Shift同時押し / 指割り当て色。指割り当ては設定がある場合のみ）
+  - **サマリーバー**: ゲーム言語（日本語名併記）・総件数・キーバッジの凡例（リマップ済み / Shift同時押し / 指割り当て色。指割り当ては設定がある場合のみ）
   - **タイミング別グループカード**: Bastion（金）/ Fortress（赤）/ その他（青）/ 指定なし の順に、色ドット + 件数付きヘッダーのカードでグループ表示。タイミング未設定のみの場合はヘッダーなしの1枚のカード
   - **行リスト**: カード内は `divide-y` の行リスト。デスクトップ（lg以上）は「アイテム / サーチ文字列 / 入力キー」の3カラム表（列ヘッダー付き）、モバイルは縦積み + インラインラベル
   - 各行: シーケンス番号、アイテムチップ、サーチ文字列（クリックでコピー、`navigator.clipboard` + toast）、実入力キーバッジ（指割り当て色・リマップring・Shift琥珀色、ツールチップ付き）、コメント
@@ -434,6 +440,10 @@ Loop の編集UIは、サーチクラフトと同じ `SearchCraftTimingBoard`（
 サーチクラフト設定はテンプレートとして公開し、他のプレイヤーが自分の設定に反映したり Playground で試したりできる。詳細は [`docs/search-craft-templates.md`](search-craft-templates.md) を参照。
 
 ---
+
+## 保存の検証と上限
+
+`saveAll`（アイテム配置・サーチクラフト・Loop）は、書き込み前に形・件数・文字数・`timing`（許可リスト）・id の重複を検証し、不正なら全体を拒否する。アイテム配置は空・重複（大文字小文字無視）のセグメント名も拒否する。検証・上限の一覧・id の引き継ぎ規則・変更履歴に生データを残さない方針は [`docs/keybindings.md`](keybindings.md)「保存の検証と上限」にまとめている。
 
 ## 関連ファイル
 

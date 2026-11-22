@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeReturnTo, encodeReturnToForCallback } from "../return-to";
+import { sanitizeReturnTo, encodeReturnToForCallback, buildLoginHref } from "../return-to";
 
 describe("sanitizeReturnTo", () => {
   it("同一オリジンの相対パスをそのまま返す", () => {
@@ -77,5 +77,23 @@ describe("encodeReturnToForCallback", () => {
     expect(encoded).not.toMatch(/[!'()*~]/);
     // 追加エスケープ後も \w \- . + / = & % @ のみで構成される
     expect(encoded).toMatch(/^[\w\-.+/=&%@]*$/);
+  });
+});
+
+describe("buildLoginHref", () => {
+  it("現在地を returnTo に付ける", () => {
+    expect(buildLoginHref("/guides/abc", "?tab=1")).toBe(
+      `/login?returnTo=${encodeURIComponent("/guides/abc?tab=1")}`,
+    );
+  });
+
+  it("search 省略でも動く", () => {
+    expect(buildLoginHref("/playground")).toBe("/login?returnTo=%2Fplayground");
+  });
+
+  it("戻せない場所は素の /login", () => {
+    expect(buildLoginHref("/login")).toBe("/login");
+    expect(buildLoginHref("/onboarding", "?x=1")).toBe("/login");
+    expect(buildLoginHref("/api/foo")).toBe("/login");
   });
 });

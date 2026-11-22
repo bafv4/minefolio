@@ -3,10 +3,10 @@
 // WebGL/canvas の無い OGP 生成環境（satori）向けに純JSのラスター処理で再現する。
 
 import { PNG } from "pngjs";
+import { headBaseRegion, headOverlayRegion, shouldHideLegacyHat } from "./skin-texture";
 
-// スキンテクスチャ内の頭部の領域（64x64 / 64x32 どちらでも同座標）
-const HEAD_BASE = { x: 8, y: 8, w: 8, h: 8 };
-const HEAD_OVERLAY = { x: 40, y: 8, w: 8, h: 8 };
+// 頭部の領域は 64 基準の座標を幅に応じた倍率で拡大して求める（64x64 / 64x32 は同座標、128x128 は 2 倍）。
+// 旧形式スキンの帽子が不透明な黒のときは Minecraft 本体と同様に帽子を描かない（skin-texture.ts 参照）。
 
 // スキン解決に失敗したときのフォールバック用 Steve UUID
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
@@ -15,7 +15,7 @@ const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 // アプリ側の MinecraftAvatar が使うものと同じ手描きドット絵 SVG。
 const NO_MCID_FACE_PATH = "/skins/no-mcid-face.svg";
 
-/** 8x8領域を size×size にニアレストネイバー拡大したときの、出力(ox,oy)に対応する元ピクセルのインデックス */
+/** 頭部領域（8x8、HD スキンでは 16x16）を size×size にニアレストネイバー拡大したときの、出力(ox,oy)に対応する元ピクセルのインデックス */
 function sampleIndex(
   region: { x: number; y: number; w: number; h: number },
   skinWidth: number,
@@ -35,22 +35,25 @@ function sampleIndex(
 export function renderSkinFacePng(skinBytes: Uint8Array, size: number): Buffer {
   const skin = PNG.sync.read(Buffer.from(skinBytes));
   const out = new PNG({ width: size, height: size });
+  const headBase = headBaseRegion(skin.width);
+  const headOverlay = headOverlayRegion(skin.width);
+  const hideHat = shouldHideLegacyHat(skin.data, skin.width, skin.height);
 
   for (let oy = 0; oy < size; oy++) {
     for (let ox = 0; ox < size; ox++) {
       const oi = (oy * size + ox) * 4;
 
       // ベース（頭の正面。通常は不透明）
-      const bi = sampleIndex(HEAD_BASE, skin.width, ox, oy, size);
+      const bi = sampleIndex(headBase, skin.width, ox, oy, size);
       let r = skin.data[bi];
       let g = skin.data[bi + 1];
       let b = skin.data[bi + 2];
       let a = skin.data[bi + 3];
 
       // 帽子レイヤーをアルファ合成で上に重ねる
-      const hi = sampleIndex(HEAD_OVERLAY, skin.width, ox, oy, size);
+      const hi = sampleIndex(headOverlay, skin.width, ox, oy, size);
       const ha = skin.data[hi + 3];
-      if (ha > 0) {
+      if (!hideHat && ha > 0) {
         const af = ha / 255;
         r = Math.round(skin.data[hi] * af + r * (1 - af));
         g = Math.round(skin.data[hi + 1] * af + g * (1 - af));

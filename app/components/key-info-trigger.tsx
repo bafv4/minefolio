@@ -291,6 +291,22 @@ function KeyInfoBody({ info }: { info: KeyInfoData }) {
 }
 
 /**
+ * キーに表示する情報（操作・リマップ・カスタムアクション・指）が1つでもあるか。
+ * `KeyInfoTrigger` が Tooltip/Dialog を出すかの判定と、仮想キーボードのキーの状態
+ * （データあり／空き）の判定で共有する。
+ */
+export function hasKeyInfo(
+  info: Pick<KeyInfoData, "bindings" | "remaps" | "customActions" | "fingers">,
+): boolean {
+  return (
+    (info.bindings?.length ?? 0) > 0 ||
+    (info.remaps?.length ?? 0) > 0 ||
+    (info.customActions?.length ?? 0) > 0 ||
+    (info.fingers?.length ?? 0) > 0
+  );
+}
+
+/**
  * キー要素をラップし、デスクトップでは Tooltip、モバイル（< md）では Dialog でキー情報を表示する。
  *
  * - 情報がない (`bindings` も `remaps` も `customActions` も `fingers` も空) かつ `alwaysShow=false` の場合は素通し。
@@ -300,21 +316,25 @@ export function KeyInfoTrigger({
   children,
   info,
   alwaysShow = false,
+  interactive = false,
 }: {
   children: ReactNode;
   info: KeyInfoData;
   alwaysShow?: boolean;
+  /**
+   * 子のキー自身が押下の操作を持つ（編集モード）とき true。モバイルで情報ダイアログを
+   * DialogTrigger で重ねない（編集ダイアログと2枚同時に開いてしまうため）。デスクトップの Tooltip は残す。
+   */
+  interactive?: boolean;
 }) {
-  const hasInfo =
-    (info.bindings?.length ?? 0) > 0 ||
-    (info.remaps?.length ?? 0) > 0 ||
-    (info.customActions?.length ?? 0) > 0 ||
-    (info.fingers?.length ?? 0) > 0;
+  const hasInfo = hasKeyInfo(info);
 
   // SSR ではデスクトップとして扱い、ハイドレーション後にモバイルなら Dialog に切替
   const isMobile = useMediaQuery("(max-width: 767px)", false);
 
   if (!alwaysShow && !hasInfo) return <>{children}</>;
+
+  if (isMobile && interactive) return <>{children}</>;
 
   if (isMobile) {
     return (

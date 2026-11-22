@@ -1,27 +1,23 @@
 import { createTranslator } from "@/lib/messages";
 import { resolveLocale, localeFromMatches, type Locale } from "@/lib/locale";
-import { useLoaderData, Link, useParams, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
-import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from "react";
+import { useLoaderData, useRouteLoaderData, Link, useSearchParams, useNavigation, useLocation, redirect, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense, Fragment, type ReactNode } from "react";
 import { ViewToggle } from "@/components/view-toggle";
 import {
   GuideCardGrid,
   GuideListView,
-  type GuideItem,
 } from "@/components/guide-list-views";
 import type { Route } from "./+types/profile";
 import { createDb } from "@/lib/db";
+import { itemSegmentLabel } from "@/lib/segment-labels";
+import { loadPendingSpeedrunRecords, type PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, categoryRecords, keybindings, playerConfigs, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, keyRemaps, configPresets, customKeys, customActions, guides } from "@/lib/schema";
+import { users, categoryRecords, keybindings, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
-import {
-  fetchAllExternalStats,
-  fetchMCSRRankedStats,
-  checkPaceManPlayer,
-  fetchSpeedrunComStats,
-} from "@/lib/external-stats";
-import { getLocalizedItemName } from "@/components/item-icon";
+import { fetchAllExternalStats } from "@/lib/external-stats";
+import { fetchPaceManRegistration } from "@/lib/paceman-registration-client";
 import { ItemHotbar, type Slot } from "@/components/item-hotbar";
 import { MinecraftFullBody, type PoseName } from "@/components/minecraft-fullbody";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
@@ -30,21 +26,23 @@ import {
   PaceManLinkCard,
   PaceManStatsCard,
   SpeedrunComCard,
+  PendingSpeedrunRecordsCard,
   StatsServiceLoadingCard,
 } from "@/components/player-stats-cards";
+import { parseAgeGroup, publicAgeGroup } from "@/lib/age-group";
 import { platformLabel } from "@/lib/platform-label";
-import { formatTime } from "@/lib/time-utils";
 import { getLocalizedDisplayName } from "@/lib/slug";
 import { resolveCapeProps } from "@/lib/cape";
-import { format, formatDistanceToNow } from "date-fns";
-import { dateFnsLocale, dateFormatPattern } from "@/lib/date-locale";
+import { format } from "date-fns";
+import { useRelativeTimeFormatter } from "@/components/relative-time";
+import { dateFnsLocale, dateFormatPattern, intlLocale } from "@/lib/date-locale";
 import { useT, useLocale } from "@/hooks/use-locale";
 import type { Translator } from "@/lib/messages";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { useProfileReactions } from "@/hooks/use-profile-reactions";
-import { getGameLanguageName } from "@/lib/game-languages";
-import { toUiRemaps, filterRemapsForContext, type RemapContext, type RemapInfo } from "@/lib/remap-utils";
-import { decodePresetConfig } from "@/lib/preset-read";
+import { getGameLanguageName, hasItemNameDictionary } from "@/lib/game-languages";
+import { itemLangForLocale } from "@/components/item-icon";
+import { toUiRemaps, filterRemapsForContext, type RemapContext } from "@/lib/remap-utils";
+import { decodePresetConfig, parseFingerAssignments } from "@/lib/preset-read";
 import { SearchCraftGroupedList, KeyBadgeLegend } from "@/components/search-craft-template-view";
 import {
   groupLoopsByTiming,
@@ -71,20 +69,36 @@ import {
   getViewerProfileReactions,
 } from "@/lib/profile-reactions.server";
 import type { ProfileReactionCount } from "@/lib/profile-reactions";
-import { YouTubeEmbed } from "@/components/youtube-embed";
+import { YouTubeClickEmbed } from "@/components/youtube-click-embed";
 import type { YouTubeChannelStats } from "@/lib/youtube";
 import type { TwitchChannelStats } from "@/lib/twitch";
 import { resolvePlayerSlugFallback } from "@/lib/player-slug-fallback.server";
 import { getGuideTranslations, getUserBioTranslation } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
-import { AutoTranslateNotice } from "@/components/profile/auto-translate-notice";
+import { AutoTranslateNotice } from "@/components/auto-translate-notice";
+import { LinkifiedText } from "@/components/profile/linkified-text";
 
-const SKIN_VIEW_SIZE_DESKTOP = { width: 240, height: 280 } as const;
-const SKIN_VIEW_SIZE_MOBILE = { width: 320, height: 380 } as const;
-const SKIN_VIEW_MOBILE_QUERY = "(max-width: 640px)"; // Tailwind sm 未満
+// スキン静止画の表示寸法は CSS で出し分ける（sm 未満 206×240 / sm 以上 240×280。どちらも縦横比 0.857）。
+// useMediaQuery で決めると SSR はデスクトップ寸法で描かれ、モバイルでハイドレーション後に変わって跳ねる（CLS）。
+// モバイルは縦を使いすぎない（スキンの下の最初の情報が下端ドックより上に入る）高さに抑える。
+// 描画解像度は 320×380 に固定し、表示は MinecraftFullBody の fluid で箱に収める（縮小表示）
+const SKIN_VIEW_RENDER_SIZE = { width: 320, height: 380 } as const;
+// md 未満は身元帯の顔と重なり最初の画面を占めるので 128px に抑える（縦横比は 206:240 のまま）
+const SKIN_VIEW_BOX_CLASS = "h-32 w-[110px] md:h-[280px] md:w-[240px]";
+// スキン画像が読めず顔（2D アバター）の代替表示になったときの箱。全身の箱のままだと、顔の右に大きな余白が残る
+const SKIN_VIEW_FALLBACK_BOX_CLASS = "size-24";
+
+// ui.md 7章の kbd チップ（単発のキー表示）
+const KBD_CHIP_CLASS = "bg-secondary/80 px-2.5 py-1 min-w-16 rounded text-sm font-mono text-center";
+
+// 記録タブの外部統計は到着が遅いので、読み込み中の欄に、届いたあとの中身に近い最小の高さを確保する
+// （初期表示のフッターが到着で押し下げられる CLS を抑える。確保は読み込み中だけで、到着後は外れる）。
+// 値は実測の目安（Ranked: 統計＋推移グラフ＋直近5試合、SRC: PB カード最大6件。モバイルは1列で縦に長い）
+const STATS_RANKED_LOADING_CLASS = "min-h-[32rem] md:min-h-[28rem]";
+const STATS_SPEEDRUNCOM_LOADING_CLASS = "min-h-[48rem] md:min-h-[36rem]";
 
 // OGPメタタグ
-export function meta({ loaderData, params, matches }: Route.MetaArgs) {
+export function meta({ loaderData, matches }: Route.MetaArgs) {
   if (!loaderData?.player) {
     return [
       { title: "Player Not Found - Minefolio" },
@@ -131,63 +145,62 @@ export function meta({ loaderData, params, matches }: Route.MetaArgs) {
 
 // ローディング中に表示するスケルトンUI
 export function HydrateFallback() {
-  const t = useT();
-  const locale = useLocale();
-  const params = useParams();
-  const slug = params.slug || "loading";
-
+  // 現行の骨格（身元帯 → ホットバー → タブ名 h2 → 欄）と同じ配置。細部は再現しない
   return (
-    <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-200">
-      {/* Left Sidebar Skeleton */}
-      <aside className="lg:w-72 shrink-0 space-y-6">
-        <div className="flex flex-col items-center lg:items-start">
-          {/* Skin Skeleton */}
-          <div className="w-40 h-60 flex items-center justify-center">
-            <Skeleton className="w-12 h-40 rounded-lg" />
+    <div aria-hidden="true" className="flex flex-col gap-4 md:gap-6 animate-in fade-in duration-200">
+      {/* 身元帯（アバター 40px / md 以上 64px、名前、操作ボタン） */}
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
+        <div className="flex items-center justify-between gap-3 md:gap-6">
+          <div className="flex min-w-0 items-center gap-3 md:gap-4">
+            <Skeleton className="size-10 shrink-0 rounded md:size-16" />
+            {/* 名前 h1（32px・md 以上 36px）＋ @MCID の行（text-sm 20px）。実物は行間なし */}
+            <div>
+              <Skeleton className="h-8 w-40 md:h-9" />
+              <Skeleton className="h-5 w-24" />
+            </div>
           </div>
-
-          <div className="mt-4 text-center lg:text-left w-full space-y-2">
-            <Skeleton className="h-8 w-32 mx-auto lg:mx-0" />
-            <Skeleton className="h-5 w-24 mx-auto lg:mx-0" />
-          </div>
-        </div>
-
-        {/* Bio Skeleton */}
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-20 w-full" />
-        </div>
-      </aside>
-
-      {/* Main Content Skeleton */}
-      <main className="flex-1 min-w-0 space-y-6">
-        {/* Tabs Skeleton */}
-        <Skeleton className="h-10 w-80" />
-
-        {/* Content Skeleton */}
-        <div className="space-y-4">
-          <Skeleton className="h-64 w-full rounded-lg" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Skeleton className="h-40 rounded-lg" />
-            <Skeleton className="h-40 rounded-lg" />
+          <div className="flex shrink-0 gap-1 md:gap-2">
+            <Skeleton className="size-11 md:h-8 md:w-20" />
+            <Skeleton className="size-11 md:h-8 md:w-20" />
           </div>
         </div>
-      </main>
+        {/* ハイライトのタイル（高さ 58px。md 以上は 4 列、md 未満は 1 行の横並び） */}
+        <div className="flex gap-2 pb-1 sm:gap-3 md:grid md:grid-cols-4 md:pb-0">
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
+          <Skeleton className="h-[58px] w-40 shrink-0 rounded-xl md:w-auto" />
+        </div>
+      </div>
+
+      {/* ホットバー */}
+      <Skeleton className="h-12 w-full rounded-xl md:h-14" />
+
+      {/* タブ名 h2 → 欄 */}
+      <div className="space-y-7 sm:space-y-8">
+        <Skeleton className="h-8 w-40" />
+        <div className="space-y-3 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </div>
+        <div className="space-y-3 border-t border-foreground/15 pt-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }
-import { getActionLabel, getKeyLabel, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type FingerType, type KeyboardLayout } from "@/lib/keybindings";
+import { getActionLabel, getKeyLabel, isTklLayout, normalizeKeyCode, parseKeyCombination, MODIFIER_LABELS, UNBOUND_KEY, type KeyboardLayout } from "@/lib/keybindings";
+import { HorizontalScrollArea } from "@/components/horizontal-scroll-area";
+import { ProfileHotbarTabs, type ProfileHotbarItem } from "@/components/profile-hotbar-tabs";
 import { VirtualKeyboard, VirtualMouse, VirtualNumpad, FingerLegend, keybindingsToMap } from "@/components/virtual-keyboard";
 import { KeyboardExportDialog } from "@/components/keybindings/keyboard-export-dialog";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -200,39 +213,39 @@ import {
   Trophy,
   Keyboard,
   Mouse,
-  Settings,
   ExternalLink,
   Pencil,
   Calendar,
   History,
-  Target,
-  CheckCircle2,
-  Video,
   Package,
   Search,
   BarChart3,
   GitCompare,
+  Users,
   Save,
   User,
-  ChevronsDown,
-  X,
   Loader2,
   BookOpen,
-  Eye,
   Maximize2,
+  Info,
   Languages,
   Pin,
   Gamepad2,
-  Layers,
-  SlidersHorizontal,
-  Sparkles,
   Speech,
+  Cake,
+  CircleHelp,
 } from "lucide-react";
 import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
 import { ShareButton } from "@/components/share-button";
 import { FavoriteButton } from "@/components/favorite-button";
 import { ProfileReactionBar } from "@/components/profile-reaction-bar";
 import { EmptyState } from "@/components/empty-state";
+import type { loader as layoutLoader } from "../_layout";
+import { PageSection } from "@/components/page-section";
+import { KeyboardScaledPreview } from "@/components/keyboard-scaled-preview";
+import { EmptyValue, OwnerEditAction } from "@/components/player-profile-bits";
+import { NoticeBanner } from "@/components/notice-banner";
+import { RecordCard, type RecordCardRecord } from "@/components/record-card";
 import {
   Dialog,
   DialogContent,
@@ -253,6 +266,12 @@ import {
   type MouseReasonConfig,
 } from "@/lib/mouse-settings-reasons";
 import { HintTip } from "@/components/hint-tip";
+import { fetchMCSRRankedStatsCached } from "@/lib/ranked-stats-cache";
+import { fetchSpeedrunComStatsCached } from "@/lib/speedruncom-stats-cache";
+import { ProfileHighlights } from "@/components/profile-highlights";
+import { pickRepresentativePb, rankedBestTimeMs } from "@/lib/profile-highlights";
+import { statsServiceDisplay } from "@/lib/stats-service-display";
+import { orderStatsSections, type StatsSectionKey } from "@/lib/profile-stats-order";
 import { SensitivityWarning } from "@/components/sensitivity-warning";
 import { MissingMouseValue, WinSensValue } from "@/components/mouse-setting-values";
 import {
@@ -305,6 +324,11 @@ export function headers(_: Route.HeadersArgs) {
 // タブ切替は URL の `tab` パラメータだけを更新する。タブ内容はすでに読み込み済みの
 // データで描画できるため、`tab` のみの変化では loader を再実行しない（DB 再取得や
 // プリセット切替オーバーレイの誤表示を防ぐ）。パス変更・preset 切替などは通常通り。
+// 審査中記録のトグル（`srcPending`）も表示だけの指定で loader は読まないので同じ扱いにする
+// （切り替えるたびに重い loader を走らせない。スイッチ自体はローカル状態で即時に切り替わる）。
+/** 表示だけを切り替える（loader が読まない）検索パラメータ。これだけが変わったときは loader を再実行しない */
+const PROFILE_VIEW_ONLY_PARAMS = ["tab", "srcPending"] as const;
+
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
@@ -316,8 +340,10 @@ export function shouldRevalidate({
   ) {
     const cur = new URLSearchParams(currentUrl.search);
     const next = new URLSearchParams(nextUrl.search);
-    cur.delete("tab");
-    next.delete("tab");
+    for (const key of PROFILE_VIEW_ONLY_PARAMS) {
+      cur.delete(key);
+      next.delete(key);
+    }
     if (cur.toString() === next.toString()) return false;
   }
   return defaultShouldRevalidate;
@@ -344,7 +370,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       where: normalizedSlug
         ? sql`lower(${users.slug}) = ${normalizedSlug}`
         : sql`0 = 1`,
-      columns: { id: true, discordId: true, profileVisibility: true },
+      columns: { id: true, discordId: true, profileVisibility: true, mcid: true, showRankedStats: true },
     }),
   ]);
 
@@ -366,8 +392,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw new Response(t("playerProfile.notFound"), { status: 404 });
   }
 
+  // 本人判定（上の非公開プロフィール判定と同じ discordId 比較）
+  const isOwner = session?.user?.id === gate.discordId;
+
+  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
+  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
+  // gate.id だけで引けるため、重い player クエリと並列に走らせる
+  const presetsPromise = db.query.configPresets.findMany({
+    where: eq(configPresets.userId, gate.id),
+    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
+    columns: {
+      id: true,
+      name: true,
+      description: true,
+      isActive: true,
+      isMain: true,
+    },
+    extras: {
+      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
+      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
+    },
+  });
+
   // Fetch player with all related data（ゲートを通過した場合のみ、内部IDで重いクエリを実行）
-  const player = await db.query.users.findFirst({
+  const playerPromise = db.query.users.findFirst({
     where: eq(users.id, gate.id),
     with: {
       playerConfig: true,
@@ -406,54 +454,100 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   });
 
-  // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
-  if (!player) {
-    throw new Response(t("playerProfile.notFound"), { status: 404 });
-  }
-
-  // プリセット一覧を取得（メインを先頭に）。重量JSON列（*Data）はここでは取得せず、
-  // 選択されたプリセットが非アクティブな場合のみ後段で1件だけ取得する（2段フェッチ）。
-  const presets = await db.query.configPresets.findMany({
-    where: eq(configPresets.userId, player.id),
-    orderBy: [desc(configPresets.isMain), desc(configPresets.updatedAt)],
+  // プレイヤーの公開ガイドを取得（gate.id だけで引けるため player クエリと並列）
+  const guidesPromise = db.query.guides.findMany({
+    where: (g, { and, eq }) => and(eq(g.authorId, gate.id), eq(g.isPublished, true)),
+    // ピン留めを先頭に表示
+    orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
     columns: {
       id: true,
-      name: true,
-      description: true,
-      isActive: true,
-      isMain: true,
+      slug: true,
+      title: true,
+      summary: true,
+      tags: true,
+      coverImageUrl: true,
+      viewCount: true,
+      updatedAt: true,
+      isPinned: true,
     },
-    extras: {
-      hasItemLayouts: sql<number>`(${configPresets.itemLayoutsData} is not null)`.as("has_item_layouts"),
-      hasSearchCrafts: sql<number>`(${configPresets.searchCraftsData} is not null)`.as("has_search_crafts"),
-    },
+    extras: { likeCount: guideLikeCountSql().as("like_count") },
+  }).then(async (rows) => {
+    // ガイドの自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
+    const translations = await getGuideTranslations(db, rows.map((g) => g.id), viewerLocale);
+    return rows.map((g) => applyGuideTranslation(g, translations));
   });
+
+  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
+  const reactionsPromise = (async (): Promise<{
+    counts: ProfileReactionCount[];
+    viewerReactions: string[];
+    viewerHasAccount: boolean;
+  }> => {
+    // 本人なら gate.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
+    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
+    const viewerUserId = isOwner
+      ? gate.id
+      : session
+        ? ((await db.query.users.findFirst({
+            where: eq(users.discordId, session.user.id),
+            columns: { id: true },
+          }))?.id ?? null)
+        : null;
+    const [counts, viewerReactions] = await Promise.all([
+      getProfileReactionCounts(db, gate.id),
+      getViewerProfileReactions(db, gate.id, viewerUserId),
+    ]);
+    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
+  })();
+
+  // PaceManの統計情報を取得（MCIDがある場合のみ）
+  const pacemanPromise = (async () => {
+    if (!gate.mcid) return null;
+    try {
+      const [netherEnterCount, mainPaces] = await Promise.all([
+        getNetherEnterCount(gate.mcid),
+        getRecentPacesForPlayer(gate.mcid, 10),
+      ]);
+      return { netherEnterCount, mainPaces };
+    } catch (error) {
+      console.error("Failed to fetch PaceMan stats:", error);
+      return null;
+    }
+  })();
+
+  // Minefolio内 Elo 順位（rankings-query.server.ts の cron キャッシュ基準）。
+  // 公開プロフィール かつ Ranked統計を非表示にしていない場合のみ取得する
+  // （/rankings ranked_elo タブと同じ絞り込み条件 = getMinefolioEloRank 内で判定）
+  const eloRankPromise =
+    gate.profileVisibility !== "public" || gate.showRankedStats === false
+      ? Promise.resolve(null)
+      : getMinefolioEloRank(db, gate.id);
 
   // 表示プリセットの解決: `?preset=` が有効ならそのプリセット、
   // 無指定・不正・削除済みの場合はメイン（公開用）プリセットへフォールバック。
   // メインが無い場合（移行前データ等）は編集中プリセットへさらにフォールバック
-  const requestedPreset = presetId
-    ? presets.find((p) => p.id === presetId)
-    : undefined;
-  const selectedPreset =
-    requestedPreset ??
-    presets.find((p) => p.isMain) ??
-    presets.find((p) => p.isActive) ??
-    null;
-
-  // Check if current user is viewing their own profile
-  // （上の非公開プロフィール判定と同じ discordId 比較。player は既に取得済みのため再クエリ不要）
-  const isOwner = session?.user?.id === player.discordId;
+  const resolveSelectedPreset = (presets: Awaited<typeof presetsPromise>) => {
+    const requestedPreset = presetId
+      ? presets.find((p) => p.id === presetId)
+      : undefined;
+    return (
+      requestedPreset ??
+      presets.find((p) => p.isMain) ??
+      presets.find((p) => p.isActive) ??
+      null
+    );
+  };
 
   // アクティブプリセットはライブ設定と同内容（不変条件）のため、
   // 非アクティブなプリセットを選択した場合のみスナップショットを適用する。
   // 重量JSON列（*Data）はここで初めて1件だけ取得する（2段フェッチ）。
   // デコードは共通ヘルパー（preset-read.ts）に委譲: null の種別は「空」として表示し、
   // ライブ（編集中）データへはフォールバックしない（正準解釈。漏出防止）
-  const resolvePresetOverride = async () => {
-    if (!selectedPreset || selectedPreset.isActive) return null;
+  const presetOverridePromise = presetsPromise.then(async (presets) => {
+    const selected = resolveSelectedPreset(presets);
+    if (!selected || selected.isActive) return null;
     const presetSnapshot = await db.query.configPresets.findFirst({
-      where: eq(configPresets.id, selectedPreset.id),
+      where: eq(configPresets.id, selected.id),
       columns: {
         keybindingsData: true,
         playerConfigData: true,
@@ -466,89 +560,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         customActionsData: true,
       },
     });
-    return decodePresetConfig(presetSnapshot ?? {}, player.id);
-  };
+    return decodePresetConfig(presetSnapshot ?? {}, gate.id);
+  });
 
-  // プロフィール絵文字リアクション（docs/profile-reactions.md）。
-  const resolveProfileReactions = async (): Promise<{
-    counts: ProfileReactionCount[];
-    viewerReactions: string[];
-    viewerHasAccount: boolean;
-  }> => {
-    // 本人なら player.id をそのまま使う（追加クエリなし）。他人がログイン中の場合のみ
-    // discordId → 内部 userId を1回引く（session.user.id は Discord ID）
-    const viewerUserId = isOwner
-      ? player.id
-      : session
-        ? ((await db.query.users.findFirst({
-            where: eq(users.discordId, session.user.id),
-            columns: { id: true },
-          }))?.id ?? null)
-        : null;
-    const [counts, viewerReactions] = await Promise.all([
-      getProfileReactionCounts(db, player.id),
-      getViewerProfileReactions(db, player.id, viewerUserId),
-    ]);
-    return { counts, viewerReactions, viewerHasAccount: viewerUserId !== null };
-  };
-
-  // PaceManの統計情報を取得（MCIDがある場合のみ）
-  const resolvePacemanStats = async () => {
-    if (!player.mcid) return null;
-    try {
-      const [netherEnterCount, mainPaces] = await Promise.all([
-        getNetherEnterCount(player.mcid),
-        getRecentPacesForPlayer(player.mcid, 10),
-      ]);
-      return { netherEnterCount, mainPaces };
-    } catch (error) {
-      console.error("Failed to fetch PaceMan stats:", error);
-      return null;
-    }
-  };
-
-  // Minefolio内 Elo 順位（rankings-query.server.ts の cron キャッシュ基準）。
-  // 公開プロフィール かつ Ranked統計を非表示にしていない場合のみ取得する
-  // （/rankings ranked_elo タブと同じ絞り込み条件 = getMinefolioEloRank 内で判定）
-  const resolveMinefolioEloRank = async () => {
-    if (player.profileVisibility !== "public" || player.showRankedStats === false) return null;
-    return getMinefolioEloRank(db, player.id);
-  };
-
-  // プリセットスナップショットの解決・絵文字リアクション集計・公開ガイド一覧・PaceMan統計・
-  // Minefolio内順位は互いに独立したクエリのため、1つの Promise.all にまとめて並列実行する
+  // gate 通過後に必要なクエリはすべて互いに独立（gate.id・session だけで引ける）ため、
+  // 重い player クエリと一緒に1つの Promise.all で並列実行する
   // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
-  const [presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
-    resolvePresetOverride(),
-    resolveProfileReactions(),
-    // プレイヤーの公開ガイドを取得
-    db.query.guides.findMany({
-      where: (g, { and, eq }) => and(eq(g.authorId, player.id), eq(g.isPublished, true)),
-      // ピン留めを先頭に表示
-      orderBy: [desc(guides.isPinned), desc(guides.updatedAt)],
-      columns: {
-        id: true,
-        slug: true,
-        title: true,
-        summary: true,
-        tags: true,
-        coverImageUrl: true,
-        viewCount: true,
-        updatedAt: true,
-        isPinned: true,
-      },
-      extras: { likeCount: guideLikeCountSql().as("like_count") },
-    }).then(async (rows) => {
-      // ガイドの自動翻訳（docs/translation.md）。title / summary を訳文へ差し替える（使えない行は原文のまま）
-      const translations = await getGuideTranslations(db, rows.map((g) => g.id), viewerLocale);
-      return rows.map((g) => applyGuideTranslation(g, translations));
-    }),
-    resolvePacemanStats(),
-    resolveMinefolioEloRank(),
+  const [player, presets, presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
+    playerPromise,
+    presetsPromise,
+    presetOverridePromise,
+    reactionsPromise,
+    guidesPromise,
+    pacemanPromise,
+    eloRankPromise,
     // bio / shortBio の自動翻訳（docs/translation.md）。訳文が使えない（機能無効・opt-out・失効・
-    // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する
-    getUserBioTranslation(db, player, viewerLocale),
+    // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する。player 取得後に続けて走る
+    playerPromise.then((p) => (p ? getUserBioTranslation(db, p, viewerLocale) : null)),
   ]);
+
+  // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
+  if (!player) {
+    throw new Response(t("playerProfile.notFound"), { status: 404 });
+  }
+
+  const selectedPreset = resolveSelectedPreset(presets);
 
   let displayKeybindings = player.keybindings;
   let displayPlayerConfig = player.playerConfig;
@@ -597,6 +633,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
   const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
+  // 審査中の speedrun.com 記録（cron が保存済みの player_rankings から。外部APIは叩かない）。
+  // 非公開プロフィールは上のゲートで本人以外を弾き済み
+  const pendingSpeedrunRecords = await loadPendingSpeedrunRecords(db, gate.id, new Set(hiddenSpeedrunRecords));
+
   // 外部APIは呼び出さず、クライアント側で取得する
   return {
     appUrl: env.APP_URL || "https://minefolio.app",
@@ -605,6 +645,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: Date.now(),
     player: {
       ...player,
+      // 年代は公開設定のときだけ返す（非公開の値は本人を含めレスポンスに載せない）
+      ageGroup: publicAgeGroup(player),
+      ageGroupPublic: undefined,
       keybindings: displayKeybindings,
       playerConfig: displayPlayerConfig,
       keyRemaps: displayKeyRemaps,
@@ -618,6 +661,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     profileReactions,
     hiddenSpeedrunRecords,
     pinnedSpeedrunRecords,
+    pendingSpeedrunRecords,
     pacemanStats,
     minefolioEloRank,
     bioTranslation,
@@ -638,11 +682,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function PlayerProfilePage() {
   const t = useT();
   const locale = useLocale();
-  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pacemanStats, minefolioEloRank, bioTranslation, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
+  const { player, isOwner, profileReactions, hiddenSpeedrunRecords, pinnedSpeedrunRecords, pendingSpeedrunRecords, pacemanStats, minefolioEloRank, bioTranslation, presets, selectedPresetId, playerGuides, now } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const location = useLocation();
   const [skin3dOpen, setSkin3dOpen] = useState(false);
+  const [skinFallback, setSkinFallback] = useState(false);
+  // 初期設定（/onboarding）が終わっていない本人。ページはまだ公開されていない
+  const setupIncomplete = isOwner && !player.onboardingCompleted;
+  const ageGroup = parseAgeGroup(player.ageGroup);
   // 自己紹介（bio / shortBio）の自動翻訳。訳文があれば既定で訳文を出し、原文へ切り替えられる。
   // 切替はクライアント状態のみ（ローダーは訳文と原文の両方を返す）
   const [showBioOriginal, setShowBioOriginal] = useState(false);
@@ -717,14 +765,6 @@ export default function PlayerProfilePage() {
     if (customLabel) return customLabel;
     return getKeyLabel(t, keyCode);
   };
-  const resolveKeyCombinationLabel = (combo: string): string => {
-    if (!combo || combo === UNBOUND_KEY) return resolveKeyLabel(combo);
-    const parsed = parseKeyCombination(combo);
-    const keyLabel = resolveKeyLabel(parsed.keyCode);
-    if (parsed.modifiers.length === 0) return keyLabel;
-    const modifierLabels = parsed.modifiers.map((m) => MODIFIER_LABELS[m]);
-    return [...modifierLabels, keyLabel].join("+");
-  };
   // 同時押しを別 chip で並べるためのラベル配列ヘルパー
   const resolveKeyCombinationChips = (combo: string): string[] => {
     if (!combo || combo === UNBOUND_KEY) return [resolveKeyLabel(combo)];
@@ -737,20 +777,17 @@ export default function PlayerProfilePage() {
   type KeybindingDisplayGroup = {
     key: string;
     label: string;
-    colorClass: string;
     actions: string[];
   };
   const keybindingDisplayGroups: KeybindingDisplayGroup[] = [
     {
       key: "movement",
       label: t("playerProfile.movement"),
-      colorClass: getCategoryColorClass("movement"),
       actions: ["forward", "back", "left", "right", "jump", "sneak", "sprint"],
     },
     {
       key: "inventory",
       label: t("playerProfile.inventory"),
-      colorClass: getCategoryColorClass("inventory"),
       actions: [
         "hotbar1", "hotbar2", "hotbar3", "hotbar4", "hotbar5",
         "hotbar6", "hotbar7", "hotbar8", "hotbar9",
@@ -760,7 +797,6 @@ export default function PlayerProfilePage() {
     {
       key: "combat-ui",
       label: t("playerProfile.combatAndUi"),
-      colorClass: getCategoryColorClass("combat"),
       actions: ["attack", "use", "togglePerspective", "chat", "command", "fullscreen"],
     },
   ];
@@ -770,14 +806,12 @@ export default function PlayerProfilePage() {
   const keyboardLayout = (player.playerConfig?.keyboardLayout || "US") as KeyboardLayout;
 
   // ユーザーの指割り当てをパース（不正な JSON でも描画を壊さない）
-  const userFingerAssignments = useMemo(() => {
-    if (!player.playerConfig?.fingerAssignments) return {};
-    try {
-      return JSON.parse(player.playerConfig.fingerAssignments);
-    } catch {
-      return {};
-    }
-  }, [player.playerConfig?.fingerAssignments]);
+  const userFingerAssignments = useMemo(
+    () => parseFingerAssignments(player.playerConfig?.fingerAssignments),
+    [player.playerConfig?.fingerAssignments],
+  );
+  // 指色の割り当てが1つでもあるか（無い走者ではキーが指色で塗られないので、指色の凡例を出さない）
+  const hasFingerAssignments = Object.values(userFingerAssignments).some((fingers) => fingers.length > 0);
 
   // サーチクラフト（items JSON列をパース）。SearchCraftGroupedList・Loop 表示のクラフト
   // 参照解決の両方で使うため一度だけ計算する
@@ -873,15 +907,10 @@ export default function PlayerProfilePage() {
     [player.rtaStartedYearMonth, locale, now],
   );
 
-  const isTKL = keyboardLayout === "US_TKL" || keyboardLayout === "JIS_TKL";
+  const isTKL = isTklLayout(keyboardLayout);
 
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [guidesViewMode, setGuidesViewMode] = useState<"card" | "list">("card");
-
-  // スキン3Dビューワのサイズ（モバイルでは大きめに）
-  const isMobileSkinView = useMediaQuery(SKIN_VIEW_MOBILE_QUERY);
-  const skinViewSize = isMobileSkinView ? SKIN_VIEW_SIZE_MOBILE : SKIN_VIEW_SIZE_DESKTOP;
 
   // プレイスタイル: JSON列のパース・表示条件の判定（編集UI/me/playstyleと共有のヘルパーを使用）
   const playstyleVersions = useMemo(
@@ -900,6 +929,7 @@ export default function PlayerProfilePage() {
   const playstyleMainVersion = isVersionKey(playstyleMainVersionRaw) ? playstyleMainVersionRaw : null;
   const playstyleMainCategoryRaw = player.playstyle?.mainCategory;
   const playstyleMainCategory = isCategoryKey(playstyleMainCategoryRaw) ? playstyleMainCategoryRaw : null;
+  const mainCategoryKey = playstyleMainCategory;
   const showPlaystyleClickMethods = isKbmPlaystyle(player.inputMethod) && playstyleClickMethods.length > 0;
   const showPlaystyleMousepad = isKbmPlaystyle(player.inputMethod) && !!player.playstyle?.usesMousepad;
   const showPlaystyleJavaRsgRanked = playsJavaRsgOrRanked(playstyleVersions, playstyleCategories);
@@ -925,7 +955,7 @@ export default function PlayerProfilePage() {
                   {edition === "java" ? "Java" : "Bedrock"}
                 </span>
                 {keys.map((v) => (
-                  <Badge key={v} variant={v === playstyleMainVersion ? "default" : "secondary"}>
+                  <Badge key={v} variant="secondary" className={cn(v === playstyleMainVersion && "font-bold")}>
                     {versionLabel(v)}
                     {v === playstyleMainVersion && t("playerProfile.playstyleMainSuffix")}
                   </Badge>
@@ -943,7 +973,7 @@ export default function PlayerProfilePage() {
       value: (
         <div className="flex flex-wrap gap-2">
           {playstyleCategories.map((c) => (
-            <Badge key={c} variant={c === playstyleMainCategory ? "default" : "secondary"}>
+            <Badge key={c} variant="secondary" className={cn(c === playstyleMainCategory && "font-bold")}>
               {categoryLabel(t, c)}
               {c === playstyleMainCategory && t("playerProfile.playstyleMainSuffix")}
             </Badge>
@@ -953,7 +983,7 @@ export default function PlayerProfilePage() {
     });
   }
 
-  const playstyleControlsRows: { label: string; value: ReactNode }[] = [];
+  const playstyleControlsRows: { label: ReactNode; value: ReactNode }[] = [];
   if (player.inputMethod) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleInputMethod"),
@@ -968,7 +998,14 @@ export default function PlayerProfilePage() {
   }
   if (player.playstyle?.halfShift) {
     playstyleControlsRows.push({
-      label: t("playerProfile.playstyleHalfShift"),
+      label: (
+        <span className="inline-flex items-center gap-1">
+          {t("playerProfile.playstyleHalfShift")}
+          <HintTip message={t("playerProfile.halfShiftHint")} className="text-muted-foreground">
+            <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+          </HintTip>
+        </span>
+      ),
       value: playstyleOptionLabel(t, FREQUENCY_OPTIONS, player.playstyle.halfShift),
     });
   }
@@ -981,7 +1018,7 @@ export default function PlayerProfilePage() {
   if (showPlaystyleClickMethods && playstyleClickMethods.includes("drag") && player.playstyle?.dragTapeType) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleDragTapeType"),
-      value: player.playstyle.dragTapeType,
+      value: <LinkifiedText text={player.playstyle.dragTapeType} />,
     });
   }
   if (showPlaystyleMousepad) {
@@ -993,11 +1030,11 @@ export default function PlayerProfilePage() {
   if (showPlaystyleMousepad && player.playstyle?.usesMousepad === "uses" && player.playstyle?.mousepadType) {
     playstyleControlsRows.push({
       label: t("playerProfile.playstyleMousepadType"),
-      value: player.playstyle.mousepadType,
+      value: <LinkifiedText text={player.playstyle.mousepadType} />,
     });
   }
 
-  const playstyleTechniqueRows: { label: string; value: ReactNode }[] = [];
+  const playstyleTechniqueRows: { label: string; value: ReactNode; plain?: boolean }[] = [];
   if (player.playstyle?.itemLayoutPolicy) {
     playstyleTechniqueRows.push({
       label: t("playerProfile.playstyleItemLayoutPolicy"),
@@ -1010,12 +1047,9 @@ export default function PlayerProfilePage() {
       value: playstyleOptionLabel(t, SEARCH_CRAFT_OPTIONS, player.playstyle.searchCraft),
     });
   }
-  if (showPlaystyleGameLanguage) {
-    playstyleTechniqueRows.push({
-      label: t("playerProfile.gameLanguage"),
-      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
-    });
-  }
+  // ゲーム言語は、ほかの行があるときだけ入れる（言語だけではテクニックの欄を作らない。言語はデバイスタブに出る）。
+  // 位置は searchCraft の次なので、入れる場所を覚えておき、最後に差し込む
+  const languageRowIndex = playstyleTechniqueRows.length;
   if (showPlaystyleJavaRsgRanked && player.playstyle?.zeroCycle) {
     playstyleTechniqueRows.push({
       label: t("playerProfile.playstyleZeroCycle"),
@@ -1041,28 +1075,100 @@ export default function PlayerProfilePage() {
     });
   }
 
+  if (showPlaystyleGameLanguage && playstyleTechniqueRows.length > 0) {
+    playstyleTechniqueRows.splice(languageRowIndex, 0, {
+      label: t("playerProfile.gameLanguage"),
+      value: getGameLanguageName(t, locale, player.playerConfig?.gameLanguage ?? ""),
+      plain: true,
+    });
+  }
+
   const hasPlaystylePlayContent = playstylePlayContentRows.length > 0;
   const hasPlaystyleControls = playstyleControlsRows.length > 0;
   const hasPlaystyleTechnique = playstyleTechniqueRows.length > 0;
+  // プレイスタイルの欄は lg で2列。1行目（表示される最初の2欄）は罫線なし、1列の間は最初の1欄だけ罫線なし
+  const playstyleVisible = [hasPlaystylePlayContent, hasPlaystyleControls, hasPlaystyleTechnique];
+  const playstyleSectionFirst = playstyleVisible.map((shown, i) => shown && playstyleVisible.slice(0, i).every((v) => !v));
+  const playstyleSectionClass = playstyleVisible.map((shown, i) =>
+    shown && playstyleVisible.slice(0, i).filter(Boolean).length === 1 ? "lg:border-t-0 lg:pt-0" : undefined,
+  );
   const hasPlaystyleData = hasPlaystylePlayContent || hasPlaystyleControls || hasPlaystyleTechnique;
 
-  // タブ項目の定義（編集画面のメニュー順に合わせる）。
+  // デバイスタブ: 中身のあるカードだけ出す（閲覧者に空カードを見せない）
+  const pc = player.playerConfig;
+  const hasKeyboardInfo = !!(pc?.keyboardModel || pc?.keyboardLayout);
+  // 感度だけ登録している人もマウスカードを出す（各行は値が無ければ行ごと省くか「-」を表示する）
+  const hasMouseInfo = !!(
+    pc?.mouseModel ||
+    pc?.mouseDpi ||
+    pc?.gameSensitivity != null ||
+    pc?.windowsSpeed != null ||
+    pc?.windowsSpeedMultiplier != null
+  );
+  const hasInGameSettings =
+    pc != null &&
+    (pc.toggleSprint != null ||
+      pc.toggleSneak != null ||
+      pc.autoJump != null ||
+      !!pc.gameLanguage ||
+      pc.fov != null ||
+      pc.guiScale != null ||
+      !!pc.notes);
+  const hasDevicesData = hasKeyboardInfo || hasMouseInfo || hasInGameSettings;
+
+  // 各タブの「中身あり」。パネルが EmptyState を出す条件と同じ真偽値を使い、ホットバーの空スロット表示と一致させる
+  // 概要は、最終更新・リアクション以外に描く物があるか
+  const hasOverviewData = !!(
+    player.uuid || player.customSkinUrl || player.bedrockMcid || displayShortBio ||
+    player.role || player.mainEdition || player.mainPlatform || player.inputMethod ||
+    player.location || player.pronouns || ageGroup || rtaCareer ||
+    player.socialLinks.length > 0 || displayBio || displayVideos.length > 0
+  );
+  const hasKeybindingsData = player.keybindings.length > 0;
+  const hasItemLayoutsData = player.itemLayouts.length > 0;
+  const hasSearchCraftData = player.searchCrafts.length > 0;
+  const hasGuidesData = playerGuides.length > 0;
+  const hasDevicesPanelData = !!player.playerConfig && hasDevicesData;
+  // 記録タブはクライアント側で外部統計（Ranked / PaceMan / speedrun.com）を取得するため、取得前は空と断定できない。
+  // MCID も speedrun.com ユーザー名も無ければ外部統計は未登録相当で確定するので、その場合のみ手入力記録・審査中記録で判定する
+  const hasStatsDataKnown =
+    !!player.mcid ||
+    !!player.speedruncomUsername ||
+    player.categoryRecords.length > 0 ||
+    pendingSpeedrunRecords.length > 0;
+
+  // タブ項目の定義（/me のメニュー順と同じ。人物系 → セットアップ系の 2 群）。
   // サーチクラフトタブは「しない」設定時のみ非表示にする（null=未回答は表示する）
   const hideSearchCraftTab = hidesSearchCraft(player.playstyle?.searchCraft);
-  const tabItems = [
-    { value: "stats", icon: BarChart3, label: t("playerProfile.activityAndStats") },
-    { value: "playstyle", icon: Gamepad2, label: t("playerProfile.playstyleTab") },
-    { value: "keybindings", icon: Keyboard, label: t("playerProfile.keybindingsTab") },
-    { value: "devices", icon: Mouse, label: t("playerProfile.devicesTab") },
-    { value: "items", icon: Package, label: t("playerProfile.itemLayoutsTab") },
+  const tabItems: ProfileHotbarItem[] = [
+    { value: "profile", icon: User, shortLabel: t("playerProfile.hotbarOverview"), label: t("playerProfile.hotbarOverview"), empty: !hasOverviewData, group: "person" },
+    { value: "stats", icon: BarChart3, shortLabel: t("playerProfile.hotbarRecords"), label: t("playerProfile.activityAndStats"), empty: !hasStatsDataKnown, group: "person" },
+    { value: "guides", icon: BookOpen, shortLabel: t("playerProfile.hotbarGuides"), label: t("playerProfile.guidesTab"), empty: !hasGuidesData, group: "person" },
+    { value: "playstyle", icon: Gamepad2, shortLabel: t("playerProfile.hotbarStyle"), label: t("playerProfile.playstyleTab"), empty: !hasPlaystyleData, group: "setup" },
+    { value: "keybindings", icon: Keyboard, shortLabel: t("playerProfile.hotbarKeys"), label: t("playerProfile.keybindingsTab"), empty: !hasKeybindingsData, group: "setup" },
+    { value: "devices", icon: Mouse, shortLabel: t("playerProfile.hotbarDevices"), label: t("playerProfile.devicesTab"), empty: !hasDevicesPanelData, group: "setup" },
+    { value: "items", icon: Package, shortLabel: t("playerProfile.hotbarItems"), label: t("playerProfile.itemLayoutsTab"), empty: !hasItemLayoutsData, group: "setup" },
     ...(hideSearchCraftTab
       ? []
-      : [{ value: "searchcraft", icon: Search, label: t("playerProfile.searchCraftTab") }]),
-    { value: "guides", icon: BookOpen, label: t("playerProfile.guidesTab") },
+      : [{ value: "searchcraft", icon: Search, shortLabel: t("playerProfile.hotbarSearch"), label: t("playerProfile.searchCraftTab"), empty: !hasSearchCraftData, group: "setup" as const }]),
   ];
 
+  const allTabsEmpty = tabItems.every((i) => i.empty);
+
   // 有効なタブ値のリスト
-  const validTabs = ["profile", ...tabItems.map((t) => t.value)];
+  const validTabs = tabItems.map((i) => i.value);
+
+  // 現在のタブ名（タブパネルのアクセシブルネーム用）。ホットバーのトリガー名は「未登録」が付くことがあるため、パネルには素のタブ名を明示する
+  const tabLabelOf = (value: string) => tabItems.find((i) => i.value === value)?.label ?? "";
+  // パネルの名前はタブタイトル（h2）を参照する
+  const panelA11yProps = (value: string) => ({ "aria-labelledby": `profile-tab-title-${value}` });
+
+  // ログイン中の自分の slug（共通レイアウトのローダーが既に返している。追加の取得なし）。未ログイン・未オンボーディングは null
+  const viewerSlug = useRouteLoaderData<typeof layoutLoader>("routes/_layout")?.user?.slug ?? null;
+  const compareToViewerHref =
+    viewerSlug && viewerSlug !== player.slug
+      ? `/compare?p1=${player.slug}&p2=${viewerSlug}`
+      : null;
 
   // URLパラメータ `tab` を唯一の指定元とする（共有・ブックマーク・戻る/進むに対応）。
   // 不正値や未指定時は defaultProfileTab にフォールバック。defaultProfileTab 自体が無効
@@ -1076,13 +1182,21 @@ export default function PlayerProfilePage() {
 
   // 描画はローカル状態で即時反映しつつ、URL（戻る/進む等）の変化に追従させる。
   const [activeTab, setActiveTab] = useState(resolvedTab);
+  // タブ切替時だけ新しい中身を 150ms フェードインさせる。初回表示（SSR・ハイドレーション・`?tab=` 直開き）は
+  // false のままで動かさない。パネルは hidden 属性で隠れており、表示に戻るたびに CSS アニメーションが再生される
+  const [tabFade, setTabFade] = useState(false);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   useEffect(() => {
+    // 初回マウント時は activeTab === resolvedTab なので何もしない。戻る/進むで URL 由来の値が変わったときだけ切替扱いにする
+    if (resolvedTab !== activeTabRef.current) setTabFade(true);
     setActiveTab(resolvedTab);
   }, [resolvedTab]);
 
   // タブ変更ハンドラー: 即時にローカル反映し、URL の `tab` パラメータも更新する。
   // （`shouldRevalidate` により loader は再実行されない）
   const handleTabChange = (tab: string) => {
+    if (tab !== activeTab) setTabFade(true);
     setActiveTab(tab);
     setSearchParams(
       (prev) => {
@@ -1090,158 +1204,290 @@ export default function PlayerProfilePage() {
         next.set("tab", tab);
         return next;
       },
+      { preventScrollReset: true },
+    );
+  };
+
+  // 訪問者向けの空状態の案内: この走者で中身のある他のタブ（最大3つ。概要は最後）へ切り替えるボタン。
+  // 本人には出さない（登録への導線 OwnerEditAction を出す）。中身のあるタブが無ければ何も出さない
+  const visitorSuggestTabs = [
+    ...tabItems.filter((i) => !i.empty && i.value !== activeTab && i.value !== "profile"),
+    ...tabItems.filter((i) => !i.empty && i.value !== activeTab && i.value === "profile"),
+  ].slice(0, 3);
+  const visitorEmptyAction =
+    !isOwner && visitorSuggestTabs.length > 0 ? (
+      <div className="flex flex-wrap items-center justify-center gap-2 px-4">
+        <span className="w-full text-xs text-muted-foreground">{t("playerProfile.emptySuggestTabs")}</span>
+        {visitorSuggestTabs.map((item) => (
+          <Button key={item.value} type="button" size="sm" variant="outline" onClick={() => handleTabChange(item.value)}>
+            <item.icon className="h-4 w-4" aria-hidden />
+            {item.shortLabel}
+          </Button>
+        ))}
+      </div>
+    ) : undefined;
+
+  // 審査中記録のトグル: URL の `srcPending=1` が指定元（共有・再訪に対応）。履歴は汚さない。
+  // スイッチはタブと同じくローカル状態で即時に切り替え、URL の変化（「審査中の記録を見る」リンク等）に追従させる。
+  // URL だけを読むと、ナビゲーションが終わる（root / _layout の loader が返る）まで切り替わって見えないため
+  // （profile の loader は shouldRevalidate で再実行しない）
+  const pendingFromUrl = searchParams.get("srcPending") === "1";
+  const [showPending, setShowPending] = useState(pendingFromUrl);
+  useEffect(() => {
+    setShowPending(pendingFromUrl);
+  }, [pendingFromUrl]);
+  const handleShowPendingChange = (show: boolean) => {
+    setShowPending(show);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (show) next.set("srcPending", "1");
+        else next.delete("srcPending");
+        return next;
+      },
       { preventScrollReset: true, replace: true },
     );
   };
 
   // プリセット選択を表示するタブ（プリセットが1件も無い場合はセレクタ自体を出さない）
+  // アイテム配置・サーチクラフトは、表示中が空でどのプリセットにも中身が無いときは選択自体が無意味なので出さない
+  // （プリセット一覧が種別ごとの有無フラグを持つ。他プリセットに中身があれば切替先として残す）
   const presetTabs = ["keybindings", "devices", "items", "searchcraft"];
-  const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab);
+  const presetTabHasNothing =
+    (activeTab === "items" && !hasItemLayoutsData && !presets.some((p) => p.hasItemLayouts)) ||
+    (activeTab === "searchcraft" && !hasSearchCraftData && !presets.some((p) => p.hasSearchCrafts));
+  const showPresetSelector = presets.length > 0 && presetTabs.includes(activeTab) && !presetTabHasNothing;
+
+  // アイテム配置タブのホットバー下に出す「押すキー」（hotbar1〜9 の割り当て。キー配置タブと同じ解決）。
+  // キー配置が未登録なら渡さず、番号表示のままにする
+  const hotbarKeyLabels: Partial<Record<number, string>> | undefined = hasKeybindingsData
+    ? Object.fromEntries(
+        Array.from({ length: 9 }, (_, i) => {
+          const kb = keybindingsByAction.get(`hotbar${i + 1}`);
+          return [i + 1, kb && kb.keyCode !== UNBOUND_KEY ? resolveKeyLabel(kb.keyCode) : undefined] as const;
+        }),
+      )
+    : undefined;
 
   // メイン以外のプリセットを表示中か（「プリセット表示中」バッジ用)。
   // メインプリセットは既定表示そのものなのでバッジは出さない。
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
   const isViewingPresetSnapshot = !!selectedPreset && !selectedPreset.isMain;
 
+  // プリセット選択（箱にせず、タブパネルの一番上・右寄せに1行で置く小さなセレクト。
+  // キー配置・デバイス・アイテム・サーチクラフトで同じ位置、空状態のタブでも同じ）。表示条件は showPresetSelector
+  // lg 以上はホットバーの行の右端（ProfileHotbarTabs の trailing）、lg 未満はパネル上端の右に1行（下端ドックには入れない）。
+  // 同じ部品を2か所に描き、表示側を CSS（max-lg:hidden / lg:hidden）で切り替える
+  // メインの印（「 (メイン)」）。名前がメインの表示そのもの（「メイン」）なら重ねて付けない（「メイン (メイン)」を避ける）
+  const presetMainLabel = t("playerProfile.presetMainLabel").toLowerCase();
+  const presetOptionLabel = (preset: { name: string; isMain: boolean }) =>
+    preset.isMain && preset.name.trim().toLowerCase() !== presetMainLabel
+      ? `${preset.name}${t("playerProfile.presetMainSuffix")}`
+      : preset.name;
+  const presetSelectorNode = showPresetSelector ? (
+    <div className="flex min-w-0 items-center justify-end gap-2">
+      <Select value={selectedPresetId ?? ""} onValueChange={handlePresetChange}>
+        <SelectTrigger size="sm" aria-label={t("playerProfile.preset")} className="w-auto min-w-0 max-w-[min(100%,16rem)] sm:max-w-56">
+          <SelectValue placeholder={t("playerProfile.currentSetting")}>
+            {/* SSR の最初の描画から名前を出す（children なしだと選択項目の描画がハイドレーション後になり空のピルになる） */}
+            {selectedPreset ? presetOptionLabel(selectedPreset) : undefined}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {presets.map((preset) => (
+            <SelectItem key={preset.id} value={preset.id}>
+              {presetOptionLabel(preset)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isViewingPresetSnapshot && (
+        <Badge variant="secondary" className="text-xs max-md:hidden">
+          {t("playerProfile.presetViewing")}
+        </Badge>
+      )}
+    </div>
+  ) : null;
+  const presetSelector = presetSelectorNode ? <div className="lg:hidden">{presetSelectorNode}</div> : null;
+
+  // サーチクラフトのアイテム名を閲覧者の言語で表示するトグル（状態はこの state だけ。保存しない）。
+  // 既定は走者のゲーム言語（未設定は日本語）のまま。サーチ文字列・キー列は言語に依らず不変。
+  // 走者の言語が閲覧者の言語と同じときはボタン自体を出さない
+  const [searchCraftViewerLang, setSearchCraftViewerLang] = useState(false);
+  useEffect(() => {
+    setSearchCraftViewerLang(false);
+  }, [player.id]);
+  const viewerItemLang = itemLangForLocale(locale);
+  const runnerItemLang = player.playerConfig?.gameLanguage || "ja_jp";
+  const canToggleSearchCraftLang = runnerItemLang !== viewerItemLang;
+
+  // キー配置タブの仮想キーボード共通 props（デスクトップ版・モバイル版・拡大 Dialog で共有）
+  const vkCommon = {
+    fingerAssignments: userFingerAssignments,
+    remaps: remapsForKeyboard,
+    customActions: player.customActions,
+    showActionLabels: true,
+    showFingerAssignments: true,
+    showRemaps: true,
+  } as const;
+  const keyboardMainProps = { ...vkCommon, layout: keyboardLayout, keybindings: keybindingsMap, customKeys: customKeyboardKeys };
+  // 下の段（ナビは「下の段にナビ」版のときだけ）: ナビ → テンキー → マウス
+  const keyboardLowerRow = (showNav: boolean, navClassName?: string) => (
+    <div className="flex items-start gap-6">
+      {showNav && (
+        <div className={navClassName}>
+          <VirtualKeyboard {...keyboardMainProps} section="nav" />
+        </div>
+      )}
+      {!isTKL && (
+        <VirtualNumpad keybindings={keybindingsMap} {...vkCommon} />
+      )}
+      <VirtualMouse keybindings={keybindingsMap} {...vkCommon} customButtons={customButtons} />
+    </div>
+  );
+  // モバイル版の中身（縮小表示・拡大 Dialog 用。実寸固定で container query は使わない）
+  const keyboardMobileLayout = (
+    <div className="flex flex-col items-start gap-4">
+      <VirtualKeyboard {...keyboardMainProps} section="main" hideNumpad />
+      {keyboardLowerRow(true)}
+    </div>
+  );
+  const skipToKeyList = () => {
+    const heading = document.getElementById("profile-keylist-heading");
+    if (!heading) return;
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+  };
+
   return (
     <>
-    {/* Mobile Menu Toggle — extracted outside Tabs for reliable sticky behavior */}
-    <div className="lg:hidden sticky top-16 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-2 pt-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border/40">
-      <Button
-        variant="outline"
-        className="w-full justify-between h-14 py-3 touch-manipulation"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-      >
-        <div className="flex items-center gap-3">
-          {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く */}
-          <MinecraftAvatar
-            uuid={player.uuid}
-            skinUrl={player.customSkinUrl}
-            mcid={player.mcid}
-            size={32}
-            className="rounded"
-          />
-          <div className="text-left">
-            <p className="font-medium text-sm">{playerName}</p>
-            {player.mcid && <p className="text-xs text-muted-foreground">@{player.mcid}</p>}
-            {player.bedrockMcid && (
-              <p className="text-xs text-muted-foreground">
-                {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
-              </p>
+    {/* ホットバー型タブ（activationMode="manual": 矢印キーはフォーカス移動のみ、Enter/Space で切替）。
+        身元帯・ホットバー・パネルの縦並び。フォルダ型ではないので間隔は gap で取る */}
+    <Tabs value={activeTab} onValueChange={handleTabChange} activationMode="manual" className="flex flex-col gap-4 md:gap-6 overflow-visible rounded-none border-0 bg-transparent [&_[id]]:scroll-mt-0">
+
+      {/* 初期設定が未完了の本人だけに出す。このページはまだ公開されていない */}
+      {setupIncomplete && (
+        <NoticeBanner tone="warning" icon={Info}>
+          <p>{t("playerProfile.setupIncompleteNotice")}</p>
+          <Link to="/onboarding" className="mt-1 inline-block min-h-6 font-medium text-primary underline underline-offset-4 hover:text-primary/80">
+            {t("playerProfile.setupIncompleteLink")}
+          </Link>
+        </NoticeBanner>
+      )}
+
+      {/* 身元帯（全タブ共通。h1 はここだけ） */}
+      <div className="space-y-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 md:space-y-4 md:p-5">
+        {/* md 未満は操作ボタン（アイコンのみ）を名前の右に置き、名前に十分な幅（アバター 40px＋gap 12px＋
+            名前 約 124px ＝ 11rem）を取れないときだけ操作ボタンを次の行へ折り返す。
+            basis にアバターぶんを含めるので、7.5rem だと名前が約 50px しか取れず切れていた。
+            それでも収まらない長い名前は切らずに折り返す（h1 の break-words） */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 md:gap-6">
+          <div className="flex min-w-0 flex-1 basis-[11rem] items-center gap-3 md:basis-auto md:gap-4">
+            {/* MCID未登録（uuid も customSkinUrl も無し）は MinecraftAvatar 側でプレースホルダーを描く。
+                size は描画解像度を決める数値 prop なので、md 未満 40px / 以上 64px を CSS で出し分ける
+                （useMediaQuery だと SSR は 64px で描かれ、モバイルでハイドレーション後に縮んで跳ねる） */}
+            <MinecraftAvatar
+              uuid={player.uuid}
+              skinUrl={player.customSkinUrl}
+              mcid={player.mcid}
+              size={40}
+              alt=""
+              className="shrink-0 rounded md:hidden"
+            />
+            <MinecraftAvatar
+              uuid={player.uuid}
+              skinUrl={player.customSkinUrl}
+              mcid={player.mcid}
+              size={64}
+              alt=""
+              className="shrink-0 rounded max-md:hidden"
+            />
+            <div className="min-w-0">
+              <h1 className="break-words text-2xl font-bold md:text-3xl">{playerName}</h1>
+              {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
+              {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
+                <p className="truncate text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
+              )}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                {player.mcid && <span className="truncate">@{player.mcid}</span>}
+                {mainCategoryKey && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("playstyle")}
+                    className="relative inline-flex min-h-6 items-center rounded-full border border-border/70 bg-background/75 px-2.5 py-0.5 text-xs transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] sm:after:hidden"
+                  >
+                    {categoryLabel(t, mainCategoryKey)}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 操作（md 未満はアイコンのみ。タップ領域は 44px 以上、ラベルは sr-only で残す） */}
+          <div className="flex shrink-0 gap-1 max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_button]:min-h-11 max-md:[&_button]:min-w-11 md:flex-wrap md:gap-2">
+            {isOwner && (
+              <Button asChild size="sm">
+                <Link to="/me/edit">
+                  <Pencil className="h-4 w-4 md:mr-2" aria-hidden />
+                  <span className="max-md:sr-only">{t("playerProfile.edit")}</span>
+                </Link>
+              </Button>
+            )}
+            {/* 自分自身はお気に入りに入れない。初期設定が未完了のページは未公開なので共有も出さない */}
+            {!isOwner && <FavoriteButton slug={player.slug} />}
+            {!setupIncomplete && (
+              <ShareButton
+                title={`${playerName} - Minefolio`}
+                description={displayShortBio ?? undefined}
+                includeTab={true}
+                compactOnMobile
+              />
             )}
           </div>
         </div>
-        {mobileMenuOpen ? <X className="h-4 w-4" /> : <ChevronsDown className="h-4 w-4" />}
-      </Button>
 
-      {/* Mobile Menu Dropdown */}
-      {mobileMenuOpen && (
-        <div className="mt-2 p-2 border rounded-xl bg-background space-y-1">
-          <button
-            className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === "profile" ? "bg-secondary font-medium" : "hover:bg-muted")}
-            onClick={() => { handleTabChange("profile"); setMobileMenuOpen(false); }}
-          >
-            <User className="h-4 w-4 shrink-0" />
-            <span>{t("playerProfile.profile")}</span>
-          </button>
-          {tabItems.map((item) => (
-            <button
-              key={item.value}
-              className={cn("flex items-center w-full gap-3 px-3 py-2 rounded-md text-sm transition-colors", activeTab === item.value ? "bg-secondary font-medium" : "hover:bg-muted")}
-              onClick={() => { handleTabChange(item.value); setMobileMenuOpen(false); }}
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+        <ProfileHighlights
+          mcid={player.mcid}
+          showRankedStats={player.showRankedStats !== false}
+          mainCategory={player.playstyle?.mainCategory}
+          records={player.categoryRecords}
+          config={player.playerConfig}
+          speedruncomUsername={player.speedruncomUsername}
+          searchCraftLevel={player.playstyle?.searchCraft}
+          searchCraftCount={player.searchCrafts.length}
+          gameLanguage={player.playerConfig?.gameLanguage}
+          hiddenSpeedrunRecords={hiddenSpeedrunRecords}
+          pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+          rankedRegisteredKnown={!!minefolioEloRank}
+          onSelectTab={handleTabChange}
+        />
+      </div>
 
-    {/* 縦サイドバー構成のためルートのカード化は打ち消す（パネル側が個別にカードになる） */}
-    <Tabs value={activeTab} onValueChange={handleTabChange} orientation="vertical" className="flex flex-col lg:flex-row gap-6 overflow-visible rounded-none border-0 bg-transparent">
+      <ProfileHotbarTabs
+        items={tabItems}
+        activeValue={activeTab}
+        onSelect={handleTabChange}
+        trailing={presetSelectorNode}
+        leading={
+          <>
+            <MinecraftAvatar uuid={player.uuid} skinUrl={player.customSkinUrl} mcid={player.mcid} size={28} alt="" className="shrink-0 rounded" />
+            {/* 名前は xl 以上だけ（1024px 前後は8スロット＋プリセットでバー幅が埋まるためアバターだけ）。1行で切る */}
+            <span className="hidden max-w-40 truncate text-sm font-semibold xl:block">{playerName}</span>
+          </>
+        }
+      />
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-56 shrink-0">
-        {/* 初期位置と一致させ、スクロール時にサイドバーが滑らないようにする（ヘッダー65px+メイン上余白32px≈96px） */}
-        <div className="sticky top-24 space-y-4">
-          <TabsList className="m-0 w-full flex-col items-stretch gap-1 overflow-visible bg-transparent p-0">
-            {/* Profile Tab with Avatar */}
-            <TabsTrigger
-              value="profile"
-              className="h-auto w-full justify-start gap-3 rounded-md px-3 py-3 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
-            >
-              <MinecraftAvatar
-                uuid={player.uuid}
-                skinUrl={player.customSkinUrl}
-                mcid={player.mcid}
-                size={40}
-                className="rounded shrink-0"
-              />
-              <div className="text-left min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{playerName}</p>
-                {player.mcid && <p className="text-xs text-muted-foreground truncate">@{player.mcid}</p>}
-                {player.bedrockMcid && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
-                  </p>
-                )}
-                {displayShortBio && (
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{displayShortBio}</p>
-                )}
-              </div>
-            </TabsTrigger>
-
-            <Separator className="my-2" />
-
-            {/* Other Tabs */}
-            {tabItems.map((item) => (
-              <TabsTrigger
-                key={item.value}
-                value={item.value}
-                className="h-auto w-full justify-start gap-3 rounded-md px-3 py-2 data-[state=inactive]:border-transparent data-[state=inactive]:bg-transparent data-[state=active]:border-b-border before:left-0 before:right-auto before:top-2 before:bottom-2 before:h-auto before:w-0.5"
-              >
-                <item.icon className="h-4 w-4 shrink-0" />
-                <span>{item.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {/* Preset Selector in Sidebar */}
-          {showPresetSelector && (
-            <div className="p-3 border rounded-lg space-y-2 bg-card">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Save className="h-3 w-3" />
-                <span>{t("playerProfile.preset")}</span>
-              </div>
-              <Select
-                value={selectedPresetId ?? ""}
-                onValueChange={handlePresetChange}
-              >
-                <SelectTrigger className="w-full text-sm">
-                  <SelectValue placeholder={t("playerProfile.currentSetting")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {presets.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.name}
-                      {preset.isMain && t("playerProfile.presetMainSuffix")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isViewingPresetSnapshot && (
-                <Badge variant="secondary" className="text-xs w-full justify-center">
-                  {t("playerProfile.presetViewing")}
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <div className="flex-1 min-w-0 space-y-6 relative">
+      {/* Main Content。切替後だけ、表示に戻ったパネルを opacity でフェードする（パネルは hidden 属性で隠れており、
+          display:none から表示に戻るときに CSS アニメーションが再生される。退場なし・reduced-motion は app.css の全体ルールで即時） */}
+      <div
+        className={cn(
+          "flex-1 min-w-0 space-y-6 relative",
+          tabFade &&
+            // 退場するパネル（data-state=inactive）に animation-name を付けない。付けると Radix の Presence が
+            // 「退場アニメーションあり」と見なして animationend まで unmount を待ち、旧パネルが display:block のまま残る
+            "[&>[role=tabpanel][data-state=active]]:animate-in [&>[role=tabpanel][data-state=active]]:fade-in [&>[role=tabpanel][data-state=active]]:duration-150 [&>[role=tabpanel][data-state=active]]:ease-out",
+        )}
+      >
         {/* プリセット切替中のオーバーレイ（メインコンテンツ全体を覆う） */}
         {isSwitchingPreset && (
           <div
@@ -1256,137 +1502,27 @@ export default function PlayerProfilePage() {
           </div>
         )}
 
-        {/* Mobile Preset Selector */}
-        {showPresetSelector && (
-          <div className="lg:hidden flex items-center gap-3 p-3 border rounded-lg bg-card">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Save className="h-4 w-4" />
-              <span>{t("playerProfile.presetWithColon")}</span>
-            </div>
-            <Select
-              value={selectedPresetId ?? ""}
-              onValueChange={handlePresetChange}
-            >
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder={t("playerProfile.currentSetting")} />
-              </SelectTrigger>
-              <SelectContent>
-                {presets.map((preset) => (
-                  <SelectItem key={preset.id} value={preset.id}>
-                    {preset.name}
-                    {preset.isMain && t("playerProfile.presetMainSuffix")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
         {/* Profile Tab */}
-        <TabsContent value="profile" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {/* Header: Skin + Basic Info */}
-          <Card className="py-5">
-            <CardContent className="px-5">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-                {/* Skin - uuid か customSkinUrl があれば従来どおり。どちらも無い（MCID未登録）なら
-                    黒スキンのプレースホルダーを静止画で出し、直下に注釈を添える（3D 閲覧は無し） */}
-                {player.uuid || player.customSkinUrl ? (() => {
-                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
-                  const skinProps = {
-                    // customSkinUrl だけのユーザーもここに来るので uuid は null を許容する
-                    uuid: player.uuid ?? undefined,
-                    skinUrl: player.customSkinUrl ?? undefined,
-                    mcid: player.mcid ?? undefined,
-                    pose: (player.profilePose as PoseName) ?? "waving",
-                    slim:
-                      player.customSkinModel === "slim" || player.slimSkin || false,
-                    angle: -35,
-                    elevation: 5,
-                    zoom: 0.9,
-                    // カスタムマント → Mojang のマント → なし。capeDisplay が hidden なら {}
-                    ...resolveCapeProps({
-                      uuid: player.uuid,
-                      customCapeUrl: player.customCapeUrl,
-                      capeDisplay: player.capeDisplay,
-                    }),
-                  };
-                  const modalSize = { width: 360, height: 480 };
-                  return (
-                    <div className="flex justify-center sm:justify-start shrink-0">
-                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
-                        <DialogTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label={t("playerProfile.viewSkin3d")}
-                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
-                            <MinecraftFullBody
-                              {...skinProps}
-                              width={skinViewSize.width}
-                              height={skinViewSize.height}
-                              asImage
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                              <Maximize2
-                                className="h-8 w-8 text-foreground drop-shadow"
-                                aria-hidden
-                              />
-                            </div>
-                          </button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>
-                              {t("playerProfile.skinDialogTitle", { name: playerName })}
-                            </DialogTitle>
-                          </DialogHeader>
-                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
-                          {skin3dOpen && (
-                            <div className="flex justify-center">
-                              <MinecraftFullBody
-                                {...skinProps}
-                                {...modalSize}
-                                interactive
-                                showInteractiveHint
-                              />
-                            </div>
-                          )}
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  );
-                })() : (
-                  <div className="flex justify-center sm:justify-start shrink-0">
-                    <div className="flex flex-col items-center gap-2">
-                      <MinecraftFullBody
-                        pose={(player.profilePose as PoseName) ?? "waving"}
-                        angle={-35}
-                        elevation={5}
-                        zoom={0.9}
-                        width={skinViewSize.width}
-                        height={skinViewSize.height}
-                        asImage
-                      />
-                      <p
-                        className="max-w-full text-center text-xs text-muted-foreground"
-                        style={{ width: skinViewSize.width }}
-                      >
-                        {t("playerProfile.noMcidNote")}
-                      </p>
-                    </div>
-                  </div>
-                )}
+        <TabsContent value="profile" {...panelA11yProps("profile")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="profile" label={tabLabelOf("profile")} />
+          {/* 概要に描く物が最終更新・リアクションしか無い走者: 谷にならないよう、ほかのタブへの導線（訪問者）か編集への導線（本人）を添える。
+              意味の薄い日付とボタンより先に「何も無い」ことを伝えるので、ヘッダー（最終更新・リアクション）の上に置く */}
+          {!hasOverviewData && (
+            <EmptyState
+              size="compact"
+              icon={<User className="h-5 w-5" aria-hidden />}
+              title={t("playerProfile.noOverviewTitle")}
+              description={t(isOwner ? "playerProfile.noOverviewOwner" : "playerProfile.noOverview")}
+              action={isOwner ? <OwnerEditAction to="/me/edit" label={t("playerProfile.editLinkProfile")} /> : visitorEmptyAction}
+            />
+          )}
 
+          {/* Header: Skin + Basic Info（箱にせず欄の先頭にそのまま置く） */}
+          <div>
+              <div className={cn("flex flex-col sm:flex-row gap-4 sm:gap-6", skinFallback ? "sm:items-start" : "sm:items-center")}>
                 {/* Info */}
-                <div className="flex-1 space-y-4">
-                  <div className="text-center sm:text-left">
-                    <h1 className="text-2xl font-bold">{playerName}</h1>
-                    {/* アルファベット表記はロケールを問わず併記する（見出しと同一なら省く） */}
-                    {player.displayNameAlphabet && player.displayNameAlphabet !== playerName && (
-                      <p className="text-sm text-muted-foreground">{player.displayNameAlphabet}</p>
-                    )}
-                    {player.mcid && <p className="text-muted-foreground">@{player.mcid}</p>}
+                <div className="contents sm:block sm:flex-1 sm:space-y-4">
+                  <div className="order-2 text-center sm:text-left">
                     {player.bedrockMcid && (
                       <p className="text-muted-foreground">
                         {t("playerProfile.bedrockMcidLine", { id: player.bedrockMcid })}
@@ -1404,10 +1540,11 @@ export default function PlayerProfilePage() {
                     )}
                   </div>
 
+                  <div className="order-3 space-y-4">
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                     {player.role && (
-                      <Badge variant={player.role === "runner" ? "default" : "secondary"}>
+                      <Badge variant="secondary">
                         {player.role === "runner" ? t("common.runner") : t("common.viewer")}
                       </Badge>
                     )}
@@ -1419,9 +1556,10 @@ export default function PlayerProfilePage() {
                     )}
                     {player.inputMethod && (
                       <Badge variant="outline">
-                        {player.inputMethod === "keyboard_mouse" && "KBM"}
-                        {player.inputMethod === "controller" && "Controller"}
-                        {player.inputMethod === "touch" && "Touch"}
+                        {/* 入力方法の表示名は設定画面（/me/playstyle）の選択肢と同じキーを使う */}
+                        {player.inputMethod === "keyboard_mouse" && t("mePlaystyle.inputMethodKeyboardMouse")}
+                        {player.inputMethod === "controller" && t("mePlaystyle.inputMethodController")}
+                        {player.inputMethod === "touch" && t("mePlaystyle.inputMethodTouch")}
                       </Badge>
                     )}
                   </div>
@@ -1438,6 +1576,12 @@ export default function PlayerProfilePage() {
                       <span className="flex items-center gap-1">
                         <Speech className="h-4 w-4" aria-hidden />
                         {player.pronouns}
+                      </span>
+                    )}
+                    {ageGroup && (
+                      <span className="flex items-center gap-1">
+                        <Cake className="h-4 w-4" aria-hidden />
+                        {t(`meEdit.ageGroupLabels.${ageGroup}`)}
                       </span>
                     )}
                     {rtaCareer &&
@@ -1470,40 +1614,90 @@ export default function PlayerProfilePage() {
                     </span>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                    {isOwner && (
-                      <Button asChild size="sm">
-                        <Link to="/me/edit">
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {t("playerProfile.edit")}
-                        </Link>
-                      </Button>
-                    )}
-                    <FavoriteButton slug={player.slug} />
-                    <ShareButton
-                      title={`${playerName} - Minefolio`}
-                      description={displayShortBio ?? undefined}
-                      includeTab={true}
-                    />
-                    <Button asChild variant="outline" size="sm">
-                      <Link to={`/compare?p1=${player.slug}`}>
-                        <GitCompare className="h-4 w-4 mr-2" />
-                        {t("playerProfile.compare")}
-                      </Link>
-                    </Button>
-                  </div>
-
                   {/* 絵文字リアクション */}
                   <ProfileReactionBar
                     pills={reactionPills}
                     toggle={toggleReaction}
                     isLoggedIn={profileReactions.viewerHasAccount}
                   />
+                  </div>
                 </div>
+
+                {/* Skin - uuid か customSkinUrl があれば従来どおり。どちらも無い（MCID未登録）なら
+                    黒スキンのプレースホルダーを静止画で出し、直下に注釈を添える（3D 閲覧は無し） */}
+                {player.uuid || player.customSkinUrl ? (() => {
+                  // 静止画と interactive で共通の MinecraftFullBody プロパティ
+                  const skinProps = {
+                    // customSkinUrl だけのユーザーもここに来るので uuid は null を許容する
+                    uuid: player.uuid ?? undefined,
+                    skinUrl: player.customSkinUrl ?? undefined,
+                    mcid: player.mcid ?? undefined,
+                    pose: (player.profilePose as PoseName) ?? "waving",
+                    slim:
+                      player.customSkinModel === "slim" || player.slimSkin || false,
+                    angle: -35,
+                    elevation: 5,
+                    zoom: 0.9,
+                    // カスタムマント → Mojang のマント → なし。capeDisplay が hidden なら {}
+                    ...resolveCapeProps({
+                      uuid: player.uuid,
+                      customCapeUrl: player.customCapeUrl,
+                      capeDisplay: player.capeDisplay,
+                    }),
+                  };
+                  const modalSize = { width: 360, height: 480 };
+                  return (
+                    <div className="order-1 flex justify-center sm:order-first sm:justify-start shrink-0">
+                      <Dialog open={skin3dOpen} onOpenChange={setSkin3dOpen}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={t("playerProfile.viewSkin3d")}
+                            className="group relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {/* ページ上は静止画。WebGL を常駐させない（仕様 3.3） */}
+                            <div className={skinFallback ? SKIN_VIEW_FALLBACK_BOX_CLASS : SKIN_VIEW_BOX_CLASS}>
+                              <MinecraftFullBody
+                                {...skinProps}
+                                width={SKIN_VIEW_RENDER_SIZE.width}
+                                height={SKIN_VIEW_RENDER_SIZE.height}
+                                asImage
+                                fluid
+                                onFallbackChange={setSkinFallback}
+                              />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/40 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                              <Maximize2
+                                className="h-8 w-8 text-foreground drop-shadow"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {t("playerProfile.skinDialogTitle", { name: playerName })}
+                            </DialogTitle>
+                          </DialogHeader>
+                          {/* open のときのみ interactive 版をマウント → 閉じたら WebGL を解放 */}
+                          {skin3dOpen && (
+                            <div className="flex justify-center">
+                              <MinecraftFullBody
+                                {...skinProps}
+                                {...modalSize}
+                                interactive
+                                showInteractiveHint
+                              />
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  );
+                })() : null /* MCID もスキンも無い走者には、「?」の大きな枠を出さない */}
               </div>
-            </CardContent>
-          </Card>
+          </div>
 
           {/* Social Links（YouTube/Twitch は統計付きリッチカード） */}
           {player.socialLinks.length > 0 && (
@@ -1512,14 +1706,10 @@ export default function PlayerProfilePage() {
 
           {/* Bio */}
           {displayBio && (
-            <Card className="gap-3 py-5">
-              <CardHeader className="px-5">
-                <CardTitle className="text-base">{t("playerProfile.bio")}</CardTitle>
+            <PageSection headingLevel="h3" id="profile-bio" title={t("playerProfile.bio")}>
                 {hasTranslatedBio && (
                   <AutoTranslateNotice showOriginal={showBioOriginal} onToggle={toggleBioOriginal} />
                 )}
-              </CardHeader>
-              <CardContent className="px-5">
                 <Suspense
                   fallback={
                     <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -1529,20 +1719,13 @@ export default function PlayerProfilePage() {
                 >
                   <BioMarkdown bio={displayBio} />
                 </Suspense>
-              </CardContent>
-            </Card>
+            </PageSection>
           )}
 
           {/* Videos（複数動画欄。行が無い場合は旧 featuredVideoUrl にフォールバック） */}
           {displayVideos.length > 0 && (
-            <Card className="gap-3 py-5">
-              <CardHeader className="px-5">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Video className="h-5 w-5" />
-                  {t("playerProfile.videos")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 space-y-4">
+            <PageSection headingLevel="h3" id="profile-videos" title={t("playerProfile.videos")}>
+              <div className="space-y-4">
                 {displayVideos.length === 1 ? (
                   // 1件のみは従来どおり大きく表示
                   <VideoEmbed video={displayVideos[0]} size="large" />
@@ -1562,111 +1745,112 @@ export default function PlayerProfilePage() {
                     )}
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </PageSection>
           )}
         </TabsContent>
 
         {/* Keybindings Tab */}
-        <TabsContent value="keybindings" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {player.keybindings.length > 0 ? (
+        <TabsContent value="keybindings" {...panelA11yProps("keybindings")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="keybindings" label={tabLabelOf("keybindings")} trailing={presetSelector} />
+          {hasKeybindingsData ? (
             <>
-              {/* Visual Keyboard */}
-              <Card className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                    <CardTitle className="text-base">{t("playerProfile.keyboardView")}</CardTitle>
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
-                      {hasTypedRemaps && (
-                        <RemapViewToggle value={remapView} onChange={setRemapView} />
-                      )}
-                      <FingerLegend />
-                      <KeyboardExportDialog
-                        layout={keyboardLayout}
-                        keybindings={player.keybindings}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={player.keyRemaps}
-                        hasTypedRemaps={hasTypedRemaps}
-                        initialRemapContext={remapView}
-                        customKeys={customKeyboardKeys}
-                        customButtons={customButtons}
-                        isTKL={isTKL}
-                        player={{
-                          uuid: player.uuid,
-                          skinUrl: player.customSkinUrl,
-                          mcid: player.mcid,
-                          displayName: player.displayName,
-                          displayNameAlphabet: player.displayNameAlphabet,
-                          slug: player.slug,
-                        }}
-                      />
-                    </div>
+              <PageSection
+                headingLevel="h3"
+                id="profile-keyboard"
+                title={t("playerProfile.keyboardView")}
+              >
+                {/* ツールバー: 凡例・Trigger/Chat 切替・案内・画像保存 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {hasFingerAssignments && <FingerLegend />}
+                  <HintTip message={t("playerProfile.keyAbbrHint")} className="text-xs text-muted-foreground">
+                    <span className="underline decoration-dotted underline-offset-4">OH / HB</span>
+                    <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+                  </HintTip>
+                  {/* Trigger/Chat 表示切替（種別付きリマップがある場合のみ） */}
+                  {hasTypedRemaps && (
+                    <span className="inline-flex items-center gap-1">
+                      <RemapViewToggle value={remapView} onChange={setRemapView} />
+                      <HintTip message={t("playerProfile.remapViewHint")} className="text-muted-foreground">
+                        <CircleHelp className="h-4 w-4" aria-hidden />
+                      </HintTip>
+                    </span>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    <span className="md:hidden">{t("playerProfile.keyboardTapHintMobile")}</span>
+                    <span className="max-md:hidden">{t("playerProfile.keyboardTapHint")}</span>
+                  </p>
+                  <div className="ml-auto">
+                    <KeyboardExportDialog
+                      layout={keyboardLayout}
+                      keybindings={player.keybindings}
+                      fingerAssignments={userFingerAssignments}
+                      remaps={player.keyRemaps}
+                      hasTypedRemaps={hasTypedRemaps}
+                      initialRemapContext={remapView}
+                      customKeys={customKeyboardKeys}
+                      customButtons={customButtons}
+                      isTKL={isTKL}
+                      player={{
+                        uuid: player.uuid,
+                        skinUrl: player.customSkinUrl,
+                        mcid: player.mcid,
+                        displayName: player.displayName,
+                        displayNameAlphabet: player.displayNameAlphabet,
+                        slug: player.slug,
+                      }}
+                    />
                   </div>
-                </CardHeader>
-                <CardContent className="px-5">
+                </div>
+                <button
+                  type="button"
+                  onClick={skipToKeyList}
+                  // md 未満は縮小キーボード（キーの文字が読めない）より前に、読める割り当て一覧への導線を見せる。
+                  // md 以上はキーボード利用者向けに、フォーカスされたときだけ現れる
+                  className="sr-only rounded-md bg-background px-3 py-1.5 text-sm font-medium focus:not-sr-only focus-visible:ring-2 focus-visible:ring-ring max-md:not-sr-only max-md:-my-1 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-0 max-md:text-primary max-md:underline-offset-4 max-md:hover:underline"
+                >
+                  {t("playerProfile.skipToKeyList")}
+                </button>
+                {/* モバイル: 縮小表示＋タップで全画面（レイアウトは「下の段にナビ」固定の実寸） */}
+                <div className="md:hidden">
+                  <KeyboardScaledPreview dialogTitle={t("playerProfile.keyboardView")}>
+                    {keyboardMobileLayout}
+                  </KeyboardScaledPreview>
+                </div>
+                {/* デスクトップ: コンテナ幅 70rem（=1120px）以上で「右にナビ」、未満で「下の段にナビ」。
+                    @container は幅いっぱいのブロック要素に置く（flex 子・w-max・スクロール内容に置くと幅 0 で潰れる）。
+                    両方描いて display:none で片方を隠すので、隠れた側のキーは Tab 順から外れる */}
+                <div className="@container max-md:hidden">
                   <div className="flex flex-col items-start gap-4">
-                    {/* メインキーボード */}
-                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
-                      <VirtualKeyboard
-                        layout={keyboardLayout}
-                        keybindings={keybindingsMap}
-                        fingerAssignments={userFingerAssignments}
-                        remaps={remapsForKeyboard}
-                        customActions={player.customActions}
-                        customKeys={customKeyboardKeys}
-                        showActionLabels
-                        showFingerAssignments
-                        showRemaps
-                        hideNumpad
-                      />
+                    <div className="hidden w-full @min-[70rem]:block">
+                      <HorizontalScrollArea showHint surface="background">
+                        <VirtualKeyboard {...keyboardMainProps} hideNumpad />
+                      </HorizontalScrollArea>
                     </div>
-                    {/* テンキーとマウスを横並び */}
-                    <div className="custom-scrollbar overflow-x-auto pb-2 w-full">
-                      <div className="flex items-start gap-6">
-                        {!isTKL && (
-                          <VirtualNumpad
-                            keybindings={keybindingsMap}
-                            fingerAssignments={userFingerAssignments}
-                            remaps={remapsForKeyboard}
-                            customActions={player.customActions}
-                            showActionLabels
-                            showFingerAssignments
-                            showRemaps
-                          />
-                        )}
-                        <VirtualMouse
-                          keybindings={keybindingsMap}
-                          fingerAssignments={userFingerAssignments}
-                          remaps={remapsForKeyboard}
-                          customActions={player.customActions}
-                          customButtons={customButtons}
-                          showActionLabels
-                          showFingerAssignments
-                          showRemaps
-                        />
-                      </div>
+                    <div className="w-full @min-[70rem]:hidden">
+                      <HorizontalScrollArea showHint surface="background">
+                        <VirtualKeyboard {...keyboardMainProps} section="main" hideNumpad />
+                      </HorizontalScrollArea>
                     </div>
+                    <HorizontalScrollArea surface="background">
+                      {keyboardLowerRow(true, "@min-[70rem]:hidden")}
+                    </HorizontalScrollArea>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </PageSection>
 
-              {/* List View */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {keybindingDisplayGroups.map((group) => {
-                  const bindings = group.actions
-                    .map((action) => keybindingsByAction.get(action))
-                    .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
-                  if (bindings.length === 0) return null;
+              {/* 割り当て一覧 */}
+              <PageSection headingLevel="h3" id="profile-keylist" title={t("playerProfile.keyListTitle")}>
+                <div className="gap-x-8 lg:columns-2">
+                  {keybindingDisplayGroups.map((group) => {
+                    const bindings = group.actions
+                      .map((action) => keybindingsByAction.get(action))
+                      .filter((kb): kb is NonNullable<typeof kb> => kb !== undefined);
+                    if (bindings.length === 0) return null;
 
-                  return (
-                    <Card key={group.key} className="gap-3 py-5">
-                      <CardHeader className="px-5">
-                        <CardTitle className={`text-base ${group.colorClass}`}>
-                          {group.label}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-5">
+                    return (
+                      <div key={group.key} className="mb-6 space-y-2 break-inside-avoid">
+                        <h4 className="text-base font-semibold">{group.label}</h4>
                         <div className="divide-y">
                           {bindings.map((kb) => (
                             <div
@@ -1674,26 +1858,20 @@ export default function PlayerProfilePage() {
                               className="flex justify-between items-center py-2.5"
                             >
                               <span className="text-sm">{getActionLabel(t, kb.action)}</span>
-                              <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                              <kbd className={KBD_CHIP_CLASS}>
                                 {resolveKeyLabel(kb.keyCode)}
                               </kbd>
                             </div>
                           ))}
                         </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
 
-                {/* カスタムアクション（登録されている場合のみ） */}
-                {player.customActions.length > 0 && (
-                  <Card className="gap-3 py-5">
-                    <CardHeader className="px-5">
-                      <CardTitle className="text-base">
-                        {t("playerProfile.customActions")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5">
+                  {/* カスタムアクション（登録されている場合のみ） */}
+                  {player.customActions.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-base font-semibold">{t("playerProfile.customActions")}</h4>
                       <div className="divide-y">
                         {player.customActions.map((ca) => {
                           const chips = resolveKeyCombinationChips(ca.triggerKey);
@@ -1709,7 +1887,7 @@ export default function PlayerProfilePage() {
                                     {i > 0 && (
                                       <span className="text-muted-foreground text-xs">+</span>
                                     )}
-                                    <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                    <kbd className={KBD_CHIP_CLASS}>
                                       {label}
                                     </kbd>
                                   </span>
@@ -1719,20 +1897,17 @@ export default function PlayerProfilePage() {
                           );
                         })}
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
+                  )}
 
-                {/* リマップ（登録されている場合のみ） */}
-                {player.keyRemaps.length > 0 && (
-                  <Card className="gap-3 py-5">
-                    <CardHeader className="px-5">
-                      <CardTitle className="text-base">
-                        {t("playerProfile.remaps")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5">
-                      <div className="divide-y">
+                </div>
+              </PageSection>
+
+              {/* リマップ（登録されている場合のみ。割り当て一覧とは別の欄） */}
+              {player.keyRemaps.length > 0 && (
+                <PageSection headingLevel="h3" id="profile-remaps" title={t("playerProfile.remaps")}>
+                      {/* lg 以上は2列（読み順は左から右・上から下。行ごとに高さと区切り線が揃う） */}
+                      <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-2">
                         {player.keyRemaps.map((remap) => {
                           const sourceChips = resolveKeyCombinationChips(remap.sourceKey);
                           const targetChips =
@@ -1740,7 +1915,7 @@ export default function PlayerProfilePage() {
                               ? [remap.outputCharacter]
                               : remap.targetKey
                               ? resolveKeyCombinationChips(remap.targetKey)
-                              : ["-"];
+                              : [];
                           const renderChipGroup = (
                             chips: string[],
                             justify: "start" | "end",
@@ -1750,12 +1925,17 @@ export default function PlayerProfilePage() {
                                 justify === "start" ? "justify-start" : "justify-end"
                               }`}
                             >
+                              {chips.length === 0 && (
+                                <kbd className={KBD_CHIP_CLASS}>
+                                  <EmptyValue />
+                                </kbd>
+                              )}
                               {chips.map((label, i) => (
                                 <span key={i} className="flex items-center gap-1">
                                   {i > 0 && (
                                     <span className="text-muted-foreground text-xs">+</span>
                                   )}
-                                  <kbd className="px-2.5 py-1 bg-secondary/80 rounded text-sm font-mono min-w-16 text-center">
+                                  <kbd className={KBD_CHIP_CLASS}>
                                     {label}
                                   </kbd>
                                 </span>
@@ -1765,7 +1945,7 @@ export default function PlayerProfilePage() {
                           return (
                             <div
                               key={remap.id}
-                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-2.5"
+                              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t py-2.5 first:border-t-0 lg:nth-2:border-t-0"
                             >
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <RemapTypeBadge remapType={remap.remapType} />
@@ -1777,142 +1957,168 @@ export default function PlayerProfilePage() {
                           );
                         })}
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+                </PageSection>
+              )}
             </>
           ) : (
             <EmptyState
               icon={<Keyboard className="h-12 w-12" />}
               title={t("playerProfile.noKeybindingsTitle")}
-              description={t("playerProfile.noKeybindings")}
+              description={t(isOwner ? "playerProfile.noKeybindingsOwner" : "playerProfile.noKeybindings")}
+              action={isOwner ? <OwnerEditAction to="/me/keybindings" label={t("playerProfile.editLinkKeybindings")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Stats Tab */}
-        <TabsContent value="stats" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="stats" {...panelA11yProps("stats")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="stats" label={tabLabelOf("stats")} />
           <StatsTabContent
             player={player}
             hiddenSpeedrunRecords={hiddenSpeedrunRecords}
             pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+            pendingSpeedrunRecords={pendingSpeedrunRecords}
+            showPending={showPending}
+            onShowPendingChange={handleShowPendingChange}
             pacemanStats={pacemanStats}
             minefolioEloRank={minefolioEloRank}
+            isOwner={isOwner}
+            mainCategory={player.playstyle?.mainCategory}
+            visitorEmptyAction={visitorEmptyAction}
           />
         </TabsContent>
 
         {/* Playstyle Tab */}
-        <TabsContent value="playstyle" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
+        <TabsContent value="playstyle" {...panelA11yProps("playstyle")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="playstyle" label={tabLabelOf("playstyle")} />
           {hasPlaystyleData ? (
-            <>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 lg:grid-cols-2">
               {/* プレイ内容 */}
               {hasPlaystylePlayContent && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Layers className="h-5 w-5" />
-                      {t("playerProfile.playstylePlayContent")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5 space-y-4">
+                <PageSection headingLevel="h3" id="profile-playstyle-play" className={playstyleSectionClass[0]} first={playstyleSectionFirst[0]} title={t("playerProfile.playstylePlayContent")}>
                     {playstylePlayContentRows.map((row, i) => (
                       <div key={i} className="space-y-2">
                         <p className="text-sm text-muted-foreground">{row.label}</p>
                         {row.value}
                       </div>
                     ))}
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
 
               {/* 操作 */}
               {hasPlaystyleControls && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <SlidersHorizontal className="h-5 w-5" />
-                      {t("playerProfile.playstyleControls")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection headingLevel="h3" id="profile-playstyle-controls" className={playstyleSectionClass[1]} first={playstyleSectionFirst[1]} title={t("playerProfile.playstyleControls")}>
                     <div className="divide-y">
                       {playstyleControlsRows.map((row, i) => (
-                        <DeviceRow key={i} label={row.label} value={row.value} />
+                        <DeviceRow key={i} label={row.label} value={row.value} plain />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
 
               {/* テクニック */}
               {hasPlaystyleTechnique && (
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Sparkles className="h-5 w-5" />
-                      {t("playerProfile.playstyleTechnique")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                <PageSection headingLevel="h3" id="profile-playstyle-technique" className={playstyleSectionClass[2]} first={playstyleSectionFirst[2]} title={t("playerProfile.playstyleTechnique")}>
                     <div className="divide-y">
                       {playstyleTechniqueRows.map((row, i) => (
-                        <DeviceRow key={i} label={row.label} value={row.value} />
+                        <DeviceRow key={i} label={row.label} value={row.value} plain={row.plain} />
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                </PageSection>
               )}
-            </>
+            </div>
           ) : (
             <EmptyState
               icon={<Gamepad2 className="h-12 w-12" />}
               title={t("playerProfile.noPlaystyleTitle")}
-              description={t("playerProfile.noPlaystyle")}
+              description={t(isOwner ? "playerProfile.noPlaystyleOwner" : "playerProfile.noPlaystyle")}
               action={
                 isOwner ? (
                   <Button asChild size="sm" variant="outline" className="mt-4">
                     <Link to="/me/playstyle">{t("playerProfile.noPlaystyleEditLink")}</Link>
                   </Button>
-                ) : undefined
+                ) : visitorEmptyAction
               }
             />
           )}
         </TabsContent>
 
         {/* Item Layouts Tab */}
-        <TabsContent value="items" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {player.itemLayouts.length > 0 ? (
-            <Card className="gap-3 py-5">
-              <CardContent className="px-5">
-                <div className="divide-y">
-                  {player.itemLayouts.map((layout) => (
-                    <ItemLayoutRow key={layout.id} layout={layout} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+        <TabsContent value="items" {...panelA11yProps("items")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="items" label={tabLabelOf("items")} trailing={presetSelector} />
+          {hasItemLayoutsData ? (
+            // xl 以上は区間を2列の格子に並べる（DOM 順＝左→右・上→下の読み順）。メモは各ホットバーの下のまま。
+            // lg（1024px）では列幅約457px に9スロットのホットバー（約535px）が収まらず、列ごとに横スクロールが出て
+            // ページ幅もはみ出すため、収まる xl から2列にする。
+            // 欄の上罫線は、先頭（全幅で最初）だけ外し、2列のとき最上段の右の欄も外す（プレイスタイルの2列と同じ）
+            <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 xl:grid-cols-2">
+              {player.itemLayouts.map((layout, index) => (
+                <ItemLayoutRow
+                  key={layout.id}
+                  layout={layout}
+                  slotKeyLabels={hotbarKeyLabels}
+                  first={index === 0}
+                  className={index === 1 ? "xl:border-t-0 xl:pt-0" : undefined}
+                />
+              ))}
+            </div>
           ) : (
             <EmptyState
               icon={<Package className="h-12 w-12" />}
               title={t("playerProfile.noItemLayoutsTitle")}
-              description={t("playerProfile.noItemLayouts")}
+              description={t(isOwner ? "playerProfile.noItemLayoutsOwner" : "playerProfile.noItemLayouts")}
+              action={isOwner ? <OwnerEditAction to="/me/items" label={t("playerProfile.editLinkItems")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Search Craft Tab */}
-        <TabsContent value="searchcraft" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {player.searchCrafts.length > 0 ? (
-            <>
-              {/* サマリーバー: ゲーム言語・件数・凡例 */}
-              <div className="rounded-xl border border-border/70 bg-card px-4 py-3 space-y-2.5">
+        <TabsContent value="searchcraft" {...panelA11yProps("searchcraft")} className={PANEL_CLASS}>
+          <ProfileTabTitle
+            value="searchcraft"
+            label={tabLabelOf("searchcraft")}
+            badge={
+              hasSearchCraftData ? (
+                <HintTip message={t("playerProfile.searchCraftTabHint")} className="text-muted-foreground">
+                  <CircleHelp className="h-4 w-4" aria-hidden />
+                </HintTip>
+              ) : undefined
+            }
+            trailing={
+              (hasSearchCraftData && canToggleSearchCraftLang) || presetSelector ? (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {hasSearchCraftData && canToggleSearchCraftLang && (
+                    // スイッチ＋ラベル（label で結ぶ。min-h-8 で押せる範囲を 24px 以上に）。折り返しは親の flex-wrap に任せる
+                    <label className="flex min-h-8 max-w-full cursor-pointer items-center gap-2 text-sm">
+                      <Switch
+                        checked={searchCraftViewerLang}
+                        onCheckedChange={setSearchCraftViewerLang}
+                      />
+                      <span className="min-w-0">
+                        {t("playerProfile.searchCraftItemNamesIn", { language: t("playerProfile.searchCraftViewerLangName") })}
+                      </span>
+                    </label>
+                  )}
+                  {presetSelector}
+                </div>
+              ) : null
+            }
+          />
+          {hasSearchCraftData ? (
+            // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする（見出しの並びを h2 → h3 → h4 にそろえる）。
+            // グループの名前もこの h3 を参照する。サーチクラフトのグループ名は h4
+            <div id="profile-searchcraft" role="group" aria-labelledby="profile-searchcraft-heading" className="space-y-4">
+              <h3 id="profile-searchcraft-heading" className="sr-only">{t("playerProfile.searchCraftListHeading")}</h3>
+              {/* ゲーム言語・件数・凡例（箱にせず欄の先頭に置く） */}
+              <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                   {player.playerConfig?.gameLanguage && (
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Languages className="h-4 w-4" />
+                    // 長い言語名（Norsk Bokmål（ノルウェー語（ブークモール））等）が 320px でページを横に押し広げないよう、
+                    // 行は折り返し可・バッジは whitespace-normal で折り返せるようにする
+                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-muted-foreground">
+                      <Languages className="h-4 w-4 shrink-0" />
                       <span>{t("playerProfile.gameLanguage")}:</span>
-                      <Badge variant="secondary">
+                      <Badge variant="secondary" className="max-w-full whitespace-normal text-left">
                         {getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
                       </Badge>
                     </div>
@@ -1926,83 +2132,89 @@ export default function PlayerProfilePage() {
                     </Badge>
                   )}
                 </div>
+                {player.playerConfig?.gameLanguage &&
+                  !searchCraftViewerLang &&
+                  !hasItemNameDictionary(player.playerConfig.gameLanguage) && (
+                    // 辞書が無い言語は英語表示になる。走者の言語で表示中（スイッチ OFF）のときだけ理由を添える
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                      <span className="min-w-0">{t("playerProfile.searchCraftNoItemDictionary")}</span>
+                    </p>
+                  )}
                 <KeyBadgeLegend
                   showFingers={Object.keys(userFingerAssignments).length > 0}
                   showCraftMarker={player.searchCraftLoops.length > 0}
                 />
               </div>
               <SearchCraftGroupedList
+                framed={false}
+                collapsible
+                stickyHeaders
+                // ヘッダー（md 未満）・ホットバー（md 以上、64+57=121 が下端）の下に 1px もぐらせて貼り付く。
+                // ちょうど接すると表示倍率 125% 等で境目が小数の画素位置になり、下のコンテンツが透けるため
+                stickyTopClassName="top-[64px] md:top-[120px]"
                 crafts={parsedSearchCrafts}
                 remaps={player.keyRemaps}
                 fingerAssignments={userFingerAssignments}
-                gameLanguage={player.playerConfig?.gameLanguage}
+                gameLanguage={searchCraftViewerLang ? viewerItemLang : player.playerConfig?.gameLanguage}
                 keyboardLayout={keyboardLayout}
                 extraTimings={searchCraftLoopTimings}
                 renderGroupExtra={renderSearchCraftLoopExtra}
+                groupHeadingLevel="h4"
               />
-            </>
+            </div>
           ) : (
             <EmptyState
               icon={<Search className="h-12 w-12" />}
               title={t("playerProfile.searchCraftNoneTitle")}
-              description={t("playerProfile.noSearchCraft")}
+              description={t(isOwner ? "playerProfile.noSearchCraftOwner" : "playerProfile.noSearchCraft")}
+              action={isOwner ? <OwnerEditAction to="/me/search-craft" label={t("playerProfile.editLinkSearchCraft")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Devices Tab (merged with settings) */}
-        <TabsContent value="devices" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {player.playerConfig ? (
+        <TabsContent value="devices" {...panelA11yProps("devices")} className={PANEL_CLASS}>
+          <ProfileTabTitle value="devices" label={tabLabelOf("devices")} trailing={presetSelector} />
+          {hasDevicesPanelData && player.playerConfig ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(hasKeyboardInfo || hasMouseInfo) && (
+              <div className="grid grid-cols-1 gap-x-8 gap-y-7 sm:gap-y-8 md:grid-cols-2">
                 {/* Keyboard */}
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Keyboard className="h-5 w-5" />
-                      {t("playerProfile.keyboard")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
+                {hasKeyboardInfo && (
+                <PageSection headingLevel="h3" id="profile-devices-keyboard" first title={t("playerProfile.keyboard")}>
                     {player.playerConfig.keyboardModel || player.playerConfig.keyboardLayout ? (
                       <div className="divide-y">
                         {player.playerConfig.keyboardModel && (
                           <DeviceRow
                             label={t("playerProfile.model")}
                             value={player.playerConfig.keyboardModel}
+                            plain
                           />
                         )}
                         {player.playerConfig.keyboardLayout && (
                           <DeviceRow
                             label={t("playerProfile.layout")}
-                            value={player.playerConfig.keyboardLayout}
+                            value={keyboardLayoutLabel(player.playerConfig.keyboardLayout)}
+                            plain
                           />
                         )}
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground py-2">
-                        {t("playerProfile.keyboardNoInfo")}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                    ) : null}
+                </PageSection>
+                )}
 
                 {/* Mouse */}
-                <Card className="gap-3 py-5">
-                  <CardHeader className="px-5">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Mouse className="h-5 w-5" />
-                      {t("playerProfile.mouse")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-5">
-                    {player.playerConfig.mouseModel || player.playerConfig.mouseDpi ? (
+                {hasMouseInfo && (
+                <PageSection headingLevel="h3" id="profile-mouse" first={!hasKeyboardInfo} className={hasKeyboardInfo ? "md:border-t-0 md:pt-0" : undefined} title={t("playerProfile.mouse")}>
+                    {hasMouseInfo ? (
                       <div className="divide-y">
                         {/* モデル */}
                         {player.playerConfig.mouseModel && (
                           <DeviceRow
                             label={t("playerProfile.model")}
                             value={player.playerConfig.mouseModel}
+                            plain
                           />
                         )}
                         {/* DPI */}
@@ -2031,7 +2243,7 @@ export default function PlayerProfilePage() {
                         ) : (
                           <DeviceRow
                             label={t("playerProfile.winSens")}
-                            value={t("playerProfile.noValue")}
+                            value={<EmptyValue />}
                           />
                         )}
                         {/* マウス加速 */}
@@ -2039,6 +2251,7 @@ export default function PlayerProfilePage() {
                           <DeviceRow
                             label={t("playerProfile.mouseAcceleration")}
                             value={player.playerConfig.mouseAcceleration ? t("common.on") : t("common.off")}
+                          plain
                           />
                         )}
                         {/* ゲーム内感度（有効範囲外は一覧と同じく警告付きで出す） */}
@@ -2064,6 +2277,7 @@ export default function PlayerProfilePage() {
                           <DeviceRow
                             label={t("playerProfile.rawInput")}
                             value={player.playerConfig.rawInput ? t("common.on") : t("common.off")}
+                          plain
                           />
                         )}
                         {/* 振り向き（計算できなければ行を消さず「-」+ 理由） */}
@@ -2077,48 +2291,43 @@ export default function PlayerProfilePage() {
                           value={<CursorSpeedValue config={player.playerConfig} />}
                         />
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground py-2">
-                        {t("playerProfile.mouseNoInfo")}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                    ) : null}
+                </PageSection>
+                )}
               </div>
+              )}
 
               {/* Game Settings */}
-              <Card className="gap-3 py-5">
-                <CardHeader className="px-5">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    {t("playerProfile.inGameSettings")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-5">
+              {hasInGameSettings && (
+              <PageSection headingLevel="h3" id="profile-ingame" title={t("playerProfile.inGameSettings")}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                     <div className="divide-y">
                       {player.playerConfig.toggleSprint != null && (
                         <DeviceRow
                           label={t("playerProfile.toggleSprint")}
                           value={player.playerConfig.toggleSprint ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.toggleSneak != null && (
                         <DeviceRow
                           label={t("playerProfile.toggleSneak")}
                           value={player.playerConfig.toggleSneak ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.autoJump != null && (
                         <DeviceRow
                           label={t("playerProfile.autoJump")}
                           value={player.playerConfig.autoJump ? t("common.on") : t("common.off")}
+                        plain
                         />
                       )}
                       {player.playerConfig.gameLanguage && (
                         <DeviceRow
                           label={t("playerProfile.gameLanguage")}
                           value={getGameLanguageName(t, locale, player.playerConfig.gameLanguage)}
+                          plain
                         />
                       )}
                     </div>
@@ -2142,46 +2351,85 @@ export default function PlayerProfilePage() {
                       <p className="text-sm">{player.playerConfig.notes}</p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </PageSection>
+              )}
             </>
           ) : (
             <EmptyState
               icon={<Mouse className="h-12 w-12" />}
               title={t("playerProfile.noDevicesTitle")}
-              description={t("playerProfile.noDevices")}
+              description={t(isOwner ? "playerProfile.noDevicesOwner" : "playerProfile.noDevices")}
+              action={isOwner ? <OwnerEditAction to="/me/devices" label={t("playerProfile.editLinkDevices")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
 
         {/* Guides Tab */}
-        <TabsContent value="guides" className="rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-4">
-          {playerGuides.length > 0 ? (
-            <>
-              <div className="flex justify-end">
-                <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} />
-              </div>
+        <TabsContent value="guides" {...panelA11yProps("guides")} className={PANEL_CLASS}>
+          <ProfileTabTitle
+            value="guides"
+            label={tabLabelOf("guides")}
+            trailing={hasGuidesData ? <ViewToggle viewMode={guidesViewMode} onChange={setGuidesViewMode} /> : null}
+          />
+          {hasGuidesData ? (
+            // 欄が1つだけのタブなので欄見出しは目に見えない（sr-only）h3 にする。グループの名前もこの h3 を参照し、カードのタイトルは h4
+            <div id="profile-guides" role="group" aria-labelledby="profile-guides-heading">
+              <h3 id="profile-guides-heading" className="sr-only">{t("playerProfile.guidesListHeading")}</h3>
               {guidesViewMode === "card" ? (
                 <GuideCardGrid
                   guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
                   gridCols="sm:grid-cols-2"
+                  titleLevel="h4"
                 />
               ) : (
                 <GuideListView
                   guides={playerGuides}
                   linkFn={(guide) => `/guides/${player.slug}/${guide.slug}`}
+                  titleLevel="h4"
                 />
               )}
-            </>
+            </div>
           ) : (
             <EmptyState
               icon={<BookOpen className="h-12 w-12" />}
               title={t("playerProfile.noGuidesTitle")}
-              description={t("playerProfile.noGuidesDescription")}
+              description={t(isOwner ? "playerProfile.noGuidesDescriptionOwner" : "playerProfile.noGuidesDescription")}
+              action={isOwner ? <OwnerEditAction to="/my-guides" label={t("playerProfile.editLinkGuides")} /> : visitorEmptyAction}
             />
           )}
         </TabsContent>
+
+        {/* 各タブの末尾の導線（全タブ共通。TabsContent の外・後ろに1つだけ置く） */}
+        <div className="mt-7 sm:mt-8">
+          <PageSection id="profile-explore" title={t(allTabsEmpty ? "playerProfile.exploreTitleEmpty" : "playerProfile.exploreTitle")}>
+            <div className="flex flex-wrap gap-2 max-md:[&_a]:min-h-11">
+              {/* 全タブが空の走者は、比べる中身が無いので比較の導線を出さず、探す導線だけにする */}
+              {!allTabsEmpty && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to={`/compare?p1=${player.slug}`}>
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    {t("playerProfile.exploreCompare")}
+                  </Link>
+                </Button>
+              )}
+              {!allTabsEmpty && compareToViewerHref && (
+                <Button asChild variant="outline" size="sm">
+                  <Link to={compareToViewerHref}>
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    {t("playerProfile.exploreCompareWithMe")}
+                  </Link>
+                </Button>
+              )}
+              <Button asChild variant={allTabsEmpty ? "default" : "outline"} size="sm">
+                <Link to="/browse">
+                  <Users className="h-4 w-4 mr-2" />
+                  {t("playerProfile.exploreBrowse")}
+                </Link>
+              </Button>
+            </div>
+          </PageSection>
+        </div>
 
       </div>
     </Tabs>
@@ -2223,9 +2471,50 @@ const ITEM_LAYOUT_SEGMENT_DOT_CLASSES: Record<string, string> = {
   "Blinded / Stronghold": "bg-primary",
 };
 
-/** アイテム配置カード内の1セグメント分の行（見出し + ホットバー + メモ）。アイテム名はホットバーの Tooltip でのみ提示する */
+/**
+ * 走者画面のタブパネルの共通クラス。タイトル（`data-tab-title`）の直下の最初の欄は上罫線と上余白を外す
+ * （2つ目以降は罫線あり）。欄がパネル直下の section のとき、記録タブの審査中の欄（id 付き div で包む）に効く。
+ * 2列グリッドの1行目は PageSection の `className` で個別に外す。
+ */
+const PANEL_CLASS =
+  "rounded-none border-0 bg-transparent p-0 sm:p-0 space-y-7 sm:space-y-8 [&>[data-tab-title]+section]:border-t-0 [&>[data-tab-title]+section]:pt-0 [&>[data-tab-title]+[role=status]+section]:border-t-0 [&>[data-tab-title]+[role=status]+section]:pt-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:border-t-0 [&>[data-tab-title]+#pending-speedruncom-records>section]:pt-0";
+
+/**
+ * 各タブの先頭のタイトル（h2 `text-xl md:text-2xl`。走者名は h1 `text-2xl md:text-3xl`、欄は h3 `text-lg`、欄内の小見出しは h4）。
+ * 欄が1つだけのタブ（ガイド・サーチクラフト）は欄見出しを出さず、その右の操作を `trailing`、HintTip を `badge` に置く。タブ名はホットバーのツールチップと同じ。
+ * md 未満のプリセット選択（trailing）は同じ行の右端（狭いと折り返す）。タイトルと最初の欄の間は欄どうしより詰める。
+ */
+function ProfileTabTitle({
+  value,
+  label,
+  badge,
+  trailing,
+}: {
+  value: string;
+  label: string;
+  /** タイトルの直後（HintTip など） */
+  badge?: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div data-tab-title className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:mb-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <h2 id={`profile-tab-title-${value}`} className="min-w-0 text-xl font-bold md:text-2xl">
+          {label}
+        </h2>
+        {badge && <div className="shrink-0">{badge}</div>}
+      </div>
+      {trailing}
+    </div>
+  );
+}
+
+/** アイテム配置タブの1セグメント分の欄（見出し + ホットバー + メモ）。アイテム名はホットバーのヒント（ホバー・フォーカス・タップ）で提示する */
 function ItemLayoutRow({
   layout,
+  slotKeyLabels,
+  first,
+  className,
 }: {
   layout: {
     id: string;
@@ -2234,147 +2523,61 @@ function ItemLayoutRow({
     offhand: string | null;
     notes: string | null;
   };
+  slotKeyLabels?: Partial<Record<number, string>>;
+  /** 欄の上罫線と上余白を外す（タブタイトル直下の最初の欄） */
+  first?: boolean;
+  className?: string;
 }) {
   const t = useT();
-  const locale = useLocale();
   const slots = JSON.parse(layout.slots) as Slot[];
   const offhand = layout.offhand ? (JSON.parse(layout.offhand) as string[]) : [];
   const dotClass = ITEM_LAYOUT_SEGMENT_DOT_CLASSES[layout.segment] ?? "bg-muted-foreground";
 
   return (
-    <div className="py-4 first:pt-0 last:pb-0 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {dotClass && <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />}
-        {layout.segment}
-      </div>
+    <PageSection
+      headingLevel="h3"
+      id={`profile-items-${layout.id}`}
+      first={first}
+      className={className}
+      icon={<span aria-hidden className={cn("block h-2.5 w-2.5 rounded-full", dotClass)} />}
+      title={itemSegmentLabel(layout.segment)}
+    >
       <ItemHotbar
         slots={slots}
         offhand={offhand}
         offhandLabel={t("playerProfile.offhandShort")}
-        renderSlotWrapper={({ items, tile }) =>
-          items.length === 0 ? (
-            tile
-          ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>{tile}</div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {items.map((item) => getLocalizedItemName(item, locale)).join(", ")}
-              </TooltipContent>
-            </Tooltip>
-          )
-        }
+        slotKeyLabels={slotKeyLabels}
+        fitMobile
+        itemNameTips
       />
       {layout.notes && (
-        <p className="text-sm text-muted-foreground">{layout.notes}</p>
+        <p className="mt-3 text-sm text-muted-foreground">{layout.notes}</p>
       )}
-    </div>
+    </PageSection>
   );
 }
 
 // KeyBadge / SearchCraftLegend / SearchCraftList 系は @/components/search-craft-template-view に共通化済み
 
-// pbVideoUrl は http/https のみをリンク化する。過去に保存された javascript: 等の危険な
-// スキームを href として DOM に到達させないためのレンダー時ガード（書き込み側の検証は
-// routes/me/records.tsx にもある）。F6 所有の app/lib/safe-url.ts には依存しない局所実装。
-function isHttpVideoUrl(value: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return false;
-  }
-  return parsed.protocol === "http:" || parsed.protocol === "https:";
-}
-
-type RecordCardRecord = {
-  id: string;
-  category: string;
-  categoryDisplayName: string;
-  subcategory: string | null;
-  personalBest: number | null;
-  targetTime: number | null;
-  achieved: boolean;
-  pbVideoUrl: string | null;
-  pbNotes: string | null;
-  isPinned?: boolean;
-};
-
-function RecordCard({
-  record,
-}: {
-  record: RecordCardRecord;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  return (
-    // ピン留め記録はグリッド2列分に拡大し、枠線で強調する
-    <Card className={cn("gap-3 py-5", record.isPinned && "md:col-span-2 border-primary/40")}>
-      <CardHeader className="px-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-base flex items-center gap-1.5">
-              {record.isPinned && <Pin className="h-4 w-4 text-primary shrink-0" />}
-              {record.categoryDisplayName}
-            </CardTitle>
-            {record.subcategory && (
-              <CardDescription>{record.subcategory}</CardDescription>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="px-5 space-y-2">
-        {record.personalBest && (
-          <div className="flex items-baseline gap-2">
-            <span className={cn("font-mono font-bold", record.isPinned ? "text-3xl" : "text-2xl")}>
-              {formatTime(record.personalBest)}
-            </span>
-            <span className="text-sm text-muted-foreground">{t("playerProfile.pb")}</span>
-          </div>
-        )}
-        {record.targetTime && (
-          <div className="flex items-center gap-2 text-sm">
-            <Target className="h-4 w-4 text-muted-foreground" />
-            <span>{t("playerProfile.target")}: {formatTime(record.targetTime)}</span>
-            {record.achieved && (
-              <CheckCircle2 className="h-4 w-4 text-success" />
-            )}
-          </div>
-        )}
-        {record.pbVideoUrl && isHttpVideoUrl(record.pbVideoUrl) && (
-          <Button variant="outline" size="sm" asChild className="w-full mt-2">
-            <a
-              href={record.pbVideoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              {t("playerProfile.watchVideo")}
-            </a>
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function SocialIcon({
   platform,
+  className = "h-5 w-5",
 }: {
   platform: string;
+  /** Button の中では基底の svg サイズ指定に負けるため `size-5` を渡す */
+  className?: string;
 }) {
   switch (platform) {
     case "youtube":
-      return <Youtube className="h-5 w-5" />;
+      return <Youtube className={className} />;
     case "twitch":
-      return <Twitch className="h-5 w-5" />;
+      return <Twitch className={className} />;
     case "twitter":
-      return <Twitter className="h-5 w-5" />;
+      return <Twitter className={className} />;
     case "speedruncom":
-      return <Trophy className="h-5 w-5" />;
+      return <Trophy className={className} />;
     default:
-      return <ExternalLink className="h-5 w-5" />;
+      return <ExternalLink className={className} />;
   }
 }
 
@@ -2432,9 +2635,9 @@ type SocialStatsData = {
 // 日本語は「1.2万」等のコンパクト表記（1万以上）、英語は "1.2K" 等（Intl compact）。
 // いずれも閾値未満は桁区切り（例: 2,170）
 function formatCompactCount(count: number, locale: Locale): string {
-  const intlLocale = locale === "en" ? "en-US" : "ja-JP";
-  if (count < 10000) return count.toLocaleString(intlLocale);
-  return new Intl.NumberFormat(intlLocale, {
+  const intlTag = intlLocale(locale);
+  if (count < 10000) return count.toLocaleString(intlTag);
+  return new Intl.NumberFormat(intlTag, {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(count);
@@ -2445,7 +2648,6 @@ function formatCompactCount(count: number, locale: Locale): string {
 // 統計はAPIキーがサーバー専用のため /api/social-stats（キャッシュあり）から遅延取得する
 function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: string }) {
   const t = useT();
-  const locale = useLocale();
   const richLinks = links.filter((l) => l.platform === "youtube" || l.platform === "twitch");
   const plainLinks = links.filter((l) => l.platform !== "youtube" && l.platform !== "twitch");
   const [stats, setStats] = useState<SocialStatsData | null>(null);
@@ -2468,11 +2670,8 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
   }, [slug, hasRichLinks]);
 
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardTitle className="text-base">{t("playerProfile.links")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-5 space-y-2">
+    <PageSection headingLevel="h3" id="profile-links" title={t("playerProfile.links")}>
+      <div className="space-y-2">
         {hasRichLinks && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {richLinks.map((link) => (
@@ -2493,7 +2692,7 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
             {plainLinks.map((link) => (
               <Button key={link.id} variant="outline" asChild className="gap-2 h-10 px-4">
                 <a href={getSocialUrl(link.platform, link.identifier, link.customUrl)} target="_blank" rel="noopener noreferrer">
-                  <SocialIcon platform={link.platform} />
+                  <SocialIcon platform={link.platform} className="size-5" />
                   <span className="font-medium">{getSocialPlatformName(link.platform, link.customLabel)}</span>
                   <span className="text-muted-foreground">{link.identifier}</span>
                 </a>
@@ -2501,8 +2700,8 @@ function SocialLinksCard({ links, slug }: { links: ProfileSocialLink[]; slug: st
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </PageSection>
   );
 }
 
@@ -2517,13 +2716,16 @@ function SocialLinkRichCard({
 }) {
   const t = useT();
   const locale = useLocale();
+  // 暦日はタイムゾーン依存。SSR（サーバー UTC）と水和は経過日数で描き、水和後に端末の暦日へ切り替える
+  const formatRelativeTime = useRelativeTimeFormatter();
   const statParts: string[] = [];
   let isLive = false;
 
   if (stats) {
     if (link.platform === "youtube") {
       const yt = stats as YouTubeChannelStats;
-      if (yt.subscriberCount != null) {
+      // 本物の 0（新規チャンネル等）は「登録者 0人」と出さない（取得失敗は元から null で非表示）
+      if (yt.subscriberCount != null && yt.subscriberCount > 0) {
         statParts.push(
           t("playerProfile.subscribersCompact", { count: formatCompactCount(yt.subscriberCount, locale) }),
         );
@@ -2531,14 +2733,15 @@ function SocialLinkRichCard({
       if (yt.latestVideoAt) {
         statParts.push(
           t("playerProfile.latestVideoAgo", {
-            time: formatDistanceToNow(new Date(yt.latestVideoAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
+            time: formatRelativeTime(yt.latestVideoAt),
           }),
         );
       }
     } else {
       const tw = stats as TwitchChannelStats;
       isLive = tw.isLive;
-      if (tw.followerCount != null) {
+      // フォロワー 0 も同じく出さない（リンクと配信の情報は残す）
+      if (tw.followerCount != null && tw.followerCount > 0) {
         statParts.push(
           t("playerProfile.followersCompact", { count: formatCompactCount(tw.followerCount, locale) }),
         );
@@ -2546,7 +2749,7 @@ function SocialLinkRichCard({
       if (!tw.isLive && tw.lastStreamAt) {
         statParts.push(
           t("playerProfile.lastStreamAgo", {
-            time: formatDistanceToNow(new Date(tw.lastStreamAt), { addSuffix: true, locale: dateFnsLocale(locale) }),
+            time: formatRelativeTime(tw.lastStreamAt),
           }),
         );
       }
@@ -2568,8 +2771,8 @@ function SocialLinkRichCard({
           </span>
           <span className="truncate text-sm text-muted-foreground">{link.identifier}</span>
           {isLive && (
-            <Badge className="shrink-0 gap-1 border-transparent bg-destructive px-1.5 text-white">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+            <Badge className="border-transparent bg-live-fill px-1.5 text-live-on-fill">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none" />
               {t("playerProfile.liveNow")}
             </Badge>
           )}
@@ -2584,11 +2787,17 @@ function SocialLinkRichCard({
   );
 }
 
-function DeviceRow({ label, value, unit }: { label: string; value: ReactNode; unit?: string }) {
+/** plain: 値が数値ではなく名前（ゲーム言語・機種名など）のとき等幅フォントにしない */
+/** キーボードレイアウトの生の値（US_TKL 等）を設定画面の選択肢と同じ表示名（US TKL）にする */
+function keyboardLayoutLabel(layout: string): string {
+  return layout.replace(/[_-]/g, " ");
+}
+
+function DeviceRow({ label, value, unit, plain }: { label: ReactNode; value: ReactNode; unit?: string; plain?: boolean }) {
   return (
     <div className="flex justify-between items-center py-2.5">
       <span className="text-sm">{label}</span>
-      <span className="font-medium font-mono text-sm">
+      <span className={cn("font-medium text-sm", !plain && "font-mono")}>
         {value}
         {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
@@ -2611,8 +2820,10 @@ function TurnDistanceValue({ config }: { config: MouseReasonConfig }) {
   }
   return (
     <>
-      {cm360.toFixed(2)}
-      <span className="text-muted-foreground ml-1">cm</span>
+      {/* calculateCm360 は半回転（180°）の距離を返す。身元帯のハイライト・ホームと同じ小数1桁＋cm/180° */}
+      {/* 数値と単位の間は余白ではなく空白文字で区切る（コピー・読み上げでも「1.5 cm/180°」になり、身元帯と表記がそろう） */}
+      {cm360.toFixed(1)}{" "}
+      <span className="text-muted-foreground">cm/180°</span>
     </>
   );
 }
@@ -2637,42 +2848,6 @@ function CursorSpeedValue({ config }: { config: MouseReasonConfig }) {
   );
 }
 
-function SettingBadge({
-  label,
-  enabled,
-}: {
-  label: string;
-  enabled: boolean | null;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  if (enabled === null) return null;
-
-  return (
-    <div className="flex items-center gap-2">
-      <Badge variant={enabled ? "default" : "secondary"}>
-        {enabled ? t("common.on") : t("common.off")}
-      </Badge>
-      <span className="text-sm">{label}</span>
-    </div>
-  );
-}
-
-function getCategoryColorClass(category: string): string {
-  switch (category) {
-    case "movement":
-      return "text-category-movement";
-    case "combat":
-      return "text-category-combat";
-    case "inventory":
-      return "text-category-inventory";
-    case "ui":
-      return "text-category-ui";
-    default:
-      return "";
-  }
-}
-
 /** プロフィール動画の表示用エントリ（profileVideos 行 or 旧 featuredVideoUrl フォールバック） */
 type DisplayVideo = {
   id: string;
@@ -2686,6 +2861,7 @@ type DisplayVideo = {
  * iframe に渡さず外部リンクとして表示する（X-Frame-Options ブロックの防止）。
  */
 function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "small" }) {
+  const t = useT();
   const embedUrl = getYouTubeEmbedUrl(video.url);
   const containerClass = size === "large" ? "max-w-2xl" : "";
 
@@ -2713,7 +2889,12 @@ function VideoEmbed({ video, size }: { video: DisplayVideo; size: "large" | "sma
           {video.title && <span className="text-sm font-medium truncate">{video.title}</span>}
         </div>
       )}
-      <YouTubeEmbed embedUrl={embedUrl} title={video.title || "Video"} />
+      {/* 押してから読み込む（記録タブの SRC 動画と同じ YouTubeClickEmbed）。名前は動画のタイトル（無ければ URL）で一意にする */}
+      <YouTubeClickEmbed
+        embedUrl={embedUrl}
+        title={t("playerStatsCards.videoTitle", { label: video.title || video.url })}
+        playLabel={t("playerStatsCards.playVideo", { label: video.title || video.url })}
+      />
     </div>
   );
 }
@@ -2727,90 +2908,122 @@ type StatsPlayer = {
   categoryRecords: RecordCardRecord[];
 };
 
+type StatsService = "ranked" | "paceman" | "speedruncom";
+type StatsLoadState = Record<StatsService, "loading" | "done" | "error">;
+const STATS_SERVICE_KEYS: readonly StatsService[] = ["ranked", "paceman", "speedruncom"];
+const PACEMAN_REGISTERED = { isRegistered: true } as const;
+
+// サービスごとの取得キー（無ければ取得しない）と取得関数。PaceMan の取得関数は差し替えやすいよう単独の関数にしている。
+// force は再試行用（キャッシュを迂回する。キャッシュの無い PaceMan では無視）
+const STATS_SERVICES: Record<
+  StatsService,
+  { key: (player: StatsPlayer) => string | null; fetch: (id: string, force: boolean) => Promise<unknown> }
+> = {
+  ranked: { key: (p) => p.mcid, fetch: (id, force) => fetchMCSRRankedStatsCached(id, { force }) },
+  paceman: { key: (p) => p.mcid, fetch: (id) => fetchPaceManRegistration(id) },
+  speedruncom: { key: (p) => p.speedruncomUsername, fetch: (id, force) => fetchSpeedrunComStatsCached(id, { force }) },
+};
+
+/** MCID / speedrun.com ユーザー名が無いサービス（と、登録済みが自明な PaceMan）は取得しないので最初から "done" */
+function initialLoadState(player: StatsPlayer, pacemanRegisteredKnown: boolean): StatsLoadState {
+  return {
+    ranked: STATS_SERVICES.ranked.key(player) ? "loading" : "done",
+    paceman: STATS_SERVICES.paceman.key(player) && !pacemanRegisteredKnown ? "loading" : "done",
+    speedruncom: STATS_SERVICES.speedruncom.key(player) ? "loading" : "done",
+  };
+}
+
 // Stats タブのコンテナ（クライアント側でデータ取得）
 function StatsTabContent({
   player,
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
+  pendingSpeedrunRecords,
+  showPending,
+  onShowPendingChange,
   pacemanStats,
   minefolioEloRank,
+  isOwner,
+  mainCategory,
+  visitorEmptyAction,
 }: {
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
+  pendingSpeedrunRecords: PendingSpeedrunRecord[];
+  showPending: boolean;
+  onShowPendingChange: (show: boolean) => void;
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
+  isOwner: boolean;
+  mainCategory: string | null | undefined;
+  /** 空のときに訪問者へ出す案内（他の中身あるタブへのボタン） */
+  visitorEmptyAction?: ReactNode;
 }) {
-  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>({});
-  const [loadState, setLoadState] = useState({
-    ranked: "loading" as "loading" | "done" | "error",
-    paceman: "loading" as "loading" | "done" | "error",
-    speedruncom: (player.speedruncomUsername ? "loading" : "done") as "loading" | "done" | "error",
-  });
+  // loader 由来の週間統計があれば PaceMan 登録済みは自明なので、登録確認の取得は行わず最初から取得済みとして扱う
+  const pacemanRegisteredKnown = hasWeeklyPacemanStats(pacemanStats, player);
+  const [externalStats, setExternalStats] = useState<Awaited<ReturnType<typeof fetchAllExternalStats>>>(
+    pacemanRegisteredKnown ? { paceman: PACEMAN_REGISTERED } : {},
+  );
+  const [loadState, setLoadState] = useState(() => initialLoadState(player, pacemanRegisteredKnown));
+
+  // 走者切替・アンマウントで破棄する取得セッション。各サービスの取得は、開始時点のセッションが
+  // まだ有効なときだけ結果を反映する（再試行も同じ仕組みを通る）
+  const sessionRef = useRef({ cancelled: false });
+
+  // サービスごとの取得（失敗は結果の `error` か reject）。取得キーが無い走者（mcid / speedrun.com ユーザー名なし）は
+  // 取得せず終える（"null" を名前に外部 API を呼ぶと偽の取得失敗になる。身元帯 profile-highlights も止めている）。
+  // 取得関数は失敗を throw せず { error } で返す。error があれば取得失敗（再試行カード）、
+  // error なしの未登録・データなしは従来どおり「done」で欄ごと出さない。force は再試行用でキャッシュを迂回する
+  const load = useCallback(
+    async (service: StatsService, force = false) => {
+      const target = STATS_SERVICES[service];
+      const id = target.key(player);
+      if (!id) return;
+      const session = sessionRef.current;
+      setLoadState((prev) => ({ ...prev, [service]: "loading" }));
+      try {
+        const result = await target.fetch(id, force);
+        if (session.cancelled) return;
+        setExternalStats((prev) => ({ ...prev, [service]: result }));
+        setLoadState((prev) => ({ ...prev, [service]: (result as { error?: unknown } | undefined)?.error ? "error" : "done" }));
+      } catch (error) {
+        console.error(`Failed to fetch ${service} stats:`, error);
+        if (session.cancelled) return;
+        setLoadState((prev) => ({ ...prev, [service]: "error" }));
+      }
+    },
+    [player.mcid, player.speedruncomUsername], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchStats() {
-      setLoadState({
-        ranked: "loading",
-        paceman: "loading",
-        speedruncom: player.speedruncomUsername ? "loading" : "done",
-      });
-
-      const tasks: Promise<void>[] = [
-        // mcid が未設定でも従来から無条件に呼び出している（各関数側が未登録相当を返す）。
-        // StatsPlayer.mcid は users テーブルに合わせ string | null だが、呼び出しはその挙動を
-        // 変えないための型上の非nullアサーション
-        fetchMCSRRankedStats(player.mcid!)
-          .then((ranked) => {
-            if (cancelled) return;
-            setExternalStats((prev) => ({ ...prev, ranked }));
-            setLoadState((prev) => ({ ...prev, ranked: "done" }));
-          })
-          .catch((error) => {
-            console.error("Failed to fetch MCSR Ranked stats:", error);
-            if (cancelled) return;
-            setLoadState((prev) => ({ ...prev, ranked: "error" }));
-          }),
-        checkPaceManPlayer(player.mcid!)
-          .then((paceman) => {
-            if (cancelled) return;
-            setExternalStats((prev) => ({ ...prev, paceman }));
-            setLoadState((prev) => ({ ...prev, paceman: "done" }));
-          })
-          .catch((error) => {
-            console.error("Failed to fetch PaceMan status:", error);
-            if (cancelled) return;
-            setLoadState((prev) => ({ ...prev, paceman: "error" }));
-          }),
-      ];
-
-      if (player.speedruncomUsername) {
-        tasks.push(
-          fetchSpeedrunComStats(player.speedruncomUsername)
-            .then((speedruncom) => {
-              if (cancelled) return;
-              setExternalStats((prev) => ({ ...prev, speedruncom }));
-              setLoadState((prev) => ({ ...prev, speedruncom: "done" }));
-            })
-            .catch((error) => {
-              console.error("Failed to fetch speedrun.com stats:", error);
-              if (cancelled) return;
-              setLoadState((prev) => ({ ...prev, speedruncom: "error" }));
-            })
-        );
-      }
-
-      await Promise.all(tasks);
-    }
-
-    fetchStats();
-
+    const session = { cancelled: false };
+    sessionRef.current = session;
+    setLoadState(initialLoadState(player, pacemanRegisteredKnown));
+    void load("ranked");
+    if (pacemanRegisteredKnown) setExternalStats((prev) => (prev.paceman === PACEMAN_REGISTERED ? prev : { ...prev, paceman: PACEMAN_REGISTERED }));
+    else void load("paceman");
+    void load("speedruncom");
     return () => {
-      cancelled = true;
+      session.cancelled = true;
     };
-  }, [player.mcid, player.speedruncomUsername]);
+  }, [load, pacemanRegisteredKnown, player.mcid, player.speedruncomUsername]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 「再試行」を押したサービスは、成功して失敗カードが消えたら、その欄の見出しへフォーカスを移す
+  // （押したボタンが消えてフォーカスが BODY に落ちるのを防ぐ。失敗のままならボタンにフォーカスが残る）。
+  // 欄の見出し id は PageSection の `${id}-heading`（player-stats-cards.tsx の stats-ranked / stats-paceman / stats-speedruncom）
+  const retryFocusRef = useRef<Partial<Record<StatsService, true>>>({});
+  const retry = (service: StatsService) => {
+    retryFocusRef.current[service] = true;
+    void load(service, true);
+  };
+  useEffect(() => {
+    for (const service of STATS_SERVICE_KEYS) {
+      if (!retryFocusRef.current[service] || loadState[service] === "loading") continue;
+      delete retryFocusRef.current[service];
+      if (loadState[service] === "done") document.getElementById(`stats-${service}-heading`)?.focus();
+    }
+  }, [loadState]);
 
   return (
     <StatsContent
@@ -2818,9 +3031,16 @@ function StatsTabContent({
       player={player}
       hiddenSpeedrunRecords={hiddenSpeedrunRecords}
       pinnedSpeedrunRecords={pinnedSpeedrunRecords}
+      pendingSpeedrunRecords={pendingSpeedrunRecords}
+      showPending={showPending}
+      onShowPendingChange={onShowPendingChange}
       pacemanStats={pacemanStats}
       minefolioEloRank={minefolioEloRank}
+      isOwner={isOwner}
       loadState={loadState}
+      onRetry={retry}
+      mainCategory={mainCategory}
+      visitorEmptyAction={visitorEmptyAction}
     />
   );
 }
@@ -2833,30 +3053,65 @@ function filterWeeklyMainPaces(mainPaces: GroupedPaceEntry[]): GroupedPaceEntry[
   });
 }
 
+/** PaceMan の週間統計欄を出せる（表示設定がオンで、件数がある）か。あれば PaceMan 登録済みは自明 */
+function hasWeeklyPacemanStats(
+  pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null,
+  player: StatsPlayer,
+): boolean {
+  return (
+    !!pacemanStats &&
+    player.showPacemanStats !== false &&
+    (pacemanStats.netherEnterCount > 0 || filterWeeklyMainPaces(pacemanStats.mainPaces).length > 0)
+  );
+}
+
 // Stats タブのコンテンツ
 function StatsContent({
   externalStats,
   player,
   hiddenSpeedrunRecords,
   pinnedSpeedrunRecords,
+  pendingSpeedrunRecords,
+  showPending,
+  onShowPendingChange,
   pacemanStats,
   minefolioEloRank,
+  isOwner,
   loadState,
+  onRetry,
+  mainCategory,
+  visitorEmptyAction,
 }: {
   externalStats: Awaited<ReturnType<typeof fetchAllExternalStats>>;
+  /** サービスごとの再取得（取得失敗カードの「再試行」） */
+  onRetry: (service: StatsService) => void;
   player: StatsPlayer;
   hiddenSpeedrunRecords: string[];
   pinnedSpeedrunRecords: string[];
+  pendingSpeedrunRecords: PendingSpeedrunRecord[];
+  showPending: boolean;
+  onShowPendingChange: (show: boolean) => void;
   pacemanStats: { netherEnterCount: number; mainPaces: GroupedPaceEntry[] } | null;
   minefolioEloRank: { rank: number; total: number } | null;
-  loadState: {
-    ranked: "loading" | "done" | "error";
-    paceman: "loading" | "done" | "error";
-    speedruncom: "loading" | "done" | "error";
-  };
+  isOwner: boolean;
+  visitorEmptyAction?: ReactNode;
+  loadState: StatsLoadState;
+  /** 本人のメインカテゴリ（playstyle.mainCategory）。欄の並びとハイライト PB の選択に使う */
+  mainCategory: string | null | undefined;
 }) {
   const t = useT();
+  // ?srcPending=1 で開いた直後に、審査中記録カードの位置へ移動する（外部統計の取得完了で上のカードが
+  // 伸びてずれるため、最初のレンダー後と取得完了後の2回合わせる）
+  const hasPending = pendingSpeedrunRecords.length > 0;
+  const externalDone = loadState.ranked !== "loading" && loadState.paceman !== "loading" && loadState.speedruncom !== "loading";
+  useEffect(() => {
+    if (!showPending || !hasPending) return;
+    document.getElementById("pending-speedruncom-records")?.scrollIntoView({ block: "start" });
+  }, [externalDone]); // eslint-disable-line react-hooks/exhaustive-deps
   const weeklyMainPaces = pacemanStats ? filterWeeklyMainPaces(pacemanStats.mainPaces) : [];
+  const hasWeeklyStats = hasWeeklyPacemanStats(pacemanStats, player);
+  const hasPacemanLink = !!externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && !!player.mcid;
+  const showPacemanSection = hasWeeklyStats || hasPacemanLink;
   const allExternalResolved = loadState.ranked !== "loading"
     && loadState.paceman !== "loading"
     && loadState.speedruncom !== "loading";
@@ -2867,79 +3122,218 @@ function StatsContent({
   const hiddenSet = new Set(hiddenSpeedrunRecords);
   const pinnedSet = new Set(pinnedSpeedrunRecords);
 
+  // 代表 PB（身元帯のハイライト）が speedrun.com の記録になったときは、表示上限に関係なく Speedrun.com 欄へ必ず含める。
+  // 選び方は身元帯と同じ pickRepresentativePb（Ranked・カスタム記録が代表になるときは指定しない）。
+  // メインカテゴリが Ranked のときは Ranked の取得が済むまで決まらないので、その間は指定しない
+  const categoryKey = isCategoryKey(mainCategory) ? mainCategory : null;
+  const rankedShown = player.showRankedStats !== false;
+  const representativePb =
+    externalStats.speedruncom?.personalBests && !(categoryKey === "ranked" && rankedShown && loadState.ranked === "loading")
+      ? pickRepresentativePb({
+          mainCategory: categoryKey,
+          records: player.categoryRecords,
+          speedrunComPbs: externalStats.speedruncom.personalBests,
+          hiddenRunIds: hiddenSpeedrunRecords,
+          pinnedRunIds: pinnedSpeedrunRecords,
+          rankedTimeMs: rankedShown ? rankedBestTimeMs(externalStats.ranked) : null,
+        })
+      : null;
+  const highlightSrcRunId = representativePb?.kind === "speedruncom" ? representativePb.pb.run.id : null;
+
+  // 全体が空のとき（下の EmptyState を出すとき）は、サービスごとの「記録なし」は出さない（二重になる）
+  const noData =
+    !externalStats.ranked?.isRegistered &&
+    !externalStats.paceman?.isRegistered &&
+    !externalStats.speedruncom?.personalBests?.length &&
+    pendingSpeedrunRecords.length === 0 &&
+    player.categoryRecords.length === 0;
+  const showEmptyState = allExternalResolved && !hasExternalError && noData;
+  // 結果が無かったサービスの欄は出さない（ui.md「中身が無い欄は出さない」。/player/:slug/stats と同じ）
+
+  // 取得前に「記録がある見込み」が loader で分からないサービス（Ranked は Minefolio 内順位なし、PaceMan は週間統計なし）は、
+  // 読み込み中の欄（約140px）を出さない。取得後に空で消えると下の内容が押し上がるため、1行の確認中表示だけを末尾に出す。失敗時は再試行のため欄で出す
+  const rankedExpected = !!minefolioEloRank;
+  const rankedDisplay = statsServiceDisplay({
+    enabled: player.showRankedStats !== false,
+    state: loadState.ranked,
+    expected: rankedExpected,
+  });
+  const pacemanDisplay = statsServiceDisplay({ enabled: !hasWeeklyStats, state: loadState.paceman, expected: false });
+  const rankedCardShown = rankedDisplay === "card";
+  const pacemanCardShown = pacemanDisplay === "card";
+  const checkingExternal = rankedDisplay === "checking" || pacemanDisplay === "checking";
+  // 確認中の1行（下の checkingExternal）より前に描かれる欄があるか。無いと「直前の欄の下の余白へ引き上げる」置き方がタブ名に重なる
+  // 各欄を描く条件は、ここで1か所にまとめて sections と hasSectionAbove の両方から使う（書き写しだと条件を変えたときにずれる）
+  const rankedBodyShown = !!externalStats.ranked?.isRegistered && rankedShown && loadState.ranked !== "loading";
+  const speedruncomLoadingShown = !!player.speedruncomUsername && loadState.speedruncom !== "done";
+  const speedruncomBodyShown =
+    !!externalStats.speedruncom &&
+    !externalStats.speedruncom.error &&
+    externalStats.speedruncom.personalBests.length > 0 &&
+    loadState.speedruncom !== "loading";
+  const pendingShown = pendingSpeedrunRecords.length > 0;
+  const hasSectionAbove =
+    rankedCardShown ||
+    rankedBodyShown ||
+    pacemanCardShown ||
+    showPacemanSection ||
+    speedruncomLoadingShown ||
+    speedruncomBodyShown ||
+    pendingShown;
+
+  const sections: Record<StatsSectionKey, ReactNode> = {
+    ranked: (
+      <>
+        {rankedCardShown && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="MCSR Ranked"
+            description={t("loading.rankedStats")}
+            state={loadState.ranked}
+            onRetry={() => onRetry("ranked")}
+            // 登録済みが loader の時点で分かる（Minefolio 内順位がある）ときだけ、届く中身に近い高さを確保する
+            loadingClassName={minefolioEloRank ? STATS_RANKED_LOADING_CLASS : undefined}
+          />
+        )}
+        {rankedBodyShown && externalStats.ranked && (
+          <MCSRRankedCard framed={false} ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
+        )}
+      </>
+    ),
+    // PaceMan は欄を 1 つ（「PaceMan」）にまとめる。リンク（クライアント取得）は見出し右、週間統計（loader 取得済み）は中身
+    paceman: (
+      <>
+        {/* 週間統計があるときは欄を 1 つにし、登録判定の状態は見出し右（PaceManStatsCard 側）で出す */}
+        {pacemanCardShown && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="PaceMan"
+            description={t("loading.pacemanStats")}
+            state={loadState.paceman}
+            onRetry={() => onRetry("paceman")}
+          />
+        )}
+        {showPacemanSection &&
+          (hasWeeklyStats && pacemanStats ? (
+            <PaceManStatsCard
+              framed={false}
+              netherEnterCount={pacemanStats.netherEnterCount}
+              mainPaces={weeklyMainPaces}
+              openDetailsMcid={hasPacemanLink ? player.mcid : null}
+              registrationState={loadState.paceman}
+              onRetryRegistration={() => onRetry("paceman")}
+            />
+          ) : (
+            player.mcid && (
+              <PaceManLinkCard
+                framed={false}
+                mcid={player.mcid}
+                weeklyStatsHidden={player.showPacemanStats === false}
+              />
+            )
+          ))}
+      </>
+    ),
+    speedruncom: (
+      <>
+        {speedruncomLoadingShown && (
+          <StatsServiceLoadingCard
+            framed={false}
+            title="Speedrun.com"
+            description={t("loading.speedruncomStats")}
+            state={loadState.speedruncom}
+            onRetry={() => onRetry("speedruncom")}
+            loadingClassName={STATS_SPEEDRUNCOM_LOADING_CLASS}
+          />
+        )}
+        {speedruncomBodyShown && externalStats.speedruncom && (
+          <SpeedrunComCard
+            framed={false}
+            speedruncom={externalStats.speedruncom}
+            hiddenRunIds={hiddenSet}
+            pinnedRunIds={pinnedSet}
+            showVideoEmbed
+            highlightRunId={highlightSrcRunId}
+            expandable
+          />
+        )}
+
+        {/* 審査中の記録（0件なら出さない。?srcPending=1 で最初から開き、その位置へスクロール） */}
+        {pendingShown && (
+          <PendingSpeedrunRecordsCard
+            framed={false}
+            records={pendingSpeedrunRecords}
+            show={showPending}
+            onShowChange={onShowPendingChange}
+          />
+        )}
+      </>
+    ),
+  };
+
   return (
     <>
-      {/* MCSR Ranked Section */}
-      {player.showRankedStats !== false && loadState.ranked !== "done" && (
-        <StatsServiceLoadingCard
-          title="MCSR Ranked"
-          description={t("loading.rankedStats")}
-          state={loadState.ranked}
-        />
-      )}
-      {externalStats.ranked?.isRegistered && player.showRankedStats !== false && loadState.ranked !== "loading" && (
-        <MCSRRankedCard ranked={externalStats.ranked} minefolioRank={minefolioEloRank} />
-      )}
+      {/* メインカテゴリに合う欄を先頭に置く（残りは既定の順） */}
+      {orderStatsSections(mainCategory).map((key) => (
+        <Fragment key={key}>{sections[key]}</Fragment>
+      ))}
 
-      {/* PaceMan Section - リンクのみ（週間統計とは独立にロード状態を持つため別カード） */}
-      {loadState.paceman !== "done" && (
-        <StatsServiceLoadingCard
-          title="PaceMan"
-          description={t("loading.pacemanStats")}
-          state={loadState.paceman}
-        />
-      )}
-      {externalStats.paceman?.isRegistered && loadState.paceman !== "loading" && player.mcid && (
-        <PaceManLinkCard mcid={player.mcid} />
-      )}
+      {checkingExternal &&
+        (hasSectionAbove ? (
+          // 取得後に何も無くて消えると下の欄とページ末尾の導線が押し上がるので、流れに場所を取らない（absolute）。
+          // 静的な位置（直前の欄の下の余白の終わり）から余白の中へ引き上げて、次の欄に重ならないようにする
+          <p
+            role="status"
+            className="absolute flex h-5 -translate-y-[calc(100%+0.375rem)] items-center gap-2 text-sm text-muted-foreground"
+          >
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            {t("playerProfile.statsLoadingExternal")}
+          </p>
+        ) : player.categoryRecords.length === 0 ? (
+          // 直前に欄が1つも無い（上の引き上げ方だとタブ名に重なる）。取得後に出る空状態（EmptyState 既定の大きさ）と
+          // 同じ外枠・同じ段（アイコン 48px・題・説明1行・操作の分）で場所を取り、読み終わっても下の導線が跳ねないようにする
+          <EmptyState
+            role="status"
+            icon={<Loader2 className="h-12 w-12 animate-spin" aria-hidden="true" />}
+            title={t("playerProfile.statsLoadingExternal")}
+            // 説明1行ぶんの高さだけ確保する（空白文字）
+            description={" "}
+            // 操作の分は、取得後の EmptyState と同じ物を見えない状態で置いて高さをそろえる
+            // （本人は OwnerEditAction、訪問者は他タブへの導線。訪問者で導線が無いときは何も置かない）
+            action={
+              isOwner || visitorEmptyAction ? (
+                <div className="invisible" aria-hidden="true" inert>
+                  {isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
+                </div>
+              ) : undefined
+            }
+          />
+        ) : (
+          // カスタム記録だけがある走者: 流れの中の1行（取得後に消えても、続くカスタム記録が動くのは1行ぶんだけ）
+          <p role="status" className="flex h-5 items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            {t("playerProfile.statsLoadingExternal")}
+          </p>
+        ))}
 
-      {/* PaceMan 過去1週間の統計（loader取得済みのためロード状態に依存しない） */}
-      {pacemanStats && player.showPacemanStats !== false && (pacemanStats.netherEnterCount > 0 || weeklyMainPaces.length > 0) && (
-        <PaceManStatsCard netherEnterCount={pacemanStats.netherEnterCount} mainPaces={weeklyMainPaces} />
-      )}
-
-      {/* Speedrun.com Section */}
-      {player.speedruncomUsername && loadState.speedruncom !== "done" && (
-        <StatsServiceLoadingCard
-          title="Speedrun.com"
-          description={t("loading.speedruncomStats")}
-          state={loadState.speedruncom}
-        />
-      )}
-      {externalStats.speedruncom && !externalStats.speedruncom.error && externalStats.speedruncom.personalBests.length > 0 && loadState.speedruncom !== "loading" && (
-        <SpeedrunComCard
-          speedruncom={externalStats.speedruncom}
-          hiddenRunIds={hiddenSet}
-          pinnedRunIds={pinnedSet}
-          showVideoEmbed
-        />
-      )}
-
-      {/* カスタム記録 */}
+      {/* カスタム記録（RecordCard は1件ずつの箱のまま） */}
       {player.categoryRecords.length > 0 && (
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              {t("playerProfile.customRecords")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {player.categoryRecords.map((record) => (
-                <RecordCard key={record.id} record={record} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <PageSection headingLevel="h3" id="stats-custom-records" title={t("playerProfile.customRecords")}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {player.categoryRecords.map((record) => (
+              <RecordCard key={record.id} record={record} />
+            ))}
+          </div>
+        </PageSection>
       )}
 
       {/* データがない場合（外部サービスがエラーの場合は各セクションのエラー表示に任せ、ここでは出さない） */}
-      {allExternalResolved && !hasExternalError && (!externalStats.ranked?.isRegistered && !externalStats.paceman?.isRegistered && !externalStats.speedruncom?.personalBests?.length && player.categoryRecords.length === 0) && (
+      {showEmptyState && (
         <EmptyState
           icon={<BarChart3 className="h-12 w-12" />}
           title={t("playerProfile.noStatsTitle")}
-          description={t("playerProfile.noStatsDescription")}
+          description={t(isOwner ? "playerProfile.noStatsDescriptionOwner" : "playerProfile.noStatsDescription")}
+          action={isOwner ? <OwnerEditAction to="/me/records" label={t("playerProfile.editLinkRecords")} /> : visitorEmptyAction}
         />
       )}
     </>

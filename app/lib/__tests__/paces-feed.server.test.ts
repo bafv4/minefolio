@@ -1,16 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
+  comparePaceByProgress,
   getPublicPaceFeed,
   paceFeedCacheKey,
   parsePaceSearchParams,
+  withPaceProfiles,
 } from "../paces-feed.server";
+import { USER_DATA_CACHE_KEY } from "../home-user-data.server";
 import { invalidateCache } from "../cache";
 import { PACE_FEED_SPLITS } from "../pace-splits";
 import { createTestDbAt, seedUser, seedPace, type TestDb } from "./helpers/test-db";
 
-// getPublicPaceFeed は渡された db で users を引くが、pacemanPaces は内部で createDb()
-// （＝ process.env.TURSO_DATABASE_URL）を使う。両者を同一の共有メモリ DB に向けることで
-// 実結合を検証する。libSQL の共有メモリ（file::memory:?cache=shared）はプロセス内で
+// getPublicPaceFeed（getUserData 経由の users 取得）も pacemanPaces も内部で createDb()
+// （＝ process.env.TURSO_DATABASE_URL）を使う。env を共有メモリ DB に向け、テストのシード用 db も
+// 同じ DB に向けることで実結合を検証する。libSQL の共有メモリ（file::memory:?cache=shared）はプロセス内で
 // 単一の DB を共有するため、beforeEach でスキーマを貼り直して（DROP→CREATE）テスト間を隔離する。
 const SHARED_URL = "file::memory:?cache=shared";
 
@@ -19,6 +22,7 @@ let originalUrl: string | undefined;
 
 // getPaceFeedBase のフィード全体キャッシュ（区間キー毎）を毎テスト消す
 async function clearFeedCache() {
+  await invalidateCache(USER_DATA_CACHE_KEY);
   await invalidateCache(paceFeedCacheKey());
   for (const split of PACE_FEED_SPLITS) {
     await invalidateCache(paceFeedCacheKey(split));
@@ -71,19 +75,29 @@ describe("getPublicPaceFeed - 可視性（F12 回帰）", () => {
     await seedPace(db, { mcid: "Privy", userId: prv.id, pacemanRunId: 2, rta: 200_000 });
     await seedPace(db, { mcid: "Unlisted", userId: unl.id, pacemanRunId: 3, rta: 250_000 });
 
-    const feed = await getPublicPaceFeed(db, {});
+    const feed = await getPublicPaceFeed({});
 
     // items には public の Pubby のみ
     expect(feed.items.map((i) => i.mcid)).toEqual(["Pubby"]);
 
-    // マップ類（表示名・UUID・スキン）に private/unlisted の mcid が現れない
-    expect(Object.keys(feed.mcidToUuid)).toEqual(["pubby"]);
-    expect(feed.mcidToUuid).not.toHaveProperty("privy");
-    expect(feed.mcidToUuid).not.toHaveProperty("unlisted");
-    expect(feed.mcidToDisplayName).not.toHaveProperty("privy");
-    expect(feed.mcidToSkinUrl).not.toHaveProperty("privy");
-    expect(feed.mcidToDisplayName["pubby"]).toBe("PubDisplay");
-    expect(feed.mcidToSkinUrl["pubby"]).toBe("https://skins/pub.png");
+    // 走者情報の取得元（共通ユーザーキャッシュ）に private/unlisted の mcid が現れない
+    const { userData } = feed;
+    expect(Object.keys(userData.mcidToUuid)).toEqual(["pubby"]);
+    expect(userData.mcidToUuid).not.toHaveProperty("privy");
+    expect(userData.mcidToUuid).not.toHaveProperty("unlisted");
+    expect(userData.mcidToDisplayName).not.toHaveProperty("privy");
+    expect(userData.mcidToSkinUrl).not.toHaveProperty("privy");
+    expect(userData.mcidToDisplayName["pubby"]).toBe("PubDisplay");
+    expect(userData.mcidToSkinUrl["pubby"]).toBe("https://skins/pub.png");
+
+    // 応答に載せるペースへは、そのペースの mcid の走者情報だけが添えられる
+    const withProfiles = withPaceProfiles(feed.items, userData);
+    expect(withProfiles).toHaveLength(1);
+    expect(withProfiles[0].profile).toEqual({
+      uuid: "uuid-pub",
+      displayName: "PubDisplay",
+      skinUrl: "https://skins/pub.png",
+    });
   });
 
   it("mcid / uuid が null の public ユーザーは対象外", async () => {
@@ -94,8 +108,8 @@ describe("getPublicPaceFeed - 可視性（F12 回帰）", () => {
       role: "runner",
       profileVisibility: "public",
     });
-    const feed = await getPublicPaceFeed(db, {});
-    expect(feed.mcidToUuid).not.toHaveProperty("nouuid");
+    const feed = await getPublicPaceFeed({});
+    expect(feed.userData.mcidToUuid).not.toHaveProperty("nouuid");
   });
 
   it("viewer ロールの public ユーザーは除外される", async () => {
@@ -108,9 +122,9 @@ describe("getPublicPaceFeed - 可視性（F12 回帰）", () => {
     });
     await seedPace(db, { mcid: "Viewer", userId: viewer.id, pacemanRunId: 9 });
 
-    const feed = await getPublicPaceFeed(db, {});
+    const feed = await getPublicPaceFeed({});
     expect(feed.items).toEqual([]);
-    expect(feed.mcidToUuid).not.toHaveProperty("viewer");
+    expect(feed.userData.mcidToUuid).not.toHaveProperty("viewer");
   });
 });
 
@@ -125,7 +139,7 @@ describe("getPublicPaceFeed - フィルタ", () => {
     await seedPace(db, { mcid: "Dream", userId: dream.id, pacemanRunId: 11 });
     await seedPace(db, { mcid: "Bob", userId: bob.id, pacemanRunId: 12 });
 
-    const feed = await getPublicPaceFeed(db, { player: "dre" });
+    const feed = await getPublicPaceFeed({ player: "dre" });
     expect(feed.items.map((i) => i.mcid)).toEqual(["Dream"]);
   });
 
@@ -136,8 +150,35 @@ describe("getPublicPaceFeed - フィルタ", () => {
     await seedPace(db, { mcid: "U", userId: u.id, pacemanRunId: 21, rta: 100_000 });
     await seedPace(db, { mcid: "U", userId: u.id, pacemanRunId: 22, rta: 900_000 });
 
-    const feed = await getPublicPaceFeed(db, { maxRta: 500_000 });
+    const feed = await getPublicPaceFeed({ maxRta: 500_000 });
     expect(feed.items.map((i) => i.rta)).toEqual([100_000]);
+  });
+});
+
+describe("withPaceProfiles", () => {
+  const userData = {
+    registeredMcids: ["a", "b"],
+    mcidToUuid: { a: "uuid-a", b: "uuid-b" },
+    mcidToSlug: { a: "slug-a", b: "slug-b" },
+    mcidToDisplayName: { a: "A名", b: "B名" },
+    mcidToDisplayNameAlphabet: { a: "A-en" },
+    mcidToSkinUrl: {},
+  };
+  const base = { timeline: "Fortress", rta: 1, pacemanRunId: 1, time: 1 };
+
+  it("各ペースの mcid（大文字小文字不問）の走者情報だけを添え、無い mcid は profile なし", () => {
+    const items = [
+      { ...base, mcid: "A", nickname: "A" },
+      { ...base, mcid: "Zed", nickname: "Zed" },
+    ];
+    const [a, zed] = withPaceProfiles(items, userData);
+    expect(a.profile).toEqual({ uuid: "uuid-a", displayName: "A名", displayNameAlphabet: "A-en" });
+    expect(zed.profile).toBeUndefined();
+  });
+
+  it("mcid が Object.prototype のプロパティ名でも他人の値を拾わない", () => {
+    const [c] = withPaceProfiles([{ ...base, mcid: "constructor", nickname: "constructor" }], userData);
+    expect(c.profile).toBeUndefined();
   });
 });
 
@@ -160,5 +201,32 @@ describe("parsePaceSearchParams", () => {
     expect(filters.from).toBeInstanceOf(Date);
     expect(filters.to).toBeInstanceOf(Date);
     expect(filters.maxRta).toBeUndefined();
+  });
+});
+
+describe("comparePaceByProgress（sort=time）", () => {
+  const mk = (timeline: string, rta: number, runId: number, time = 1) => ({
+    mcid: "a",
+    nickname: "a",
+    timeline,
+    rta,
+    pacemanRunId: runId,
+    time,
+  });
+
+  it("進んだ区間ほど上、同じ区間の中は IGT の速い順", () => {
+    const items = [
+      mk("Bastion", 150_000, 1),
+      mk("Finish", 700_000, 2),
+      mk("Enter End", 500_000, 3),
+      mk("Finish", 600_000, 4),
+      mk("Enter End", 450_000, 5),
+    ];
+    expect([...items].sort(comparePaceByProgress).map((i) => i.pacemanRunId)).toEqual([4, 2, 5, 3, 1]);
+  });
+
+  it("同区間・同IGTは新しい順→ランIDで決定的", () => {
+    const items = [mk("Finish", 600_000, 1, 10), mk("Finish", 600_000, 2, 20), mk("Finish", 600_000, 3, 20)];
+    expect([...items].sort(comparePaceByProgress).map((i) => i.pacemanRunId)).toEqual([3, 2, 1]);
   });
 });

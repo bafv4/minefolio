@@ -333,7 +333,7 @@ describe("loader - 正常系の回帰", () => {
     const csv = await res.text();
 
     expect(res.status).toBe(200);
-    expect(csv).toContain("Player,DPI,Sensitivity (%),cm/360");
+    expect(csv).toContain("Player,DPI,Sensitivity (%),cm/180°");
     expect(csv).not.toContain("Source Key");
     expect(csv).not.toContain("Trigger Key");
     expect(csv.replace("﻿", "").split("\n")[0].startsWith("Player,DPI,")).toBe(true);

@@ -55,6 +55,7 @@ interface StubEntry {
   status: number;
   json?: unknown;
   body?: number[];
+  contentLength?: number;
 }
 
 /** URL → 応答のテーブルで fetch をスタブする。未登録URLは 404 扱い */
@@ -65,6 +66,7 @@ function stubFetch(routes: Record<string, StubEntry>) {
     return {
       ok: entry.ok,
       status: entry.status,
+      headers: new Headers(entry.contentLength === undefined ? {} : { "content-length": String(entry.contentLength) }),
       json: async () => entry.json,
       arrayBuffer: async () => new Uint8Array(entry.body ?? []).buffer,
     };
@@ -238,6 +240,25 @@ describe("customSkinUrl の再検証（保存済み不正URLへのSSRF防止）"
     expect(fetchedUrls(fetchMock)).toEqual([BLOB_SKIN_URL]);
     expect(await bodyBytes(res)).toEqual(BLOB_BYTES);
     expect(res.headers.get("Cache-Control")).toBe(LONG_CACHE);
+  });
+
+  it("Content-Length がスキンの上限（1MB）を超える Blob は読まず、Mojang 経路へフォールバックする", async () => {
+    const user = await seedUser(db, {
+      slug: "huge",
+      discordId: "discord-huge",
+      uuid: UUID,
+      customSkinUrl: BLOB_SKIN_URL,
+    });
+    const fetchMock = stubFetch({
+      [BLOB_SKIN_URL]: { ok: true, status: 200, body: BLOB_BYTES, contentLength: 1024 * 1024 + 1 },
+      [mojangProfileUrl(UUID)]: { ok: false, status: 404 },
+      [STEVE_SKIN_URL]: { ok: true, status: 200, body: STEVE_BYTES },
+    });
+
+    const res = await callLoader(`?userId=${user.id}`);
+
+    expect(await bodyBytes(res)).toEqual(STEVE_BYTES);
+    expect(fetchedUrls(fetchMock)[0]).toBe(BLOB_SKIN_URL);
   });
 
   it("Blob の取得に失敗した場合は Mojang 経路へフォールバックする", async () => {

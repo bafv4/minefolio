@@ -1,7 +1,7 @@
 // 操作設定の統計を集計するサーバー側ロジック。
 // 旧 /keybindings/stats の loader を関数として切り出したもの。
 // /keybindings?view=stats からも呼び出される。
-import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { keybindings, keyRemaps, playerConfigs, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
@@ -13,8 +13,15 @@ import {
 } from "./mouse-settings";
 import type { MessageKey } from "./messages";
 import { getCached, setCached } from "./cache";
+import { loadKeybindingsListPlayers } from "./keybindings-list.server";
+import { isUnbound } from "./keybindings";
+import { hasMouseSettings } from "./keybindings-filter";
 // 描画側（stats-view.tsx）も値として参照するため、非 .server モジュールに置いている
-import { SENSITIVITY_PERCENT_BINS, UNASSIGNED_INPUT_KEY } from "./keybindings-stats-shared";
+import {
+  KEY_ACTION_STATS_KEYS,
+  SENSITIVITY_PERCENT_BINS,
+  UNASSIGNED_INPUT_KEY,
+} from "./keybindings-stats-shared";
 
 export { UNASSIGNED_INPUT_KEY };
 
@@ -79,7 +86,7 @@ export const CM180_RANGES = [
 // ゲーム内感度区分（10段階）
 // 表示・CSV・編集画面と同じ 0〜200%（Minecraft 準拠）基準。max は DPI 区分と同じく閉端で、
 // 最終区分の 200% も含む（有効範囲外の感度は集計対象から除外しているため上限は 200% で足りる）。
-// 区分の実体は keybindings-stats-shared.ts の SENSITIVITY_PERCENT_BINS（/stats と共有）。
+// 区分の実体は keybindings-stats-shared.ts の SENSITIVITY_PERCENT_BINS（描画側と共有するため keybindings-stats-shared.ts に置いている）。
 export const SENSITIVITY_RANGES = SENSITIVITY_PERCENT_BINS.map(({ min, max }) => ({
   min,
   max,
@@ -132,12 +139,22 @@ export interface Cm180Stats {
 export interface SensitivityStats {
   ranges: RangeStatWithPlayers[];
   average: number | null;
+  median: number | null;
   totalCount: number;
   /** 感度は登録済みだが有効範囲（0〜200%）外のため母数から外した人数 */
   excludedCount: number;
 }
 
-export interface RawInputStats {
+/** キー → 操作の統計（1 キーぶん）。割合の分母は totalCount（そのキーに何か割り当てている走者数） */
+export interface KeyActionStats {
+  keyCode: string;
+  /** 上位 5 件。1 人が同じキーに複数の操作を置けるので、割合の合計は 100% を超えうる */
+  topActions: Array<{ action: string; count: number; percentage: number; players: PlayerInfo[] }>;
+  totalCount: number;
+}
+
+/** ON / OFF の 2 値設定の分布（Raw Input・マウス加速・ダッシュ切替で共通。null は母数に入れない） */
+export interface BooleanSettingStats {
   onCount: number;
   offCount: number;
   totalCount: number;
@@ -151,8 +168,18 @@ export interface KeybindingsStatsData {
   dpiStats: DpiStats;
   cm180Stats: Cm180Stats;
   sensitivityStats: SensitivityStats;
-  rawInputStats: RawInputStats;
-  totalPlayers: number;
+  rawInputStats: BooleanSettingStats;
+  /** マウス加速の ON / OFF 分布 */
+  mouseAccelerationStats: BooleanSettingStats;
+  /** ダッシュ切替（toggleSprint）の ON / OFF 分布 */
+  toggleSprintStats: BooleanSettingStats;
+  /** キー → 操作の統計（KEY_ACTION_STATS_KEYS の順。データの無いキーも totalCount 0 で含む） */
+  keyActionStats: KeyActionStats[];
+  /** 登録走者数: 操作設定を登録している公開走者（/keybindings の一覧と同じ母集団） */
+  registeredPlayers: number;
+  /** 公開プロフィール数: 公開設定の走者すべて（設定の有無を問わない） */
+  publicProfiles: number;
+  /** ライブの keybindings テーブルに行がある公開走者（一覧と違い、メインプリセットのスナップショットは見ない） */
   playersWithKeybindings: number;
   playersWithMouseSettings: number;
 }
@@ -171,49 +198,114 @@ export async function loadKeybindingsStats(
     excludeViewersCondition,
   );
 
-  // 総走者数
-  const [totalResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(users)
-    .where(publicCondition);
-  const totalPlayers = totalResult?.count ?? 0;
-
-  // キーバインドを持つユーザー数
-  const [keybindingCountResult] = await db
-    .select({ count: sql<number>`count(distinct ${keybindings.userId})` })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(publicCondition);
+  // 独立した7クエリは並列に実行する（Turso は 1 往復ごとに HTTP RTT がかかるため）
+  const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
+  const [
+    [totalResult],
+    [keybindingCountResult],
+    trackedRows,
+    f3InputRemaps,
+    usersWithKeybindingsData,
+    mouseConfigs,
+    listPlayers,
+  ] = await Promise.all([
+    // 公開プロフィール数
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(publicCondition),
+    // キーバインドを持つユーザー数
+    db
+      .select({ count: sql<number>`count(distinct ${keybindings.userId})` })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(publicCondition),
+    // キーバインド統計の元データ（全アクションを1クエリで取得し、JS側で「操作→キー」（追跡対象のみ）と「キー→操作」（全操作）に分けて集計する）
+    db
+      .select({
+        userId: keybindings.userId,
+        action: keybindings.action,
+        keyCode: keybindings.keyCode,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(publicCondition),
+    // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
+    db
+      .select({
+        userId: keyRemaps.userId,
+        sourceKey: keyRemaps.sourceKey,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keyRemaps)
+      .innerJoin(users, eq(keyRemaps.userId, users.id))
+      .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat"))),
+    db
+      .select({
+        userId: keybindings.userId,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(keybindings)
+      .innerJoin(users, eq(keybindings.userId, users.id))
+      .where(publicCondition)
+      .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl),
+    // マウス設定
+    db
+      .select({
+        mouseDpi: playerConfigs.mouseDpi,
+        gameSensitivity: playerConfigs.gameSensitivity,
+        windowsSpeed: playerConfigs.windowsSpeed,
+        windowsSpeedMultiplier: playerConfigs.windowsSpeedMultiplier,
+        rawInput: playerConfigs.rawInput,
+        mouseAcceleration: playerConfigs.mouseAcceleration,
+        toggleSprint: playerConfigs.toggleSprint,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
+      .from(playerConfigs)
+      .innerJoin(users, eq(playerConfigs.userId, users.id))
+      .where(publicCondition),
+    // 一覧（/keybindings）と同じ母集団。ローダー側で 1 分キャッシュされる
+    loadKeybindingsListPlayers(db),
+  ]);
+  const publicProfiles = totalResult?.count ?? 0;
+  const registeredPlayers = listPlayers.length;
   const playersWithKeybindings = keybindingCountResult?.count ?? 0;
-
-  // マウス設定を持つユーザー数
-  const [mouseCountResult] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(playerConfigs)
-    .innerJoin(users, eq(playerConfigs.userId, users.id))
-    .where(and(publicCondition, isNotNull(playerConfigs.mouseDpi)));
-  const playersWithMouseSettings = mouseCountResult?.count ?? 0;
+  // マウス設定の登録者と Raw Input / マウス加速の分布の母集団は、表のマウスタブに載る走者
+  // （DPI・感度・Windows 速度のどれかがある。hasMouseSettings）に揃える。Raw Input（既定 ON）・
+  // マウス加速（既定 OFF）は設定行ができた時点で値が入るため、これだけを根拠にすると
+  // マウス設定を何も入力していない走者まで「ON / OFF の 4 人」に数えてしまい、
+  // 「表で見る」で渡した走者が表のマウスタブに載らなくなる
+  const mouseSettingConfigs = mouseConfigs.filter((c) => hasMouseSettings(c));
+  const playersWithMouseSettings = mouseSettingConfigs.length;
 
   // キーバインド統計（TRACKED_ACTIONS 全アクション分を1クエリでまとめて取得し、JS側で集計する）
   const keybindingStats: KeybindingStats[] = [];
-  const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
-  const trackedRows = await db
-    .select({
-      action: keybindings.action,
-      keyCode: keybindings.keyCode,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(and(publicCondition, inArray(keybindings.action, trackedActionNames)));
 
+  const trackedActionSet = new Set<string>(trackedActionNames);
   const rowsByAction = new Map<string, typeof trackedRows>();
   for (const r of trackedRows) {
+    if (!trackedActionSet.has(r.action)) continue;
     const rows = rowsByAction.get(r.action) ?? [];
     rows.push(r);
     rowsByAction.set(r.action, rows);
@@ -249,36 +341,7 @@ export async function loadKeybindingsStats(
   }
 
   // F3 入力キー統計（ゲーム入力の統計なので chat 種別のリマップは除外）
-  const f3InputRemaps = await db
-    .select({
-      userId: keyRemaps.userId,
-      sourceKey: keyRemaps.sourceKey,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keyRemaps)
-    .innerJoin(users, eq(keyRemaps.userId, users.id))
-    .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat")));
-
   const remappedToF3UserIds = new Set(f3InputRemaps.map((r) => r.userId));
-  const usersWithKeybindingsData = await db
-    .select({
-      userId: keybindings.userId,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(keybindings)
-    .innerJoin(users, eq(keybindings.userId, users.id))
-    .where(publicCondition)
-    .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl);
 
   const f3DefaultUsers = usersWithKeybindingsData.filter(
     (u) => !remappedToF3UserIds.has(u.userId),
@@ -321,26 +384,7 @@ export async function loadKeybindingsStats(
     totalCount: f3TotalCount,
   };
 
-  // マウス設定
-  const mouseConfigs = await db
-    .select({
-      mouseDpi: playerConfigs.mouseDpi,
-      gameSensitivity: playerConfigs.gameSensitivity,
-      windowsSpeed: playerConfigs.windowsSpeed,
-      windowsSpeedMultiplier: playerConfigs.windowsSpeedMultiplier,
-      rawInput: playerConfigs.rawInput,
-      slug: users.slug,
-      mcid: users.mcid,
-      uuid: users.uuid,
-      displayName: users.displayName,
-      displayNameAlphabet: users.displayNameAlphabet,
-      customSkinUrl: users.customSkinUrl,
-    })
-    .from(playerConfigs)
-    .innerJoin(users, eq(playerConfigs.userId, users.id))
-    .where(publicCondition);
-
-  // DPI 統計
+  // マウス設定: DPI 統計
   const dpiConfigs = mouseConfigs.filter((c) => c.mouseDpi != null);
   const dpiValues = dpiConfigs.map((c) => c.mouseDpi!);
 
@@ -470,36 +514,81 @@ export async function loadKeybindingsStats(
           sensitivityValues.reduce((a, b) => a + b, 0) / sensitivityValues.length,
         )
       : null,
+    median: sensitivityValues.length > 0
+      ? [...sensitivityValues].sort((a, b) => a - b)[Math.floor(sensitivityValues.length / 2)]
+      : null,
     totalCount: sensitivityValues.length,
     excludedCount: sensitivityExcludedCount,
   };
 
-  // Raw Input 統計
-  const rawInputConfigs = mouseConfigs.filter((c) => c.rawInput != null);
-  const onConfigs = rawInputConfigs.filter((c) => c.rawInput === true);
-  const offConfigs = rawInputConfigs.filter((c) => c.rawInput === false);
-
-  const rawInputStats: RawInputStats = {
-    onCount: onConfigs.length,
-    offCount: offConfigs.length,
-    totalCount: rawInputConfigs.length,
-    onPlayers: onConfigs.map((c) => ({
-      slug: c.slug,
-      mcid: c.mcid,
-      uuid: c.uuid,
-      displayName: c.displayName,
-      displayNameAlphabet: c.displayNameAlphabet,
-      customSkinUrl: c.customSkinUrl,
-    })),
-    offPlayers: offConfigs.map((c) => ({
-      slug: c.slug,
-      mcid: c.mcid,
-      uuid: c.uuid,
-      displayName: c.displayName,
-      displayNameAlphabet: c.displayNameAlphabet,
-      customSkinUrl: c.customSkinUrl,
-    })),
+  // ON / OFF 設定の分布（null は母数に入れない）
+  const toPlayerInfo = (c: (typeof mouseConfigs)[number]): PlayerInfo => ({
+    slug: c.slug,
+    mcid: c.mcid,
+    uuid: c.uuid,
+    displayName: c.displayName,
+    displayNameAlphabet: c.displayNameAlphabet,
+    customSkinUrl: c.customSkinUrl,
+  });
+  const buildBooleanStats = (
+    pick: (c: (typeof mouseConfigs)[number]) => boolean | null,
+    population: typeof mouseConfigs = mouseConfigs,
+  ): BooleanSettingStats => {
+    const onConfigs = population.filter((c) => pick(c) === true);
+    const offConfigs = population.filter((c) => pick(c) === false);
+    return {
+      onCount: onConfigs.length,
+      offCount: offConfigs.length,
+      totalCount: onConfigs.length + offConfigs.length,
+      onPlayers: onConfigs.map(toPlayerInfo),
+      offPlayers: offConfigs.map(toPlayerInfo),
+    };
   };
+  const rawInputStats = buildBooleanStats((c) => c.rawInput, mouseSettingConfigs);
+  const mouseAccelerationStats = buildBooleanStats((c) => c.mouseAcceleration, mouseSettingConfigs);
+  const toggleSprintStats = buildBooleanStats((c) => c.toggleSprint);
+
+  // キー → 操作の統計（全操作が対象。未割り当ての行はキーとして数えない）
+  // キー -> 操作 -> userId -> 走者（同じキーに同じ操作の行が重なっても 1 人と数える）
+  const keyActionRows = new Map<string, Map<string, Map<string, PlayerInfo>>>();
+  for (const r of trackedRows) {
+    if (isUnbound(r.keyCode)) continue;
+    let byAction = keyActionRows.get(r.keyCode);
+    if (!byAction) {
+      byAction = new Map();
+      keyActionRows.set(r.keyCode, byAction);
+    }
+    let byUser = byAction.get(r.action);
+    if (!byUser) {
+      byUser = new Map();
+      byAction.set(r.action, byUser);
+    }
+    byUser.set(r.userId, {
+      slug: r.slug,
+      mcid: r.mcid,
+      uuid: r.uuid,
+      displayName: r.displayName,
+      displayNameAlphabet: r.displayNameAlphabet,
+      customSkinUrl: r.customSkinUrl,
+    });
+  }
+  const keyActionStats: KeyActionStats[] = KEY_ACTION_STATS_KEYS.map((keyCode) => {
+    const byAction = keyActionRows.get(keyCode);
+    if (!byAction) return { keyCode, topActions: [], totalCount: 0 };
+    const userIds = new Set<string>();
+    for (const byUser of byAction.values()) for (const id of byUser.keys()) userIds.add(id);
+    const totalCount = userIds.size;
+    const topActions = Array.from(byAction.entries())
+      .map(([action, byUser]) => ({
+        action,
+        count: byUser.size,
+        percentage: totalCount > 0 ? (byUser.size / totalCount) * 100 : 0,
+        players: Array.from(byUser.values()),
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    return { keyCode, topActions, totalCount };
+  });
 
   const result: KeybindingsStatsData = {
     keybindingStats,
@@ -508,7 +597,11 @@ export async function loadKeybindingsStats(
     cm180Stats,
     sensitivityStats,
     rawInputStats,
-    totalPlayers,
+    mouseAccelerationStats,
+    toggleSprintStats,
+    keyActionStats,
+    registeredPlayers,
+    publicProfiles,
     playersWithKeybindings,
     playersWithMouseSettings,
   };

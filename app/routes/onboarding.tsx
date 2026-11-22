@@ -17,13 +17,20 @@ import { createAuth } from "@/lib/auth";
 import { getSession, isRegistered } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, socialLinks } from "@/lib/schema";
-import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
 import { createDefaultsForNewUser } from "@/lib/defaults";
 import { generateSlug, getLocalizedDisplayName } from "@/lib/slug";
-import { sanitizeReturnTo } from "@/lib/return-to";
-import { claimSlug, recordSlugChange } from "@/lib/slug-history.server";
+import { sanitizeReturnTo, returnToPageKey } from "@/lib/return-to";
+import { claimSlug } from "@/lib/slug-history.server";
+import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
-import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import {
+  PRINTABLE_ASCII_RE,
+  PROFILE_FIELD_LIMITS,
+  validateBedrockMcidFormat,
+  validateLinkInput,
+  validateMcidFormat,
+  validateProfileTextFields,
+} from "@/lib/profile-edit-validation";
 import {
   runAfterResponse,
   refreshTwitchVodsForLogin,
@@ -32,11 +39,12 @@ import {
 } from "@/lib/targeted-refresh.server";
 import { cn } from "@/lib/utils";
 import { resolveCapeProps } from "@/lib/cape";
+import { estimateOnboardingResumeStep, ONBOARDING_TOTAL_STEPS } from "@/lib/onboarding-progress";
 import { useLocale, useT } from "@/hooks/use-locale";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,10 +58,12 @@ import {
   OnboardingStepError,
   OnboardingStepFooter,
   OnboardingStepHeader,
+  useFocusOnMount,
 } from "@/components/onboarding/onboarding-step";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
   Info,
   Loader2,
@@ -66,19 +76,19 @@ const VISIBILITIES = users.profileVisibility.enumValues;
 type ProfileVisibility = (typeof VISIBILITIES)[number];
 
 /** ウィザードのステップ数（ようこそ画面・完了画面は数えない） */
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = ONBOARDING_TOTAL_STEPS;
 
 // 連携ステップで扱うプラットフォーム（custom は扱わない）。
-// label / placeholder / prefix は edit.tsx の platformOptions に倣う
+// label / prefix は /me/edit のリンク欄（platformOptions）に倣う。プレースホルダは翻訳キー（onboarding.linkPlaceholder）に example を差し込む
 const LINK_PLATFORMS = [
-  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@", icon: Youtube },
-  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/", icon: Twitch },
-  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/", icon: Twitter },
+  { value: "youtube", label: "YouTube", prefix: "youtube.com/@", example: "yourchannel", icon: Youtube },
+  { value: "twitch", label: "Twitch", prefix: "twitch.tv/", example: "your_name", icon: Twitch },
+  { value: "twitter", label: "Twitter/X", prefix: "x.com/", example: "your_handle", icon: Twitter },
   {
     value: "speedruncom",
     label: "Speedrun.com",
-    placeholder: "e.g. couriern3w",
     prefix: "speedrun.com/users/",
+    example: "YourName",
     icon: ExternalLink,
   },
 ] as const;
@@ -116,9 +126,6 @@ const DISPLAY_TOGGLES = [
   { name: "showYoutubeOnHome", labelKey: "meEdit.showYoutubeOnHome" },
 ] as const;
 
-// 印字可能な ASCII のみ（英数字・空白・基本記号）。アルファベット表記の表示名の規則（edit.tsx と同じ）
-const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
-
 /**
  * Discord 表示名を「アルファベット表記の表示名」の既定値に使えるなら返す。
  * edit.tsx の基本情報フォームと同じ規則（印字可能 ASCII のみ・50 文字以内）を満たすときだけ採用し、
@@ -127,31 +134,20 @@ const PRINTABLE_ASCII_RE = /^[\x20-\x7E]+$/;
  */
 function discordNameAsAlphabet(name: string | null | undefined): string | null {
   const value = name?.trim();
-  if (!value || value.length > 50 || !PRINTABLE_ASCII_RE.test(value)) {
+  if (!value || value.length > PROFILE_FIELD_LIMITS.displayNameAlphabet || !PRINTABLE_ASCII_RE.test(value)) {
     return null;
   }
   return value;
 }
 
 /**
- * ソーシャルリンク ID の形式検証。edit.tsx の create_link と同じ規則
+ * ソーシャルリンク ID の形式検証。/me/edit（app/lib/profile-edit.server.ts）が使う validateLinkInput と同じ規則
  * （100 文字以内、YouTube は禁止文字方式、それ以外は英数字・ハイフン・アンダースコアのみ）。
  * 問題なければ null を返す。
  */
 function validateLinkIdentifier(t: Translator, platform: LinkPlatform, identifier: string): string | null {
-  if (identifier.length > 100) {
-    return t("meEdit.idMaxLength");
-  }
-  if (platform === "youtube") {
-    // YouTubeハンドルは日本語などUnicode文字を許可。空白、@、URL特殊文字は禁止
-    if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
-      return t("meEdit.idInvalidChars");
-    }
-  } else if (!/^[\w\-]+$/.test(identifier)) {
-    // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
-    return t("meEdit.idAllowedChars");
-  }
-  return null;
+  const key = validateLinkInput({ platform, identifier, customLabel: null, customUrl: null });
+  return key ? t(key) : null;
 }
 
 export const meta: Route.MetaFunction = ({ matches, loaderData }) => {
@@ -252,6 +248,16 @@ export async function loader({ request }: Route.LoaderArgs) {
         }
       : null,
     links,
+    // 途中離脱からの再開位置（保存済みの内容からの推定。行が無ければ使わない）
+    resumeStep: existingUser
+      ? estimateOnboardingResumeStep(
+          {
+            ...existingUser,
+            linkPlatforms: existingUser.socialLinks.map((link) => link.platform),
+          },
+          session.user.name,
+        )
+      : 1,
     appUrl: env.APP_URL || "https://minefolio.app",
     returnTo,
   };
@@ -325,34 +331,17 @@ export async function action({ request }: Route.ActionArgs) {
     const location = (formData.get("location") as string)?.trim() || null;
     const pronouns = (formData.get("pronouns") as string)?.trim() || null;
 
-    // 以下の検証は edit.tsx の基本情報フォームと同じ規則
-    if (displayName && displayName.length > 50) {
-      return { error: t("meEdit.displayNameMax") };
-    }
-
-    if (displayNameAlphabet && displayNameAlphabet.length > 50) {
-      return { error: t("meEdit.displayNameAlphabetMax") };
-    }
-
-    // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
-    if (displayNameAlphabet && !PRINTABLE_ASCII_RE.test(displayNameAlphabet)) {
-      return { error: t("meEdit.displayNameAlphabetInvalid") };
-    }
-
-    if (bio && bio.length > 500) {
-      return { error: t("meEdit.bioMax") };
-    }
-
-    if (location && location.length > 100) {
-      return { error: t("meEdit.locationMax") };
-    }
-
-    if (shortBio && shortBio.length > 50) {
-      return { error: t("meEdit.shortBioMax") };
-    }
-
-    if (pronouns && pronouns.length > 20) {
-      return { error: t("meEdit.pronounsMax") };
+    // /me/edit の基本情報と同じ検証（profile-edit-validation.ts が単一情報源）
+    const textError = validateProfileTextFields({
+      displayName,
+      displayNameAlphabet,
+      bio,
+      location,
+      shortBio,
+      pronouns,
+    });
+    if (textError) {
+      return { error: t(textError) };
     }
 
     await db
@@ -380,16 +369,12 @@ export async function action({ request }: Route.ActionArgs) {
     const mcid = (formData.get("mcid") as string)?.trim() || "";
     const bedrockMcidInput = (formData.get("bedrockMcid") as string)?.trim() || "";
 
-    // Bedrock版MCID: edit.tsx の set_bedrock_mcid と同じ規則。空欄なら null（解除）。
+    // Bedrock版MCID: /me/edit の一括保存（save_all → app/lib/profile-edit.server.ts）と同じ規則。空欄なら null（解除）。
     // 自己申告の表示用テキストのためMojang検証はせず、uuid・スキン・slug には関与させない
     if (bedrockMcidInput) {
-      // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
-      if (bedrockMcidInput.length < 3 || bedrockMcidInput.length > 24) {
-        return { error: t("meEdit.bedrockMcidLength") };
-      }
-      // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
-      if (/[\u0000-\u001f\u007f]/.test(bedrockMcidInput)) {
-        return { error: t("meEdit.bedrockMcidInvalid") };
+      const bedrockError = validateBedrockMcidFormat(bedrockMcidInput);
+      if (bedrockError) {
+        return { error: t(bedrockError), field: "bedrockMcid" as const };
       }
     }
     const bedrockMcid = bedrockMcidInput || null;
@@ -398,37 +383,25 @@ export async function action({ request }: Route.ActionArgs) {
     const mcidChanged = mcid ? mcid !== user.mcid : !!user.mcid;
 
     if (mcidChanged) {
-      // 設定/変更は edit.tsx の set_mcid、解除は remove_mcid と同じ処理
-      if (mcid) {
-        if (mcid.length < 3 || mcid.length > 16) {
-          return { error: t("meEdit.mcidLength") };
-        }
-
-        // 既に同じMCIDが登録されていないかチェック
-        const existingUser = await db.query.users.findFirst({
-          where: eq(users.mcid, mcid),
-        });
-
-        if (existingUser && existingUser.id !== user.id) {
-          return { error: t("meEdit.mcidTaken") };
-        }
-      }
-
-      // 設定時は Mojang API で検証して uuid を導出する（フォームの値は信用しない）。解除時は両方 null
+      // 設定/変更・解除とも /me/edit と同じ処理（mcid-change.server.ts）
+      // 設定時は形式・重複・Mojang 照合（uuid はフォームの値を信用せず導出）。解除時は両方 null
       let next: { mcid: string | null; uuid: string | null };
-      try {
-        next = mcid ? { mcid, uuid: await fetchUuidFromMcid(mcid) } : { mcid: null, uuid: null };
-      } catch (error) {
-        if (error instanceof MojangError && error.code === "MCID_NOT_FOUND") {
-          return { error: t("meEdit.mcidNotFound") };
+      if (mcid) {
+        const formatError = validateMcidFormat(mcid);
+        if (formatError) {
+          return { error: t(formatError), field: "mcid" as const };
         }
-        return { error: t("meEdit.mcidVerifyFailed") };
+        const verified = await verifyMcidForUser(db, user, mcid);
+        if ("errorKey" in verified) {
+          return { error: t(verified.errorKey), field: "mcid" as const };
+        }
+        next = { mcid, uuid: verified.uuid };
+      } else {
+        next = { mcid: null, uuid: null };
       }
-
-      // 解除時の slug は @{discordId} に戻る
-      const newSlug = generateSlug(next.mcid, session.user.id);
 
       await db.transaction(async (tx) => {
+        const newSlug = await applyMcidSlugChange(tx, user, next.mcid);
         await tx
           .update(users)
           .set({
@@ -439,11 +412,8 @@ export async function action({ request }: Route.ActionArgs) {
             updatedAt: new Date(),
           })
           .where(eq(users.id, user.id));
-
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
       });
-      // edit.tsx の set_mcid が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
+      // /me/edit の一括保存（save_all → mcid-change.server.ts の verifyMcidForUser / applyMcidSlugChange）が行う YouTube 動画キャッシュの追従（updateYoutubeCacheMcid / 即時取得）は
       // ここでは行わない。ウィザード中は常に非公開（cron 対象外）でキャッシュが存在せず、
       // 公開へ切り替えた時点で save_visibility が最新の MCID で追いつかせるため
     } else if (bedrockMcid !== user.bedrockMcid) {
@@ -583,7 +553,7 @@ export async function action({ request }: Route.ActionArgs) {
     } else if (profileVisibility === "unlisted") {
       // 限定公開もプロフィールは見られるが、SRC/MCSR Ranked ランキングの cron は public のみが対象で追いつかない。
       // 連携ステップ（save_links）では取得しないため、ここで SRC だけ即時に取得する
-      // （/me/edit の create_link なら限定公開でも即時取得される挙動に揃える）
+      // （/me/edit のリンク保存でも限定公開で即時取得される挙動に揃える）
       runAfterResponse(refreshSrcRankingsForUser(user.id));
     }
 
@@ -600,66 +570,128 @@ type OnboardingUser = NonNullable<LoaderData["user"]>;
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
 
-type Completion = { redirectTo: string; name: string };
+type Completion = {
+  /** 初期設定の前にいたページ（returnTo）。無ければ null */
+  returnTo: string | null;
+  /** 自分のプロフィール */
+  profileHref: string;
+  name: string;
+  /** MCID を登録したときの顔（スキン）。未登録なら null（チェックのアイコンのまま） */
+  avatar: { uuid: string | null; skinUrl: string | null; mcid: string } | null;
+};
 
 /**
  * ステップごとの保存用 fetcher。action が `{ success }` を返し、続く loader の再検証まで
  * 終わった（state が idle に戻った）時点で onSuccess を呼ぶ。失敗時は error を返す。
  */
-function useStepSubmit(onSuccess: () => void) {
+function useStepSubmit(onSuccess: () => void, onBack?: () => void) {
   const fetcher = useFetcher<typeof action>();
   const onSuccessRef = useRef(onSuccess);
+  const onBackRef = useRef(onBack);
+  // 「戻る」で保存を送ったときだけ true。成功したら onSuccess（次へ）ではなく onBack（前へ）へ進む
+  const backAfterSaveRef = useRef(false);
+  const [savingForBack, setSavingForBack] = useState(false);
   useEffect(() => {
     onSuccessRef.current = onSuccess;
+    onBackRef.current = onBack;
   });
 
   const { state, data } = fetcher;
   useEffect(() => {
-    if (state === "idle" && data && "success" in data && data.success) {
-      onSuccessRef.current();
+    if (state !== "idle") return;
+    const goBack = backAfterSaveRef.current;
+    backAfterSaveRef.current = false;
+    setSavingForBack(false);
+    if (data && "success" in data && data.success) {
+      if (goBack && onBackRef.current) onBackRef.current();
+      else onSuccessRef.current();
     }
   }, [state, data]);
 
+  /** 入力途中の「戻る」: 今の入力を保存してから前へ戻る。保存に失敗したらその手順に残り、エラーを見せる */
+  const saveThenBack = (form: HTMLFormElement | null) => {
+    if (!form) return;
+    if (!form.reportValidity()) return;
+    backAfterSaveRef.current = true;
+    setSavingForBack(true);
+    void fetcher.submit(new FormData(form), { method: "post" });
+  };
+
   const error = state === "idle" && data && "error" in data ? data.error : null;
-  return { fetcher, isSubmitting: state !== "idle", error };
+  // 欄に結ぶエラー（save_minecraft の mcid / bedrockMcid）。欄の無いエラーは null
+  const errorField = state === "idle" && data && "field" in data ? data.field : null;
+  return { fetcher, isSubmitting: state !== "idle", savingForBack, saveThenBack, error, errorField };
+}
+
+/**
+ * 非制御フォームの「保存済みの値から変わったか」。form の onInput に渡す。
+ * 値は FormData から読み、`initial` の各キーと（前後の空白を除いて）比べる。
+ * 保存済みの値（途中から再開したときの初期値）はスキップしても消えないので、変わっていなければ未入力と同じ扱い
+ */
+function useFormDirty(initial: Record<string, string>) {
+  const [dirty, setDirty] = useState(false);
+  const onInput = (event: React.FormEvent<HTMLFormElement>) => {
+    const formData = new FormData(event.currentTarget);
+    setDirty(
+      Object.entries(initial).some(
+        ([name, value]) => ((formData.get(name) as string | null) ?? "").trim() !== value.trim(),
+      ),
+    );
+  };
+  return { dirty, onInput };
 }
 
 export default function OnboardingPage() {
-  const { discordUser, user, links, returnTo } = useLoaderData<typeof loader>();
-  // 行があり未完了（途中離脱からの再開）ならようこそ画面を飛ばしてステップ1から
-  const [step, setStep] = useState<WizardStep>(() => (user ? 1 : 0));
+  const { discordUser, user, links, resumeStep, returnTo } = useLoaderData<typeof loader>();
+  // 行があり未完了（途中離脱からの再開）ならようこそ画面を飛ばし、保存済みの内容から推定した手順から
+  const [step, setStep] = useState<WizardStep>(() => (user ? resumeStep : 0));
   const [completion, setCompletion] = useState<Completion | null>(null);
+  // 手順を自分で切り替えた後だけ、新しい手順のタイトルへフォーカスを移す（ページを開いた直後は動かさない）
+  const [moved, setMoved] = useState(false);
 
   // 画面を切り替えたらページ先頭へ（長いステップの下端から次へ進んだときに途中から表示されないように）
   const goTo = (next: WizardStep) => {
     setStep(next);
+    setMoved(true);
     window.scrollTo({ top: 0 });
   };
   const complete = (result: Completion) => {
     setCompletion(result);
+    setMoved(true);
     window.scrollTo({ top: 0 });
   };
 
   let content;
   if (completion) {
-    content = <CompleteScreen completion={completion} />;
+    content = <CompleteScreen completion={completion} focusTitle={moved} />;
   } else if (step === 0 || !user) {
     content = <WelcomeStep discordUser={discordUser} onStarted={() => goTo(1)} />;
   } else if (step === 1) {
-    content = <ProfileStep user={user} discordName={discordUser.name} onNext={() => goTo(2)} />;
+    content = (
+      <ProfileStep user={user} discordName={discordUser.name} focusTitle={moved} onNext={() => goTo(2)} />
+    );
   } else if (step === 2) {
-    content = <MinecraftStep user={user} onBack={() => goTo(1)} onNext={() => goTo(3)} />;
+    content = <MinecraftStep user={user} focusTitle={moved} onBack={() => goTo(1)} onNext={() => goTo(3)} />;
   } else if (step === 3) {
-    content = <SkinStep user={user} onBack={() => goTo(2)} onNext={() => goTo(4)} />;
+    content = <SkinStep user={user} focusTitle={moved} onBack={() => goTo(2)} onNext={() => goTo(4)} />;
   } else if (step === 4) {
-    content = <LinksStep links={links} onBack={() => goTo(3)} onNext={() => goTo(5)} />;
+    content = <LinksStep links={links} focusTitle={moved} onBack={() => goTo(3)} onNext={() => goTo(5)} />;
   } else {
-    content = <VisibilityStep user={user} returnTo={returnTo} onBack={() => goTo(4)} onComplete={complete} />;
+    content = (
+      <VisibilityStep
+        user={user}
+        returnTo={returnTo}
+        focusTitle={moved}
+        onBack={() => goTo(4)}
+        onComplete={complete}
+      />
+    );
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-8">
-      <Card className="w-full max-w-xl gap-3 py-5">{content}</Card>
+    // モバイルはカードの外側・内側の余白を詰める（375 幅で本文の幅を確保する）
+    <div className="flex-1 flex items-center justify-center py-2 sm:px-4 sm:py-8">
+      <Card className="w-full max-w-xl gap-3 py-4 sm:py-5">{content}</Card>
     </div>
   );
 }
@@ -671,7 +703,7 @@ function WelcomeStep({ discordUser, onStarted }: { discordUser: DiscordUser; onS
 
   return (
     <>
-      <CardHeader className="justify-items-center gap-3 px-5 text-center">
+      <CardHeader className="justify-items-center gap-3 px-4 text-center sm:px-5">
         <Avatar className="size-20">
           <AvatarImage
             src={discordUser.image ?? undefined}
@@ -682,12 +714,12 @@ function WelcomeStep({ discordUser, onStarted }: { discordUser: DiscordUser; onS
             <UserRound className="h-10 w-10 text-muted-foreground" />
           </AvatarFallback>
         </Avatar>
-        <CardTitle className="text-2xl font-bold leading-tight">
+        <h1 data-slot="card-title" className="text-2xl font-bold leading-snug">
           {t("onboarding.welcomeTitle", { name: discordUser.name ?? "" })}
-        </CardTitle>
+        </h1>
         <CardDescription>{t("onboarding.welcomeDescription")}</CardDescription>
       </CardHeader>
-      <CardContent className="px-5">
+      <CardContent className="px-4 sm:px-5">
         <fetcher.Form method="post" className="space-y-4">
           <input type="hidden" name="_action" value="start" />
           <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
@@ -695,7 +727,7 @@ function WelcomeStep({ discordUser, onStarted }: { discordUser: DiscordUser; onS
             {t("onboarding.connectedViaDiscord")}
           </p>
           <OnboardingStepError error={error} />
-          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" size="lg" className="w-full min-h-11" disabled={isSubmitting}>
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {t("onboarding.getStarted")}
           </Button>
@@ -709,16 +741,27 @@ function WelcomeStep({ discordUser, onStarted }: { discordUser: DiscordUser; onS
 function ProfileStep({
   user,
   discordName,
+  focusTitle,
   onNext,
 }: {
   user: OnboardingUser;
   discordName: string | null | undefined;
+  focusTitle: boolean;
   onNext: () => void;
 }) {
   const t = useT();
   const { fetcher, isSubmitting, error } = useStepSubmit(onNext);
   // Combobox は controlled のみのため、値は state で持って hidden input で送る
   const [pronouns, setPronouns] = useState(user.pronouns ?? "");
+  // 代名詞は hidden input なので onInput では拾えず、state の値で別に比べる
+  const { dirty: textDirty, onInput } = useFormDirty({
+    displayName: user.displayName ?? "",
+    displayNameAlphabet: user.displayNameAlphabet ?? "",
+    shortBio: user.shortBio ?? "",
+    bio: user.bio ?? "",
+    location: user.location ?? "",
+  });
+  const dirty = textDirty || pronouns.trim() !== (user.pronouns ?? "").trim();
 
   return (
     <>
@@ -727,9 +770,10 @@ function ProfileStep({
         total={TOTAL_STEPS}
         title={t("onboarding.profileTitle")}
         description={t("onboarding.profileDescription")}
+        focusTitle={focusTitle}
       />
-      <CardContent className="px-5">
-        <fetcher.Form method="post" className="space-y-4">
+      <CardContent className="px-4 sm:px-5">
+        <fetcher.Form method="post" className="space-y-4" onInput={onInput}>
           <input type="hidden" name="_action" value="save_profile" />
 
           <div className="space-y-2">
@@ -739,7 +783,7 @@ function ProfileStep({
               name="displayName"
               defaultValue={user.displayName ?? ""}
               placeholder={discordName ?? ""}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.displayName}
             />
             <p className="text-xs text-muted-foreground">
               {t("onboarding.displayNameHint", { name: discordName ?? "" })}
@@ -753,7 +797,7 @@ function ProfileStep({
               name="displayNameAlphabet"
               defaultValue={user.displayNameAlphabet ?? ""}
               placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.displayNameAlphabet}
             />
             <p className="text-xs text-muted-foreground">{t("meEdit.displayNameAlphabetHint")}</p>
           </div>
@@ -765,7 +809,7 @@ function ProfileStep({
               name="shortBio"
               defaultValue={user.shortBio ?? ""}
               placeholder={t("meEdit.shortBioExample")}
-              maxLength={50}
+              maxLength={PROFILE_FIELD_LIMITS.shortBio}
             />
             <p className="text-xs text-muted-foreground">{t("meEdit.shortBioHint")}</p>
           </div>
@@ -777,7 +821,7 @@ function ProfileStep({
               name="bio"
               defaultValue={user.bio ?? ""}
               placeholder={t("meEdit.bioPlaceholder")}
-              maxLength={500}
+              maxLength={PROFILE_FIELD_LIMITS.bio}
               rows={3}
             />
           </div>
@@ -790,16 +834,18 @@ function ProfileStep({
                 name="location"
                 defaultValue={user.location ?? ""}
                 placeholder={t("meEdit.locationExample")}
-                maxLength={100}
+                maxLength={PROFILE_FIELD_LIMITS.location}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>{t("meEdit.pronouns")}</Label>
+              {/* trigger ボタン（role="combobox"）に名前を付ける */}
+              <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
               <Combobox
+                id="pronouns"
                 options={pronounOptions}
                 value={pronouns}
-                onValueChange={(value) => setPronouns(value.slice(0, 20))}
+                onValueChange={(value) => setPronouns(value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}
                 placeholder={t("meEdit.pronounsExample")}
                 allowCustomValue={true}
               />
@@ -808,8 +854,9 @@ function ProfileStep({
           </div>
 
           <OnboardingStepError error={error} />
+          {/* 入力があるときはスキップを出さない（黙って入力を捨てない。「次へ」で保存して進む） */}
           <OnboardingStepFooter
-            onSkip={onNext}
+            onSkip={dirty ? undefined : onNext}
             nextLabel={t("onboarding.next")}
             isSubmitting={isSubmitting}
           />
@@ -822,15 +869,41 @@ function ProfileStep({
 // ステップ2: Minecraft
 function MinecraftStep({
   user,
+  focusTitle,
   onBack,
   onNext,
 }: {
   user: OnboardingUser;
+  focusTitle: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
   const t = useT();
-  const { fetcher, isSubmitting, error } = useStepSubmit(onNext);
+  const { fetcher, isSubmitting, savingForBack, saveThenBack, error, errorField } = useStepSubmit(onNext, onBack);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { dirty, onInput } = useFormDirty({
+    mcid: user.mcid ?? "",
+    bedrockMcid: user.bedrockMcid ?? "",
+  });
+  // 欄を離れたときの形式チェック（空欄は任意なので検証しない）。サーバーの照合結果は送信後に欄へ結ぶ
+  const [blurErrors, setBlurErrors] = useState<{ mcid: string | null; bedrockMcid: string | null }>({
+    mcid: null,
+    bedrockMcid: null,
+  });
+  const validateOnBlur = (field: "mcid" | "bedrockMcid", raw: string) => {
+    const value = raw.trim();
+    const key = !value ? null : field === "mcid" ? validateMcidFormat(value) : validateBedrockMcidFormat(value);
+    setBlurErrors((prev) => ({ ...prev, [field]: key ? t(key) : null }));
+  };
+  // サーバーのエラー（Mojang の照合・重複など）は、その欄を書き直すまで出しておく。送信のたびに戻す
+  const [editedSinceSubmit, setEditedSinceSubmit] = useState({ mcid: false, bedrockMcid: false });
+  useEffect(() => {
+    if (fetcher.state === "submitting") setEditedSinceSubmit({ mcid: false, bedrockMcid: false });
+  }, [fetcher.state]);
+  const fieldError = (field: "mcid" | "bedrockMcid"): string | null =>
+    blurErrors[field] ?? (!editedSinceSubmit[field] && errorField === field ? (error ?? null) : null);
+  const mcidError = fieldError("mcid");
+  const bedrockError = fieldError("bedrockMcid");
 
   return (
     <>
@@ -839,9 +912,10 @@ function MinecraftStep({
         total={TOTAL_STEPS}
         title={t("onboarding.minecraftTitle")}
         description={t("onboarding.minecraftDescription")}
+        focusTitle={focusTitle}
       />
-      <CardContent className="px-5">
-        <fetcher.Form method="post" className="space-y-4">
+      <CardContent className="px-4 sm:px-5">
+        <fetcher.Form ref={formRef} method="post" className="space-y-4" onInput={onInput}>
           <input type="hidden" name="_action" value="save_minecraft" />
 
           <div className="space-y-2">
@@ -851,12 +925,17 @@ function MinecraftStep({
               name="mcid"
               defaultValue={user.mcid ?? ""}
               placeholder={t("onboarding.mcidPlaceholder")}
-              minLength={3}
-              maxLength={16}
+              minLength={PROFILE_FIELD_LIMITS.mcidMin}
+              maxLength={PROFILE_FIELD_LIMITS.mcidMax}
               autoComplete="off"
+              aria-invalid={mcidError ? true : undefined}
+              aria-describedby={mcidError ? "mcid-error mcid-hint" : "mcid-hint"}
+              onChange={() => setEditedSinceSubmit((prev) => ({ ...prev, mcid: true }))}
+              onBlur={(e) => validateOnBlur("mcid", e.currentTarget.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              <Info className="mr-1 inline h-3 w-3" />
+            <FieldError id="mcid-error" message={mcidError} />
+            <p id="mcid-hint" className="text-xs text-muted-foreground">
+              <Info className="mr-1 inline h-3 w-3" aria-hidden />
               {t("onboarding.mcidHint")}
             </p>
           </div>
@@ -868,17 +947,24 @@ function MinecraftStep({
               name="bedrockMcid"
               defaultValue={user.bedrockMcid ?? ""}
               placeholder={t("meEdit.bedrockMcidExample")}
-              minLength={3}
-              maxLength={24}
+              minLength={PROFILE_FIELD_LIMITS.bedrockMcidMin}
+              maxLength={PROFILE_FIELD_LIMITS.bedrockMcidMax}
               autoComplete="off"
+              aria-invalid={bedrockError ? true : undefined}
+              aria-describedby={bedrockError ? "bedrockMcid-error bedrockMcid-hint" : "bedrockMcid-hint"}
+              onChange={() => setEditedSinceSubmit((prev) => ({ ...prev, bedrockMcid: true }))}
+              onBlur={(e) => validateOnBlur("bedrockMcid", e.currentTarget.value)}
             />
-            <p className="text-xs text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
+            <FieldError id="bedrockMcid-error" message={bedrockError} />
+            <p id="bedrockMcid-hint" className="text-xs text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
           </div>
 
-          <OnboardingStepError error={error} />
+          {/* 欄に結んだエラーは下に重ねて出さない */}
+          <OnboardingStepError error={errorField ? null : error} />
           <OnboardingStepFooter
-            onBack={onBack}
-            onSkip={onNext}
+            onBack={dirty ? () => saveThenBack(formRef.current) : onBack}
+            backSaving={savingForBack}
+            onSkip={dirty ? undefined : onNext}
             nextLabel={t("onboarding.next")}
             isSubmitting={isSubmitting}
           />
@@ -888,13 +974,26 @@ function MinecraftStep({
   );
 }
 
+/** 欄の直下に出すエラー（Input の aria-describedby から id で結ぶ） */
+function FieldError({ id, message }: { id: string; message: string | null }) {
+  if (!message) return null;
+  return (
+    <p id={id} className="flex items-start gap-1 text-xs text-destructive">
+      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+      {message}
+    </p>
+  );
+}
+
 // ステップ3: スキン（アップロード/削除は既存 API /api/me/skin を使うため、このステップ専用の action は無い）
 function SkinStep({
   user,
+  focusTitle,
   onBack,
   onNext,
 }: {
   user: OnboardingUser;
+  focusTitle: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -912,8 +1011,9 @@ function SkinStep({
         total={TOTAL_STEPS}
         title={t("onboarding.skinTitle")}
         description={t("onboarding.skinDescription")}
+        focusTitle={focusTitle}
       />
-      <CardContent className="space-y-4 px-5">
+      <CardContent className="space-y-4 px-4 sm:px-5">
         {/* プレビュー（uuid も customSkinUrl も無ければ各コンポーネントのプレースホルダ表示に任せる） */}
         <div className="flex items-center justify-center gap-6 rounded-lg border border-border/60 bg-secondary/50 p-4">
           <div className="h-36 w-24 shrink-0">
@@ -973,15 +1073,19 @@ function SkinStep({
 // ステップ4: 連携
 function LinksStep({
   links,
+  focusTitle,
   onBack,
   onNext,
 }: {
   links: LoaderData["links"];
+  focusTitle: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
   const t = useT();
-  const { fetcher, isSubmitting, error } = useStepSubmit(onNext);
+  const { fetcher, isSubmitting, savingForBack, saveThenBack, error } = useStepSubmit(onNext, onBack);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { dirty, onInput } = useFormDirty(links);
 
   return (
     <>
@@ -990,9 +1094,10 @@ function LinksStep({
         total={TOTAL_STEPS}
         title={t("onboarding.linksTitle")}
         description={t("onboarding.linksDescription")}
+        focusTitle={focusTitle}
       />
-      <CardContent className="px-5">
-        <fetcher.Form method="post" className="space-y-4">
+      <CardContent className="px-4 sm:px-5">
+        <fetcher.Form ref={formRef} method="post" className="space-y-4" onInput={onInput}>
           <input type="hidden" name="_action" value="save_links" />
 
           {LINK_PLATFORMS.map((platform) => (
@@ -1001,16 +1106,18 @@ function LinksStep({
                 <platform.icon className="h-4 w-4" />
                 {platform.label}
               </Label>
-              <div className="flex items-center">
-                <span className="mr-2 shrink-0 text-sm text-muted-foreground">{platform.prefix}</span>
+              {/* 接頭辞は sm 以上で一番長い物（speedrun.com/users/）の幅にそろえ、入力欄の左端を縦に合わせる。
+                  モバイルは欄の上に置き、入力欄を全幅にする */}
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <span className="shrink-0 text-sm text-muted-foreground sm:w-[9.5rem]">{platform.prefix}</span>
                 <Input
                   id={`link-${platform.value}`}
                   name={platform.value}
                   defaultValue={links[platform.value]}
-                  placeholder={platform.placeholder}
-                  maxLength={100}
+                  placeholder={t("onboarding.linkPlaceholder", { example: platform.example })}
+                  maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
                   autoComplete="off"
-                  className="flex-1"
+                  className="min-w-0 flex-1"
                 />
               </div>
             </div>
@@ -1018,8 +1125,9 @@ function LinksStep({
 
           <OnboardingStepError error={error} />
           <OnboardingStepFooter
-            onBack={onBack}
-            onSkip={onNext}
+            onBack={dirty ? () => saveThenBack(formRef.current) : onBack}
+            backSaving={savingForBack}
+            onSkip={dirty ? undefined : onNext}
             nextLabel={t("onboarding.next")}
             isSubmitting={isSubmitting}
           />
@@ -1033,11 +1141,13 @@ function LinksStep({
 function VisibilityStep({
   user,
   returnTo,
+  focusTitle,
   onBack,
   onComplete,
 }: {
   user: OnboardingUser;
   returnTo: string | null;
+  focusTitle: boolean;
   onBack: () => void;
   onComplete: (completion: Completion) => void;
 }) {
@@ -1047,12 +1157,29 @@ function VisibilityStep({
   // slug・表示名は保存後の値になっている）
   const { fetcher, isSubmitting, error } = useStepSubmit(() => {
     onComplete({
-      redirectTo: returnTo || `/player/${user.slug}`,
+      returnTo,
+      profileHref: `/player/${user.slug}`,
       name: getLocalizedDisplayName(user, locale),
+      avatar: user.mcid ? { uuid: user.uuid, skinUrl: user.customSkinUrl, mcid: user.mcid } : null,
     });
   });
   // 既定選択なし（本人が必ず選ぶ）。選ぶまで完了ボタンは押せない
   const [visibility, setVisibility] = useState<ProfileVisibility | "">("");
+  // 表示設定のトグル。畳んだ要約に今の状態を出すため controlled にする（既定値は従来どおり保存済みの値、無ければオン）
+  const [toggles, setToggles] = useState<Record<(typeof DISPLAY_TOGGLES)[number]["name"], boolean>>(() => ({
+    showRankedStats: user.showRankedStats ?? true,
+    showPacemanStats: user.showPacemanStats ?? true,
+    showPacemanOnHome: user.showPacemanOnHome ?? true,
+    showTwitchOnHome: user.showTwitchOnHome ?? true,
+    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
+  }));
+  const onCount = DISPLAY_TOGGLES.filter((toggle) => toggles[toggle.name]).length;
+  const toggleSummary =
+    onCount === DISPLAY_TOGGLES.length
+      ? t("onboarding.displaySummaryAllOn")
+      : onCount === 0
+        ? t("onboarding.displaySummaryAllOff")
+        : t("onboarding.displaySummarySome", { count: onCount, total: DISPLAY_TOGGLES.length });
 
   return (
     <>
@@ -1061,8 +1188,9 @@ function VisibilityStep({
         total={TOTAL_STEPS}
         title={t("onboarding.visibilityTitle")}
         description={t("onboarding.visibilityDescription")}
+        focusTitle={focusTitle}
       />
-      <CardContent className="px-5">
+      <CardContent className="px-4 sm:px-5">
         <fetcher.Form method="post" className="space-y-5">
           <input type="hidden" name="_action" value="save_visibility" />
           <input type="hidden" name="profileVisibility" value={visibility} />
@@ -1082,7 +1210,8 @@ function VisibilityStep({
                   htmlFor={`visibility-${option.value}`}
                   className={cn(
                     "cursor-pointer rounded-lg border border-border/70 px-3 py-3 font-normal leading-snug transition-colors",
-                    visibility === option.value && "border-primary/60 bg-primary/10",
+                    // 選択中は brand（ui.md 1 章「brand＝選択中・進行」）
+                    visibility === option.value && "border-brand/60 bg-brand/10",
                   )}
                 >
                   <RadioGroupItem id={`visibility-${option.value}`} value={option.value} />
@@ -1092,21 +1221,35 @@ function VisibilityStep({
             </RadioGroup>
           </div>
 
-          <div className="space-y-3 border-t border-border/60 pt-4">
-            <div className="space-y-1">
-              <Label>{t("meEdit.displaySettings")}</Label>
+          {/* 表示設定は畳み、要約の1行だけを出す（既定値は変えない）。畳んでいても中の Switch はフォームに含まれ、
+              オンのときだけ name=value("true") が送信される（edit.tsx の Switch と同じ） */}
+          <details className="group border-t border-border/60 pt-4">
+            <summary className="-mx-2 flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md px-2 text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-9 [&::-webkit-details-marker]:hidden">
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
+                aria-hidden
+              />
+              <span className="font-medium">{t("meEdit.displaySettings")}</span>
+              <span className="text-muted-foreground">{toggleSummary}</span>
+            </summary>
+            <div className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">{t("meEdit.displaySettingsHint")}</p>
+              {DISPLAY_TOGGLES.map((toggle) => (
+                <div key={toggle.name} className="flex items-center justify-between gap-3">
+                  <Label htmlFor={toggle.name} className="cursor-pointer text-sm font-normal leading-snug">
+                    {t(toggle.labelKey)}
+                  </Label>
+                  <Switch
+                    id={toggle.name}
+                    name={toggle.name}
+                    value="true"
+                    checked={toggles[toggle.name]}
+                    onCheckedChange={(checked) => setToggles((prev) => ({ ...prev, [toggle.name]: checked }))}
+                  />
+                </div>
+              ))}
             </div>
-            {DISPLAY_TOGGLES.map((toggle) => (
-              <div key={toggle.name} className="flex items-center justify-between gap-3">
-                <Label htmlFor={toggle.name} className="cursor-pointer text-sm font-normal leading-snug">
-                  {t(toggle.labelKey)}
-                </Label>
-                {/* uncontrolled。オンのときだけ name=value("true") が送信される（edit.tsx の Switch と同じ） */}
-                <Switch id={toggle.name} name={toggle.name} value="true" defaultChecked={user[toggle.name] ?? true} />
-              </div>
-            ))}
-          </div>
+          </details>
 
           <OnboardingStepError error={error} />
           <OnboardingStepFooter
@@ -1123,29 +1266,67 @@ function VisibilityStep({
 }
 
 // 完了画面
-function CompleteScreen({ completion }: { completion: Completion }) {
+function CompleteScreen({ completion, focusTitle }: { completion: Completion; focusTitle: boolean }) {
   const t = useT();
+  const titleRef = useFocusOnMount<HTMLHeadingElement>(focusTitle);
+  const returnPage = completion.returnTo ? returnToPageKey(completion.returnTo) : null;
 
   return (
     <>
-      <CardHeader className="justify-items-center gap-3 px-5 text-center">
-        <div className="rounded-full bg-success/10 p-3">
-          <CheckCircle2 className="h-8 w-8 text-success" />
-        </div>
+      <CardHeader className="justify-items-center gap-3 px-4 text-center sm:px-5">
+        {completion.avatar ? (
+          // 作ったプロフィールの顔（隣に名前の見出しがあるので alt は空）
+          <div className="mb-1 h-16 w-16 shrink-0 overflow-hidden rounded-xl">
+            <MinecraftAvatar
+              uuid={completion.avatar.uuid}
+              skinUrl={completion.avatar.skinUrl}
+              mcid={completion.avatar.mcid}
+              size={64}
+              alt=""
+            />
+          </div>
+        ) : (
+          <CheckCircle2 className="mb-1 h-8 w-8 text-success" aria-hidden />
+        )}
         <p className="text-sm font-medium text-success">{t("onboarding.completeTitle")}</p>
-        <CardTitle className="text-2xl font-bold leading-tight">
+        <h1
+          ref={titleRef}
+          tabIndex={-1}
+          data-slot="card-title"
+          className="text-2xl font-bold leading-snug focus-visible:outline-none"
+        >
           {t("onboarding.completeWelcome", { name: completion.name })}
-        </CardTitle>
+        </h1>
         <CardDescription>{t("onboarding.completeDescription")}</CardDescription>
       </CardHeader>
-      <CardContent className="px-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button asChild size="lg">
-            <Link to={completion.redirectTo}>{t("onboarding.viewProfile")}</Link>
+      <CardContent className="px-4 sm:px-5">
+        {/* 主操作は1つ。元のページ（returnTo）があるときは、そこへ戻る（ログインした目的を続ける）。
+            無いときは「キー配置を登録する」（製品の核へつなぐため）。ほかは2段目の副次に並べる */}
+        <div className="flex flex-col gap-2 sm:items-center">
+          <Button asChild size="lg" className="min-h-11">
+            {completion.returnTo ? (
+              <Link to={completion.returnTo}>
+                {returnPage
+                  ? t("onboarding.backToPage", { page: t(returnPage) })
+                  : t("onboarding.backToPrevious")}
+              </Link>
+            ) : (
+              <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
+            )}
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/me/edit">{t("onboarding.moreSettings")}</Link>
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+            {completion.returnTo && (
+              <Button asChild size="lg" variant="outline" className="min-h-11">
+                <Link to="/me/keybindings">{t("onboarding.registerKeybindings")}</Link>
+              </Button>
+            )}
+            <Button asChild size="lg" variant="outline" className="min-h-11">
+              <Link to={completion.profileHref}>{t("onboarding.viewProfile")}</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="min-h-11">
+              <Link to="/me/edit">{t("onboarding.moreSettings")}</Link>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </>

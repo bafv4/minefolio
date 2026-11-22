@@ -12,6 +12,7 @@ import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import { parseDateParam } from "./paces-feed.server";
 import { videoRetentionCutoff, type FeedVideo } from "./feed-video";
+import { getHomeHiddenUsers } from "./home-visibility.server";
 
 // フィード全体のメモリキャッシュTTL（無限スクロールのページ毎の全走査を避ける）
 const VIDEOS_FEED_CACHE_TTL = 60 * 1000;
@@ -85,12 +86,24 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
 
   const cutoff = videoRetentionCutoff();
 
-  const [ytRows, vodRows, twitchLinks] = await Promise.all([
+  // YouTube動画に紐付いているMCIDのユーザーは、同じ条件のキャッシュ行から引くサブクエリで絞る
+  // （全公開ユーザーの走査を避けつつ、動画行の取得を待たずに並列で取得する）
+  const ytWhere = and(
+    eq(youtubeVideoCache.isAvailable, true),
+    gte(youtubeVideoCache.publishedAt, cutoff),
+  );
+  const [ytRows, vodRows, twitchLinks, ytUsers] = await Promise.all([
+    // 一覧表示に使う列のみ（description 等の未使用の長文列は取得しない）
     db.query.youtubeVideoCache.findMany({
-      where: and(
-        eq(youtubeVideoCache.isAvailable, true),
-        gte(youtubeVideoCache.publishedAt, cutoff),
-      ),
+      where: ytWhere,
+      columns: {
+        videoId: true,
+        title: true,
+        thumbnailUrl: true,
+        channelTitle: true,
+        publishedAt: true,
+        minefolioMcid: true,
+      },
       orderBy: [desc(youtubeVideoCache.publishedAt)],
     }),
     db.query.twitchVodCache.findMany({
@@ -98,39 +111,43 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
         eq(twitchVodCache.isAvailable, true),
         gte(twitchVodCache.publishedAt, cutoff),
       ),
+      columns: {
+        vodId: true,
+        userLogin: true,
+        title: true,
+        thumbnailUrl: true,
+        channelTitle: true,
+        publishedAt: true,
+        durationSeconds: true,
+        gameName: true,
+      },
       orderBy: [desc(twitchVodCache.publishedAt)],
     }),
     getPublicTwitchLinks(),
+    db.query.users.findMany({
+      where: and(
+        isNotNull(users.mcid),
+        inArray(
+          sql`lower(${users.mcid})`,
+          db
+            .select({ mcid: sql<string>`lower(${youtubeVideoCache.minefolioMcid})` })
+            .from(youtubeVideoCache)
+            .where(and(isNotNull(youtubeVideoCache.minefolioMcid), ytWhere)),
+        ),
+        eq(users.profileVisibility, "public"),
+        excludeViewersCondition,
+      ),
+      columns: {
+        mcid: true,
+        uuid: true,
+        slug: true,
+        displayName: true,
+        displayNameAlphabet: true,
+        discordAvatar: true,
+        customSkinUrl: true,
+      },
+    }),
   ]);
-
-  // YouTube動画に実際に紐付いているMCIDのユーザーのみ取得（全公開ユーザーの走査を避ける）
-  const ytMcids = [
-    ...new Set(
-      ytRows
-        .map((v) => v.minefolioMcid?.toLowerCase())
-        .filter((mcid): mcid is string => !!mcid)
-    ),
-  ];
-  const ytUsers =
-    ytMcids.length > 0
-      ? await db.query.users.findMany({
-          where: and(
-            isNotNull(users.mcid),
-            inArray(sql`lower(${users.mcid})`, ytMcids),
-            eq(users.profileVisibility, "public"),
-            excludeViewersCondition,
-          ),
-          columns: {
-            mcid: true,
-            uuid: true,
-            slug: true,
-            displayName: true,
-            displayNameAlphabet: true,
-            discordAvatar: true,
-            customSkinUrl: true,
-          },
-        })
-      : [];
 
   const ytUserMap = new Map(ytUsers.map((u) => [u.mcid!.toLowerCase(), u]));
   const twitchLinkMap = new Map(twitchLinks.map((l) => [l.identifier.toLowerCase(), l]));
@@ -169,6 +186,7 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
       channelTitle: v.channelTitle,
       publishedAt: v.publishedAt,
       durationSeconds: v.durationSeconds,
+      gameName: v.gameName,
       minefolioMcid: link.mcid,
       uuid: link.uuid,
       slug: link.slug,
@@ -208,8 +226,23 @@ async function getVideoFeedBase(db: Db): Promise<FeedVideo[]> {
 export async function getPublicVideoFeed(
   db: Db,
   filters: VideoSearchFilters = {},
+  options: { forHome?: boolean } = {},
 ): Promise<FeedVideo[]> {
-  let items = await getVideoFeedBase(db);
+  // ホーム用の非表示一覧はフィード本体と独立なので並列で取る
+  const [baseItems, hidden] = await Promise.all([
+    getVideoFeedBase(db),
+    options.forHome ? getHomeHiddenUsers(db) : Promise.resolve(null),
+  ]);
+  let items = baseItems;
+
+  // ホーム用: 「ホーム画面にYouTube動画／Twitch配信を表示」をオフにした人の動画を全員のホームから除く
+  // （/videos 等ホーム以外は forHome を渡さないので対象外。紐付けなし＝slug なしの旧データは残す）
+  if (hidden && (hidden.youtubeSlugs.size > 0 || hidden.twitchSlugs.size > 0)) {
+    items = items.filter((v) => {
+      if (!v.slug) return true;
+      return !(v.platform === "youtube" ? hidden.youtubeSlugs : hidden.twitchSlugs).has(v.slug);
+    });
+  }
 
   if (filters.platform) {
     items = items.filter((v) => v.platform === filters.platform);

@@ -24,15 +24,15 @@ export function YoutubeNodeView({
   const embedUrl = getYouTubeEmbedUrl(String(node.attrs.src));
 
   return (
-    <NodeViewWrapper>
-      <div className="relative group my-4">
-        <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-lg">
+    <NodeViewWrapper className="guide-block-node">
+      <div className="relative group">
+        <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl">
           <iframe
             src={embedUrl}
             className="absolute top-0 left-0 w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
-            title="YouTube video"
+            title={t("guideEditor.youtubeEmbedTitle")}
           />
         </div>
         <Tooltip>

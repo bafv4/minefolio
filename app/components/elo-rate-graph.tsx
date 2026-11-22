@@ -5,6 +5,12 @@ import type { MCSRRankedMatch } from "@/lib/external-stats";
 
 interface EloRateGraphProps {
   matches: MCSRRankedMatch[];
+  /** 見出しのレベル。既定は h4（既存の表示）。欄（h2）の中の小見出しとして使うときは h3 */
+  headingLevel?: "h3" | "h4";
+  /** 見出しの class を差し替える（省略時は既存の text-sm font-medium text-muted-foreground） */
+  headingClassName?: string;
+  /** 増減の数字に「直近N戦で」の説明を付ける（既定は数字のみ） */
+  labelChange?: boolean;
 }
 
 /**
@@ -15,7 +21,8 @@ interface EloRateGraphProps {
  * 色はテーマトークン（--success / --destructive）を使う。SVG の fill/stroke は
  * Tailwind クラスではなく実際の色値が必要なため var() 文字列で直接渡す。
  */
-export function EloRateGraph({ matches }: EloRateGraphProps) {
+export function EloRateGraph({ matches, headingLevel = "h4", headingClassName, labelChange = false }: EloRateGraphProps) {
+  const Heading = headingLevel;
   const t = useT();
   // 同一ページに複数描画されても <linearGradient id> が衝突しないように一意化する
   const gradientId = `eloRateGraphGradient-${useId()}`;
@@ -59,18 +66,19 @@ export function EloRateGraph({ matches }: EloRateGraphProps) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-muted-foreground">
+      <div className={cn("flex items-center justify-between", labelChange && "flex-wrap gap-x-3 gap-y-1")}>
+        <Heading className={headingClassName ?? "text-sm font-medium text-muted-foreground"}>
           {t("playerProfile.eloTrend", { count: sortedMatches.length })}
-        </h4>
+        </Heading>
         <span
           className={cn(
             "text-sm font-medium",
             isPositive ? "text-success" : "text-destructive",
           )}
         >
-          {isPositive ? "+" : ""}
-          {eloChange}
+          {labelChange
+            ? t("playerProfile.eloChangeOver", { change: `${isPositive ? "+" : ""}${eloChange}` })
+            : `${isPositive ? "+" : ""}${eloChange}`}
         </span>
       </div>
       <div className="bg-secondary/30 rounded-lg p-3">

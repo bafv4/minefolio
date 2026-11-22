@@ -5,6 +5,7 @@ import { AArrowUp } from "lucide-react";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { PickerTrigger } from "./color-picker";
 import { FONT_SIZES } from "../constants";
+import { useRovingItems, focusPanelOnKeyboardOpen } from "../hooks/use-roving-items";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
 
@@ -39,9 +40,12 @@ export function applyGuideFontSize(editor: Editor, value: string): void {
 export function FontSizePicker({
   editor,
   showLabel,
+  size,
 }: {
   editor: Editor;
   showLabel?: boolean;
+  /** トリガーの大きさ（PickerTrigger の size） */
+  size?: "sm" | "default";
 }) {
   const t = useT();
   const current = currentFontSize(editor);
@@ -53,44 +57,56 @@ export function FontSizePicker({
         label={editable ? t("guideEditor.fontSize") : t("guideEditor.fontSizeDisabledInHeading")}
         showLabel={showLabel}
         disabled={!editable}
+        size={size}
       >
         <AArrowUp className="h-4 w-4" />
       </PickerTrigger>
       <PopoverContent
         className="w-40 p-1"
         onMouseDown={(e) => e.preventDefault()}
-        // 開いてもフォーカスをエディタから奪わない（選択範囲を保持する）
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        // マウスで開いたときはフォーカスをエディタから奪わない（選択範囲を保持する）。キーボードで開いたときは中へ移す
+        onOpenAutoFocus={focusPanelOnKeyboardOpen}
         align="start"
       >
-        {FONT_SIZES.map((size) => {
-          const isActive = current === size.value;
-          return (
-            <button
-              key={size.nameKey}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                applyGuideFontSize(editor, size.value);
-              }}
-              aria-pressed={isActive}
-              className={cn(
-                "flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left transition-colors",
-                isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted",
-              )}
-            >
-              {/* プレビュー: 実際の段階の大きさで「あA」を表示する */}
-              <span
-                className="w-10 shrink-0 text-center leading-none"
-                style={{ fontSize: size.value || "1em" }}
-              >
-                {t("guideEditor.fontSizes.sample")}
-              </span>
-              <span className="text-xs">{t(size.nameKey)}</span>
-            </button>
-          );
-        })}
+        <FontSizeOptions editor={editor} current={current} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** 段階の選択肢（パネルを開くたびにマウントされるので、roving の状態も開くたびに選択中へ戻る） */
+function FontSizeOptions({ editor, current }: { editor: Editor; current: string }) {
+  const t = useT();
+  const { itemProps } = useRovingItems(
+    FONT_SIZES.length,
+    FONT_SIZES.findIndex((s) => s.value === current),
+  );
+  return (
+    <>
+      {FONT_SIZES.map((size, i) => {
+        const isActive = current === size.value;
+        return (
+          <button
+            key={size.nameKey}
+            type="button"
+            {...itemProps(i)}
+            // 適用は click で行う（Enter / Space でも動く）。mousedown ではエディタの選択を奪わないことだけをする
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => applyGuideFontSize(editor, size.value)}
+            aria-pressed={isActive}
+            className={cn(
+              "flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isActive ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+            )}
+          >
+            {/* プレビュー: 実際の段階の大きさで「あA」を表示する */}
+            <span className="w-10 shrink-0 text-center leading-none" style={{ fontSize: size.value || "1em" }}>
+              {t("guideEditor.fontSizes.sample")}
+            </span>
+            <span className="text-xs">{t(size.nameKey)}</span>
+          </button>
+        );
+      })}
+    </>
   );
 }

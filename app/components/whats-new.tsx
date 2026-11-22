@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { useT } from "@/hooks/use-locale";
-import { unreadEntries, type ChangelogEntry } from "@/lib/changelog";
+import { useLocale, useT } from "@/hooks/use-locale";
+import { changelogCategoryLabel, unreadEntries, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 // markdown 描画（react-markdown 一式）はポップオーバーを開いた時にだけロードする。
@@ -16,7 +17,7 @@ const WhatsNewMarkdown = lazy(() =>
   import("./whats-new-markdown")
     .then((mod) => ({ default: mod.WhatsNewMarkdown }))
     .catch(() => ({
-      default: ({ markdown }: { markdown: string }) => (
+      default: ({ markdown }: { markdown: string; h3Label?: (text: string) => string }) => (
         <p className="whitespace-pre-wrap text-xs text-muted-foreground">{markdown}</p>
       ),
     })),
@@ -65,8 +66,22 @@ function normalizeHeading(text: string): string {
   return text.replace(/`/g, "").trim();
 }
 
+/** 読み込み中のスケルトン。開いた後の本文（max-h-[min(55vh,320px)]）と同じ高さを先に確保する */
+function WhatsNewBodySkeleton() {
+  return (
+    <div className="h-[min(55vh,320px)] space-y-2 overflow-hidden px-4 py-3" aria-hidden>
+      {["w-1/3", "w-full", "w-5/6", "w-full", "w-2/3", "w-1/3", "w-full", "w-4/5", "w-full", "w-1/2"].map(
+        (width, index) => (
+          <Skeleton key={index} className={cn("h-3", width, index === 5 && "mt-4")} />
+        ),
+      )}
+    </div>
+  );
+}
+
 export function WhatsNew() {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   // changelog.md 全文＋パース処理を含む ./whats-new-data はアイドル時に
   // 動的 import する（共通レイアウトの初期チャンクから分離するため）。
@@ -79,6 +94,8 @@ export function WhatsNew() {
   const openRef = useRef(false);
 
   const latest = entries?.[0] ?? null;
+  // 本文が日本語の文書なので、見出しの読み替えもロケールによらず日本語（changelogCategoryLabel）
+  const categoryLabel = changelogCategoryLabel;
 
   // SSRとの整合のため、entries読み込み・未読判定は初回マウントの useEffect に
   // 閉じ込める（cookie-consent.tsx と同じ隔離パターン。初期レンダは常に「未読なし」）
@@ -160,27 +177,32 @@ export function WhatsNew() {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative"
-          aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
-        >
-          {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
-          <Sparkles aria-hidden />
-          {hasUnread && (
-            <span
-              className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
-              aria-hidden
-            />
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-[min(92vw,380px)] p-0">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative size-11 md:size-9"
+              aria-label={hasUnread ? t("whatsNew.ariaLabelUnread") : t("whatsNew.ariaLabel")}
+            >
+              {/* ベル・封筒は通知/メールと誤解されるため、新着の意味で Sparkles を使う */}
+              <Sparkles aria-hidden />
+              {hasUnread && (
+                <span
+                  className="absolute top-2.5 right-2.5 md:top-1.5 md:right-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-background animate-in fade-in duration-300"
+                  aria-hidden
+                />
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent sideOffset={6}>{t("whatsNew.ariaLabel")}</TooltipContent>
+      </Tooltip>
+      <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-[min(92vw,380px)] p-0">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand shrink-0" aria-hidden />
+            <Sparkles className="h-4 w-4 text-primary shrink-0" aria-hidden />
             <span className="text-sm font-semibold">{t("whatsNew.title")}</span>
             {multi ? (
               <Badge variant="secondary">
@@ -201,31 +223,40 @@ export function WhatsNew() {
                 <button
                   key={category}
                   type="button"
-                  onClick={() => scrollToCategory(category)}
-                  className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] text-brand transition-colors hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => scrollToCategory(categoryLabel(category))}
+                  className="inline-flex min-h-6 items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] text-secondary-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  {category}
+                  {categoryLabel(category)}
                 </button>
               ))}
             </div>
+          )}
+          {/* 読み込み中は分類の行の高さも先に確保する */}
+          {entries === null && (
+            <div className="mt-2 flex gap-1" aria-hidden>
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-14 rounded-full" />
+              <Skeleton className="h-6 w-12 rounded-full" />
+            </div>
+          )}
+          {/* 本文は日本語の changelog。ja 以外の人には先に知らせる */}
+          {locale !== "ja" && (
+            <p className="mt-2 text-xs text-muted-foreground">{t("whatsNew.jaOnlyNotice")}</p>
           )}
         </div>
 
         {entries === null ? (
           // ./whats-new-data のアイドル読み込みが終わる前にポップオーバーが開かれた場合
-          <div className="space-y-2 px-4 py-3">
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-1/2" />
-          </div>
+          <WhatsNewBodySkeleton />
         ) : displayEntries.length > 0 ? (
           <div ref={bodyRef} className="max-h-[min(55vh,320px)] overflow-y-auto overscroll-contain px-4 py-3">
             <Suspense
               fallback={
-                <div className="space-y-2 py-1">
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-1/2" />
+                // 本文の器（px-4 py-3）の中なので、器の上下の余白（1.5rem）を引いた高さを確保する
+                <div className="h-[calc(min(55vh,320px)-1.5rem)] space-y-2 overflow-hidden" aria-hidden>
+                  {["w-1/3", "w-full", "w-5/6", "w-full", "w-2/3", "w-1/3", "w-full", "w-4/5"].map((width, index) => (
+                    <Skeleton key={index} className={cn("h-3", width, index === 5 && "mt-4")} />
+                  ))}
                 </div>
               }
             >
@@ -244,7 +275,7 @@ export function WhatsNew() {
                       </span>
                     </div>
                   )}
-                  <WhatsNewMarkdown markdown={entry.body} />
+                  <WhatsNewMarkdown markdown={entry.body} h3Label={categoryLabel} />
                 </div>
               ))}
             </Suspense>
@@ -262,7 +293,7 @@ export function WhatsNew() {
           <Link
             to="/developers/changelog"
             onClick={() => setOpen(false)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-link hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-brand-link hover:underline sm:min-h-0"
           >
             {t("whatsNew.viewChangelog")}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />

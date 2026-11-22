@@ -8,16 +8,16 @@ import { getEnv, isDevAuthEnabled } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { authClient } from "@/lib/auth-client";
-import { sanitizeReturnTo, encodeReturnToForCallback } from "@/lib/return-to";
+import { sanitizeReturnTo, encodeReturnToForCallback, returnToPageKey } from "@/lib/return-to";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { NoticeBanner } from "@/components/notice-banner";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useT } from "@/hooks/use-locale";
 import { localeFromMatches } from "@/lib/locale";
@@ -72,38 +72,76 @@ export async function loader({ request }: Route.LoaderArgs) {
     appUrl: env.APP_URL || "https://minefolio.app",
     devAuthEnabled: isDevAuthEnabled(),
     returnTo,
+    // Discord 側の拒否・取り消し・コールバック失敗では better-auth が errorCallbackURL に ?error=... を付けて戻す。
+    // 値（コード・説明文）は画面に出さず、失敗したかどうかだけを使う
+    authFailed: new URL(request.url).searchParams.has("error"),
   };
 }
 
 export default function LoginPage({ loaderData }: Route.ComponentProps) {
   const t = useT();
   const [isLoading, setIsLoading] = useState(false);
-  const { returnTo } = loaderData;
+  // ログインを始める前（signIn.social がエラーを返した）の失敗
+  const [startFailed, setStartFailed] = useState(false);
+  const { returnTo, authFailed } = loaderData;
 
   const handleDiscordLogin = async () => {
     setIsLoading(true);
+    setStartFailed(false);
     // returnTo は /onboarding のクエリとして引き継ぐ（既存ユーザーはそこで即座に returnTo へ、
     // 新規ユーザーはオンボーディング完了後に returnTo へ遷移する）。better-auth の callbackURL は
     // 独自の許可文字集合で検証されるため、encodeReturnToForCallback で追加エスケープする
     const callbackURL = returnTo
       ? `/onboarding?returnTo=${encodeReturnToForCallback(returnTo)}`
       : "/onboarding";
-    await authClient.signIn.social({
-      provider: "discord",
-      callbackURL,
-    });
+    // Discord 側で拒否・取り消し・失敗したときは、better-auth がここ（/login）へ ?error=... 付きで戻す
+    const errorCallbackURL = returnTo
+      ? `/login?returnTo=${encodeReturnToForCallback(returnTo)}`
+      : "/login";
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: "discord",
+        callbackURL,
+        errorCallbackURL,
+      });
+      // 成功時は Discord へ遷移するのでボタンは押せない状態のまま。エラーのときだけ戻す
+      if (error) {
+        setIsLoading(false);
+        setStartFailed(true);
+      }
+    } catch {
+      setIsLoading(false);
+      setStartFailed(true);
+    }
   };
+
+  const returnToPage = returnTo ? returnToPageKey(returnTo) : null;
 
   return (
     <div className="flex-1 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Minefolio</CardTitle>
+          {/* ページの h1。見た目は CardTitle と同じ */}
+          <h1 data-slot="card-title" className="text-2xl font-bold leading-snug">
+            {t("login.heading")}
+          </h1>
           <CardDescription>
             {t("login.cardDescription")}
           </CardDescription>
+          {returnTo && (
+            <CardDescription>
+              {returnToPage
+                ? t("login.returnToNamed", { page: t(returnToPage) })
+                : t("login.returnToGeneric")}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {(authFailed || startFailed) && (
+            <NoticeBanner tone="error" icon={AlertCircle}>
+              {t("login.authFailed")}
+            </NoticeBanner>
+          )}
           <Button
             onClick={handleDiscordLogin}
             disabled={isLoading}
@@ -118,12 +156,44 @@ export default function LoginPage({ loaderData }: Route.ComponentProps) {
             {t("login.signInWithDiscord")}
           </Button>
           {loaderData.devAuthEnabled && (
-            <Button asChild variant="outline" className="w-full">
+            <Button asChild variant="outline" className="w-full min-h-11 sm:min-h-9">
               <Link to={returnTo ? `/dev/login?returnTo=${encodeURIComponent(returnTo)}` : "/dev/login"}>
                 {t("devLogin.title")}
               </Link>
             </Button>
           )}
+          {/* ログインしたくない人の逃げ道（フィードバックから来たときだけ）。外部リンクは本文中なので下線 */}
+          {returnTo && returnToPageKey(returnTo) === "nav.feedback" && (
+            <p className="text-xs text-muted-foreground">
+              {t("login.feedbackAlt")}{" "}
+              <a
+                href="https://github.com/bafv4/minefolio/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 items-center text-primary underline underline-offset-2 hover:text-primary/80 sm:min-h-6"
+              >
+                {t("login.feedbackAltLink")}
+              </a>
+            </p>
+          )}
+          {/* Discord から受け取る情報（app/content/privacy.md「1. (1)」と auth.ts の scope: identify・email に合わせる） */}
+          <div className="space-y-2 border-t border-border/60 pt-4 text-xs text-muted-foreground">
+            <p>{t("login.discordDataNote")}</p>
+            <p className="flex flex-wrap items-center justify-center gap-x-3">
+              <Link
+                to="/terms"
+                className="inline-flex min-h-11 items-center text-primary underline-offset-2 hover:underline sm:min-h-6"
+              >
+                {t("nav.terms")}
+              </Link>
+              <Link
+                to="/privacy"
+                className="inline-flex min-h-11 items-center text-primary underline-offset-2 hover:underline sm:min-h-6"
+              >
+                {t("nav.privacy")}
+              </Link>
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

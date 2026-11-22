@@ -160,6 +160,8 @@ export const KEY_CODE_LABELS: Record<string, string> = {
   Comma: ",",
   Period: ".",
   Backquote: "`",
+  // JIS 以外では ¥ キー（JIS の半角は JIS_KEY_LABEL_KEY_OVERRIDES で上書き）
+  IntlYen: "¥",
   // テンキー
   NumpadEnter: "Num Enter",
   NumpadAdd: "Num +",
@@ -185,11 +187,17 @@ const KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
   AltRight: "keyLabels.altRight",
   MetaLeft: "keyLabels.winLeft",
   MetaRight: "keyLabels.winRight",
+  // JIS 配列の変換系キー（KeyboardEvent.code の名前のままでは読めない）
+  NonConvert: "keyLabels.nonConvert",
+  Convert: "keyLabels.convert",
+  KanaMode: "keyLabels.kana",
 };
 
 /** JIS 配列だけ翻訳が要るキー */
 const JIS_KEY_LABEL_KEY_OVERRIDES: Record<string, MessageKey> = {
   Backquote: "keyLabels.hankaku",
+  // サイトの JIS 仮想キーボードは半角キーを IntlYen で持つ（¥ キーは IntlBackslash）
+  IntlYen: "keyLabels.hankaku",
 };
 
 /**
@@ -312,6 +320,19 @@ const NORMALIZE_SPECIAL_KEYS: Record<string, string> = {
 };
 
 /**
+ * Windows 仮想キーコード（16進表記）のうちマウスボタンのもの → 正規コード。
+ * VK_LBUTTON=0x01 / VK_RBUTTON=0x02 / VK_MBUTTON=0x04 / VK_XBUTTON1=0x05（戻る）/ VK_XBUTTON2=0x06（進む）。
+ * 戻る→Mouse4(サイド2)・進む→Mouse3(サイド1) は key-capture-button.tsx のサイドボタン対応に合わせる。
+ */
+const WINDOWS_VK_MOUSE_KEYS: Record<string, string> = {
+  "0x01": "Mouse0",
+  "0x02": "Mouse1",
+  "0x04": "Mouse2",
+  "0x05": "Mouse4",
+  "0x06": "Mouse3",
+};
+
+/**
  * 様々な形式のキーコードをJavaScript KeyboardEvent.code形式（PascalCase）に正規化
  *
  * 対応形式:
@@ -329,7 +350,7 @@ export function normalizeKeyCode(keyCode: string): string {
   const lowerKeyCode = keyCode.toLowerCase();
 
   // 1. Minecraft形式の特殊キーマッピング
-  if (MINECRAFT_SPECIAL_KEYS[lowerKeyCode]) {
+  if (Object.hasOwn(MINECRAFT_SPECIAL_KEYS, lowerKeyCode)) {
     return MINECRAFT_SPECIAL_KEYS[lowerKeyCode];
   }
 
@@ -359,7 +380,7 @@ export function normalizeKeyCode(keyCode: string): string {
   }
 
   // 3. 特殊キーの正規化（大文字/小文字混在対応）
-  if (NORMALIZE_SPECIAL_KEYS[lowerKeyCode]) {
+  if (Object.hasOwn(NORMALIZE_SPECIAL_KEYS, lowerKeyCode)) {
     return NORMALIZE_SPECIAL_KEYS[lowerKeyCode];
   }
 
@@ -419,6 +440,10 @@ export function normalizeKeyCode(keyCode: string): string {
     return `F${fKeyMatch[1]}`;
   }
 
+  // Windows 仮想キーコードの16進表記（MCSRer Hotkeys 等の取り込み元に残るもの）
+  const vk = Object.hasOwn(WINDOWS_VK_MOUSE_KEYS, lowerKeyCode) ? WINDOWS_VK_MOUSE_KEYS[lowerKeyCode] : undefined;
+  if (vk) return vk;
+
   // 5. すでにPascalCase形式の場合はそのまま返す
   return keyCode;
 }
@@ -441,14 +466,40 @@ export function keysEqual(keyCode1: string, keyCode2: string): boolean {
 // =====================================
 
 // JIS配列とUS配列で異なるキーのマッピング
+// キーコードは物理的な位置（ブラウザの KeyboardEvent.code・Minecraft のキー名とも US 配列の位置で名付ける）。
+// JIS の刻印は仮想キーボードの JIS_MAIN_LAYOUT（virtual-keyboard.tsx）と同じにする
 const JIS_KEY_LABELS: Record<string, string> = {
-  Semicolon: ":",
-  Quote: "^",
+  Equal: "^",
+  Quote: ":",
   BracketLeft: "@",
   BracketRight: "[",
   Backslash: "]",
   Backquote: "",  // → keyLabels.hankaku
+  IntlBackslash: "¥",
 };
+
+/** 配列名が JIS 系か（"JIS" / "JIS_TKL" / "JIS-TKL"。大文字小文字は問わない。null・未指定は US 扱い） */
+export function isJisLayout(layout: string | null | undefined): boolean {
+  return layout?.toUpperCase().startsWith("JIS") ?? false;
+}
+
+/** 配列名が TKL（テンキーレス）か（"US_TKL" / "JIS-TKL" 等。大文字小文字は問わない） */
+export function isTklLayout(layout: string | null | undefined): boolean {
+  return layout?.toUpperCase().includes("TKL") ?? false;
+}
+
+/**
+ * 仮想キーボード上の1キーに重ねて出す、同じキーを指す別名のキーコード（自身を先頭に含む）。
+ * サイトの JIS 配列では半角キーを IntlYen で描くが、Minecraft 取り込み・実キーボードの半角は
+ * Backquote で保存される。JIS の IntlYen には Backquote の割り当ても出す。US は Backquote キーが
+ * そのまま別にあるので別名なし。
+ */
+export function getKeyCodeAliases(keyCode: string, layout: string | null | undefined): string[] {
+  if (isJisLayout(layout) && normalizeKeyCode(keyCode) === "IntlYen") {
+    return [keyCode, "Backquote"];
+  }
+  return [keyCode];
+}
 
 const US_KEY_LABELS: Record<string, string> = {
   Semicolon: ";",
@@ -468,7 +519,7 @@ const US_KEY_LABELS: Record<string, string> = {
  * - PascalCase形式: "KeyW" → "W"
  *
  * @param keyCode キーコード（任意の形式）
- * @param keyboardLayout キーボード配列 ("jis" | "us" | null)
+ * @param keyboardLayout キーボード配列（保存値の "JIS" / "JIS_TKL" / "US" / "US_TKL"、ハイフン表記（"JIS-TKL"）も可。大文字小文字は問わない。null は US）
  */
 export function getKeyLabel(
   t: Translator,
@@ -484,7 +535,7 @@ export function getKeyLabel(
   const normalized = normalizeKeyCode(keyCode);
 
   // キーボード配列による違いを適用（JIS の半角キーだけ翻訳が要る）
-  const isJis = keyboardLayout === "jis";
+  const isJis = isJisLayout(keyboardLayout);
   if (isJis && JIS_KEY_LABEL_KEY_OVERRIDES[normalized]) {
     return t(JIS_KEY_LABEL_KEY_OVERRIDES[normalized]);
   }
@@ -518,6 +569,17 @@ export function getKeyLabel(
     return "Num" + normalized.slice(6);
   }
 
+  // Minecraft がキー名を持たないキーは "scancode.NNN" で記録される。番号だけを読める形にする
+  const scancode = normalized.match(/^scancode\.(\d+)$/i);
+  if (scancode) {
+    return t("keyLabels.scancode", { code: scancode[1] });
+  }
+
+  // 未解決の16進表記（Windows 仮想キーコード等）は生のまま出さず、意味の分かる名称にする
+  if (/^0x[0-9a-f]+$/i.test(normalized)) {
+    return t("keyLabels.unknownKey", { code: normalized.toLowerCase() });
+  }
+
   // その他は正規化後の値を返す
   return normalized;
 }
@@ -527,19 +589,22 @@ export function getKeyLabel(
 // =====================================
 
 // 指の種類定義
-export type FingerType =
-  | "left-pinky"
-  | "left-ring"
-  | "left-middle"
-  | "left-index"
-  | "left-thumb"
-  | "left-palm"
-  | "right-palm"
-  | "right-thumb"
-  | "right-index"
-  | "right-middle"
-  | "right-ring"
-  | "right-pinky";
+// 許可する指の一覧（単一情報源。保存時の検証・読み取り時のサニタイズはここから導出する）
+export const FINGER_TYPES = [
+  "left-pinky",
+  "left-ring",
+  "left-middle",
+  "left-index",
+  "left-thumb",
+  "left-palm",
+  "right-palm",
+  "right-thumb",
+  "right-index",
+  "right-middle",
+  "right-ring",
+  "right-pinky",
+] as const;
+export type FingerType = (typeof FINGER_TYPES)[number];
 
 // 指のラベル
 const FINGER_LABEL_KEYS: Record<FingerType, MessageKey> = {
@@ -840,17 +905,6 @@ export function isSingleKey(keyCode: string): boolean {
   return !keyCode.includes("+");
 }
 
-/**
- * 修飾キー組み合わせかどうかを判定
- *
- * @example
- * hasModifiers("Ctrl+KeyA") // => true
- * hasModifiers("KeyA") // => false
- */
-export function hasModifiers(keyCode: string): boolean {
-  return !isSingleKey(keyCode);
-}
-
 // =====================================
 // キーボードレイアウト（配列 × フルサイズ/テンキーレス）
 // =====================================
@@ -863,6 +917,11 @@ export function hasModifiers(keyCode: string): boolean {
 export type KeyboardLayout = "US" | "JIS" | "US_TKL" | "JIS_TKL";
 
 export const KEYBOARD_LAYOUT_OPTIONS: KeyboardLayout[] = ["US", "JIS", "US_TKL", "JIS_TKL"];
+
+/** 配列の表示名（"US_TKL" → "US TKL"） */
+export function keyboardLayoutLabel(layout: string): string {
+  return layout.replace("_", " ");
+}
 
 /** 不明・欠落値は既定の "US" に正規化する */
 export function normalizeKeyboardLayout(value: string | null | undefined): KeyboardLayout {

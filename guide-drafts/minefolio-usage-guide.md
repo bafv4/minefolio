@@ -255,7 +255,8 @@ Speedrun.com / YouTube / Twitch / Twitter（X）およびカスタムリンク�
 
 ## 他アプリからの移行（インポート）
 
-以前MCSRer Hotkeysなどのアプリでキー配置を管理していた場合、`/me/import` からバックアップデータをインポートし、キーリマップやキーバインドをまとめて引き継げます。
+- **MCSRer Hotkeys からの移行**: 「公開とアカウント」（`/me/account`）の「MCSRer Hotkeysからデータをインポート」から、以前の設定を取り込めます。
+- **AutoHotkey のリマップ・Minecraft の設定ファイル**（`options.txt` / `standardsettings.json`）: キー配置画面のプリセット行の「インポート」から取り込めます。
 
 ---
 

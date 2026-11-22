@@ -10,10 +10,13 @@ export function RemapViewToggle({
   value,
   onChange,
   className,
+  buttonClassName,
 }: {
   value: RemapContext;
   onChange: (value: RemapContext) => void;
   className?: string;
+  /** 各ボタンへの追加クラス（モバイルでタップ領域を広げるときなど） */
+  buttonClassName?: string;
 }) {
   const t = useT();
   return (
@@ -33,6 +36,7 @@ export function RemapViewToggle({
             value === view
               ? "bg-secondary text-foreground"
               : "text-muted-foreground hover:text-foreground",
+            buttonClassName,
           )}
         >
           {t(`remapType.${view}`)}

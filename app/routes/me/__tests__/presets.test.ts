@@ -22,6 +22,7 @@ import {
 } from "@/lib/__tests__/helpers/test-db";
 import { parseLoopSteps } from "@/lib/search-craft-loops";
 import { DEFAULT_KEYBINDINGS } from "@/lib/defaults";
+import { encodeHistoryDescription } from "@/lib/history-description";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -34,6 +35,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../presets";
+import { SAVE_LIMITS } from "@/lib/save-limits";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -420,8 +422,8 @@ describe("action - apply-preset のラウンドトリップ", () => {
       sourceType: "current",
     });
     expect(created).toEqual({
-      success: true,
-      message: "プリセット「A」を作成して適用しました",
+      success: true, intent: "create-preset",
+      message: "プリセット「A」を作成し、編集中にしました",
     });
 
     const presetA = await db.query.configPresets.findFirst({
@@ -458,7 +460,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
       ]),
     });
     const appliedB = await callAction({ intent: "apply-preset", presetId: presetB.id });
-    expect(appliedB).toEqual({ success: true, message: "プリセット「B」を適用しました" });
+    expect(appliedB).toEqual({ success: true, intent: "apply-preset", message: "プリセット「B」を編集中にしました" });
 
     // B は他種別を持たないので、ライブは B の内容だけに置き換わる（全ワイプの確認）
     expect(await readLiveConfig(user.id)).toEqual({
@@ -468,7 +470,7 @@ describe("action - apply-preset のラウンドトリップ", () => {
 
     // A を再適用するとライブが完全復元される（craftId は新規採番だが参照は保たれる）
     const appliedA = await callAction({ intent: "apply-preset", presetId: presetA!.id });
-    expect(appliedA).toEqual({ success: true, message: "プリセット「A」を適用しました" });
+    expect(appliedA).toEqual({ success: true, intent: "apply-preset", message: "プリセット「A」を編集中にしました" });
 
     expect(await readLiveConfig(user.id)).toEqual(baseline);
   });
@@ -536,7 +538,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, message: "プリセット「旧世代」を適用しました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「旧世代」を編集中にしました" });
     const live = await readLiveConfig(user.id);
     expect(live.keyRemaps).toEqual([
       {
@@ -604,7 +606,7 @@ describe("action - apply-preset のスナップショット耐性", () => {
 
     const res = await callAction({ intent: "apply-preset", presetId: preset.id });
 
-    expect(res).toEqual({ success: true, message: "プリセット「重複sequence」を適用しました" });
+    expect(res).toEqual({ success: true, intent: "apply-preset", message: "プリセット「重複sequence」を編集中にしました" });
     const live = await readLiveConfig(user.id);
     // sequence は挿入順の1始まりへ振り直される
     expect(live.searchCraftLoops.map((l) => ({ sequence: l.sequence, comment: l.comment }))).toEqual(
@@ -698,7 +700,7 @@ describe("action - delete-preset の不変条件", () => {
 
     expect(res).toEqual({
       error:
-        "編集中のプリセットは削除できません。別のプリセットを編集対象にしてから削除してください。",
+        "編集中のプリセットは削除できません。別のプリセットを編集中にしてから削除してください。",
     });
     expect(await findPreset(active.id)).toBeDefined();
   });
@@ -709,13 +711,13 @@ describe("action - delete-preset の不変条件", () => {
 
     const res = await callAction({ intent: "delete-preset", presetId: plain.id });
 
-    expect(res).toEqual({ success: true, message: "プリセットを削除しました" });
+    expect(res).toEqual({ success: true, intent: "delete-preset", message: "プリセットを削除しました" });
     expect(await findPreset(plain.id)).toBeUndefined();
     expect(await readLiveConfig(user.id)).toEqual(before);
     const history = await db.query.configHistory.findMany({
       where: eq(schema.configHistory.userId, user.id),
     });
-    expect(history.some((h) => h.changeDescription === "プリセット「その他」を削除")).toBe(true);
+    expect(history.some((h) => h.changeDescription === encodeHistoryDescription("preset.delete", { name: "その他" }))).toBe(true);
   });
 
   it("唯一のプリセットは（メインかつ編集中でも）削除でき、ライブテーブルも全ワイプされる", async () => {
@@ -729,7 +731,7 @@ describe("action - delete-preset の不変条件", () => {
 
     const res = await callAction({ intent: "delete-preset", presetId: only.id });
 
-    expect(res).toEqual({ success: true, message: "プリセットを削除しました" });
+    expect(res).toEqual({ success: true, intent: "delete-preset", message: "プリセットを削除しました" });
     expect(await findPreset(only.id)).toBeUndefined();
     expect(await readLiveConfig(user.id)).toEqual(EMPTY_LIVE);
   });
@@ -887,8 +889,8 @@ describe("action - create-preset のソース別スナップショット", () =>
       sourcePresetId: source.id,
     });
     expect(res).toEqual({
-      success: true,
-      message: "プリセット「コピー先」を作成して適用しました",
+      success: true, intent: "create-preset",
+      message: "プリセット「コピー先」を作成し、編集中にしました",
     });
 
     const copy = (await db.query.configPresets.findFirst({
@@ -917,7 +919,7 @@ describe("action - create-preset のソース別スナップショット", () =>
     const user = await setupUser();
 
     const res = await callAction({ intent: "create-preset", name: "初期", sourceType: "current" });
-    expect(res).toEqual({ success: true, message: "プリセット「初期」を作成して適用しました" });
+    expect(res).toEqual({ success: true, intent: "create-preset", message: "プリセット「初期」を作成し、編集中にしました" });
 
     const preset = (await db.query.configPresets.findFirst({
       where: eq(schema.configPresets.userId, user.id),
@@ -978,6 +980,40 @@ describe("action - create-preset のソース別スナップショット", () =>
 // 5. その他の intent
 // ---------------------------------------------------------------------------
 
+describe("action - 編集先の切替・作成は、内容が変わらないプリセットの updatedAt を進めない", () => {
+  const OLD = new Date("2024-01-01T00:00:00Z");
+
+  it("apply-preset は、切替元・切替先どちらの updatedAt も進めない（isActive だけが変わる）", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const from = await insertPreset(user.id, { name: "元", isActive: true, updatedAt: OLD });
+    const to = await insertPreset(user.id, { name: "先", updatedAt: OLD });
+
+    const res = await callAction({ intent: "apply-preset", presetId: to.id });
+
+    expect(res).toMatchObject({ success: true, intent: "apply-preset" });
+    const fromAfter = await findPreset(from.id);
+    const toAfter = await findPreset(to.id);
+    expect(fromAfter?.isActive).toBe(false);
+    expect(toAfter?.isActive).toBe(true);
+    expect(fromAfter?.updatedAt.getTime()).toBe(OLD.getTime());
+    expect(toAfter?.updatedAt.getTime()).toBe(OLD.getTime());
+  });
+
+  it("create-preset は、既存プリセットの updatedAt を進めない", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const existing = await insertPreset(user.id, { name: "既存", isActive: true, updatedAt: OLD });
+
+    const res = await callAction({ intent: "create-preset", name: "新規", sourceType: "current" });
+
+    expect(res).toMatchObject({ success: true, intent: "create-preset" });
+    const after = await findPreset(existing.id);
+    expect(after?.isActive).toBe(false);
+    expect(after?.updatedAt.getTime()).toBe(OLD.getTime());
+  });
+});
+
 describe("action - set-main / 未知の intent", () => {
   it("set-main は is_main を排他的に付け替え、編集中フラグとライブテーブルには触れない", async () => {
     const user = await setupUser();
@@ -989,8 +1025,8 @@ describe("action - set-main / 未知の intent", () => {
     const res = await callAction({ intent: "set-main", presetId: other.id });
 
     expect(res).toEqual({
-      success: true,
-      message: "メインのプリセットを設定しました。プロフィールにはこのプリセットが表示されます",
+      success: true, intent: "set-main",
+      message: "メインのプリセットを設定しました。プロフィールにはこのプリセットが表示されます。",
     });
     expect((await findPreset(main.id))?.isMain).toBe(false);
     expect((await findPreset(main.id))?.isActive).toBe(true);
@@ -999,9 +1035,200 @@ describe("action - set-main / 未知の intent", () => {
     expect(await readLiveConfig(user.id)).toEqual(before);
   });
 
+  it("update-preset は名前・説明だけを更新し、編集先・メイン・設定内容・更新日時には触れず、履歴は公開影響なしで残す", async () => {
+    const user = await setupUser();
+    await seedFullLiveConfig(user.id);
+    const main = await insertPreset(user.id, { name: "旧名", isMain: true, isActive: true });
+    const before = await readLiveConfig(user.id);
+    const beforeRow = await findPreset(main.id);
+
+    const res = await callAction({
+      intent: "update-preset",
+      presetId: main.id,
+      name: "  新名  ",
+      description: "  説明文  ",
+    });
+
+    expect(res).toEqual({ success: true, intent: "update-preset", message: "プリセットの名前と説明を更新しました" });
+    const after = await findPreset(main.id);
+    expect(after).toMatchObject({ name: "新名", description: "説明文", isMain: true, isActive: true });
+    expect(after?.keybindingsData).toBe(beforeRow?.keybindingsData);
+    expect(after?.updatedAt).toEqual(beforeRow?.updatedAt);
+    expect(await readLiveConfig(user.id)).toEqual(before);
+    const rows = await db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, user.id),
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      changeType: "preset_switch",
+      changeDescription: encodeHistoryDescription("preset.rename", { oldName: "旧名", name: "新名" }),
+      presetId: null,
+    });
+  });
+
+  it("update-preset は説明だけの変更でも履歴を残し、空の説明は null にする。変更が無ければ何も書かない", async () => {
+    const user = await setupUser();
+    const preset = await insertPreset(user.id, { name: "名前", isActive: true });
+    await db.update(schema.configPresets).set({ description: "古い説明" }).where(eq(schema.configPresets.id, preset.id));
+
+    await callAction({ intent: "update-preset", presetId: preset.id, name: "名前", description: "   " });
+    expect((await findPreset(preset.id))?.description).toBeNull();
+    let rows = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].changeDescription).toBe(encodeHistoryDescription("preset.describe", { name: "名前" }));
+
+    const res = await callAction({ intent: "update-preset", presetId: preset.id, name: "名前", description: "" });
+    expect(res.success).toBe(true);
+    rows = await db.query.configHistory.findMany({ where: eq(schema.configHistory.userId, user.id) });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("update-preset は名前が空・他人のプリセット・存在しない id を拒否する", async () => {
+    const user = await setupUser();
+    const mine = await insertPreset(user.id, { name: "自分", isActive: true });
+    const other = await seedUser(db, { slug: "other", discordId: "discord-other" });
+    const theirs = await insertPreset(other.id, { name: "他人", isActive: true });
+
+    expect(await callAction({ intent: "update-preset", presetId: mine.id, name: "  " })).toEqual({
+      error: "プリセット名を入力してください",
+    });
+    expect(await callAction({ intent: "update-preset", presetId: theirs.id, name: "乗っ取り" })).toEqual({
+      error: "プリセットが見つかりません",
+    });
+    expect(await callAction({ intent: "update-preset", presetId: "nope", name: "x" })).toEqual({
+      error: "プリセットが見つかりません",
+    });
+    expect((await findPreset(theirs.id))?.name).toBe("他人");
+    expect((await findPreset(mine.id))?.name).toBe("自分");
+  });
+
   it("未知の intent はエラーを返す", async () => {
     await setupUser();
 
-    expect(await callAction({ intent: "bogus" })).toEqual({ error: "不明な操作です" });
+    expect(await callAction({ intent: "bogus" })).toEqual({ error: "不明な操作です。ページを再読み込みしてお試しください。" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. 変更履歴の公開影響（config_history.preset_id 規約。app/lib/config-history.ts）
+// ---------------------------------------------------------------------------
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  async function presetSwitchRows(userId: string) {
+    return db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, userId),
+    });
+  }
+
+  it("set-main はメインになったプリセットの id を入れる（公開影響あり）", async () => {
+    const user = await setupUser();
+    await insertPreset(user.id, { name: "旧メイン", isMain: true, isActive: true });
+    const other = await insertPreset(user.id, { name: "新メイン" });
+
+    await callAction({ intent: "set-main", presetId: other.id });
+
+    const rows = await presetSwitchRows(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ changeType: "preset_switch", presetId: other.id });
+  });
+
+  it("apply-preset（編集対象の切替）は、メインを適用しても履歴を記録しない", async () => {
+    const user = await setupUser();
+    const main = await insertPreset(user.id, { name: "メイン", isMain: true });
+    await insertPreset(user.id, { name: "編集中", isActive: true });
+
+    await callAction({ intent: "apply-preset", presetId: main.id });
+
+    // 編集先の切替は変更履歴に残さない（公開内容も設定内容も変えない）
+    expect(await presetSwitchRows(user.id)).toHaveLength(0);
+  });
+
+  it("非メインの削除は preset_id を入れない", async () => {
+    const user = await setupUser();
+    await insertPreset(user.id, { name: "メイン", isMain: true, isActive: true });
+    const plain = await insertPreset(user.id, { name: "その他" });
+
+    await callAction({ intent: "delete-preset", presetId: plain.id });
+
+    const rows = await presetSwitchRows(user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].presetId).toBeNull();
+  });
+
+  it("create-preset は、初回（自動でメイン）だけ preset_id を入れ、メインがある状態での作成は入れない", async () => {
+    const user = await setupUser();
+
+    await callAction({ intent: "create-preset", name: "初回", sourceType: "current" });
+    await callAction({ intent: "create-preset", name: "二件目", sourceType: "current" });
+
+    const rows = await presetSwitchRows(user.id);
+    const first = rows.find((r) => r.changeDescription.includes("初回"));
+    const second = rows.find((r) => r.changeDescription.includes("二件目"));
+    const firstPreset = await db.query.configPresets.findFirst({
+      where: eq(schema.configPresets.name, "初回"),
+    });
+    expect(first?.presetId).toBe(firstPreset?.id);
+    expect(first?.presetId).not.toBeNull();
+    expect(second?.presetId).toBeNull();
+  });
+});
+
+describe("action - 上限と型の検証（create-preset / update-preset）", () => {
+  it("名前・説明が上限を超えると作成せずエラーを返す", async () => {
+    const user = await setupUser();
+
+    for (const entries of <Record<string, string>[]>[
+      { name: "x".repeat(SAVE_LIMITS.presetName + 1) },
+      { name: "A", description: "x".repeat(SAVE_LIMITS.presetDescription + 1) },
+    ]) {
+      const res = await callAction({ intent: "create-preset", sourceType: "current", ...entries });
+      expect(res.error).toBeTruthy();
+    }
+    expect(await db.query.configPresets.findMany({ where: eq(schema.configPresets.userId, user.id) })).toHaveLength(0);
+  });
+
+  it("1ユーザーのプリセット数が上限に達していたら作成（コピー含む）を拒否する", async () => {
+    const user = await setupUser();
+    const rows = Array.from({ length: SAVE_LIMITS.presetsPerUser }, (_, i) => ({
+      userId: user.id,
+      name: `P${i}`,
+      isActive: i === 0,
+    }));
+    await db.insert(schema.configPresets).values(rows);
+
+    const res = await callAction({ intent: "create-preset", name: "One more", sourceType: "current" });
+
+    expect(res.error).toContain(String(SAVE_LIMITS.presetsPerUser));
+    expect(await db.query.configPresets.findMany({ where: eq(schema.configPresets.userId, user.id) })).toHaveLength(
+      SAVE_LIMITS.presetsPerUser,
+    );
+  });
+
+  it("update-preset も名前・説明の上限を超えると拒否し、既存の値を変えない", async () => {
+    const user = await setupUser();
+    const [preset] = await db
+      .insert(schema.configPresets)
+      .values({ userId: user.id, name: "Old", isActive: true })
+      .returning();
+
+    const res = await callAction({
+      intent: "update-preset",
+      presetId: preset.id,
+      name: "x".repeat(SAVE_LIMITS.presetName + 1),
+    });
+
+    expect(res.error).toBeTruthy();
+    const after = await db.query.configPresets.findFirst({ where: eq(schema.configPresets.id, preset.id) });
+    expect(after?.name).toBe("Old");
+  });
+
+  it("name に File を送られても 500 にせず「名前が必要」エラーを返す", async () => {
+    await setupUser();
+    const fd = new FormData();
+    fd.set("intent", "create-preset");
+    fd.set("name", new File(["x"], "x.txt"));
+    const res = (await action({ request: makeRequest(fd), params: {}, context: {} } as never)) as ActionResult;
+
+    expect(res.error).toBe("プリセット名を入力してください");
   });
 });

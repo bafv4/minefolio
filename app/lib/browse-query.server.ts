@@ -1,21 +1,22 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
-import { users } from "./schema";
+import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn } from "drizzle-orm";
+import { favorites, users } from "./schema";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
-import { getFavoritesFromDb } from "./favorites";
+import {
+  DEFAULT_PROFILE_EDITION,
+  DEFAULT_PROFILE_INPUT_METHOD,
+  DEFAULT_PROFILE_PLATFORM,
+  DEFAULT_PROFILE_ROLE,
+} from "./profile-defaults";
 import { profilePageViewsSql } from "./page-view-stats.server";
+import { escapeLike } from "./sql-like.server";
 
 export const BROWSE_ITEMS_PER_PAGE = 12;
 // ページ番号の上限。巨大な page 値で offset が整数範囲を超え SQL エラー(500)になるのを防ぐ。
 const MAX_BROWSE_PAGE = 100_000;
-
-/** LIKE のワイルドカード(%,_)とエスケープ文字(\)を無害化する。 */
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
 
 /** page パラメータを安全な整数範囲にクランプする。 */
 function parseBrowsePage(raw: string | null): number {
@@ -82,10 +83,16 @@ const BROWSE_LIST_COLUMNS = {
   role: true,
   mainEdition: true,
   mainPlatform: true,
+  inputMethod: true,
   updatedAt: true,
   shortBio: true,
   customSkinUrl: true,
 } as const;
+
+/** 列 = value。value が既定値のときは、未設定（NULL）も既定値として含める */
+function eqOrNullWhenDefault(column: AnyColumn, value: string, defaultValue: string) {
+  return value === defaultValue ? or(isNull(column), eq(column, value))! : eq(column, value);
+}
 
 /**
  * 検索 + フィルタ条件を組み立てる（共通）。
@@ -109,84 +116,128 @@ function buildWhere(args: BrowseQueryArgs) {
   }
 
   if (args.roles.length > 0) {
-    conditions.push(or(...args.roles.map((r) => eq(users.role, r)))!);
+    // role 未設定（NULL）は走者として扱う（excludeViewersCondition / 既定の一覧と同じ解釈）
+    conditions.push(or(...args.roles.map((r) => eqOrNullWhenDefault(users.role, r, DEFAULT_PROFILE_ROLE)))!);
   } else {
     conditions.push(excludeViewersCondition!);
   }
+  // 未設定（NULL）は既定値（Java・Windows・キーボード＆マウス）として扱う。
+  // カード（profile-feed-card.tsx）が既定値を出さないのと意味をそろえ、既定値で絞るときは NULL も含める
   if (args.editions.length > 0) {
-    conditions.push(or(...args.editions.map((e) => eq(users.mainEdition, e)))!);
+    conditions.push(
+      or(...args.editions.map((e) => eqOrNullWhenDefault(users.mainEdition, e, DEFAULT_PROFILE_EDITION)))!,
+    );
   }
   if (args.inputMethods.length > 0) {
     conditions.push(
-      or(...args.inputMethods.map((i) => eq(users.inputMethod, i)))!,
+      or(...args.inputMethods.map((i) => eqOrNullWhenDefault(users.inputMethod, i, DEFAULT_PROFILE_INPUT_METHOD)))!,
     );
   }
   if (args.platforms.length > 0) {
     conditions.push(
-      or(...args.platforms.map((p) => eq(users.mainPlatform, p)))!,
+      or(...args.platforms.map((p) => eqOrNullWhenDefault(users.mainPlatform, p, DEFAULT_PROFILE_PLATFORM)))!,
     );
   }
   return and(...conditions);
+}
+
+/** 条件に一致する件数（一覧と同じ buildWhere を通す。行は取得せず count(*) のみ） */
+export async function countBrowse(db: Database, args: BrowseQueryArgs): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(buildWhere(args));
+  return Number(rows[0]?.count ?? 0);
 }
 
 /** 1 ページ分の走者リストを取得 */
 export async function loadBrowsePage(
   db: Database,
   args: BrowseQueryArgs,
-  favoriteSlugs: string[],
+  favoriteSlugs: string[] | Promise<string[]>,
 ) {
+  // buildWhere が同期 throw しても favoriteSlugs（Promise）が未処理 rejection にならないよう先に握る
+  Promise.resolve(favoriteSlugs).catch(() => {});
   const whereCondition = buildWhere(args);
 
-  // ソート: お気に入りを最優先（ログイン中のみ）→ 通常ソート
-  // ORDER BY に組み込むことで、append しても一貫した順序になる。
-  const favoritePriority =
-    favoriteSlugs.length > 0
-      ? sql`CASE WHEN ${inArray(users.slug, favoriteSlugs)} THEN 0 ELSE 1 END`
-      : null;
+  // count はお気に入りに依存しないので、お気に入り取得（Promise 可）と並行して発行する。
+  // （drizzle のクエリは await されるまで実行されないため Promise.all に直接渡す）
+  const buildList = async () => {
+    const resolvedFavoriteSlugs = await favoriteSlugs;
+    // ソート: お気に入りを最優先（ログイン中のみ）→ 通常ソート
+    // ORDER BY に組み込むことで、append しても一貫した順序になる。
+    const favoritePriority =
+      resolvedFavoriteSlugs.length > 0
+        ? sql`CASE WHEN ${inArray(users.slug, resolvedFavoriteSlugs)} THEN 0 ELSE 1 END`
+        : null;
 
-  // 未設定（NULL）の行は必ず末尾へ送る（sort-order.ts の共通ルール）。
-  // SQLite の既定では昇順で NULL が先頭に来てしまい、MCID 未登録・表示名未設定の
-  // 走者が並び替えのたびに 1 ページ目を占有する。
-  const orderByClause =
-    args.sort === "mcid"
-      ? [nullsLast(users.mcid), asc(users.mcid)]
-      : args.sort === "displayName"
-      ? [nullsLast(users.displayName), asc(users.displayName)]
-      : args.sort === "popular"
-      ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
-        [desc(profilePageViewsSql()), desc(users.updatedAt)]
-      : // updatedAt は NOT NULL なので NULL 対策は不要
-        [desc(users.updatedAt)];
+    // 未設定（NULL）の行は必ず末尾へ送る（sort-order.ts の共通ルール）。
+    // SQLite の既定では昇順で NULL が先頭に来てしまい、MCID 未登録・表示名未設定の
+    // 走者が並び替えのたびに 1 ページ目を占有する。
+    const orderByClause =
+      args.sort === "mcid"
+        ? [nullsLast(users.mcid), asc(users.mcid)]
+        : args.sort === "displayName"
+        ? [nullsLast(users.displayName), asc(users.displayName)]
+        : args.sort === "popular"
+        ? // ページビュー集計が無い間は全件0になるので、更新順へ素直に落ちる
+          [desc(profilePageViewsSql()), desc(users.updatedAt)]
+        : // updatedAt は NOT NULL なので NULL 対策は不要
+          [desc(users.updatedAt)];
 
-  const orderBy = favoritePriority
-    ? [favoritePriority, ...orderByClause]
-    : orderByClause;
+    // 末尾に一意キー（id）を付けて全順序にする。updatedAt / displayName / mcid が同値（NULL 同士含む）の
+    // 行があると offset ページングで順序が揺れ、隣接ページ間で同じ走者が重複して返る
+    // （一覧の React key 重複警告の原因）。
+    const orderBy = favoritePriority
+      ? [favoritePriority, ...orderByClause, asc(users.id)]
+      : [...orderByClause, asc(users.id)];
 
-  // count と一覧取得は独立。Turso は HTTP のため RTT を 1 つでも減らすため並列化。
-  const [totalCountResult, playerList] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(whereCondition),
-    db.query.users.findMany({
+    return db.query.users.findMany({
       where: whereCondition,
       columns: BROWSE_LIST_COLUMNS,
+      // 走者を見分ける表示用（メインカテゴリ）。with で一括取得し N+1 にしない
+      with: {
+        playstyle: { columns: { mainCategory: true } },
+      },
       orderBy,
       limit: BROWSE_ITEMS_PER_PAGE,
       offset: (args.page - 1) * BROWSE_ITEMS_PER_PAGE,
-    }),
-  ]);
+    });
+  };
 
-  const totalCount = totalCountResult[0]?.count ?? 0;
+  const [totalCount, playerList] = await Promise.all([countBrowse(db, args), buildList()]);
   const totalPages = Math.ceil(totalCount / BROWSE_ITEMS_PER_PAGE);
   const hasMore = args.page < totalPages;
 
+  const players = playerList.map(({ playstyle, ...rest }) => ({
+    ...rest,
+    mainCategory: playstyle?.mainCategory ?? null,
+  }));
+
   return {
-    players: playerList,
+    players,
     totalCount,
     totalPages,
     hasMore,
   };
+}
+
+/**
+ * discordId からユーザーの存在とお気に入り slug を 1 クエリ（users LEFT JOIN favorites）で取得する。
+ * ユーザーが存在しなければ null。favoriteSlug の辞書順で返す（変更前の既定順＝idx_favorites_user_slug の走査順を維持）。
+ */
+export async function getFavoriteSlugsByDiscordId(
+  db: Database,
+  discordId: string,
+): Promise<string[] | null> {
+  const rows = await db
+    .select({ favoriteSlug: favorites.favoriteSlug })
+    .from(users)
+    .leftJoin(favorites, eq(favorites.userId, users.id))
+    .where(eq(users.discordId, discordId))
+    .orderBy(asc(favorites.favoriteSlug));
+  if (rows.length === 0) return null;
+  return rows.flatMap((r) => (r.favoriteSlug ? [r.favoriteSlug] : []));
 }
 
 /** ログイン中ユーザーのお気に入り slug を取得（未ログインは [] ） */
@@ -195,10 +246,5 @@ export async function getViewerFavoriteSlugs(
   discordId: string | null,
 ): Promise<string[]> {
   if (!discordId) return [];
-  const me = await db.query.users.findFirst({
-    where: eq(users.discordId, discordId),
-    columns: { id: true },
-  });
-  if (!me) return [];
-  return getFavoritesFromDb(db, me.id);
+  return (await getFavoriteSlugsByDiscordId(db, discordId)) ?? [];
 }

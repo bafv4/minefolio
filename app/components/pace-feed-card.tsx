@@ -1,52 +1,24 @@
 import { Link } from "react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
-import type { Translator } from "@/lib/messages";
+import { RelativeTime } from "@/components/relative-time";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { PaceManSplitMark } from "@/components/paceman-split-mark";
+import { StageBar } from "@/components/pace-stage-bar";
+import { formatClock } from "@/lib/home-format";
+import { splitStage } from "@/lib/home-live";
 // type-only import はトランスパイル時に消去されるため、サーバー専用モジュールでも安全
-import type { CachedPace, PaceTimelineEntry } from "@/lib/paceman-cache";
-import { Clock3, ExternalLink, Loader2 } from "lucide-react";
+import type { CachedPace } from "@/lib/paceman-cache";
+import { PaceTimelineModal } from "@/components/pace-timeline-modal";
+import { Clock3 } from "lucide-react";
 
 // フィード表示に必要な最小限のペース情報（CachedPaceのサブセット）
 export type PaceFeedRun = Pick<
   CachedPace,
   "mcid" | "nickname" | "timeline" | "rta" | "time" | "pacemanRunId"
 >;
-
-interface PaceTimelineResponse {
-  timeline: PaceTimelineEntry[];
-}
-
-// ミリ秒を "m:ss" 形式に変換
-function formatRunTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-// Unix秒からの相対時間を表示（モジュール関数のためフックを使えず、t を受け取る）
-function formatRelativeUnixTime(t: Translator, unixSeconds: number): string {
-  const now = Date.now();
-  const diffMs = now - unixSeconds * 1000;
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffMinutes < 1) return t("playerStats.justNow");
-  if (diffMinutes < 60) return t("playerStats.minutesAgo", { count: diffMinutes });
-  if (diffHours < 24) return t("playerStats.hoursAgo", { count: diffHours });
-  return t("playerStats.daysAgo", { count: Math.floor(diffHours / 24) });
-}
 
 export function PaceFeedCard({
   run,
@@ -60,19 +32,17 @@ export function PaceFeedCard({
   skinUrl?: string;
 }) {
   const t = useT();
-  const isFinished = run.timeline === "Finish";
-  const paceManUrl = `https://paceman.gg/stats/run/${run.pacemanRunId}`;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <div
       className={cn(
-        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
-        isFinished && "border-info/60 bg-info/5"
+        "group relative block rounded-xl border border-border/70 bg-background/80 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       )}
     >
       {/* カード全体のクリックでタイムラインモーダルを開く。
-          アバター/名前リンク（z-10）が同じ位置にある部分はそちらが優先される */}
+          アバター/名前リンク（z-10）が同じ位置にある部分はそちらが優先される。
+          タブ停止はこのボタンと名前リンクの2つだけ（アバターは名前リンクと同じ遷移先のため除外） */}
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
@@ -80,7 +50,13 @@ export function PaceFeedCard({
         aria-label={`${displayName || run.nickname || run.mcid}: ${t("home.viewTimeline")}`}
       />
       <div className="flex items-center gap-3">
-        <Link to={`/player/${run.mcid}`} prefetch="intent" className="relative z-10 shrink-0">
+        <Link
+          to={`/player/${run.mcid}`}
+          prefetch="intent"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="relative z-10 shrink-0"
+        >
           {uuid ? (
             <div className="h-11 w-11 rounded-xl transition-opacity hover:opacity-80">
               <MinecraftAvatar uuid={uuid} skinUrl={skinUrl} size={44} />
@@ -99,13 +75,18 @@ export function PaceFeedCard({
         </Link>
       </div>
 
+      {/* 区間進行バー（ライブ欄カードと同じ。区間名は下のバッジのテキストで出る） */}
+      <div className="mt-3">
+        <StageBar stage={splitStage(run.timeline)} finished={run.timeline === "Finish"} />
+      </div>
+
       <div className="mt-3">
         {/* 狭幅でも折り返しで崩れないよう flex-wrap + gap-x/gap-y に。バッジは
             ml-auto shrink-0 で折り返し後も行内右端に揃える */}
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <div className="min-w-0">
-            <p className="text-[11px] text-muted-foreground">{t("home.rtaTime")}</p>
-            <p className="font-mono text-2xl font-semibold">{formatRunTime(run.rta)}</p>
+            <p className="text-[11px] text-muted-foreground">{t("home.igtTime")}</p>
+            <p className="font-mono text-2xl font-semibold">{formatClock(run.rta)}</p>
           </div>
           <Badge variant="secondary" className="ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs">
             <PaceManSplitMark timeline={run.timeline} size={13} />
@@ -115,8 +96,7 @@ export function PaceFeedCard({
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
-            {/* SSR時とhydration時で相対時刻の境界をまたいでも警告にならないようにする */}
-            <span suppressHydrationWarning>{formatRelativeUnixTime(t, run.time)}</span>
+            <RelativeTime date={run.time * 1000} />
           </span>
         </div>
       </div>
@@ -124,120 +104,10 @@ export function PaceFeedCard({
       <PaceTimelineModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
-        run={run}
-        displayName={displayName}
-        paceManUrl={paceManUrl}
+        mcid={run.mcid}
+        runId={run.pacemanRunId}
+        title={displayName || run.nickname || run.mcid}
       />
     </div>
-  );
-}
-
-function PaceTimelineModal({
-  open,
-  onOpenChange,
-  run,
-  displayName,
-  paceManUrl,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  run: PaceFeedRun;
-  displayName?: string;
-  paceManUrl: string;
-}) {
-  const t = useT();
-  const [state, setState] = useState<{
-    status: "idle" | "loading" | "done" | "error";
-    entries: PaceTimelineEntry[];
-  }>({ status: "idle", entries: [] });
-
-  useEffect(() => {
-    // state.status を依存に含めると、setState(loading) 自体が再実行の
-    // トリガーとなり、直前のfetchを即キャンセルしてしまう（キャンセル判定が
-    // 古いクロージャの cancelled を見るため、結果が反映されなくなる）。
-    // open の立ち上がりだけをトリガーにする（idle判定は行わない）
-    if (!open) return;
-
-    let cancelled = false;
-    setState({ status: "loading", entries: [] });
-    fetch(`/api/home-feed?type=pace-timeline&mcid=${encodeURIComponent(run.mcid)}&runId=${run.pacemanRunId}`)
-      .then((res) => res.json() as Promise<PaceTimelineResponse>)
-      .then((data) => {
-        if (cancelled) return;
-        setState({ status: "done", entries: data.timeline || [] });
-      })
-      .catch((err) => {
-        console.error("Failed to fetch pace timeline:", err);
-        if (cancelled) return;
-        setState({ status: "error", entries: [] });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, run.mcid, run.pacemanRunId]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{displayName || run.nickname || run.mcid}</DialogTitle>
-          <DialogDescription>{t("home.timelineDescription")}</DialogDescription>
-        </DialogHeader>
-
-        {state.status === "loading" && (
-          <div className="flex items-center justify-center py-8 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        )}
-
-        {state.status === "error" && (
-          <p className="py-4 text-center text-sm text-muted-foreground">{t("home.timelineError")}</p>
-        )}
-
-        {state.status === "done" && (
-          <div>
-            {state.entries.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">{t("home.timelineEmpty")}</p>
-            ) : (
-              state.entries.map((entry, index) => {
-                const isLast = index === state.entries.length - 1;
-                return (
-                  <div key={entry.timeline} className="flex gap-3">
-                    {/* アイコン列: 丸アイコンを縦線でつなぐ */}
-                    <div className="flex flex-col items-center">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/70 bg-secondary">
-                        <PaceManSplitMark timeline={entry.timeline} withLabel={false} size={16} />
-                      </div>
-                      {!isLast && <div className="w-px flex-1 bg-border" />}
-                    </div>
-                    {/* 区間名 + タイム */}
-                    <div
-                      className={cn(
-                        "flex flex-1 items-center justify-between",
-                        isLast ? "pb-1" : "pb-4"
-                      )}
-                    >
-                      <span className="text-sm font-medium">{entry.timeline}</span>
-                      <span className="font-mono text-sm font-semibold">{formatRunTime(entry.rta)}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        <a
-          href={paceManUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors"
-        >
-          PaceMan.gg {t("home.viewOnPaceMan")}
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </DialogContent>
-    </Dialog>
   );
 }

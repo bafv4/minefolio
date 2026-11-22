@@ -1,6 +1,15 @@
 import { createTranslator } from "@/lib/messages";
-import { useLoaderData, useSearchParams, useNavigation, Form, type LoaderFunctionArgs } from "react-router";
-import { useState } from "react";
+import {
+  useLoaderData,
+  useSearchParams,
+  useNavigation,
+  useLocation,
+  Form,
+  Link,
+  type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
+import { useEffect, useRef } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
@@ -8,13 +17,13 @@ import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { guideLikeCountSql, guideListOrderBy } from "@/lib/likes.server";
-import { parseGuideTags } from "@/lib/guide-tags";
+import { parseGuideTags, rankGuideTags } from "@/lib/guide-tags";
 import { guidePageViewsSql, hasPageViewStats } from "@/lib/page-view-stats.server";
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { BookOpen, Search } from "lucide-react";
 import { useT, useLocale } from "@/hooks/use-locale";
@@ -23,15 +32,16 @@ import { getGuideTranslations } from "@/lib/content-translation.server";
 import { applyGuideTranslation } from "@/lib/guide-translation-list";
 import { pickDisplayName } from "@/lib/slug";
 import { GuidesContentTabs } from "@/components/content-tabs";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { ViewToggle } from "@/components/view-toggle";
 import {
-  GuideCardGrid,
-  GuideListView,
+  GUIDE_TAG_HIT_AREA,
+  GuideListSkeleton,
+  TemplateListSkeleton,
   type GuideItem,
   type GuideItemWithAuthorSlug,
 } from "@/components/guide-list-views";
+import { GuidePagedList } from "@/components/guide-paged-list";
 import {
   ContentSortSelect,
   parseContentSort,
@@ -118,6 +128,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
         authorDisplayName: users.displayName,
         authorDisplayNameAlphabet: users.displayNameAlphabet,
         authorMcid: users.mcid,
+        // 著者の顔（カード・リストの著者名の左）。同じ JOIN で取れるので追加クエリは無い
+        authorUuid: users.uuid,
+        authorCustomSkinUrl: users.customSkinUrl,
       })
       .from(guides)
       .innerJoin(users, eq(guides.authorId, users.id))
@@ -151,10 +164,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       tagCounts[t] = (tagCounts[t] || 0) + 1;
     });
   });
-  const allTags = Object.entries(tagCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .map(([name]) => name);
+  // 並び替え（新着・人気）に依存しない順（件数 → 名前）
+  const allTags = rankGuideTags(tagCounts, locale);
 
   // 自動翻訳（docs/translation.md）。表示対象の訳文をまとめて 1 回で引き、title / summary を差し替える。
   // 検索・タグ絞り込みは原文で行う。機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
@@ -181,6 +192,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
+/** 表示形式（?view=list）を除いたクエリ。表示形式だけが変わったかの判定に使う */
+function searchWithoutView(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("view");
+  return params.toString();
+}
+
+/**
+ * 表示形式（view）の値だけが変わり、ほかは同じ遷移か。同じ URL への再検証（いいねの fetcher の後・同じ検索の
+ * 再送信など）は当てはまらない（view が変わっていない）ので、従来どおり再検証される
+ */
+function isViewToggle(
+  current: { pathname: string; search: string },
+  next: { pathname: string; search: string },
+): boolean {
+  return (
+    current.pathname === next.pathname &&
+    new URLSearchParams(current.search).get("view") !== new URLSearchParams(next.search).get("view") &&
+    searchWithoutView(current.search) === searchWithoutView(next.search)
+  );
+}
+
+// 表示形式（view）だけを切り替えたときはサーバーデータが同一なので再取得しない（/browse と同じ考え方）
+export function shouldRevalidate({ currentUrl, nextUrl, defaultShouldRevalidate }: ShouldRevalidateFunctionArgs) {
+  if (isViewToggle(currentUrl, nextUrl)) return false;
+  return defaultShouldRevalidate;
+}
+
 export default function GuidesIndexPage() {
   const t = useT();
   const locale = useLocale();
@@ -195,26 +234,61 @@ export default function GuidesIndexPage() {
   } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
+  const location = useLocation();
+  // 表示形式の切替だけのナビゲーション（このルートの loader は再実行しない。親のレイアウトは再検証される）では
+  // 一覧をスケルトンに差し替えない
+  const isViewOnlyNavigation = !!navigation.location && isViewToggle(location, navigation.location);
+  // 同じ一覧の中の遷移（検索・絞り込み・並び替え）だけをスケルトンにする。記事へ移る遷移では差し替えない
+  const isNavigating =
+    navigation.state === "loading" &&
+    !isViewOnlyNavigation &&
+    navigation.location?.pathname === location.pathname;
   const { isTabSwitching } = useTabNavigation();
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  // 表示形式は URL の ?view=list に保持する（既定のカードはパラメータなし。/browse と同じ形）。
+  // 戻る・再読み込みでも保たれる。切替は履歴を積まない replace で行う
+  const viewMode: "card" | "list" = searchParams.get("view") === "list" ? "list" : "card";
+  const setViewMode = (mode: "card" | "list") => {
+    setSearchParams(
+      (prev) => {
+        if (mode === "list") prev.set("view", "list");
+        else prev.delete("view");
+        return prev;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  };
+  const tagNavRef = useRef<HTMLElement | null>(null);
+
+  // 選択中のタグが横スクロールのレールの外にあるときだけ、初回に見える位置へ寄せる
+  // （ページ本体はスクロールさせない。nav の scrollLeft だけ動かす）
+  useEffect(() => {
+    const nav = tagNavRef.current;
+    const el = nav?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!nav || !el) return;
+    const n = nav.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.left >= n.left && r.right <= n.right) return;
+    nav.scrollLeft += r.left - n.left - (n.width - r.width) / 2;
+  }, []);
 
   // Transform loader data to GuideItem[]
   // isPinned はプロフィールのガイドタブでのみ考慮する仕様のため、グローバル一覧では意図的に落とす
   // （selectで必要カラムのみ取得しているため isPinned はそもそも含まれない）
   // 型注釈にする（as キャストだと likeCount 等の取得漏れを型検査が見逃す）
   const guideItems: GuideItemWithAuthorSlug[] = allGuides.map(
-    ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid }) => ({
+    ({ guide, likeCount, pageViews7d, authorId, authorSlug, authorDisplayName, authorDisplayNameAlphabet, authorMcid, authorUuid, authorCustomSkinUrl }) => ({
       ...guide,
       likeCount: Number(likeCount),
-      // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）
-      pageViews7d: sort === "popular" ? Number(pageViews7d) : undefined,
+      // 直近7日PVは人気順のときだけ集計している（それ以外は常に0が入るので出さない）。
+      // 集計がまだ無い間は注記と食い違う「7日 0」を出さない
+      pageViews7d: sort === "popular" && hasPageViewData ? Number(pageViews7d) : undefined,
       isOwn: !!viewerId && authorId === viewerId,
       authorName:
         pickDisplayName(
           { displayName: authorDisplayName, displayNameAlphabet: authorDisplayNameAlphabet },
           locale,
         ) || authorMcid || authorSlug,
+      authorAvatar: { uuid: authorUuid, skinUrl: authorCustomSkinUrl },
       _authorSlug: authorSlug,
     }),
   );
@@ -223,6 +297,37 @@ export default function GuidesIndexPage() {
     const item = guide as GuideItemWithAuthorSlug;
     return `/guides/${item._authorSlug}/${guide.slug}`;
   };
+
+  // タグの絞り込みリンク。ほかのクエリ（検索語・並び順）は保ち、tag だけ入れ替える／外す
+  const tagHref = (value: string | null): string => {
+    const params = new URLSearchParams(searchParams);
+    if (value) params.set("tag", value);
+    else params.delete("tag");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  };
+
+  // 件数の文言。絞り込み中は「n 件（検索: …、タグ: …）」のように何で絞っているかを添える
+  const activeFilters = [
+    q ? t("guides.resultFilterQuery", { q }) : "",
+    tag ? t("guides.resultFilterTag", { tag }) : "",
+  ].filter(Boolean);
+  const resultCountText =
+    activeFilters.length > 0
+      ? t("guides.resultCountFiltered", {
+          count: guideItems.length,
+          filters: activeFilters.join(t("guides.resultFilterSeparator")),
+        })
+      : t("guides.resultCount", { count: guideItems.length });
+
+  // 絞り込み（検索語・タグ）だけを外す。並び順は保つ
+  const clearFiltersHref = (() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("tag");
+    params.delete("q");
+    const qs = params.toString();
+    return qs ? `?${qs}` : "?";
+  })();
 
   const handleSortChange = (value: ContentSort) => {
     setSearchParams(
@@ -243,44 +348,124 @@ export default function GuidesIndexPage() {
       {/* タブ切替中はタイトル含むコンテンツ全体をスケルトンに（タイトルはタブ内側にあるため、
           先行切替済みのタブと旧ページのタイトルが食い違って見えないようにする） */}
       {isTabSwitching ? (
-        <TabContentSkeleton variant="cards" />
+        // 行き先（テンプレート一覧）の形
+        <TemplateListSkeleton />
       ) : (
       <>
       {/* タイトル・説明はタブの内側（コンテンツ側）に置く */}
       <div>
         <h1 className="text-2xl font-bold">{t("guides.pageTitle")}</h1>
+        <p className="text-sm text-muted-foreground">{t("guides.pageDesc")}</p>
       </div>
 
-      {/* Search + tag filter + toggle */}
+      {/* 検索 → 絞り込み（タグ）→ 並び替え → 表示 の順。テンプレート一覧と同じ組み方 */}
       <div className="flex flex-col gap-3">
-        {/* 狭い画面では縦積みにする（1行のままだと検索入力が潰れる。テンプレート一覧と同じ構成） */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <Form method="get" className="flex flex-col sm:flex-row gap-2 flex-1">
-            {tag && <input type="hidden" name="tag" value={tag} />}
-            {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
-            {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                name="q"
-                placeholder={t("guides.searchPlaceholder")}
-                defaultValue={q}
-                className="pl-10"
-              />
-            </div>
-            <Button type="submit">
-              <Search className="mr-2 h-4 w-4" />
-              {t("common.search")}
+        {/* 狭い画面では縦積みにする（1行のままだと検索入力が潰れる） */}
+        <Form method="get" role="search" className="flex flex-col sm:flex-row gap-2">
+          {tag && <input type="hidden" name="tag" value={tag} />}
+          {/* GETフォームはクエリを総入れ替えするので、並び順を hidden で持ち越す（tag と同じ理由） */}
+          {sort !== "new" && <input type="hidden" name="sort" value={sort} />}
+          {viewMode === "list" && <input type="hidden" name="view" value="list" />}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
+            <Input
+              name="q"
+              aria-label={t("guides.searchLabel")}
+              placeholder={t("guides.searchPlaceholder")}
+              defaultValue={q}
+              className="h-11 pl-10 pr-12 sm:h-9 sm:pr-3"
+            />
+            {/* モバイルは検索ボタンを入力欄の右端に収めて縦を節約する（Enter でも送れる） */}
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 size-11 sm:hidden"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <span className="sr-only">{t("common.search")}</span>
             </Button>
-          </Form>
-          <div className="flex items-center justify-end gap-2">
+          </div>
+          <Button type="submit" className="hidden sm:inline-flex">
+            <Search className="mr-2 h-4 w-4" />
+            {t("common.search")}
+          </Button>
+        </Form>
+        {allTags.length > 0 && (
+          // md 未満は 1 行の横スクロールのレール（縦を取らない）。各タグは高さ 44px の枠に入れ、
+          // ::after で広げた押せる範囲（見た目は 22px のピルのまま。GUIDE_TAG_HIT_AREA）が枠の中に収まるようにする。
+          // md 以上は折り返し表示で、押せる範囲は 24px 以上（隣と重ならない大きさ）
+          <nav
+            ref={tagNavRef}
+            aria-label={t("guides.tagFilterLabel")}
+            className="flex gap-x-2 overflow-x-auto [scrollbar-width:none] md:flex-wrap md:gap-y-2 md:overflow-visible [&::-webkit-scrollbar]:hidden"
+          >
+            {[null, ...allTags].map((name) => {
+              const selected = name === null ? !tag : tag === name;
+              return (
+                <div key={name ?? "__all"} className="flex min-h-11 shrink-0 items-center md:min-h-0">
+                  <Badge
+                    asChild
+                    variant="outline"
+                    className={cn(
+                      GUIDE_TAG_HIT_AREA.md,
+                      // 選択中は brand（ui.md 1 章。primary は dark でほぼ白になる）
+                      selected &&
+                        "border-transparent bg-brand text-brand-foreground [a&]:hover:bg-brand/90 [a&]:hover:text-brand-foreground",
+                    )}
+                  >
+                    <Link
+                      to={tagHref(name)}
+                      preventScrollReset
+                      aria-current={selected ? "true" : undefined}
+                    >
+                      {name ?? t("guides.tagAll")}
+                    </Link>
+                  </Badge>
+                </div>
+              );
+            })}
+          </nav>
+        )}
+        {/* スキップリンク: 検索・タグ・並び替えを飛ばして一覧の先頭へ（フォーカス時だけ見える） */}
+        <a
+          href="#guide-results"
+          className="sr-only rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-20 focus:z-50"
+        >
+          {t("guides.skipToResults")}
+        </a>
+        {/* 件数（左）と、並び替え・表示（右）。aria-live は件数だけに付ける。
+            件数は一覧の先頭の目印にもなる（スキップリンクの飛び先） */}
+        {/* 件数が長い（絞り込みの内容つき）ときは、並び替え・表示を次の行へ回す（件数を細い列に押し込まない） */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3">
+            <p
+              id="guide-results"
+              tabIndex={-1}
+              aria-live="polite"
+              className="min-w-0 text-sm text-muted-foreground outline-none"
+            >
+              {resultCountText}
+            </p>
+            {/* 絞り込み中は結果があっても解除の導線を件数の隣に出す（テンプレート一覧と同じ） */}
+            {(tag || q) && guideItems.length > 0 && (
+              <Button asChild variant="link" size="sm" className="h-11 px-0 sm:h-8">
+                <Link to={clearFiltersHref} preventScrollReset>
+                  {t("guides.clearFilters")}
+                </Link>
+              </Button>
+            )}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <ContentSortSelect
               value={sort}
               onChange={handleSortChange}
               options={GUIDE_SORTS}
-              newestLabel={t("contentSort.recentlyUpdated")}
+              // 既定順の語はテンプレート一覧と同じ「新着順」。ガイドは更新日時で並ぶので、説明でそれを示す
+              newestLabel={t("contentSort.newest")}
               // 同じ「人気順」でも一覧ごとに基準が違うため、説明は呼び出し側で用意する
               descriptions={{
+                new: t("contentSort.newestUpdatedDesc"),
                 likes: t("contentSort.likesDesc"),
                 views: t("contentSort.viewsDesc"),
                 popular: t("contentSort.popularDesc", { days: PAGE_VIEW_WINDOW_DAYS }),
@@ -289,37 +474,6 @@ export default function GuidesIndexPage() {
             <ViewToggle viewMode={viewMode} onChange={setViewMode} />
           </div>
         </div>
-        {allTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <Badge
-              variant={!tag ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() =>
-                setSearchParams((prev) => {
-                  prev.delete("tag");
-                  return prev;
-                })
-              }
-            >
-              {t("guides.tagAll")}
-            </Badge>
-            {allTags.map((t) => (
-              <Badge
-                key={t}
-                variant={tag === t ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() =>
-                  setSearchParams((prev) => {
-                    prev.set("tag", t);
-                    return prev;
-                  })
-                }
-              >
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ページビュー集計がまだ無い間は人気順が「いいね数 → 更新日時」へ落ちるので、
@@ -329,41 +483,38 @@ export default function GuidesIndexPage() {
       )}
 
       {isNavigating ? (
-        viewMode === "card" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="border border-border/70 rounded-xl overflow-hidden">
-                <Skeleton className="h-36 w-full" />
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 px-1">
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )
+        <GuideListSkeleton viewMode={viewMode} />
       ) : guideItems.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="h-12 w-12" />}
-          title={t("guides.noGuidesTitle")}
-          description={t("guides.noGuides")}
+          title={q ? t("guides.noGuidesForQueryTitle", { q }) : t("guides.noGuidesTitle")}
+          description={tag || q ? t("guides.noMatchDesc") : t("guides.noGuides")}
+          action={
+            tag || q ? (
+              <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
+                <Link to={clearFiltersHref}>{t("guides.clearFilters")}</Link>
+              </Button>
+            ) : viewerId ? (
+              // 絞り込みなしの空は、書く側への導線を出す（テンプレート一覧と同じ）
+              <Button asChild variant="outline" className="min-h-11 sm:min-h-9">
+                <Link to="/my-guides/new">{t("guides.createGuide")}</Link>
+              </Button>
+            ) : undefined
+          }
         />
-      ) : viewMode === "card" ? (
-        <GuideCardGrid guides={guideItems} linkFn={linkFn} />
       ) : (
-        <GuideListView guides={guideItems} linkFn={linkFn} />
+        // 条件（検索語・タグ・並び順）が変わったら出す件数を戻す（表示形式の切替では戻さない）
+        <GuidePagedList
+          key={searchWithoutView(searchParams.toString())}
+          guides={guideItems}
+          linkFn={linkFn}
+          viewMode={viewMode}
+          titleLevel="h2"
+          // カードのタグも絞り込みチップと同じ行き先（検索語・並び順・表示形式を引き継ぐ）
+          tagHref={tagHref}
+          // 記事の「ガイド一覧」が、この絞り込み（検索語・タグ・並び順・表示形式）へ戻れるようにする
+          linkState={{ guideListSearch: location.search }}
+        />
       )}
       </>
       )}

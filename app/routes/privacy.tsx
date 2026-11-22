@@ -25,5 +25,5 @@ export async function loader() {
 
 export default function PrivacyPage() {
   const t = useT();
-  return <MarkdownDocPage icon={Shield} heading={t("privacy.heading")} markdown={privacyMd} />;
+  return <MarkdownDocPage icon={Shield} heading={t("privacy.heading")} markdown={privacyMd} toc />;
 }

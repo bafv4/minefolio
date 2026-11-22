@@ -1,12 +1,15 @@
+import { useMemo } from "react";
 import type { Route } from "./+types/changelog";
 import { getEnv } from "@/lib/env.server";
 import { buildOgMeta } from "@/lib/og-meta";
 import { History } from "lucide-react";
-import { MarkdownDocPage } from "@/components/markdown-doc-page";
+import { MarkdownDocPage, type CollapsedDocSection } from "@/components/markdown-doc-page";
+import { JaOnlyNotice } from "@/components/ja-only-notice";
 import changelogMd from "@/content/changelog.md?raw";
+import { changelogCategoryLabel, parseChangelog } from "@/lib/changelog";
 import { createTranslator } from "@/lib/messages";
-import { localeFromMatches } from "@/lib/locale";
-import { useT } from "@/hooks/use-locale";
+import { localeFromMatches, type Locale } from "@/lib/locale";
+import { useLocale, useT } from "@/hooks/use-locale";
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -23,13 +26,46 @@ export async function loader() {
   return { appUrl: env.APP_URL ?? "https://minefolio.app" };
 }
 
+/** 開いたまま出す最新の版の数。これより古い版は details に畳む */
+const OPEN_VERSIONS = 3;
+
+// 版ごとに分け、最新の数版だけを本文として開き、古い版は版の見出しを summary にして畳む。
+// 見出しの形式（## vX.Y.Z（YYYY/MM/DD））に合わず分けられないときは、従来どおり全文を出す
+const changelogEntries = parseChangelog(changelogMd);
+
+/** 版の見出し。日本語は全角括弧、日本語以外のロケールは半角括弧（本文が日本語でも見出しの記号は表示言語に合わせる） */
+const versionHeading = (entry: { version: string; date: string }, locale: Locale) =>
+  locale === "ja" ? `${entry.version}（${entry.date}）` : `${entry.version} (${entry.date})`;
+
+function buildSections(locale: Locale): { openMarkdown: string; collapsedSections: CollapsedDocSection[] } {
+  return {
+    openMarkdown:
+      changelogEntries.length > 0
+        ? changelogEntries
+            .slice(0, OPEN_VERSIONS)
+            .map((entry) => [`## ${versionHeading(entry, locale)}`, entry.body].join("\n\n"))
+            .join("\n\n")
+        : changelogMd,
+    collapsedSections: changelogEntries
+      .slice(OPEN_VERSIONS)
+      .map((entry) => ({ heading: versionHeading(entry, locale), markdown: entry.body })),
+  };
+}
+
 export default function ChangelogPage() {
   const t = useT();
+  const locale = useLocale();
+  const { openMarkdown, collapsedSections } = useMemo(() => buildSections(locale), [locale]);
+  // 本文が日本語の文書なので、見出しの読み替えもロケールによらず日本語にそろえる
+  const h3Label = changelogCategoryLabel;
   return (
     <MarkdownDocPage
+      h3Label={h3Label}
       icon={History}
       heading={t("developers.changelogTitle")}
-      markdown={changelogMd}
+      markdown={openMarkdown}
+      collapsedSections={collapsedSections}
+      notice={<JaOnlyNotice />}
       backLink={{ to: "/developers", label: t("developers.heading") }}
     />
   );

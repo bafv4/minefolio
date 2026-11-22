@@ -16,6 +16,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 import { createPreset } from "@/lib/preset-utils";
+import { createTranslator } from "@/lib/messages";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -28,6 +29,7 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../devices";
+import { SAVE_LIMITS } from "@/lib/save-limits";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -70,7 +72,7 @@ afterEach(() => {
 /** action は playerConfig 系の保存にアクティブなプリセットを要求するため、都度用意する */
 async function setupUserWithActivePreset() {
   const user = await seedUser(db, { slug: "runner", discordId: "discord-runner" });
-  const preset = await createPreset(db, { userId: user.id, name: "Main", isActive: true });
+  const preset = await createPreset(db, { t: createTranslator("ja"), userId: user.id, name: "Main", isActive: true });
   signInAs("discord-runner");
   return { user, preset };
 }
@@ -336,5 +338,120 @@ describe("action - controllerSettings の検証", () => {
 
     expect(res).toEqual({ success: true });
     expect((await findConfig(user.id))?.controllerSettings).toBe(validJson);
+  });
+});
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  it("メイン＝編集中の保存は preset_id にメインの id、非メイン編集中は null", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    expect(preset.isMain).toBe(true);
+
+    await callAction(baseFormData(preset.id));
+    await db.update(schema.configPresets).set({ isMain: false }).where(eq(schema.configPresets.id, preset.id));
+    await callAction(baseFormData(preset.id));
+
+    const history = await db.query.configHistory.findMany({
+      where: eq(schema.configHistory.userId, user.id),
+    });
+    const deviceRows = history.filter((h) => h.changeType === "device");
+    expect(deviceRows).toHaveLength(2);
+    expect(deviceRows.filter((h) => h.presetId === preset.id)).toHaveLength(1);
+    expect(deviceRows.filter((h) => h.presetId === null)).toHaveLength(1);
+  });
+});
+
+describe("action - 入力方法は /me/playstyle に一本化", () => {
+  it("inputMethod を送っても users.inputMethod は書き換えない（編集は playstyle 側）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const before = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+
+    const res = await callAction(baseFormData(preset.id, { inputMethod: "controller" }));
+
+    expect(res).toEqual({ success: true });
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, user.id) });
+    expect(after?.inputMethod).toBe(before?.inputMethod);
+  });
+
+  it("プリセットが無いときの保存（旧 saveInputMethod）は他の保存と同じくプリセット必須で拒否する", async () => {
+    await seedUser(db, { slug: "runner", discordId: "discord-runner" });
+    signInAs("discord-runner");
+    const fd = new FormData();
+    fd.set("_action", "saveInputMethod");
+    fd.set("inputMethod", "controller");
+
+    const res = await callAction(fd);
+
+    expect(res.error).toBeTruthy();
+  });
+});
+
+describe("action - gameLanguage・長さ・型の検証", () => {
+  it("ゲーム言語は小文字に正規化して保存する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "JA_JP" }));
+
+    expect(res.success).toBe(true);
+    expect((await findConfig(user.id))?.gameLanguage).toBe("ja_jp");
+  });
+
+  it("許可リスト外のゲーム言語はエラーにし、既存値を上書きしない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await callAction(baseFormData(preset.id, { gameLanguage: "ja_jp" }));
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "../../etc" }));
+
+    expect(res.success).toBeUndefined();
+    expect(res.error).toBeTruthy();
+    expect((await findConfig(user.id))?.gameLanguage).toBe("ja_jp");
+  });
+
+  it("保存済みの値と同一なら許可リスト外でも通す（旧データの持ち主が保存不能にならない）", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.insert(schema.playerConfigs).values({ userId: user.id, gameLanguage: "Legacy_XX" });
+
+    const res = await callAction(baseFormData(preset.id, { gameLanguage: "Legacy_XX", mouseDpi: "1200" }));
+
+    expect(res.success).toBe(true);
+    expect((await findConfig(user.id))?.mouseDpi).toBe(1200);
+  });
+
+  it("モデル名・メモが上限を超えると何も書かずに拒否する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+
+    for (const overrides of <Record<string, string>[]>[
+      { keyboardModel: "x".repeat(SAVE_LIMITS.keyboardModel + 1) },
+      { mouseModel: "x".repeat(SAVE_LIMITS.mouseModel + 1) },
+      { notes: "x".repeat(SAVE_LIMITS.deviceNotes + 1) },
+    ]) {
+      const res = await callAction(baseFormData(preset.id, overrides));
+      expect(res.error).toBeTruthy();
+    }
+    expect(await findConfig(user.id)).toBeUndefined();
+  });
+
+  it("File を送られても 500 にせず（文字列でなければ未送信扱い）処理する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+    const fd = baseFormData(preset.id);
+    fd.set("keyboardModel", new File(["x"], "x.txt"));
+    fd.set("notes", new File(["x"], "x.txt"));
+
+    const res = await callAction(fd);
+
+    expect(res.success).toBe(true);
+  });
+
+  it("コントローラー設定は既知の4項目だけを保存する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const json = JSON.stringify({ controllerModel: "Xbox", lookSensitivity: 50, invertYAxis: false, vibration: true, extra: "x".repeat(50) });
+
+    await callAction(baseFormData(preset.id, { controllerSettings: json }));
+
+    expect(JSON.parse((await findConfig(user.id))?.controllerSettings ?? "{}")).toEqual({
+      controllerModel: "Xbox",
+      lookSensitivity: 50,
+      invertYAxis: false,
+      vibration: true,
+    });
   });
 });

@@ -6,6 +6,7 @@ import { useCallback } from "react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import type { Editor } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
+import { NodeSelection } from "@tiptap/pm/state";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Link as LinkIcon } from "lucide-react";
 import { ToolbarButton, ToolbarSeparator } from "./toolbar-button";
 import { InlineColorPicker } from "../panels/color-picker";
@@ -37,7 +38,9 @@ export function EditorBubbleMenu({ editor, onLink, enabled = true }: EditorBubbl
     // 行・列ハンドルやセル跨ぎドラッグの CellSelection では出さない
     // （行・列メニューと同時出現して重なる。セルへの一括整形はツールバー側で行う）
     if (editor.state.selection instanceof CellSelection) return false;
-    // ノード選択（画像）やコードブロックでは整形を出さない
+    // ノード選択（画像・埋め込み・動画・区切り線などの atom）では文字の整形の対象が無いので出さない
+    if (editor.state.selection instanceof NodeSelection) return false;
+    // 画像やコードブロックでも整形を出さない
     if (editor.isActive("image") || editor.isActive("codeBlock")) return false;
     return true;
   }, [editor, enabled]);

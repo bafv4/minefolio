@@ -11,6 +11,9 @@ import { CellSelection } from "@tiptap/pm/tables";
 import { buildExtensions } from "../../editor-config";
 import { TableHandles } from "../table-handles";
 import { isTableHandleMenuOpen } from "../../lib/table-ui-state";
+import { createTranslator } from "@/lib/messages";
+
+const t = createTranslator("ja");
 
 (globalThis as unknown as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -92,14 +95,14 @@ async function clickPill(pill: HTMLButtonElement): Promise<void> {
   });
 }
 
-/** 開いているメニューから label 一致の項目を探して押す（MenuItem は mousedown 発火） */
+/** 開いているメニューから label 一致の項目を探して押す（MenuItem は click 発火） */
 async function clickMenuItem(label: string): Promise<void> {
   const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
     (el) => el.textContent?.trim() === label,
   );
   expect(item, `メニュー項目「${label}」が見つからない`).toBeTruthy();
   await act(async () => {
-    item!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    item!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -188,7 +191,7 @@ describe("TableHandles", () => {
     );
     expect(swatch, "背景色スウォッチが見つからない").toBeTruthy();
     await act(async () => {
-      swatch!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      swatch!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     // 2 行目の 2 セルに適用され、他の行には付かない
     const colored: string[] = [];
@@ -204,10 +207,10 @@ describe("TableHandles", () => {
     ).toBe(true);
   });
 
-  it("「テーブルを削除」でテーブルが消えハンドルも消える", async () => {
+  it("「表を削除」でテーブルが消えハンドルも消える", async () => {
     await hoverCell(2);
     await clickPill(rowPill()!);
-    await clickMenuItem("テーブルを削除");
+    await clickMenuItem(t("guideEditor.toolbar.deleteTable"));
     expect(editor.view.dom.querySelector("table")).toBeNull();
     expect(rowPill()).toBeNull();
     expect(colPill()).toBeNull();
@@ -283,12 +286,12 @@ describe("TableHandles", () => {
     expect(rowPill()).toBeNull();
   });
 
-  it("「テーブルをコピー」で TSV がクリップボードへ書かれ、メニューが閉じる", async () => {
+  it("「表をコピー」で TSV がクリップボードへ書かれ、メニューが閉じる", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     await hoverCell(2);
     await clickPill(rowPill()!);
-    await clickMenuItem("テーブルをコピー");
+    await clickMenuItem(t("guideEditor.ui.copyTable"));
     expect(writeText).toHaveBeenCalledWith("h1\th2\na1\ta2\nb1\tb2");
     expect(document.querySelectorAll('[role="menuitem"]').length).toBe(0);
   });

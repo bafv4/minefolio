@@ -13,8 +13,6 @@ import {
   addLocalFavorite,
   removeLocalFavorite,
   clearLocalFavorites,
-  getSessionFavorites,
-  setSessionFavorites,
 } from "@/lib/favorites-client";
 import { useCookieConsent } from "@/components/cookie-consent";
 
@@ -39,8 +37,8 @@ interface FavoritesProviderProps {
 /**
  * お気に入り状態のグローバルプロバイダー。
  *
- * - ログイン中: マウント時に GET /api/favorites → sessionStorage にキャッシュ。
- *   localStorage に値があれば PUT で一括同期 → localStorage 削除。
+ * - ログイン中: SSR の initialFavorites を正とする（GET は出さない）。
+ *   localStorage に未同期の値があれば PUT で一括同期 → localStorage 削除（PUT 失敗時のみ GET にフォールバック）。
  *   CRUD は POST /api/favorites（楽観的UI、エラー時ロールバック）。
  * - 未ログイン: localStorage 直接読み書き（Cookie同意必須）。
  * - Cookie拒否中の未ログイン: 空配列固定、toggleFavorite は no-op。
@@ -72,37 +70,32 @@ export function FavoritesProvider({
     initializedRef.current = true;
 
     if (isLoggedIn) {
-      // 1) sessionStorage キャッシュを即時表示（API応答待ちの間のチラつき軽減）
-      const cached = getSessionFavorites();
-      if (cached.length > 0 && initialFavorites.length === 0) {
-        setFavorites(cached);
-      }
-
-      // 2) localStorage に未同期エントリがあれば PUT で一括同期
+      // 1) localStorage に未同期エントリが無ければ、SSR の initialFavorites（同一リクエストで
+      //    DB から取得済み。取得失敗時はページ自体が落ちるので「0件」と区別できる）を正とし、
+      //    useState の初期値のまま何もしない（GET は出さない）。
       const local = getLocalFavorites();
-      const syncPromise = local.length > 0
-        ? fetch("/api/favorites", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slugs: local }),
-          })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => {
-              if (data && Array.isArray(data.favorites)) {
-                clearLocalFavorites();
-                return data.favorites as string[];
-              }
-              return null;
-            })
-            .catch(() => null)
-        : Promise.resolve(null);
+      if (local.length === 0) return;
 
-      // 3) GET /api/favorites で最新を取得（PUT後はそちらを優先）
+      // 2) 未同期エントリがあれば PUT で一括同期（失敗時は GET にフォールバック）
+      const syncPromise = fetch("/api/favorites", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slugs: local }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.favorites)) {
+            clearLocalFavorites();
+            return data.favorites as string[];
+          }
+          return null;
+        })
+        .catch(() => null);
+
       setIsLoading(true);
       syncPromise.then((synced) => {
         if (synced) {
           setFavorites(synced);
-          setSessionFavorites(synced);
           setIsLoading(false);
           return;
         }
@@ -111,7 +104,6 @@ export function FavoritesProvider({
           .then((data) => {
             if (data && Array.isArray(data.favorites)) {
               setFavorites(data.favorites);
-              setSessionFavorites(data.favorites);
             }
           })
           .catch(() => {})
@@ -170,7 +162,6 @@ export function FavoritesProvider({
             const data = (await r.json()) as { favorites: string[] };
             favoritesRef.current = data.favorites;
             setFavorites(data.favorites);
-            setSessionFavorites(data.favorites);
           } catch {
             // ロールバック: 楽観的更新の直前の state（current）に戻す
             favoritesRef.current = current;

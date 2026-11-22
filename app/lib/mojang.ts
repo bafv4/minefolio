@@ -35,6 +35,9 @@ function safeParse<T>(data: unknown, schema: z.ZodSchema<T>): T | null {
 const MOJANG_API_BASE = "https://api.mojang.com";
 const SESSION_SERVER_BASE = "https://sessionserver.mojang.com";
 
+// MCIDとして解釈可能な形状（Mojangの命名規則: 3〜16文字の英数字とアンダースコア）
+export const MCID_SHAPE = /^[A-Za-z0-9_]{3,16}$/;
+
 export interface MojangProfile {
   id: string; // ハイフンなしUUID
   name: string; // MCID

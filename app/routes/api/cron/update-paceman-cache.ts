@@ -7,7 +7,7 @@ import { createDb } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { isNotNull, and } from "drizzle-orm";
 import { fetchRecentRunsForUsers } from "@/lib/paceman";
-import { cachePacemanPaces } from "@/lib/paceman-cache";
+import { cachePacemanPaces, relinkPacemanPaceUsers } from "@/lib/paceman-cache";
 import { excludeViewersCondition } from "@/lib/users-filter";
 
 export async function loader({ request }: { request: Request }) {
@@ -46,6 +46,8 @@ export async function loader({ request }: { request: Request }) {
     console.log(`Found ${registeredMcids.length} users with MCID`);
 
     if (registeredMcids.length === 0) {
+      // 登録ユーザーがいなくても、MCID 解除等で残った user_id を外す
+      await relinkPacemanPaceUsers();
       return Response.json({
         success: true,
         message: "No users with MCID found",
@@ -69,6 +71,11 @@ export async function loader({ request }: { request: Request }) {
       await cachePacemanPaces(recentPaces);
       console.log(`Successfully cached ${recentPaces.length} paces`);
     }
+
+    // 後から MCID を登録・変更したユーザーの既存行を、現在の users.mcid に合わせて user_id へ再リンクする
+    // （ホームの見本ペース/件数は user_id 結合のため。取得結果が0件でも実行する）
+    const relinked = await relinkPacemanPaceUsers();
+    if (relinked > 0) console.log(`Relinked ${relinked} paceman_paces rows`);
 
     // 部分失敗を近似計算: 1 件以上の結果が得られたユニークユーザー数を「成功」と見なす。
     // ※「活動していなかった」と「API が失敗した」の区別はつかないため、参考値。

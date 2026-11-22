@@ -32,7 +32,7 @@
 
 | ユーザー種別 | 正本 | クライアント側キャッシュ |
 |---|---|---|
-| ログイン中 | DB `favorites` | sessionStorage `minefolio_favorites_cache` |
+| ログイン中 | DB `favorites` | なし（SSR の `initialFavorites` を正とする） |
 | 未ログイン（Cookie 同意済み） | localStorage `minefolio_favorites` | （正本=ローカル） |
 | 未ログイン（Cookie 同意なし） | 利用不可 | — |
 
@@ -81,7 +81,6 @@
 ### `app/lib/favorites-client.ts`
 
 - `getLocalFavorites()` / `setLocalFavorites(slugs)` / `addLocalFavorite(slug)` / `removeLocalFavorite(slug)` / `clearLocalFavorites()`
-- `getSessionFavorites()` / `setSessionFavorites(slugs)`
 - SSR セーフ（`typeof window === "undefined"` ガード、`try/catch` で QuotaExceeded 等を吸収）
 
 ### `app/lib/favorites.ts`
@@ -105,7 +104,7 @@
 favorites コメントおよび [database.md](./database.md#弱参照fk-を張らない参照) 参照）。MCID の設定・変更・削除で
 `users.slug` が再生成されると、他ユーザーが持つ `favorites` 行が古い slug を指したまま孤児化し、
 `/favorites`（`inArray(users.slug, slugs)` の完全一致で解決）から黙って消える。これを防ぐため、
-`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid` アクションは `users` 更新と同じトランザクション内で
+`app/lib/mcid-change.server.ts` の `applyMcidSlugChange`（`/me/edit` の `save_all` と onboarding が共用）は `users` 更新と同じトランザクション内で
 `retargetFavoritesOnSlugChange(tx, { oldSlug, newSlug })` を呼ぶ。
 
 処理順（`app/lib/favorites.ts`）:
@@ -131,9 +130,8 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 **ログイン中:**
 
-1. sessionStorage から即時表示（`initialFavorites` が空のときのフォールバック）
-2. localStorage に未同期エントリがあれば `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`
-3. `GET /api/favorites` で最新を取得し state と sessionStorage を更新
+1. localStorage に未同期エントリが**無い**場合: SSR の `initialFavorites`（`_layout` ローダーが同一リクエストで DB から取得。失敗時はページ全体が落ちるため「0件」と区別できる）を正とし、何もしない（`useState` の初期値のまま）。`GET /api/favorites` は出さない
+2. 未同期エントリが**ある**場合は `PUT /api/favorites` で一括同期 → 完了後 `clearLocalFavorites()`、応答で state を更新。PUT が失敗したときだけ `GET /api/favorites` にフォールバック
 
 **未ログイン:**
 
@@ -151,6 +149,8 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 - 未ログイン状態で `useCookieConsent().hasConsent` が `true` でない場合は localStorage を参照しない
 - `FavoriteButton` クリック時に同意なしならコンセントバナーを表示
+- バナー（`CookieConsentBanner`）の文言は実際の保存先に合わせ、プライバシーポリシー「3. Cookie 等について」の書き方で「お気に入りにした走者の一覧をブラウザ内（ローカルストレージ）に保存」と書く。`role="region"`＋名前付き。「同意する」「拒否する」は同じ重さ（どちらも outline）
+- 初回の自動表示は `/login`・`/onboarding`・`/dev/login` では見合わせる（中央のカードの主ボタンに重なるため）。ほかのページへ移ると、未回答なら表示する。`FavoriteButton` からの表示（`show` 指定）は対象外
 
 ---
 
@@ -158,12 +158,25 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 
 | ページ | お気に入りの利用 |
 |---|---|
-| `/favorites` | お気に入り一覧。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
+| `/favorites` | お気に入り一覧。各カードに `FavoriteButton`（`showFavoriteButton`）を出す。ハートを外してもカードはその場に残り（ハートが空になるだけ）、再読み込みまで一覧は変わらない（誤操作しても同じ位置でハートを押し直せば戻せる）。ログイン時は loader が DB から取得 → users JOIN で詳細返却。未ログイン時はクライアント側で localStorage → `POST /api/users/by-slugs` で詳細取得 |
+| `/favorites/activity` | お気に入り走者の動き一覧（下記）。ホームの「お気に入り走者の動き」の「すべて見る」の遷移先 |
 | `/browse` | ログイン時のみ、お気に入りを上位に並べ替え（loader で DB から取得） |
 | `/player/:slug` | `<FavoriteButton slug={player.slug} />` でトグル |
 | ホーム（`/`） | ライブ・ペース・動画でお気に入りを先頭に並べ替え。クライアント側の `useFavorites()` で適用し、ゲスト（Cookie 同意済み）も対象。`/api/home-feed` 自体はユーザー非依存（お気に入り・セッションを参照せず、CDN キャッシュ） |
 
 ---
+
+## お気に入り走者の動き一覧 (/favorites/activity)
+
+お気に入りにした走者の最近の動き（PaceMan のペース・YouTube/Twitch の動画・プロフィール更新・ガイドの公開/更新）を新しい順に並べるページ。ホームの「お気に入り走者の動き」欄（直近7日・10件）の全件版。
+
+- **期間・件数**: 直近30日・最大100件（ホームは7日・10件）。サーバー側で `clampFavoriteActivityOptions`（`app/lib/home-favorite-activity-shared.ts`）が日数を最大30・件数を最大100に丸め、不正値は既定に戻す。同じ走者のペースはホームでは1人2件、このページでは1人5件まで。
+- **お気に入りの解決**: ログイン済みはサーバーのお気に入り、未ログインはブラウザのお気に入り（ホームと同じ）。取得は `POST /api/home-favorite-activity`（本文に `windowDays` / `limit`）をクライアントから呼ぶ（`useFavoriteActivity`、`app/hooks/use-favorite-activity.ts`）。
+- **除外**: 非公開・限定公開プロフィールは含めない。ホーム表示設定（`showPacemanOnHome` / `showYoutubeOnHome` / `showTwitchOnHome`）がオフの人の該当コンテンツも除外する（ホームと同じ `getFavoriteActivity`）。
+- **表示**: 日付見出し（今日・昨日・それ以前は日付）で区切り、各行に時刻（HH:mm、端末のタイムゾーン）。行の文言と行コンポーネントはホームと共用（`app/components/favorite-activity-row.tsx`）。お気に入り0件・動き0件は `EmptyState`。
+- **イベント種別**: ペース・動画・プロフィール更新・ガイドに加え、Ranked のレート帯 UP（`rankTierUp`）・Ranked PB 更新（`rankedPb`）・speedrun.com への申請（`srcSubmit`、審査中）・操作設定の変更（`settings`。メインプリセットへの切替〈プリセットを変更〉とメイン＝編集中プリセットの公開設定の保存のみ。`config_history` を `publicConfigChangeCondition()` で絞り、`change_type` は種別ラベルに使う。1人1日 changeType ごと1件）がある。データ元・精度・除外条件・文面は [home-live.md](./home-live.md#お気に入りの動き縦タイムライン) の「種類（追加分）」を参照。日付精度の種別（`rankTierUp` / `rankedPb`）はこのページの時刻列を空欄にする。Ranked 系は `showRankedStats === false` の人を除外する。一覧では rankTierUp・srcSubmit・settings は1人3件まで。
+- **ペース行の挙動**: PaceMan のペース行（`kind: "pace"`。応答に `runId` を含む）は、行全体がタイムラインモーダル（`PaceTimelineModal`、`app/components/pace-timeline-modal.tsx`。`/paces` のペースカードと共用）を開くボタン（`aria-haspopup="dialog"`）になる。走者プロフィールへはアバターが別リンク（z-10）として残る。動画・ガイド・プロフィール更新の行は従来どおり該当ページへのリンク。
+- **相互ナビ**: `/favorites` と `/favorites/activity` の両方のヘッダ直下に共通の切り替え `FavoritesNav`（「お気に入り走者」｜「動き」、現在ページに `aria-current="page"`）。見た目はページ間のタブ `ContentTabs`（`app/components/content-tabs.tsx`。ui.md 11章「ほかのタブ形」）。両ページの見出しは同じ形（素のアイコン＋h1。丸背景のアイコンチップは付けない）。
 
 ## SSR の扱い
 
@@ -179,12 +192,16 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 |---|---|
 | `app/lib/schema.ts` | `favorites` テーブル定義 |
 | `app/lib/favorites.ts` | サーバー側 DB CRUD + 旧 Cookie 削除ヘッダー + slug 変更時の追従更新（`retargetFavoritesOnSlugChange`） |
-| `app/routes/me/edit.tsx` | `set_mcid` / `remove_mcid` アクションから `retargetFavoritesOnSlugChange` を呼び出し |
-| `app/lib/favorites-client.ts` | クライアント側 localStorage / sessionStorage 操作 |
+| `app/lib/mcid-change.server.ts` | `applyMcidSlugChange` から `retargetFavoritesOnSlugChange` を呼び出し（`/me/edit` の `save_all`・onboarding 共用） |
+| `app/lib/favorites-client.ts` | クライアント側 localStorage 操作 |
 | `app/hooks/use-favorites.tsx` | `FavoritesProvider` + `useFavorites` |
 | `app/routes/api/favorites.ts` | GET / POST / PUT のお気に入り API |
 | `app/routes/api/users/by-slugs.ts` | スラッグ配列→ユーザー詳細 API |
 | `app/routes/favorites.tsx` | `/favorites` ページ |
+| `app/routes/favorites-activity.tsx` | `/favorites/activity` ページ |
+| `app/components/favorites-nav.tsx` | 上記2ページを行き来するルート間ナビ（`aria-current="page"`） |
+| `app/components/favorite-activity-row.tsx` / `app/hooks/use-favorite-activity.ts` | 動きの行・文言 / 取得フック（ホーム欄と共用） |
+| `app/lib/home-favorite-activity-shared.ts` | 期間・件数の定数（クライアントからも参照） |
 | `app/routes/_layout.tsx` | `FavoritesProvider` のマウント |
 | `app/components/favorite-button.tsx` | お気に入りトグルボタン（slug ベース） |
 | `app/components/cookie-consent.tsx` | Cookie 同意フック |
@@ -203,5 +220,6 @@ favorites コメントおよび [database.md](./database.md#弱参照fk-を張�
 - `favoriteMcid` を `favoriteSlug` にリネーム（インデックスも `idx_favorites_user_slug` に）
 - ログインユーザーの正本を DB に移行、デバイス間共有を実現
 - 未ログインユーザー向けに localStorage ベースへ切替
-- `GET /api/favorites` のレスポンスで旧 Cookie を `Max-Age=0` で自動削除
+- `/api/favorites` の応答（GET / POST / PUT）で旧 Cookie を `Max-Age=0` で自動削除（ログイン時の初期化では GET を出さなくなったため、お気に入りの追加・削除・同期のときに消える）
 - `POST /api/users/by-slugs` を新設し、未ログインの一覧表示でも detail 取得を可能に
+- ログイン中の sessionStorage キャッシュ（`minefolio_favorites_cache`）を廃止（SSR の `initialFavorites` を正とし、GET も出さないため不要になった）

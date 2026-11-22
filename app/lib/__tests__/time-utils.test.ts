@@ -6,7 +6,17 @@ describe("formatTime", () => {
     expect(formatTime(0)).toBe("0:00.000");
     expect(formatTime(585000)).toBe("9:45.000");
     expect(formatTime(448618)).toBe("7:28.618");
-    expect(formatTime(3600000)).toBe("60:00.000");
+  });
+
+  it("1時間未満は M:SS.mmm のまま（境界 59:59.999）", () => {
+    expect(formatTime(3599999)).toBe("59:59.999");
+  });
+
+  it("1時間以上は H:MM:SS.mmm（境界 1:00:00.000・100分台・ミリ秒なし）", () => {
+    expect(formatTime(3600000)).toBe("1:00:00.000");
+    expect(formatTime(6028757)).toBe("1:40:28.757");
+    expect(formatTime(7200000)).toBe("2:00:00.000");
+    expect(formatTime(3661005)).toBe("1:01:01.005");
   });
 
   it("数値文字列は数値として扱う（DBドライバ経由で文字列化された正常値の許容）", () => {
@@ -27,6 +37,15 @@ describe("parseTimeToMs", () => {
     expect(parseTimeToMs("9:45.000")).toBe(585000);
     expect(parseTimeToMs("7:28.618")).toBe(448618);
     expect(parseTimeToMs("59.999")).toBe(59999);
+  });
+
+  it("H:MM:SS.mmm もパースでき、formatTime と往復できる", () => {
+    expect(parseTimeToMs("1:40:28.757")).toBe(6028757);
+    for (const ms of [3599999, 3600000, 6028757, 36000123]) {
+      expect(parseTimeToMs(formatTime(ms))).toBe(ms);
+    }
+    // 従来の 100:28.757 形式も受け付ける
+    expect(parseTimeToMs("100:28.757")).toBe(6028757);
   });
 
   it("形式が不正なら null を返す", () => {

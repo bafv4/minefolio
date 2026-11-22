@@ -1,59 +1,24 @@
-import { createTranslator } from "@/lib/messages";
-import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useLoaderData, useRevalidator } from "react-router";
+import { createTranslator, type Translator } from "@/lib/messages";
+import { resolveLocale } from "@/lib/locale";
+import { redirect } from "react-router";
 import type { Route } from "./+types/import";
 import { createDb, type Database } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
-import { eq, desc, sql } from "drizzle-orm";
-import { ImportDialog } from "@/components/import-dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Keyboard, Settings, Info } from "lucide-react";
-import { getKeyLabel, getActionLabel } from "@/lib/keybindings";
+import { eq, sql } from "drizzle-orm";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
-import { createPresetFromImport, syncActivePresetSnapshot } from "@/lib/preset-utils";
-import { useT } from "@/hooks/use-locale";
+import { createPresetFromImport, syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
+import { normalizeGameLanguage } from "@/lib/game-languages";
 
-export const meta: Route.MetaFunction = ({ matches }) => {
-  const t = createTranslator(localeFromMatches(matches));
-  return [
-    { title: t("meImport.title") },
-    { name: "description", content: t("meImport.description") },
-  ];
-};
-
-export async function loader({ request }: Route.LoaderArgs) {
-  const env = getEnv();
-  const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
-
-  if (!user) {
-    throw new Response("Not Found", { status: 404 });
-  }
-
-  // 現在のリマップ数とキーバインド数を取得
-  const remapCount = await db.query.keyRemaps.findMany({
-    where: eq(keyRemaps.userId, user.id),
-  });
-
-  const keybindingCount = await db.query.keybindings.findMany({
-    where: eq(keybindings.userId, user.id),
-  });
-
-  return {
-    remapCount: remapCount.length,
-    keybindingCount: keybindingCount.length,
-  };
+// 設定のインポートは /me/keybindings のプリセット行の「インポート」ダイアログから行う（ImportDialog）。
+// このルートは書き込み先の action（ダイアログが fetcher で POST する）と、旧 URL（ブックマーク・docs・ガイドの
+// リンク）をダイアログが開いたキー配置画面へ転送する loader だけを持つリソースルート。ページ本体は持たない。
+export function loader() {
+  return redirect("/me/keybindings?import=1");
 }
 
 /**
@@ -65,7 +30,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  *   （アクティブ不在はアクション冒頭で弾いているため、ここでは必ず同期される）。
  * 戻り値はレスポンスの presetCreated にそのまま使う。
  */
-async function syncPresetAfterImport(db: Database, userId: string, hasPresets: boolean): Promise<boolean> {
+async function syncPresetAfterImport(t: Translator, db: Database, userId: string, hasPresets: boolean): Promise<boolean> {
   if (!hasPresets) {
     const [
       updatedKeybindings,
@@ -86,6 +51,7 @@ async function syncPresetAfterImport(db: Database, userId: string, hasPresets: b
     ]);
 
     await createPresetFromImport(
+      t,
       db,
       userId,
       updatedKeybindings,
@@ -128,7 +94,18 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const intent = formData.get("intent") as string;
+  const intent = formString(formData, "intent");
+
+  // 画面に出していた取り込み先が、別タブでの切替で変わっていないか確認する
+  // （他のプリセット対象画面と同じ。不一致なら何も書かずに staleSession）
+  try {
+    await assertPresetIsActive(db, user.id, formString(formData, "presetId") || null);
+  } catch (e) {
+    if (e instanceof PresetMismatchError) {
+      return { success: false, error: t("mePresets.staleSession") };
+    }
+    throw e;
+  }
 
   // プリセットの状態を書き込み前に確認する。
   // 「プリセットは存在するがアクティブが1件も無い」状態では、インポート後の
@@ -158,7 +135,7 @@ export async function action({ request }: Route.ActionArgs) {
     };
     let remaps: ImportRemap[];
     try {
-      const parsed = JSON.parse((formData.get("remaps") as string) ?? "");
+      const parsed = JSON.parse(formString(formData, "remaps") ?? "");
       if (!Array.isArray(parsed)) throw new Error("not an array");
       remaps = (parsed as unknown[]).map((r) => {
         if (!r || typeof r !== "object") throw new Error("invalid element");
@@ -166,18 +143,30 @@ export async function action({ request }: Route.ActionArgs) {
         if (typeof rec.sourceKey !== "string" || !rec.sourceKey) {
           throw new Error("missing sourceKey");
         }
+        const targetKey = typeof rec.targetKey === "string" ? rec.targetKey : null;
+        const software = typeof rec.software === "string" ? rec.software : null;
+        const notes = typeof rec.notes === "string" ? rec.notes : null;
+        // 文字列の長さ上限（画面側のパーサが作る値より十分緩い）
+        if (
+          rec.sourceKey.length > SAVE_LIMITS.shortText ||
+          (targetKey?.length ?? 0) > SAVE_LIMITS.shortText ||
+          (software?.length ?? 0) > SAVE_LIMITS.shortText ||
+          (notes?.length ?? 0) > SAVE_LIMITS.memo
+        ) {
+          throw new Error("too long");
+        }
         return {
           sourceKey: rec.sourceKey,
-          targetKey: typeof rec.targetKey === "string" ? rec.targetKey : null,
-          software: typeof rec.software === "string" ? rec.software : null,
-          notes: typeof rec.notes === "string" ? rec.notes : null,
+          targetKey,
+          software,
+          notes,
           remapType: rec.remapType as string | null | undefined,
         };
       });
     } catch {
       return { success: false, error: t("meImport.invalidData") };
     }
-    if (remaps.length > 1000) {
+    if (remaps.length > SAVE_LIMITS.remaps) {
       return { success: false, error: t("meImport.tooManyItems") };
     }
 
@@ -216,7 +205,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
-    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
+    const presetCreated = await syncPresetAfterImport(t, db, user.id, hasPresets);
 
     return { success: true, type: "remaps", count: remaps.length, presetCreated };
   }
@@ -227,15 +216,13 @@ export async function action({ request }: Route.ActionArgs) {
       keyCode: string;
       category: "movement" | "combat" | "inventory" | "ui";
     }>;
-    let gameSettings: {
-      toggleSprint?: boolean;
-      toggleSneak?: boolean;
-      autoJump?: boolean;
-      fov?: number;
-      guiScale?: number;
-      rawInput?: boolean;
-      gameLanguage?: string;
-    };
+    // 検証を通って実際に適用する値だけを持つ（null・欠落は「未指定」）
+    const gameSettings: Partial<
+      Pick<
+        typeof playerConfigs.$inferInsert,
+        "toggleSprint" | "toggleSneak" | "autoJump" | "fov" | "guiScale" | "rawInput" | "gameLanguage"
+      >
+    > = {};
     // category は keybindings.category 列の enum を allowlist として検証する
     // （SQLite側にCHECK制約が無いため、ここで弾かないと未知の文字列がそのままDBへ入り、
     // カテゴリ別グルーピング等の表示側が前提とする4値のいずれかという不変条件が崩れる）。
@@ -243,18 +230,18 @@ export async function action({ request }: Route.ActionArgs) {
     // （playground.tsx / search-craft-templates.ts の要素シェイプガードと同じ考え方）。
     const allowedCategories = keybindings.category.enumValues;
     try {
-      const kb = JSON.parse((formData.get("keybindings") as string) ?? "");
-      const gs = JSON.parse((formData.get("gameSettings") as string) ?? "");
-      if (!Array.isArray(kb) || typeof gs !== "object" || gs === null) {
+      const kb = JSON.parse(formString(formData, "keybindings") ?? "");
+      const gs = JSON.parse(formString(formData, "gameSettings") ?? "");
+      if (!Array.isArray(kb) || typeof gs !== "object" || gs === null || Array.isArray(gs)) {
         throw new Error("invalid shape");
       }
       keybindingsList = (kb as unknown[]).map((item) => {
         if (!item || typeof item !== "object") throw new Error("invalid element");
         const rec = item as Record<string, unknown>;
-        if (typeof rec.action !== "string" || !rec.action) {
+        if (typeof rec.action !== "string" || !rec.action || rec.action.length > SAVE_LIMITS.shortText) {
           throw new Error("missing action");
         }
-        if (typeof rec.keyCode !== "string" || !rec.keyCode) {
+        if (typeof rec.keyCode !== "string" || !rec.keyCode || rec.keyCode.length > SAVE_LIMITS.shortText) {
           throw new Error("missing keyCode");
         }
         if (typeof rec.category !== "string" || !(allowedCategories as readonly string[]).includes(rec.category)) {
@@ -266,11 +253,36 @@ export async function action({ request }: Route.ActionArgs) {
           category: rec.category as (typeof allowedCategories)[number],
         };
       });
-      gameSettings = gs;
+      // ゲーム設定。デバイス画面の保存と同じ検証関数（isValidFov / isValidGuiScale）を通す。
+      // 型違い（数値でない fov など）は手作りのリクエストなのでインポート全体を拒否する。
+      // 数値だが範囲外・非整数の fov / guiScale は、その項目だけ取り込まず既存値を保持する
+      // （改造クライアントの値や、想定と違う形式のファイルで、キー配置ごと取り込めなくなるのを避ける）。
+      // null・欠落は未指定として既存値を保持する（パーサが数値化に失敗した値は JSON で null になるため）
+      const settings = gs as Record<string, unknown>;
+      for (const key of ["toggleSprint", "toggleSneak", "autoJump", "rawInput"] as const) {
+        const value = settings[key];
+        if (value === undefined || value === null) continue;
+        if (typeof value !== "boolean") throw new Error(`invalid ${key}`);
+        gameSettings[key] = value;
+      }
+      if (settings.fov !== undefined && settings.fov !== null) {
+        if (typeof settings.fov !== "number") throw new Error("invalid fov");
+        if (isValidFov(settings.fov)) gameSettings.fov = settings.fov;
+      }
+      if (settings.guiScale !== undefined && settings.guiScale !== null) {
+        if (typeof settings.guiScale !== "number") throw new Error("invalid guiScale");
+        if (isValidGuiScale(settings.guiScale)) gameSettings.guiScale = settings.guiScale;
+      }
+      // ゲーム言語は許可リストで正規化する。許可リスト外（options.txt の独自言語など）は取り込まず既存値を保持する
+      if (settings.gameLanguage !== undefined && settings.gameLanguage !== null) {
+        if (typeof settings.gameLanguage !== "string") throw new Error("invalid gameLanguage");
+        const language = normalizeGameLanguage(settings.gameLanguage);
+        if (language !== null) gameSettings.gameLanguage = language;
+      }
     } catch {
       return { success: false, error: t("meImport.invalidData") };
     }
-    if (keybindingsList.length > 1000) {
+    if (keybindingsList.length > SAVE_LIMITS.keybindingUpdates) {
       return { success: false, error: t("meImport.tooManyItems") };
     }
 
@@ -313,27 +325,7 @@ export async function action({ request }: Route.ActionArgs) {
           updatedAt: new Date(),
         };
 
-        if (gameSettings.toggleSprint !== undefined) {
-          configData.toggleSprint = gameSettings.toggleSprint;
-        }
-        if (gameSettings.toggleSneak !== undefined) {
-          configData.toggleSneak = gameSettings.toggleSneak;
-        }
-        if (gameSettings.autoJump !== undefined) {
-          configData.autoJump = gameSettings.autoJump;
-        }
-        if (gameSettings.fov !== undefined) {
-          configData.fov = gameSettings.fov;
-        }
-        if (gameSettings.guiScale !== undefined) {
-          configData.guiScale = gameSettings.guiScale;
-        }
-        if (gameSettings.rawInput !== undefined) {
-          configData.rawInput = gameSettings.rawInput;
-        }
-        if (gameSettings.gameLanguage !== undefined) {
-          configData.gameLanguage = gameSettings.gameLanguage;
-        }
+        Object.assign(configData, gameSettings);
 
         if (existingConfig) {
           await tx
@@ -351,7 +343,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     // インポート後にプリセットへ反映（初回はプリセット自動作成、2回目以降はアクティブスナップショットを同期）
-    const presetCreated = await syncPresetAfterImport(db, user.id, hasPresets);
+    const presetCreated = await syncPresetAfterImport(t, db, user.id, hasPresets);
 
     return {
       success: true,
@@ -362,91 +354,5 @@ export async function action({ request }: Route.ActionArgs) {
     };
   }
 
-  return { success: false };
-}
-
-export default function ImportPage() {
-  const t = useT();
-  const { remapCount, keybindingCount } = useLoaderData<typeof loader>();
-  const revalidator = useRevalidator();
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{t("meImport.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("meImport.pageDescription")}
-        </p>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* リマップインポート */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Keyboard className="h-5 w-5" />
-              {t("meImport.remapTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meImport.remapDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm">
-              <p className="text-muted-foreground mb-2">{t("meImport.supportedFormat")}</p>
-              <div className="bg-muted p-2 rounded font-mono text-xs">
-                CapsLock::Ctrl<br />
-                a::b<br />
-                XButton1::e ; {t("meImport.ahkCommentExample")}
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {t("meImport.currentCountLabel")} <Badge variant="secondary">{remapCount}{t("meImport.countUnit")}</Badge>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Minecraft設定インポート */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t("meImport.minecraftTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meImport.minecraftDescription")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm">
-              <p className="text-muted-foreground mb-2">{t("meImport.supportedFiles")}</p>
-              <ul className="list-disc list-inside text-xs space-y-1">
-                <li><code className="bg-muted px-1 rounded">options.txt</code> - {t("meImport.minecraftFolder")}</li>
-                <li><code className="bg-muted px-1 rounded">standardsettings.json</code> - StandardSettings Mod</li>
-              </ul>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                {t("meImport.currentCountLabel")} <Badge variant="secondary">{keybindingCount}{t("meImport.countUnit")}</Badge>
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>{t("meImport.importInfoTitle")}</AlertTitle>
-        <AlertDescription>
-          {t("meImport.importInfoDescription")}
-        </AlertDescription>
-      </Alert>
-
-      <div className="flex justify-center">
-        <ImportDialog onSuccess={() => revalidator.revalidate()} />
-      </div>
-    </div>
-  );
+  return { success: false, error: t("meImport.unknownIntent") };
 }

@@ -10,15 +10,22 @@ import {
 import { Share2, Link2, Check } from "lucide-react";
 import { Twitter } from "@/components/brand-icons";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface ShareButtonProps {
   title: string;
   url?: string;
   description?: string;
   includeTab?: boolean; // 現在のタブをURLに含めるか
+  /** md 未満はアイコンのみ（ラベルは sr-only で残す）。既定 false */
+  compactOnMobile?: boolean;
+  /** compactOnMobile の切り替え幅。既定 "md"（md 未満でアイコンのみ）、"sm" なら sm 未満 */
+  compactBelow?: "sm" | "md";
+  /** トリガーボタンへの追加クラス（モバイルの 44px 化など。既定は変えない） */
+  className?: string;
 }
 
-export function ShareButton({ title, url, description, includeTab = false }: ShareButtonProps) {
+export function ShareButton({ title, url, description, includeTab = false, compactOnMobile = false, compactBelow = "md", className }: ShareButtonProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
 
@@ -62,9 +69,9 @@ export function ShareButton({ title, url, description, includeTab = false }: Sha
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Share2 className="h-4 w-4 mr-2" />
-          {t("share.label")}
+        <Button variant="outline" size="sm" className={className}>
+          <Share2 className={cn("h-4 w-4", compactOnMobile ? (compactBelow === "sm" ? "sm:mr-2" : "md:mr-2") : "mr-2")} aria-hidden />
+          <span className={cn(compactOnMobile && (compactBelow === "sm" ? "max-sm:sr-only" : "max-md:sr-only"))}>{t("share.label")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

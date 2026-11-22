@@ -1,6 +1,6 @@
-import { createTranslator } from "@/lib/messages";
+import { createTranslator, type MessageKey } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLoaderData, useFetcher, type ShouldRevalidateFunctionArgs } from "react-router";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/devices";
@@ -11,10 +11,10 @@ import { getEnv } from "@/lib/env.server";
 import { users, playerConfigs, configPresets } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { PageSection } from "@/components/page-section";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -27,30 +27,28 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Combobox } from "@/components/ui/combobox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Keyboard,
   Mouse,
   Gamepad2,
   AlertCircle,
-  Settings,
-  Copy,
   Smartphone,
 } from "lucide-react";
 import {
   type ControllerSettings,
   DEFAULT_CONTROLLER_SETTINGS,
   KEYBOARD_LAYOUT_OPTIONS,
+  keyboardLayoutLabel,
 } from "@/lib/keybindings";
 import {
   fromSensitivityPercent,
-  MOUSE_SETTINGS_FIELDS,
   parseMouseSettingsInput,
   toSensitivityPercent,
   validateMouseSettings,
   type MouseSettingsField,
 } from "@/lib/mouse-settings";
-import { parseInputMethodInput } from "@/lib/playstyle";
 import {
   Dialog,
   DialogContent,
@@ -61,12 +59,18 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { gameLanguageOptions } from "@/lib/game-languages";
+import { jsonEqual } from "@/lib/loader-synced-draft";
+import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
+import { gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
+import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
 import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
+import { resolveActivePublicPresetId } from "@/lib/config-history";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
-import { PresetSelector } from "@/components/preset-selector";
+import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -142,46 +146,38 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
-  const locale = useLocale();
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="h-8 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-56 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="h-9 w-20 bg-muted rounded animate-pulse" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* Header（本物は h1 32px ＋ 説明 20px。右の操作は無い） */}
+      <div>
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="h-5 w-56 max-w-full" />
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
-        </div>
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-24 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      {/* プリセットセレクター（ラベル 16px ＋ gap 4px ＋ セレクト 36px、sm 未満は 44px） */}
+      <PresetSelectorSkeleton />
+
+      {/* 入力方法の欄（見出し 28px ＋ 現在値 20px ＋ 説明 20px） */}
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-5 w-72 max-w-full" />
+      </div>
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-24" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       </div>
-
-      {/* Settings Card */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
-          <div className="h-10 bg-muted rounded animate-pulse" />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-40" />
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
+          <Skeleton className="h-10" />
         </div>
       </div>
     </div>
@@ -207,7 +203,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const actionType = formData.get("_action") as string | null;
-  const presetId = (formData.get("presetId") as string | null) || null;
+  const presetId = formString(formData, "presetId") || null;
 
   try {
     await assertPresetIsActive(db, user.id, presetId);
@@ -222,25 +218,21 @@ export async function action({ request }: Route.ActionArgs) {
   // アクティブなプリセットが無い状態では保存できない（UIのグレーアウトだけでなくサーバー側でも拒否）。
   // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
   // どのプリセットにも属さないデータになってしまう。
-  // 入力方法のみの保存（saveInputMethod）は users.inputMethod（プリセット非依存）だけを
-  // 更新するため、プリセットが無くても許可する。
-  if (actionType !== "saveInputMethod") {
-    const activePresetRow = await db.query.configPresets.findFirst({
-      where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-      columns: { id: true },
-    });
-    if (!activePresetRow) {
-      return { error: t("meDevices.presetRequired") };
-    }
+  // 入力方法（users.inputMethod）の編集は /me/playstyle に一本化した（ここでは受け付けない）。
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true },
+  });
+  if (!activePresetRow) {
+    return { error: t("meDevices.presetRequired") };
   }
 
   // マウス設定の範囲チェック（フォーム外からの POST でも異常値が DB に入らないようにする）。
   // NaN（"abc" のパース結果など）は各バリデーションがいずれも false になり拒否される。
-  // inputMethod の更新より前に検証し、エラー時に inputMethod だけ部分保存されるのを防ぐ。
-  const mouseDpiStr = formData.get("mouseDpi") as string;
-  const gameSensitivityStr = formData.get("gameSensitivity") as string;
-  const windowsSpeedStr = formData.get("windowsSpeed") as string;
-  const windowsSpeedMultiplierStr = formData.get("windowsSpeedMultiplier") as string;
+  const mouseDpiStr = formString(formData, "mouseDpi");
+  const gameSensitivityStr = formString(formData, "gameSensitivity");
+  const windowsSpeedStr = formString(formData, "windowsSpeed");
+  const windowsSpeedMultiplierStr = formString(formData, "windowsSpeedMultiplier");
 
   const parsed = parseMouseSettingsInput({
     mouseDpi: mouseDpiStr ?? "",
@@ -256,74 +248,103 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: t(validationError.messageKey), field: validationError.field };
   }
 
-  // fov / guiScale の範囲チェック（同上の理由で inputMethod の更新より前に検証する）。
+  // fov / guiScale の範囲チェック。
   // parseInt は "70.9" や "70abc" を先頭だけ読んで 70 として黙って受理してしまい、
   // 「整数で入力してください」というメッセージと矛盾するため Number() + Number.isInteger で検証する
   // （NaN は isInteger が false を返すため個別の Number.isFinite チェックは不要）。
-  const fovStr = formData.get("fov") as string;
-  const guiScaleStr = formData.get("guiScale") as string;
+  // （/me/import の Minecraft 設定取り込みと同じ検証関数 isValidFov / isValidGuiScale を使う）
+  const fovStr = formString(formData, "fov");
+  const guiScaleStr = formString(formData, "guiScale");
   const fov = fovStr ? Number(fovStr) : null;
   const guiScale = guiScaleStr ? Number(guiScaleStr) : null;
-  if (fov !== null && (!Number.isInteger(fov) || fov < 30 || fov > 110)) {
+  if (fov !== null && !isValidFov(fov)) {
     return { error: t("meDevices.fovInvalid"), field: "fov" };
   }
-  // バニラは高解像度環境で GUI スケール 5〜9 が正当値になりうるため上限は 10 まで許容する
-  if (guiScale !== null && (!Number.isInteger(guiScale) || guiScale < 0 || guiScale > 10)) {
+  if (guiScale !== null && !isValidGuiScale(guiScale)) {
     return { error: t("meDevices.guiScaleInvalid"), field: "guiScale" };
-  }
-
-  // 入力方法の更新（users.inputMethod はプリセット非依存）。
-  // 許可リストと "" → null 変換は /me/playstyle と共有（app/lib/playstyle.ts）。
-  // フィールド欠落時は更新せず、不正値は従来どおり黙って無視する
-  const inputMethodValue = formData.get("inputMethod") as string | null;
-  if (inputMethodValue !== null) {
-    const parsedInputMethod = parseInputMethodInput(inputMethodValue);
-    if (parsedInputMethod.ok) {
-      await db
-        .update(users)
-        .set({ inputMethod: parsedInputMethod.value })
-        .where(eq(users.id, user.id));
-    }
-  }
-
-  // 入力方法のみの保存はここで完了（playerConfig 系は書き込まない）
-  if (actionType === "saveInputMethod") {
-    return { success: true };
   }
 
   // keyboardLayout: DBの text({enum}) は CHECK 制約を作らないため、action 側で allowlist
   // （@/lib/keybindings の KEYBOARD_LAYOUT_OPTIONS）検証する。
   // 不正値（allowlist 外）は null 上書きにせず configData から除外し、DB の既存値を保持する。
   // 有効値・明示的な未設定（空文字→null）は従来どおり書き込む。
-  const keyboardLayoutRaw = (formData.get("keyboardLayout") as string) || null;
+  const keyboardLayoutRaw = formString(formData, "keyboardLayout") || null;
   const keyboardLayoutIsValid =
     keyboardLayoutRaw === null ||
     (KEYBOARD_LAYOUT_OPTIONS as readonly string[]).includes(keyboardLayoutRaw);
   const keyboardLayout = keyboardLayoutIsValid
     ? (keyboardLayoutRaw as (typeof KEYBOARD_LAYOUT_OPTIONS)[number] | null)
     : null;
-  const keyboardModel = (formData.get("keyboardModel") as string)?.trim() || null;
-  const mouseModel = (formData.get("mouseModel") as string)?.trim() || null;
+  const keyboardModel = formString(formData, "keyboardModel")?.trim() || null;
+  const mouseModel = formString(formData, "mouseModel")?.trim() || null;
   const toggleSprint = formData.get("toggleSprint") === "true";
   const toggleSneak = formData.get("toggleSneak") === "true";
   const autoJump = formData.get("autoJump") === "true";
   const rawInput = formData.get("rawInput") === "true";
   const mouseAcceleration = formData.get("mouseAcceleration") === "true";
-  const gameLanguage = (formData.get("gameLanguage") as string)?.trim() || null;
-  const notes = (formData.get("notes") as string)?.trim() || null;
+  const notes = formString(formData, "notes")?.trim() || null;
+
+  // 長さの上限（超過は何も書かずにエラー）
+  if (
+    (keyboardModel?.length ?? 0) > SAVE_LIMITS.keyboardModel ||
+    (mouseModel?.length ?? 0) > SAVE_LIMITS.mouseModel ||
+    (notes?.length ?? 0) > SAVE_LIMITS.deviceNotes
+  ) {
+    return { error: t("meDevices.limitExceeded") };
+  }
+
+  // ゲーム言語は許可リスト（game-languages の単一情報源）で検証する。小文字に正規化して保存する。
+  // 保存済みの値と同一なら通す（import や旧データ由来で許可リスト外の値を持つ人が、以後ほかの欄を保存できなくなるのを避ける）。
+  // 空は「未設定」。許可リスト外の新しい値はエラー（null で上書きしない）
+  const gameLanguageRaw = formString(formData, "gameLanguage")?.trim() || null;
+  let gameLanguage: string | null = null;
+  if (gameLanguageRaw !== null) {
+    const normalized = normalizeGameLanguage(gameLanguageRaw);
+    if (normalized !== null) {
+      gameLanguage = normalized;
+    } else if (gameLanguageRaw === user.playerConfig?.gameLanguage) {
+      gameLanguage = gameLanguageRaw;
+    } else {
+      return { error: t("meDevices.gameLanguageInvalid") };
+    }
+  }
 
   // コントローラー設定（JSON文字列としてそのまま保存する）。
   // JSON.parse が通るだけでなくオブジェクト（配列・null を除く）であることまで検証し、
   // "123" や "\"x\"" のような非オブジェクト JSON を弾く。
   // 不正時は null 上書きにせず configData から除外し、DB の既存値を保持する（keyboardLayout と同方針）。
-  const controllerSettingsJson = formData.get("controllerSettings") as string | null;
+  const controllerSettingsJson = formString(formData, "controllerSettings");
   let controllerSettingsIsValid = true;
   let controllerSettings: string | null = null;
   if (controllerSettingsJson) {
+    if (controllerSettingsJson.length > SAVE_LIMITS.shortText * 2) {
+      return { error: t("meDevices.limitExceeded") };
+    }
     try {
       const parsed = JSON.parse(controllerSettingsJson);
-      if (typeof parsed === "object" && parsed !== null) {
-        controllerSettings = controllerSettingsJson;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        const model = parsed.controllerModel;
+        if (typeof model === "string" && model.length > SAVE_LIMITS.controllerModel) {
+          return { error: t("meDevices.limitExceeded") };
+        }
+        // 既知の4フィールドだけを再シリアライズする（未知のキーは保存しない）。
+        // 型が合わない場合は保存せず既存値を保持する
+        const lookSensitivity = parsed.lookSensitivity;
+        if (
+          (model === null || model === undefined || typeof model === "string") &&
+          (lookSensitivity === null || lookSensitivity === undefined || typeof lookSensitivity === "number") &&
+          (parsed.invertYAxis === undefined || typeof parsed.invertYAxis === "boolean") &&
+          (parsed.vibration === undefined || typeof parsed.vibration === "boolean")
+        ) {
+          controllerSettings = JSON.stringify({
+            controllerModel: model ?? null,
+            lookSensitivity: lookSensitivity ?? null,
+            invertYAxis: parsed.invertYAxis ?? false,
+            vibration: parsed.vibration ?? true,
+          });
+        } else {
+          controllerSettingsIsValid = false;
+        }
       } else {
         controllerSettingsIsValid = false;
       }
@@ -357,45 +378,87 @@ export async function action({ request }: Route.ActionArgs) {
     configData.controllerSettings = controllerSettings;
   }
 
-  // upsert: ライブの playerConfig 行が無い場合は insert する
-  // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
-  if (user.playerConfig) {
-    await db
-      .update(playerConfigs)
-      .set(configData)
-      .where(eq(playerConfigs.id, user.playerConfig.id));
-  } else {
-    await db.insert(playerConfigs).values({
+  // 設定の更新と変更履歴の記録は 1 トランザクションにする（片方だけ残らない）。
+  // スナップショット同期はトランザクションの外（docs/presets.md の既知の制限）
+  await db.transaction(async (tx) => {
+    // upsert: ライブの playerConfig 行が無い場合は insert する
+    // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
+    if (user.playerConfig) {
+      await tx
+        .update(playerConfigs)
+        .set(configData)
+        .where(eq(playerConfigs.id, user.playerConfig.id));
+    } else {
+      await tx.insert(playerConfigs).values({
+        id: createId(),
+        userId: user.id,
+        ...configData,
+        createdAt: new Date(),
+      });
+    }
+
+    // 変更履歴を記録
+    await tx.insert(configHistory).values({
       id: createId(),
       userId: user.id,
-      ...configData,
+      changeType: "device",
+      changeDescription: encodeHistoryDescription("devices.update"),
+      presetId: await resolveActivePublicPresetId(tx, user.id),
       createdAt: new Date(),
     });
-  }
+  });
 
   // アクティブプリセットスナップショット同期
   await syncActivePresetSnapshot(db, user.id, ["playerConfig", "fingers"]);
 
-  // 変更履歴を記録
-  await db.insert(configHistory).values({
-    id: createId(),
-    userId: user.id,
-    changeType: "device",
-    changeDescription: t("meDevices.deviceChangeHistory"),
-    createdAt: new Date(),
-  });
-
   return { success: true };
 }
 
-type FieldErrorState = { field: MouseSettingsField; message: string };
+/** 欄の下にエラーを出す欄（マウス設定の4欄＋ゲーム内設定の FOV・GUI スケール） */
+type DevicesField = MouseSettingsField | "fov" | "guiScale";
+type FieldErrorState = { field: DevicesField; message: string };
+
+/** 保存時に最初の欄へ案内するための、画面上の並び順（上から） */
+const DEVICES_FIELD_ORDER: readonly DevicesField[] = [
+  "mouseDpi",
+  "gameSensitivity",
+  "windowsSpeed",
+  "windowsSpeedMultiplier",
+  "fov",
+  "guiScale",
+];
 
 /**
- * action が返す field はマウス設定欄以外（"fov" / "guiScale" 等）も含みうるため、
+ * action が返す field は他の欄も含みうるため、
  * インライン表示・スクロール対象（fieldRefs で ref を持つ欄）だけに絞り込む。
  */
-function isMouseSettingsField(field: string): field is MouseSettingsField {
-  return (MOUSE_SETTINGS_FIELDS as readonly string[]).includes(field);
+function isDevicesField(field: string): field is DevicesField {
+  return (DEVICES_FIELD_ORDER as readonly string[]).includes(field);
+}
+
+type DevicesFieldValues = Record<MouseSettingsField | "fov" | "guiScale", string>;
+
+/**
+ * 1欄だけを保存時（action）と同じ規則で検証し、エラーの翻訳キーを返す（問題なければ null）。
+ * マウス設定は他の欄を空扱いにして validateMouseSettings に通す（その欄のエラーだけが出る）。
+ * FOV・GUI スケールは action と同じ Number() + isValidFov / isValidGuiScale
+ */
+function validateDevicesField(field: DevicesField, values: DevicesFieldValues): MessageKey | null {
+  if (field === "fov" || field === "guiScale") {
+    const raw = values[field];
+    if (!raw) return null;
+    const n = Number(raw);
+    if (field === "fov") return isValidFov(n) ? null : "meDevices.fovInvalid";
+    return isValidGuiScale(n) ? null : "meDevices.guiScaleInvalid";
+  }
+  const parsed = parseMouseSettingsInput({
+    mouseDpi: "",
+    gameSensitivity: "",
+    windowsSpeed: "",
+    windowsSpeedMultiplier: "",
+    [field]: values[field],
+  });
+  return validateMouseSettings(parsed)?.messageKey ?? null;
 }
 
 /** 入力欄の直下に出すインラインエラー（aria-describedby から参照する） */
@@ -426,21 +489,19 @@ function parseControllerSettings(json: string | null | undefined): ControllerSet
 
 /**
  * プリセット未作成時に、デバイス・ゲーム内設定が編集できない旨を案内する。
- * 入力方法（users.inputMethod・プリセット非依存）はプリセットが無くても変更・保存できる。
+ * 入力方法（users.inputMethod・プリセット非依存）は /me/playstyle で編集する（この画面は表示とリンクだけ）。
  */
 function PresetRequiredNotice() {
   const t = useT();
-  const locale = useLocale();
   return (
-    <Alert>
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="flex flex-wrap items-center gap-1">
+    <NoticeBanner tone="info" icon={AlertCircle}>
+      <span className="flex flex-wrap items-center gap-1">
         <span>{t("meDevices.presetRequiredNotice")}</span>
         <Link to="/me/presets" className="underline underline-offset-2">
           {t("meDevices.presetRequiredLink")}
         </Link>
-      </AlertDescription>
-    </Alert>
+      </span>
+    </NoticeBanner>
   );
 }
 
@@ -451,12 +512,14 @@ export default function DevicesPage() {
   const fetcher = useFetcher<typeof action>();
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
 
-  const isSubmitting = fetcher.state === "submitting";
+  // 保存後の loader 再取得（loading）が終わるまでを保存中に含める。終わった時点で下書きの基準値が保存値へ進むので、
+  // 保存バーの「未保存」がちらつかず、離脱確認の「保存して移動」も再取得の完了を待ってから判定できる
+  const isSubmitting = fetcher.state !== "idle";
   const data = fetcher.data;
 
   // コントローラー設定の初期値
   // loaderデータからフォーム値を構築するヘルパー
-  const buildFormValues = useCallback(() => {
+  const sourceFormValues = useMemo(() => {
     const ics = parseControllerSettings(config?.controllerSettings);
     return {
       inputMethod: inputMethod ?? "",
@@ -485,32 +548,38 @@ export default function DevicesPage() {
     };
   }, [config, inputMethod]);
 
-  // フォームの値をトラッキング
-  const [formValues, setFormValues] = useState(buildFormValues);
-
-  const initialFormValues = useRef(formValues);
-
-  // loaderデータが変わったらフォーム値と基準値を再同期（プリセット切替時など）
-  useEffect(() => {
-    const next = buildFormValues();
-    setFormValues(next);
-    initialFormValues.current = next;
-  }, [buildFormValues]);
+  // フォームの値をトラッキング。loader の値が変わったとき（プリセット切替・保存後・タブ復帰の再検証）は、
+  // 未変更の間だけ新しい値へ置き換える（入力中の編集を黙って消さない）
+  const {
+    draft: formValues,
+    setDraft: setFormValues,
+    base: initialFormValues,
+  } = useLoaderSyncedDraft(sourceFormValues, {
+    resetKey: activePreset?.id ?? null,
+    // 成功した保存の結果。次の loader 更新では編集済みでも保存値（サーバーで正規化された値）へ揃える
+    syncToken: successfulSaveToken(data),
+  });
 
   // バリデーションエラー（クライアント側検証・action の field どちらも同じ形で扱う）
-  const [fieldError, setFieldError] = useState<FieldErrorState | null>(null);
-  const fieldRefs = useRef<Partial<Record<MouseSettingsField, HTMLDivElement | null>>>({});
-  const errorFor = (field: MouseSettingsField) =>
-    fieldError?.field === field ? fieldError.message : null;
+  // 欄ごとに持つ（2つの欄が範囲外なら両方に出す）
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<DevicesField, string>>>({});
+  const fieldRefs = useRef<Partial<Record<DevicesField, HTMLDivElement | null>>>({});
+  const errorFor = (field: DevicesField) => fieldErrors[field] ?? null;
 
   // エラー箇所を表示して該当欄までスクロールする（コントローラー表示中など、
-  // 対象欄が描画されていない場合はスクロールだけスキップする）
-  const showFieldError = useCallback((error: FieldErrorState) => {
-    setFieldError(error);
+  // 対象欄が描画されていない場合はスクロールだけスキップする）。
+  // others は同時に見つかった他の欄のエラー（スクロールは error の欄だけ）
+  const showFieldError = useCallback((error: FieldErrorState, others: FieldErrorState[] = []) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      for (const e of [error, ...others]) next[e.field] = e.message;
+      return next;
+    });
     requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       fieldRefs.current[error.field]?.scrollIntoView({
         block: "center",
-        behavior: "smooth",
+        behavior: reduceMotion ? "auto" : "smooth",
       });
     });
   }, []);
@@ -521,17 +590,17 @@ export default function DevicesPage() {
   const [presetSwitching, setPresetSwitching] = useState(false);
 
   // 変更チェック
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
   // 入力変更ハンドラ
   const handleChange = useCallback(<K extends keyof typeof formValues>(field: K, value: typeof formValues[K]) => {
     // 該当欄を編集したらインラインエラーを消す（感度は 0-1 / % のどちらの入力でも解消扱い）
-    setFieldError((prev) => {
-      if (!prev) return null;
-      const resolved =
-        prev.field === field ||
-        (prev.field === "gameSensitivity" && field === "gameSensitivityPercent");
-      return resolved ? null : prev;
+    setFieldErrors((prev) => {
+      const target: string = field === "gameSensitivityPercent" ? "gameSensitivity" : field;
+      if (!isDevicesField(target) || prev[target] == null) return prev;
+      const next = { ...prev };
+      delete next[target];
+      return next;
     });
     setFormValues((prev) => {
       const newValues = { ...prev, [field]: value };
@@ -557,38 +626,72 @@ export default function DevicesPage() {
     });
   }, []);
 
+  // 欄から離れたとき（blur）に、その欄だけ保存時と同じ検証を走らせる。
+  // - 触っていない欄（保存済みの値のまま）は検証しない（古い範囲外の値を開いただけで出さない）
+  // - 他の欄を検証対象に含めない（空扱い）ので、blur した欄のエラーだけが出る
+  // - エラーは欄ごとに持つ。別の欄の blur で既存のエラーは消さない
+  const handleBlurValidate = useCallback(
+    (field: DevicesField) => {
+      const keys =
+        field === "gameSensitivity"
+          ? (["gameSensitivity", "gameSensitivityPercent"] as const)
+          : ([field] as const);
+      if (keys.every((k) => formValues[k] === initialFormValues[k])) return;
+      const messageKey = validateDevicesField(field, formValues);
+      setFieldErrors((prev) => {
+        if (messageKey) return { ...prev, [field]: t(messageKey) };
+        if (prev[field] == null) return prev;
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    },
+    [formValues, initialFormValues, t],
+  );
+
   // フォームリセット
+  // 「元に戻す」の押下時点の基準値（loader の再検証で進んでいれば古い下書きを被せない）
+  const latestBaseRef = useRef(initialFormValues);
+  latestBaseRef.current = initialFormValues;
+
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
-    setFieldError(null);
-  }, []);
+    const prev = formValues; // 破棄の前の下書き（フィールドエラーは再検証で出し直す）
+    const baseAtReset = initialFormValues;
+    setFormValues(initialFormValues);
+    setFieldErrors({});
+    return () => {
+      if (!jsonEqual(latestBaseRef.current, baseAtReset)) return false;
+      setFormValues(prev);
+      return true;
+    };
+  }, [formValues, initialFormValues, setFormValues]);
 
   // 保存処理
   const handleSave = useCallback(() => {
     const formData = new FormData();
 
-    // プリセット未作成時は入力方法（プリセット非依存）のみ保存できる
-    if (!hasPresets) {
-      formData.set("_action", "saveInputMethod");
-      formData.set("inputMethod", formValues.inputMethod);
-      fetcher.submit(formData, { method: "post" });
-      return;
-    }
+    // プリセット未作成時は保存できる項目が無い（入力方法は /me/playstyle で編集する）
+    if (!hasPresets) return;
 
-    // 範囲外の値は送信せず、その場で該当欄にインライン表示する（トーストは補助）
-    const validationError = validateMouseSettings(parseMouseSettingsInput(formValues));
-    if (validationError) {
-      const error = { field: validationError.field, message: t(validationError.messageKey) };
-      showFieldError(error);
-      toast.error(error.message);
+    // 範囲外の値は送信せず、その場で該当欄すべてにインライン表示する（トーストは補助）。
+    // スクロールとトーストは画面上で最初の欄
+    const errors: FieldErrorState[] = [];
+    for (const field of DEVICES_FIELD_ORDER) {
+      const messageKey = validateDevicesField(field, formValues);
+      if (messageKey) errors.push({ field, message: t(messageKey) });
+    }
+    if (errors.length > 0) {
+      const [first, ...others] = errors;
+      setFieldErrors({});
+      showFieldError(first, others);
+      toast.error(first.message);
       return;
     }
-    setFieldError(null);
+    setFieldErrors({});
 
     if (activePreset) {
       formData.set("presetId", activePreset.id);
     }
-    formData.set("inputMethod", formValues.inputMethod);
     formData.set("keyboardLayout", formValues.keyboardLayout);
     formData.set("keyboardModel", formValues.keyboardModel);
     formData.set("mouseModel", formValues.mouseModel);
@@ -680,20 +783,19 @@ export default function DevicesPage() {
 
     if ("success" in data && data.success) {
       toast.success(t("meDevices.saveSuccess"));
-      initialFormValues.current = { ...formValues };
-      setFieldError(null);
+      setFieldErrors({});
     } else if ("error" in data) {
       toast.error(data.error);
       // どの欄が弾かれたか分かるエラーはインライン表示＋該当欄へスクロール
-      // （fov/guiScale 等 fieldRefs に ref を持たない欄はトーストのみで通知する）
-      if ("field" in data && data.field && isMouseSettingsField(data.field)) {
+      // （fieldRefs に ref を持たない欄はトーストのみで通知する）
+      if ("field" in data && data.field && isDevicesField(data.field)) {
         showFieldError({ field: data.field, message: data.error });
       }
     }
-  }, [data, formValues, showFieldError]);
+  }, [data, showFieldError]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 sm:space-y-8 pb-24">
       <div>
         <h1 className="text-2xl font-bold">{t("meDevices.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">{t("meDevices.pageDescription")}</p>
@@ -708,67 +810,56 @@ export default function DevicesPage() {
         onCopyFromOther={presets.length > 1 ? () => setCopyDialogOpen(true) : undefined}
       />
 
-      {/* 入力方法セレクター */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("meDevices.inputMethod")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <p className="text-sm text-muted-foreground sm:flex-1">{t("meDevices.inputMethodDescription")}</p>
-            <Select
-              value={formValues.inputMethod}
-              onValueChange={(value) => handleChange("inputMethod", value)}
-            >
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder={t("meDevices.selectPlease")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="keyboard_mouse">
-                  <span className="flex items-center gap-2">
-                    <Keyboard className="h-4 w-4" />
-                    {t("meDevices.keyboardMouse")}
-                  </span>
-                </SelectItem>
-                <SelectItem value="controller">
-                  <span className="flex items-center gap-2">
-                    <Gamepad2 className="h-4 w-4" />
-                    {t("meDevices.controller")}
-                  </span>
-                </SelectItem>
-                <SelectItem value="touch">
-                  <span className="flex items-center gap-2">
-                    <Smartphone className="h-4 w-4" />
-                    {t("meDevices.touch")}
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 入力方法（編集は /me/playstyle。ここは今の値の表示とリンクだけ） */}
+      <PageSection id="devices-input-method" title={t("meDevices.inputMethod")}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            {formValues.inputMethod === "keyboard_mouse" ? (
+              <Keyboard className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            ) : formValues.inputMethod === "controller" ? (
+              <Gamepad2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            ) : formValues.inputMethod === "touch" ? (
+              <Smartphone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            ) : null}
+            {formValues.inputMethod === "keyboard_mouse"
+              ? t("meDevices.keyboardMouse")
+              : formValues.inputMethod === "controller"
+                ? t("meDevices.controller")
+                : formValues.inputMethod === "touch"
+                  ? t("meDevices.touch")
+                  : <span className="text-muted-foreground">{t("meDevices.inputMethodUnset")}</span>}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <Link to="/me/playstyle" className="text-primary underline underline-offset-2">
+              {t("meDevices.inputMethodEditLink")}
+            </Link>
+          </p>
+        </div>
+        <p className="text-sm text-muted-foreground">{t("meDevices.inputMethodDescription")}</p>
+      </PageSection>
 
       {/* プリセット未作成時の案内（リンクを押せるようゲート外に置く） */}
       {!hasPresets && <PresetRequiredNotice />}
 
       {/* プリセット切替中はロックする */}
       <PresetSwitchLock locked={presetSwitching}>
-      <div className={cn("space-y-6", !hasPresets && "pointer-events-none opacity-50")}>
+      <div
+        className={cn("space-y-7 sm:space-y-8", !hasPresets && "pointer-events-none opacity-50")}
+        inert={!hasPresets}
+      >
         {/* コントローラー設定（inputMethod === "controller" の場合） */}
         {formValues.inputMethod === "controller" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gamepad2 className="h-5 w-5" />
-                {t("meDevices.controller")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <PageSection
+            id="devices-controller"
+            title={t("meDevices.controller")}
+          >
+            <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="controllerModel">{t("meDevices.model")}</Label>
                   <Input
                     id="controllerModel"
+                    aria-label={t("meDevices.controllerModelAria")}
                     value={formValues.controllerModel}
                     onChange={(e) => handleChange("controllerModel", e.target.value)}
                     placeholder={t("meDevices.modelExampleController")}
@@ -783,7 +874,7 @@ export default function DevicesPage() {
                     max="100"
                     value={formValues.lookSensitivity}
                     onChange={(e) => handleChange("lookSensitivity", e.target.value)}
-                    placeholder="50"
+                    placeholder={t("meDevices.exampleValue", { value: "50" })}
                   />
                 </div>
               </div>
@@ -794,7 +885,7 @@ export default function DevicesPage() {
                     checked={formValues.invertYAxis}
                     onCheckedChange={(checked) => handleChange("invertYAxis", checked)}
                   />
-                  <Label htmlFor="invertYAxis">{t("meDevices.invertYAxis")}</Label>
+                  <Label htmlFor="invertYAxis" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.invertYAxis")}</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
@@ -802,30 +893,28 @@ export default function DevicesPage() {
                     checked={formValues.vibration}
                     onCheckedChange={(checked) => handleChange("vibration", checked)}
                   />
-                  <Label htmlFor="vibration">{t("meDevices.vibration")}</Label>
+                  <Label htmlFor="vibration" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.vibration")}</Label>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </PageSection>
         )}
 
         {/* キーボード/マウス設定（inputMethod !== "controller" の場合） */}
         {formValues.inputMethod !== "controller" && (
           <>
         {/* Keyboard */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Keyboard className="h-5 w-5" />
-              {t("meDevices.keyboard")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection
+          id="devices-keyboard"
+          title={t("meDevices.keyboard")}
+        >
+          <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="keyboardModel">{t("meDevices.model")}</Label>
                 <Input
                   id="keyboardModel"
+                  aria-label={t("meDevices.keyboardModelAria")}
                   value={formValues.keyboardModel}
                   onChange={(e) => handleChange("keyboardModel", e.target.value)}
                   placeholder={t("meDevices.modelExampleKeyboard")}
@@ -837,35 +926,36 @@ export default function DevicesPage() {
                   value={formValues.keyboardLayout}
                   onValueChange={(value) => handleChange("keyboardLayout", value)}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meDevices.chooseLayout")} />
+                  <SelectTrigger id="keyboardLayout" className="w-full">
+                    <SelectValue placeholder={t("meDevices.chooseLayout")}>
+                      {formValues.keyboardLayout ? keyboardLayoutLabel(formValues.keyboardLayout) : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="US">US</SelectItem>
-                    <SelectItem value="JIS">JIS</SelectItem>
-                    <SelectItem value="US_TKL">US TKL</SelectItem>
-                    <SelectItem value="JIS_TKL">JIS TKL</SelectItem>
+                    {KEYBOARD_LAYOUT_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {keyboardLayoutLabel(option)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </PageSection>
 
         {/* Mouse */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mouse className="h-5 w-5" />
-              {t("meDevices.mouse")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection
+          id="devices-mouse"
+          title={t("meDevices.mouse")}
+        >
+          <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="mouseModel">{t("meDevices.model")}</Label>
                 <Input
                   id="mouseModel"
+                  aria-label={t("meDevices.mouseModelAria")}
                   value={formValues.mouseModel}
                   onChange={(e) => handleChange("mouseModel", e.target.value)}
                   placeholder={t("meDevices.modelExampleMouse")}
@@ -885,6 +975,7 @@ export default function DevicesPage() {
                   step="1"
                   value={formValues.mouseDpi}
                   onChange={(e) => handleChange("mouseDpi", e.target.value)}
+                  onBlur={() => handleBlurValidate("mouseDpi")}
                   placeholder={t("meDevices.dpiExample")}
                   aria-invalid={errorFor("mouseDpi") != null || undefined}
                   aria-describedby={errorFor("mouseDpi") ? "mouseDpi-error" : undefined}
@@ -908,16 +999,22 @@ export default function DevicesPage() {
                       max="1"
                       value={formValues.gameSensitivity}
                       onChange={(e) => handleChange("gameSensitivity", e.target.value)}
-                      placeholder="0.50"
+                      onBlur={() => handleBlurValidate("gameSensitivity")}
+                      placeholder={t("meDevices.exampleValue", { value: "0.50" })}
                       aria-invalid={errorFor("gameSensitivity") != null || undefined}
                       aria-describedby={
-                        errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                        errorFor("gameSensitivity")
+                          ? "gameSensitivity-error gameSensitivity-range"
+                          : "gameSensitivity-range"
                       }
                     />
-                    <p className="text-xs text-muted-foreground mt-1">0.0~1.0</p>
+                    <p id="gameSensitivity-range" className="text-xs text-muted-foreground mt-1">{t("meDevices.rangeHint", { min: "0.0", max: "1.0" })}</p>
                   </div>
                   <div className="flex-1">
                     <div className="relative">
+                      <Label htmlFor="gameSensitivityPercent" className="sr-only">
+                        {t("meDevices.inGameSensitivityPercent")}
+                      </Label>
                       <Input
                         id="gameSensitivityPercent"
                         type="number"
@@ -926,18 +1023,22 @@ export default function DevicesPage() {
                         max="200"
                         value={formValues.gameSensitivityPercent}
                         onChange={(e) => handleChange("gameSensitivityPercent", e.target.value)}
-                        placeholder="100"
+                        onBlur={() => handleBlurValidate("gameSensitivity")}
+                        placeholder={t("meDevices.exampleValue", { value: "100" })}
                         className="pr-8"
                         aria-invalid={errorFor("gameSensitivity") != null || undefined}
                         aria-describedby={
-                          errorFor("gameSensitivity") ? "gameSensitivity-error" : undefined
+                          errorFor("gameSensitivity")
+                            ? "gameSensitivity-error gameSensitivityPercent-range"
+                            : "gameSensitivityPercent-range"
                         }
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">0~200%</p>
+                    <p id="gameSensitivityPercent-range" className="text-xs text-muted-foreground mt-1">{t("meDevices.rangeHint", { min: "0", max: "200%" })}</p>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">{t("meDevices.sensitivityLinkedHint")}</p>
                 <FieldErrorText
                   id="gameSensitivity-error"
                   message={errorFor("gameSensitivity")}
@@ -955,13 +1056,18 @@ export default function DevicesPage() {
                   onValueChange={(value) => handleChange("windowsSpeed", value)}
                 >
                   <SelectTrigger
+                    id="windowsSpeed"
                     className="w-full"
                     aria-invalid={errorFor("windowsSpeed") != null || undefined}
                     aria-describedby={
                       errorFor("windowsSpeed") ? "windowsSpeed-error" : undefined
                     }
                   >
-                    <SelectValue placeholder={t("meDevices.select")} />
+                    <SelectValue placeholder={t("meDevices.select")}>
+                      {formValues.windowsSpeed
+                        ? `${formValues.windowsSpeed}/20${formValues.windowsSpeed === "11" ? ` ${t("meDevices.defaultSuffix")}` : ""}`
+                        : null}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => (
@@ -987,19 +1093,20 @@ export default function DevicesPage() {
                   min="0"
                   value={formValues.windowsSpeedMultiplier}
                   onChange={(e) => handleChange("windowsSpeedMultiplier", e.target.value)}
+                  onBlur={() => handleBlurValidate("windowsSpeedMultiplier")}
                   placeholder={t("meDevices.customMultiplierPlaceholder")}
                   aria-invalid={errorFor("windowsSpeedMultiplier") != null || undefined}
                   aria-describedby={
                     errorFor("windowsSpeedMultiplier")
-                      ? "windowsSpeedMultiplier-error"
-                      : undefined
+                      ? "windowsSpeedMultiplier-error windowsSpeedMultiplier-hint"
+                      : "windowsSpeedMultiplier-hint"
                   }
                 />
                 <FieldErrorText
                   id="windowsSpeedMultiplier-error"
                   message={errorFor("windowsSpeedMultiplier")}
                 />
-                <p className="text-xs text-muted-foreground">
+                <p id="windowsSpeedMultiplier-hint" className="text-xs text-muted-foreground">
                   {t("meDevices.customMultiplierHint")}
                 </p>
               </div>
@@ -1012,7 +1119,7 @@ export default function DevicesPage() {
                   checked={formValues.rawInput}
                   onCheckedChange={(checked) => handleChange("rawInput", checked)}
                 />
-                <Label htmlFor="rawInput">Raw Input</Label>
+                <Label htmlFor="rawInput" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">Raw Input</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1020,20 +1127,17 @@ export default function DevicesPage() {
                   checked={formValues.mouseAcceleration}
                   onCheckedChange={(checked) => handleChange("mouseAcceleration", checked)}
                 />
-                <Label htmlFor="mouseAcceleration">{t("meDevices.mouseAcceleration")}</Label>
+                <Label htmlFor="mouseAcceleration" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.mouseAcceleration")}</Label>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </PageSection>
           </>
         )}
 
         {/* In-Game Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("meDevices.gameSettings")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection id="devices-game" title={t("meDevices.gameSettings")}>
+          <div className="space-y-4">
             <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">
                 <Switch
@@ -1041,7 +1145,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSprint}
                   onCheckedChange={(checked) => handleChange("toggleSprint", checked)}
                 />
-                <Label htmlFor="toggleSprint">{t("meDevices.toggleSprint")}</Label>
+                <Label htmlFor="toggleSprint" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.toggleSprint")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1049,7 +1153,7 @@ export default function DevicesPage() {
                   checked={formValues.toggleSneak}
                   onCheckedChange={(checked) => handleChange("toggleSneak", checked)}
                 />
-                <Label htmlFor="toggleSneak">{t("meDevices.toggleSneak")}</Label>
+                <Label htmlFor="toggleSneak" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.toggleSneak")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
@@ -1057,7 +1161,7 @@ export default function DevicesPage() {
                   checked={formValues.autoJump}
                   onCheckedChange={(checked) => handleChange("autoJump", checked)}
                 />
-                <Label htmlFor="autoJump">{t("meDevices.autoJump")}</Label>
+                <Label htmlFor="autoJump" className="min-h-11 flex-1 cursor-pointer sm:min-h-0">{t("meDevices.autoJump")}</Label>
               </div>
             </div>
 
@@ -1065,6 +1169,7 @@ export default function DevicesPage() {
               <div className="space-y-2">
                 <Label htmlFor="gameLanguage">{t("meDevices.gameLanguage")}</Label>
                 <Combobox
+                  id="gameLanguage"
                   options={gameLanguageOptions(t, locale)}
                   value={formValues.gameLanguage}
                   onValueChange={(value) => handleChange("gameLanguage", value)}
@@ -1074,29 +1179,55 @@ export default function DevicesPage() {
                   allowCustomValue={true}
                 />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.fov = el;
+                }}
+              >
                 <Label htmlFor="fov">FOV</Label>
                 <Input
                   id="fov"
                   type="number"
                   min="30"
                   max="110"
+                  step="1"
                   value={formValues.fov}
                   onChange={(e) => handleChange("fov", e.target.value)}
+                  onBlur={() => handleBlurValidate("fov")}
                   placeholder={t("meDevices.fovExample")}
+                  aria-invalid={errorFor("fov") != null || undefined}
+                  aria-describedby={errorFor("fov") ? "fov-error fov-range" : "fov-range"}
                 />
+                {/* 範囲は action の isValidFov と同じ（save-limits.ts） */}
+                <p id="fov-range" className="text-xs text-muted-foreground">{t("meDevices.rangeHint", { min: "30", max: "110" })}</p>
+                <FieldErrorText id="fov-error" message={errorFor("fov")} />
               </div>
-              <div className="space-y-2">
+              <div
+                className="space-y-2"
+                ref={(el) => {
+                  fieldRefs.current.guiScale = el;
+                }}
+              >
                 <Label htmlFor="guiScale">{t("meDevices.guiScale")}</Label>
                 <Input
                   id="guiScale"
                   type="number"
                   min="0"
                   max="10"
+                  step="1"
                   value={formValues.guiScale}
                   onChange={(e) => handleChange("guiScale", e.target.value)}
+                  onBlur={() => handleBlurValidate("guiScale")}
                   placeholder={t("meDevices.guiScaleExample")}
+                  aria-invalid={errorFor("guiScale") != null || undefined}
+                  aria-describedby={
+                    errorFor("guiScale") ? "guiScale-error guiScale-range" : "guiScale-range"
+                  }
                 />
+                {/* 範囲は action の isValidGuiScale と同じ（save-limits.ts） */}
+                <p id="guiScale-range" className="text-xs text-muted-foreground">{t("meDevices.rangeHint", { min: "0", max: "10" })}</p>
+                <FieldErrorText id="guiScale-error" message={errorFor("guiScale")} />
               </div>
             </div>
 
@@ -1110,17 +1241,19 @@ export default function DevicesPage() {
                 rows={3}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </PageSection>
       </div>
       </PresetSwitchLock>
 
-      {/* Floating Save Bar（プリセット未作成時でも入力方法の保存/取消ができるようゲート外に置く） */}
+      {/* Floating Save Bar（プリセット未作成時は入力欄が inert で編集できず、保存も行えないので出さない） */}
       <FloatingSaveBar
-        hasChanges={hasChanges}
+        hasChanges={hasChanges && hasPresets}
         isSubmitting={isSubmitting}
         onSave={handleSave}
         onReset={handleReset}
+        saveResult={fetcher.data}
+        saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
       />
 
       {/* プリセットからコピーダイアログ */}
@@ -1188,24 +1321,5 @@ export default function DevicesPage() {
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  const locale = useLocale();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meDevices.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meDevices.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meDevices.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

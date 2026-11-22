@@ -46,9 +46,15 @@ function SheetContent({
   className,
   children,
   side = "right",
+  closeLabel = "Close",
+  closeClassName,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
+  /** 右上の閉じるボタンの読み上げ名（既定 "Close"。翻訳した文言を渡す） */
+  closeLabel?: string
+  /** 閉じるボタンへの追加クラス（既定は 28px 四方。モバイルで 44px にしたいときなど） */
+  closeClassName?: string
 }) {
   return (
     <SheetPortal>
@@ -70,9 +76,14 @@ function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-5 right-4 rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <SheetPrimitive.Close
+          className={cn(
+            "ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-5 right-4 rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none",
+            closeClassName
+          )}
+        >
           <XIcon className="size-5" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{closeLabel}</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

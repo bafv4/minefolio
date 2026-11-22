@@ -1,53 +1,93 @@
-// キーバインド / サーチクラフト埋め込みの共通 NodeView。
-// 旧 index.tsx KeybindEmbedNodeView / SearchCraftEmbedNodeView を 1 コンポーネントに統合
-// （保存 HTML は各 Extension の renderHTML が担うため、編集中表示の共通化は互換性に影響しない）。
-import type { LucideIcon } from "lucide-react";
+// リマップ / サーチクラフト埋め込みの共通 NodeView。
+// 保存 HTML（data-user-slug / data-preset-name）は各 Extension の renderHTML が担うため、編集中表示を変えても互換性に影響しない。
+// 編集中は、公開ページと同じ規則で走者を解決し、表示名と中身の要約（サーチクラフトはグループごとの件数、
+// リマップはその件数）を出す。読み込み中・見つからないときもそれと分かる表示にする。
+// 右上の「変更」で、保存済みの属性を初期値にしてダイアログを開き、確定したら updateAttributes で書き換える。
+import type { Editor } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
-import { Keyboard, Package, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { useT } from "@/hooks/use-locale";
+import { useT, useLocale } from "@/hooks/use-locale";
+import { getLocalizedDisplayName } from "@/lib/slug";
+import { useEmbedUser } from "../lib/embed-user-cache";
+import { getEmbedEditContext } from "../lib/embed-edit-context";
+import { EmbedSummary, type EmbedKind } from "../panels/embed-summary";
+import { EmbedNodeActions, EmbedNodeFrame, EmbedShowKeysToggle, deleteEmbedNode } from "./embed-node-actions";
 
 interface EmbedNodeViewProps {
-  node: { attrs: Record<string, string> };
+  node: { attrs: Record<string, string | boolean | null> };
+  editor: Editor;
+  selected: boolean;
   deleteNode: () => void;
+  getPos: () => number | undefined;
+  updateAttributes: (attrs: Record<string, unknown>) => void;
 }
 
-/** 埋め込み種別ごとのアイコンとラベル */
 function EmbedNodeView({
   node,
+  editor,
+  selected,
   deleteNode,
-  icon: Icon,
+  getPos,
+  updateAttributes,
+  kind,
   label,
-}: EmbedNodeViewProps & { icon: LucideIcon; label: string }) {
+}: EmbedNodeViewProps & { kind: EmbedKind; label: string }) {
+  const locale = useLocale();
+  const userSlug = (node.attrs.userSlug as string | null) ?? "";
+  const presetName = (node.attrs.presetName as string | null) || null;
+  // 押すキーの表示（サーチクラフトだけ。属性なし＝表示）
+  const showKeys = node.attrs.showKeys !== false;
+  const state = useEmbedUser(userSlug);
+  const broken = state.status === "missing";
+  // 宿主の注入は NodeView の初回描画より後になることがあるので、押したときに取り出す
+  const onEdit = () =>
+    getEmbedEditContext(editor)?.editEmbed(kind, { userSlug, presetName }, (nextSlug, nextPreset) =>
+      updateAttributes({ userSlug: nextSlug, presetName: nextPreset }),
+    );
+
+  // ヘッダー帯の文字は公開ページの UserEmbedHeader と同じ「走者名（プリセット名）— 種別」。
+  // 解決できるまで（読み込み中・失敗・見つからない）は走者名が無いので種別だけ
+  const found = state.status === "found";
+  const header = (
+    <p className="flex min-w-0 items-center">
+      {found && (
+        <span className="min-w-0 truncate">
+          {getLocalizedDisplayName(state.user, locale)}
+          {presetName && <span className="ml-2 text-muted-foreground">({presetName})</span>}
+        </span>
+      )}
+      <span className={found ? "ml-1 shrink-0 whitespace-nowrap" : "shrink-0 whitespace-nowrap"}>
+        {found ? "— " : ""}
+        {label}
+      </span>
+    </p>
+  );
+
   return (
     <NodeViewWrapper>
-      <div className="relative group my-2 rounded-lg border bg-card p-4" contentEditable={false}>
-        <div className="flex items-center gap-2 text-sm">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{label}</span>
-          <span className="text-muted-foreground">— {node.attrs.userSlug}</span>
-          {node.attrs.presetName && (
-            <Badge variant="outline" className="text-xs">{node.attrs.presetName}</Badge>
-          )}
-        </div>
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); deleteNode(); }}
-          className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+      <EmbedNodeFrame
+        broken={broken}
+        header={header}
+        actions={
+          <EmbedNodeActions selected={selected} label={label} onEdit={onEdit}
+            onDelete={() => deleteEmbedNode(editor, getPos, deleteNode)}
+          />
+        }
+      >
+        <EmbedSummary kind={kind} state={state} userQuery={userSlug} presetName={presetName} showIdentity={false} />
+        {kind === "searchcraft" && (
+          <EmbedShowKeysToggle checked={showKeys} onCheckedChange={(v) => updateAttributes({ showKeys: v })} />
+        )}
+      </EmbedNodeFrame>
     </NodeViewWrapper>
   );
 }
 
 export function KeybindEmbedNodeView(props: EmbedNodeViewProps) {
   const t = useT();
-  return <EmbedNodeView {...props} icon={Keyboard} label={t("guideEditor.embedKeybindLabel")} />;
+  return <EmbedNodeView {...props} kind="keybind" label={t("guideEditor.embedKeybindLabel")} />;
 }
 
 export function SearchCraftEmbedNodeView(props: EmbedNodeViewProps) {
   const t = useT();
-  return <EmbedNodeView {...props} icon={Package} label={t("guideEditor.embedSearchCraftLabel")} />;
+  return <EmbedNodeView {...props} kind="searchcraft" label={t("guideEditor.embedSearchCraftLabel")} />;
 }

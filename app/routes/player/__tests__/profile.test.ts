@@ -35,7 +35,7 @@ const sessionMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => sessionMocks);
 
-import { loader } from "../profile";
+import { loader, shouldRevalidate } from "../profile";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -151,6 +151,25 @@ describe("loader - プロフィール可視性のゲート", () => {
 
     expect(data.player.slug).toBe("runner");
     expect(data.isOwner).toBe(false);
+  });
+});
+
+describe("loader - 年代（ageGroup）の公開制御", () => {
+  it("非公開の年代は他人のレスポンスに含まれない", async () => {
+    await seedPlayer({ ageGroup: "30s", ageGroupPublic: false });
+
+    const data = await callLoader("runner");
+
+    expect((data.player as unknown as { ageGroup: string | null }).ageGroup).toBeNull();
+    expect(JSON.stringify(data)).not.toContain("30s");
+  });
+
+  it("公開の年代は返る", async () => {
+    await seedPlayer({ ageGroup: "30s", ageGroupPublic: true });
+
+    const data = await callLoader("runner");
+
+    expect((data.player as unknown as { ageGroup: string | null }).ageGroup).toBe("30s");
   });
 });
 
@@ -390,5 +409,28 @@ describe("loader - 非アクティブプリセット閲覧時の表示データ"
     expect(data.player.customActions.map((a) => a.actionName)).toEqual([`${LIVE_MARKER}_ACTION`]);
     expect(data.player.playerConfig?.mouseModel).toBe(`${LIVE_MARKER}_MOUSE`);
     expect(JSON.stringify(data)).toContain(LIVE_MARKER);
+  });
+});
+
+describe("shouldRevalidate - 表示だけの検索パラメータ", () => {
+  const args = (from: string, to: string) =>
+    ({
+      currentUrl: new URL(`http://localhost${from}`),
+      nextUrl: new URL(`http://localhost${to}`),
+      defaultShouldRevalidate: true,
+    }) as unknown as Parameters<typeof shouldRevalidate>[0];
+
+  it("tab だけの変化では loader を再実行しない", () => {
+    expect(shouldRevalidate(args("/player/a", "/player/a?tab=stats"))).toBe(false);
+  });
+
+  it("審査中記録のトグル（srcPending）だけの変化でも再実行しない（スイッチがすぐ切り替わるように）", () => {
+    expect(shouldRevalidate(args("/player/a?tab=stats", "/player/a?tab=stats&srcPending=1"))).toBe(false);
+    expect(shouldRevalidate(args("/player/a?tab=stats&srcPending=1", "/player/a?tab=stats"))).toBe(false);
+  });
+
+  it("preset の変化やパスの変化は既定どおり再実行する", () => {
+    expect(shouldRevalidate(args("/player/a?srcPending=1", "/player/a?srcPending=1&preset=p1"))).toBe(true);
+    expect(shouldRevalidate(args("/player/a", "/player/b"))).toBe(true);
   });
 });

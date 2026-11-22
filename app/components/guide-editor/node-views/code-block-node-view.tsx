@@ -30,6 +30,7 @@ export function CodeBlockNodeView({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleCopy}
+              aria-label={t("guideEditor.ui.copy")}
               contentEditable={false}
               className="code-block-copy"
             >

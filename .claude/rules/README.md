@@ -25,7 +25,7 @@
 ## 規約ファイル
 
 - [general.md](./general.md) — コーディング規約（import順・命名・エクスポート・Loader/Action・エラー処理・翻訳・DBクエリ・プライバシーポリシー/利用規約への準拠）
-- [ui.md](./ui.md) — UIデザイン規約（shadcn/ui 選定・テーマトークン・カラー・角丸/カードシステム/空状態/公開一覧ページヘッダ・タブ/ダイアログ/トーストの既定構造）
+- [ui.md](./ui.md) — UIデザイン規約。ホームと走者画面の実装を正とする（原則〔面を増やさない・らしさはデータ由来の部品で出す・brand＝選択中/進行、primary＝リンク〕・部品の選び方・テーマと色トークン・欄区切り〔全画面の標準〕と大型パネル・見出しの段・角丸/透明度/カードの面/ホバー・Minecraft 由来の部品〔アイテムアイコン・キーバッジ・区間〕・空/読み込み/失敗の状態・タップ領域と a11y・オーバーレイリンク・貼り付く UI〔上端と下端〕・タブ〔フォルダ型＋ホットバー型の例外〕・ダイアログ/トースト）
 
 ## ルーティング表（メインが担当を選ぶ）
 
@@ -35,9 +35,9 @@
 | 変更対象 | ワーカー |
 |---|---|
 | `/keybindings*`・`/playground`・`/me/{keybindings,devices,presets,import,items,search-craft}`／仮想キーボード・リマップ・プリセット・サーチクラフト | `keybindings-worker` |
-| `/player/:slug*`・`/me/{index,edit,playstyle,records}`・`/browse`・`/compare`・`/favorites`・`/random-player`／スキン・アバター・リアクション | `profiles-worker` |
+| `/player/:slug*`・`/me/{index,edit,account,playstyle,records}`・`/browse`・`/compare`・`/favorites`・`/random-player`／スキン・アバター・リアクション | `profiles-worker` |
 | `/guides/*`・`/my-guides/*`／TipTap エディタ・ガイド画像・いいね | `guides-worker` |
-| `/`（ホーム）・`/paces`・`/live`・`/videos`・`/rankings`・`/stats`／`api/cron/*`・PaceMan・外部統計 | `rankings-worker` |
+| `/`（ホーム）・`/paces`・`/live`・`/videos`・`/rankings`／`api/cron/*`・PaceMan・外部統計 | `rankings-worker` |
 | `/login`・`/onboarding`・`/developers*`・`/feedback`・`api/*`（cron 以外）・共通レイアウト・`app/root.tsx`・`app/app.css`・**`app/lib/schema.ts`** | `platform-worker` |
 | `docs/`・`changelog.md`・翻訳キー（`pages-ja.ts`）・依存の軽微更新・ファイル整理 | `chores-worker` |
 | `**/__tests__/*`（Vitest） | `test-worker` |

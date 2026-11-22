@@ -1,5 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { and, asc, eq } from "drizzle-orm";
+import type { Translator } from "@/lib/messages";
+import { encodeHistoryDescription } from "@/lib/history-description";
 import type { Database } from "./db";
 import {
   configPresets,
@@ -154,6 +156,8 @@ export interface PresetCustomActionData {
  * プリセット作成用のオプション
  */
 export interface CreatePresetOptions {
+  /** 変更履歴の文言（保存される文字列）を呼び出し側のロケールで作る */
+  t: Translator;
   userId: string;
   name: string;
   description?: string | null;
@@ -354,18 +358,23 @@ export type PresetSyncKind =
 /**
  * アクティブプリセットのスナップショットを、指定種別のライブテーブル内容で更新する。
  * アクティブプリセットがない場合は no-op。
+ * options.activePresetId を渡すと、アクティブプリセットの再取得を省略する（呼び出し側で解決済みの場合）。
  */
 export async function syncActivePresetSnapshot(
   db: Database,
   userId: string,
   kinds: PresetSyncKind[],
+  options?: { activePresetId?: string },
 ): Promise<void> {
   if (kinds.length === 0) return;
 
-  const active = await db.query.configPresets.findFirst({
-    where: (p, { and, eq }) => and(eq(p.userId, userId), eq(p.isActive, true)),
-    columns: { id: true },
-  });
+  // 呼び出し側がアクティブプリセットを解決済みならそれを使い、再取得（DB 1 往復）を省く
+  const active = options?.activePresetId
+    ? { id: options.activePresetId }
+    : await db.query.configPresets.findFirst({
+        where: (p, { and, eq }) => and(eq(p.userId, userId), eq(p.isActive, true)),
+        columns: { id: true },
+      });
   if (!active) return;
 
   const now = new Date();
@@ -441,7 +450,18 @@ export async function syncActivePresetSnapshot(
   const updates: Partial<typeof configPresets.$inferInsert> = Object.assign({}, ...parts);
 
   updates.updatedAt = now;
-  await db.update(configPresets).set(updates).where(eq(configPresets.id, active.id));
+  // 呼び出し側が解決済みの activePresetId を渡す経路では、解決から同期までの間に別タブで切替が起きうる。
+  // isActive を条件に含め、切替後は旧プリセットのスナップショットを書き換えない（no-op）ようにする
+  await db
+    .update(configPresets)
+    .set(updates)
+    .where(
+      and(
+        eq(configPresets.id, active.id),
+        eq(configPresets.userId, userId),
+        eq(configPresets.isActive, true),
+      ),
+    );
 }
 
 /**
@@ -521,10 +541,11 @@ export async function resolveIsMainForNewPreset(
  * プリセットを作成する共通関数
  */
 export async function createPreset(
-  db: Database,
+  db: DatabaseOrTransaction,
   options: CreatePresetOptions,
 ): Promise<ConfigPreset> {
   const {
+    t,
     userId,
     name,
     description = null,
@@ -555,21 +576,27 @@ export async function createPreset(
   const customActionsData = customActions.length > 0 ? serializeCustomActions(customActions) : null;
 
   // 変更履歴の説明文
-  const changeDescriptions: Record<string, string> = {
-    manual: `プリセット「${name}」を作成`,
-    import: `プリセット「${name}」をインポートから作成`,
-    onboarding: `プリセット「${name}」を初期設定として作成`,
-  };
+  const changeDescriptions = {
+    manual: encodeHistoryDescription("preset.createManual", { name }),
+    import: encodeHistoryDescription("preset.createFromImport", { name }),
+    onboarding: encodeHistoryDescription("preset.createOnboarding", { name }),
+  } satisfies Record<NonNullable<CreatePresetOptions["source"]>, string>;
 
   // 非アクティブ化＋挿入＋履歴記録を単一トランザクションで実行
   let isMain = false;
-  await db.transaction(async (tx) => {
+  // 呼び出し側がトランザクション内で呼んだ場合（drizzle のトランザクションは rollback を持つ）はそのトランザクションに
+  // 参加し、呼び出し側のロールバックでプリセットの作成も巻き戻る。そうでなければ自前でトランザクションを張る
+  const runInTransaction = async (fn: (tx: DatabaseOrTransaction) => Promise<void>) => {
+    if ("rollback" in db) await fn(db);
+    else await db.transaction(fn);
+  };
+  await runInTransaction(async (tx) => {
     // アクティブとして作成する場合、既存のアクティブプリセットを先に非アクティブ化する
     // （「アクティブプリセットはユーザーごとに高々1件」の不変条件を維持）
     if (isActive) {
       await tx
         .update(configPresets)
-        .set({ isActive: false, updatedAt: now })
+        .set({ isActive: false })
         .where(and(eq(configPresets.userId, userId), eq(configPresets.isActive, true)));
     }
 
@@ -602,8 +629,9 @@ export async function createPreset(
       id: createId(),
       userId,
       changeType: "preset_switch",
-      changeDescription: changeDescriptions[source] ?? `プリセット「${name}」を作成`,
-      presetId,
+      changeDescription: changeDescriptions[source],
+      // 公開面に影響するのは、このプリセットが（初回作成で）メインになる場合だけ
+      presetId: isMain ? presetId : null,
       createdAt: now,
     });
   });
@@ -632,20 +660,20 @@ export async function createPreset(
 /**
  * 初期プリセットの名前を生成
  */
-export function generateInitialPresetName(source: "import" | "onboarding"): string {
+export function generateInitialPresetName(t: Translator, source: "import" | "onboarding"): string {
   const date = new Date();
   const dateStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
 
-  if (source === "import") {
-    return `インポート (${dateStr})`;
-  }
-  return `初期設定 (${dateStr})`;
+  return t(source === "import" ? "mePresets.initialNameImport" : "mePresets.initialNameOnboarding", {
+    date: dateStr,
+  });
 }
 
 /**
  * インポート時にプリセットを自動作成
  */
 export async function createPresetFromImport(
+  t: Translator,
   db: Database,
   userId: string,
   keybindings: Keybinding[],
@@ -656,12 +684,13 @@ export async function createPresetFromImport(
   customKeys: CustomKey[] = [],
   customActions: CustomAction[] = [],
 ): Promise<ConfigPreset> {
-  const name = generateInitialPresetName("import");
+  const name = generateInitialPresetName(t, "import");
 
   return createPreset(db, {
+    t,
     userId,
     name,
-    description: "インポートされた設定から自動作成されたプリセット",
+    description: t("mePresets.initialDescriptionImport"),
     isActive: true,
     keybindings,
     playerConfig,
@@ -678,7 +707,8 @@ export async function createPresetFromImport(
  * オンボーディング時にプリセットを自動作成
  */
 export async function createPresetFromOnboarding(
-  db: Database,
+  t: Translator,
+  db: DatabaseOrTransaction,
   userId: string,
   keybindings: Keybinding[],
   playerConfig: PlayerConfig | null,
@@ -688,12 +718,13 @@ export async function createPresetFromOnboarding(
   customKeys: CustomKey[] = [],
   customActions: CustomAction[] = [],
 ): Promise<ConfigPreset> {
-  const name = generateInitialPresetName("onboarding");
+  const name = generateInitialPresetName(t, "onboarding");
 
   return createPreset(db, {
+    t,
     userId,
     name,
-    description: "アカウント作成時の初期設定",
+    description: t("mePresets.initialDescriptionOnboarding"),
     isActive: true,
     keybindings,
     playerConfig,

@@ -7,6 +7,7 @@ import {
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
 import { invalidateCache } from "@/lib/cache";
+import { HOME_HIDDEN_USERS_CACHE_KEY } from "@/lib/home-visibility.server";
 import { loader } from "../home-feed";
 
 // youtube-videos / twitch-vods ケースはどちらもキャッシュテーブル（cron蓄積）からの読み出しで、
@@ -29,6 +30,7 @@ beforeEach(async () => {
   db = await createTestDbAt(SHARED_URL);
   // getPublicVideoFeed のメモリキャッシュを毎テスト無効化する
   await invalidateCache("videos:feed:all");
+  await invalidateCache(HOME_HIDDEN_USERS_CACHE_KEY);
 });
 
 afterEach(() => {
@@ -183,5 +185,57 @@ describe("/api/home-feed?type=youtube-videos（キャッシュテーブル読み
     const body = await res.json();
 
     expect(body.recentVideos).toEqual([]);
+  });
+});
+
+describe("表示設定（showYoutubeOnHome / showTwitchOnHome）: ホームからだけ全員分を除外", () => {
+  async function callHome(type: "twitch-vods" | "youtube-videos", perRunner: boolean): Promise<Response> {
+    const request = new Request(`https://minefolio.app/api/home-feed?type=${type}${perRunner ? "&perRunner=1" : ""}`);
+    return loader({ request, params: {}, context: {} } as never);
+  }
+
+  it("Twitch: showTwitchOnHome=false の人のVODはホーム（perRunner=1）で除き、true・null は出す。perRunner なしでは除かない", async () => {
+    await seedTwitchUser("off", "offtv", { showTwitchOnHome: false });
+    await seedTwitchUser("on", "ontv", { showTwitchOnHome: true });
+    await seedTwitchUser("unset", "unsettv", { showTwitchOnHome: null });
+    await seedVod({ vodId: "off1", userLogin: "offtv" });
+    await seedVod({ vodId: "on1", userLogin: "ontv" });
+    await seedVod({ vodId: "unset1", userLogin: "unsettv" });
+
+    const home = await (await callHome("twitch-vods", true)).json();
+    expect(home.recentVods.map((v: { videoId: string }) => v.videoId).sort()).toEqual(["on1", "unset1"]);
+
+    await invalidateCache("videos:feed:all");
+    const all = await (await callHome("twitch-vods", false)).json();
+    expect(all.recentVods.map((v: { videoId: string }) => v.videoId).sort()).toEqual(["off1", "on1", "unset1"]);
+  });
+
+  it("YouTube: showYoutubeOnHome=false の人の動画はホームで除き、Twitch の設定だけオフの人の動画は残す", async () => {
+    await seedUser(db, { slug: "ytoff", mcid: "ytoff", uuid: "u1", role: "runner", profileVisibility: "public", showYoutubeOnHome: false });
+    await seedUser(db, { slug: "twoff", mcid: "twoff", uuid: "u2", role: "runner", profileVisibility: "public", showTwitchOnHome: false });
+    for (const [videoId, mcid] of [["v1", "ytoff"], ["v2", "twoff"]]) {
+      await db.insert(schema.youtubeVideoCache).values({ videoId, channelId: "UCtest", title: "t", publishedAt: daysAgo(1), minefolioMcid: mcid });
+    }
+
+    const home = await (await callHome("youtube-videos", true)).json();
+    expect(home.recentVideos.map((v: { videoId: string }) => v.videoId)).toEqual(["v2"]);
+
+    await invalidateCache("videos:feed:all");
+    const all = await (await callHome("youtube-videos", false)).json();
+    expect(all.recentVideos.map((v: { videoId: string }) => v.videoId).sort()).toEqual(["v1", "v2"]);
+  });
+
+  it("perRunner=1 は同じ走者の動画を新しい順の先頭1本に絞り、perRunner なしでは絞らない（1人1本はサーバー側で完結）", async () => {
+    await seedUser(db, { slug: "multi", mcid: "multi", uuid: "u-m", role: "runner", profileVisibility: "public" });
+    await seedUser(db, { slug: "solo", mcid: "solo", uuid: "u-s", role: "runner", profileVisibility: "public" });
+    for (const [videoId, mcid, days] of [["m-new", "multi", 1], ["m-old", "multi", 3], ["s-1", "solo", 2]] as const) {
+      await db.insert(schema.youtubeVideoCache).values({ videoId, channelId: "UCtest", title: "t", publishedAt: daysAgo(days), minefolioMcid: mcid });
+    }
+
+    const home = await (await callHome("youtube-videos", true)).json();
+    expect(home.recentVideos.map((v: { videoId: string }) => v.videoId)).toEqual(["m-new", "s-1"]);
+
+    const all = await (await callHome("youtube-videos", false)).json();
+    expect(all.recentVideos.map((v: { videoId: string }) => v.videoId)).toEqual(["m-new", "s-1", "m-old"]);
   });
 });

@@ -15,6 +15,7 @@ import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
 import { Film, Loader2 } from "lucide-react";
 import { useT } from "@/hooks/use-locale";
+import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 import { MAX_UPLOAD_BYTES } from "../hooks/use-image-upload";
 import {
   convertVideoToGif,
@@ -45,6 +46,8 @@ interface VideoToGifDialogProps {
 
 export function VideoToGifDialog({ open, onOpenChange, onInsert }: VideoToGifDialogProps) {
   const t = useT();
+  // 閉じたあと body に落ちたフォーカスを、開く前の要素かエディタへ戻す（トリガーの無いダイアログ。lib/dialog-return-focus.ts）
+  const returnFocus = useDialogReturnFocus(open);
   const [file, setFile] = useState<File | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -160,7 +163,7 @@ export function VideoToGifDialog({ open, onOpenChange, onInsert }: VideoToGifDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" {...returnFocus}>
         <DialogHeader>
           <DialogTitle>{t("guideEditor.gifTitle")}</DialogTitle>
           <DialogDescription>

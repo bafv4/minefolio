@@ -29,7 +29,7 @@ export function ContentSortSelect({
   onChange: (value: ContentSort) => void;
   /** 表示する選択肢（一覧ごとに異なる。GUIDE_SORTS / TEMPLATE_SORTS） */
   options: readonly ContentSort[];
-  /** 既定順のラベル。ガイドは updatedAt 基準で「更新順」、テンプレートは createdAt 基準で「新着順」 */
+  /** 既定順のラベル。ガイド（updatedAt 基準）・テンプレート（createdAt 基準）とも「新着順」で、基準の違いは descriptions.new で示す */
   newestLabel: string;
   /**
    * 各選択肢の「何を基準に並ぶか」を補足する説明（翻訳済みの文字列）。
@@ -50,7 +50,7 @@ export function ContentSortSelect({
     <div className="flex shrink-0 items-center gap-2">
       <ArrowUpDown className="h-4 w-4 text-muted-foreground" aria-hidden />
       <Select value={value} onValueChange={(next) => onChange(next as ContentSort)}>
-        <SelectTrigger className="w-[130px]" aria-label={t("contentSort.label")}>
+        <SelectTrigger className="w-[130px] data-[size=default]:h-11 sm:data-[size=default]:h-9" aria-label={t("contentSort.label")}>
           {/* SelectValue に children を渡して、トリガーの表示を常に1行ラベルに固定する。
               Radix は valueNode に children があると SelectItemText のポータルを行わないため、
               選択中の項目に説明があってもトリガーへは転送されない（2行入ると崩れるため）。 */}

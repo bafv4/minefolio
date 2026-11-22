@@ -16,7 +16,7 @@ interface UseGuideEditorOptions {
    * パフォーマンスのため HTML はここで渡さない（毎キー入力の getHTML を避ける）。
    * 保存時に editor.getHTML() を呼ぶこと。
    */
-  onUpdate: () => void;
+  onUpdate: (editor: Editor) => void;
   /** 画像ペースト時のアップロード処理（File を受け取る） */
   onImagePaste: (file: File) => void;
 }
@@ -37,8 +37,8 @@ export function useGuideEditor({
     // 先頭末尾・連続スペースが消え、次回保存で DB に焼き付くのを防ぐ。
     // 保存 HTML は editor.getHTML() の出力（整形空白なし）なので副作用はない。
     parseOptions: { preserveWhitespace: "full" },
-    onUpdate: () => {
-      onUpdate();
+    onUpdate: ({ editor }) => {
+      onUpdate(editor);
     },
     editorProps: {
       attributes: {
@@ -46,6 +46,11 @@ export function useGuideEditor({
         spellcheck: "false",
         autocorrect: "off",
         autocapitalize: "off",
+        // contenteditable（role=textbox）のアクセシブルネーム
+        "aria-label": t("guideEditor.ui.editorAriaLabel"),
+        // 「/」で項目の一覧（listbox）が開くことを伝える。開いている間は slash-command/renderer.ts が
+        // aria-controls / aria-activedescendant を付ける（textbox に aria-expanded は付けられない）
+        "aria-haspopup": "listbox",
       },
       // 外部リッチテキストのペーストでは、コピー元の算出スタイル
       // （閲覧テーマの文字色 = rgb(...) や Word/Docs の #000000、font-size: 14px 等）が

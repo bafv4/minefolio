@@ -1,7 +1,9 @@
 // /keybindings（表）と /keybindings/visual（ビジュアル）で共有するレイアウト。
 // タイトル・ツールバー（ビュー切替 / 件数 / フィルター）・フィルタ適用を一元化し、
 // mode によって本体を「表（Tabs）」か「ビジュアル（カード）」に切り替える。
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
+import { Link } from "react-router";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Keyboard,
@@ -12,36 +14,109 @@ import {
   Swords,
   ArrowLeftRight,
 } from "lucide-react";
+import { FingerLegend, KEY_STATE_CLASS } from "@/components/virtual-keyboard";
 import { ViewSwitcher } from "./view-switcher";
 import { FilterDialog } from "./filter-dialog";
-import { TabContentSkeleton } from "@/components/tab-content-skeleton";
+import {
+  KeybindingsViewSkeleton,
+  skeletonVariantForPath,
+} from "@/components/keybindings/keybindings-view-skeleton";
 import { useTabNavigation } from "@/hooks/use-tab-navigation";
 import { KeybindingsTable } from "./keybindings-table";
 import { CardView } from "./card-view";
+import { sortKeybindingsRows } from "./keybindings-columns";
 import { UserFilterChips } from "./user-filter";
 import type { KeybindingsRow, PresetKey } from "./keybindings-columns";
-import { useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
-import type { Tab } from "@/lib/keybindings-search-params";
-import { useT } from "@/hooks/use-locale";
+import { KnownRunnerSlugsContext, useKeybindingsFilters } from "@/hooks/use-keybindings-filters";
+import { hasKeyBindings, hasKeyboardContent, hasMouseSettings } from "@/lib/keybindings-filter";
+import {
+  COMBAT_UI_ACTIONS,
+  HOTBAR_ACTIONS,
+  INVENTORY_ACTIONS,
+  MOVEMENT_ACTIONS,
+  type Tab,
+} from "@/lib/keybindings-search-params";
+import { useLocale, useT } from "@/hooks/use-locale";
 import type { MessageKey } from "@/lib/messages";
 
-/** ページ共通タイトル（全ビューで同一） */
-export function KeybindingsPageTitle() {
+/** インベントリのタブに載る操作（ホットバー 1〜9 を含む） */
+const INVENTORY_TAB_ACTIONS: readonly string[] = [...INVENTORY_ACTIONS, ...HOTBAR_ACTIONS];
+
+/** ページ共通タイトル。h1 はビュー（表 / ビジュアル / 統計）の名前、説明文はビューごとに渡す（省略時は表の説明） */
+export function KeybindingsPageTitle({
+  title,
+  description,
+  trailing,
+  children,
+}: {
+  title?: string;
+  description?: string;
+  /** タイトル行の右に置くもの（ビュー切替。モバイルではタイトルの下） */
+  trailing?: ReactNode;
+  /** 説明文の下に置くもの（凡例など） */
+  children?: ReactNode;
+}) {
   const t = useT();
   return (
     <div>
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Keyboard className="h-6 w-6" />
-        {t("keybindings.title")}
-      </h1>
-      <p className="text-sm text-muted-foreground mt-1">
-        {t("keybindings.description")}
-      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Keyboard className="h-6 w-6" aria-hidden />
+            {title ?? t("keybindings.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {description ?? t("keybindings.description")}
+          </p>
+        </div>
+        {trailing}
+      </div>
+      {children}
     </div>
   );
 }
 
-export function KeybindingsListLayout({
+/** ビジュアルの凡例（1行）。指色・リマップ済みの枠・空きキー。キーボードのキーと同じ面・枠のトークンで描く */
+function VisualLegend() {
+  const t = useT();
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <FingerLegend />
+      <span className="flex items-center gap-1">
+        <span
+          aria-hidden
+          className={cn("h-3 w-4 rounded-[3px] border-2", KEY_STATE_CLASS.data, "border-primary")}
+        />
+        <span className="text-[11px] text-muted-foreground">{t("keybindings.legendRemapped")}</span>
+      </span>
+      <span className="flex items-center gap-1">
+        <span aria-hidden className={cn("h-3 w-4 rounded-[3px] border", KEY_STATE_CLASS.empty)} />
+        <span className="text-[11px] text-muted-foreground">{t("keybindings.legendEmpty")}</span>
+      </span>
+      <Link
+        to="/compare"
+        className="text-xs text-primary underline-offset-4 hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
+      >
+        {t("keybindings.visualCompareLink")}
+      </Link>
+    </div>
+  );
+}
+
+export function KeybindingsListLayout(props: {
+  players: KeybindingsRow[];
+  mode: "table" | "visual";
+}) {
+  // URL の users から実在しない走者を捨てる（チップ・件数・注記・絞り込みをそろえる）ため、一覧の走者を共有する
+  const knownSlugs = useMemo(() => new Set(props.players.map((p) => p.slug)), [props.players]);
+  return (
+    <KnownRunnerSlugsContext.Provider value={knownSlugs}>
+      <KeybindingsListLayoutInner {...props} />
+    </KnownRunnerSlugsContext.Provider>
+  );
+}
+
+function KeybindingsListLayoutInner({
   players,
   mode,
 }: {
@@ -49,15 +124,17 @@ export function KeybindingsListLayout({
   mode: "table" | "visual";
 }) {
   const t = useT();
+  const locale = useLocale();
   const filters = useKeybindingsFilters();
   const tab = filters.params.tab;
   // ビュー切替（/keybindings ⇄ /visual ⇄ /stats）中は本体をスケルトンに差し替える
   const { isTabSwitching, targetPathname } = useTabNavigation();
 
   // フィルタ適用（数値範囲・ユーザー絞り込みはクライアント側）
+  const { applyToPlayers } = filters;
   const filteredPlayers = useMemo(
-    () => filters.applyToPlayers(players),
-    [players, filters],
+    () => applyToPlayers(players),
+    [players, applyToPlayers],
   );
   const remapsPlayers = useMemo(
     () => filteredPlayers.filter((p) => p.keyRemaps.length > 0),
@@ -68,68 +145,130 @@ export function KeybindingsListLayout({
     [filteredPlayers],
   );
   const mousePlayersFiltered = useMemo(
-    () =>
-      filteredPlayers.filter((p) => {
-        const c = p.playerConfig;
-        return (
-          c != null &&
-          (c.mouseDpi != null ||
-            c.gameSensitivity != null ||
-            c.windowsSpeed != null ||
-            c.windowsSpeedMultiplier != null)
-        );
-      }),
+    () => filteredPlayers.filter((p) => hasMouseSettings(p.playerConfig)),
+    [filteredPlayers],
+  );
+  // キーのタブは、そのタブの列がすべて「未割り当て」の走者を載せない（マウスタブの「設定のある走者のみ」と同じ扱い）
+  const movementPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, MOVEMENT_ACTIONS)),
+    [filteredPlayers],
+  );
+  const inventoryPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, INVENTORY_TAB_ACTIONS)),
+    [filteredPlayers],
+  );
+  const combatUiPlayers = useMemo(
+    () => filteredPlayers.filter((p) => hasKeyBindings(p, COMBAT_UI_ACTIONS)),
+    [filteredPlayers],
+  );
+  // ビジュアルは、キーボードに描くものが何も無い走者（空のカードになる）を載せない
+  const visualBase = useMemo(
+    () => filteredPlayers.filter(hasKeyboardContent),
     [filteredPlayers],
   );
 
   const rowsByTab: Record<Tab, KeybindingsRow[]> = {
-    movement: filteredPlayers,
-    inventory: filteredPlayers,
-    "combat-ui": filteredPlayers,
+    movement: movementPlayers,
+    inventory: inventoryPlayers,
+    "combat-ui": combatUiPlayers,
     remaps: remapsPlayers,
     "custom-actions": customActionsPlayersFiltered,
     mouse: mousePlayersFiltered,
   };
 
+  // ビジュアルは表と同じ並べ替え（URL の sort）で並べる
+  const { sort } = filters;
+  const visualPlayers = useMemo(
+    () => sortKeybindingsRows(visualBase, sort, t, locale),
+    [visualBase, sort, t, locale],
+  );
+  // 件数は、いま見えている表の行数（タブごとに母集団が違う）。表は「このタブ N人 / 全 M人」で出し、
+  // M は絞り込み後の全走者。ビジュアルは絞り込み後の走者数だけ
+  const visibleCount = mode === "visual" ? visualBase.length : rowsByTab[tab].length;
+
+  // 統計などから users= で指定された走者のうち、このタブに載らない人がいるときの注記（黙って減らさない）
+  const specifiedUsers = filters.params.users;
+  const tabShownOfSpecified = useMemo(() => {
+    if (mode !== "table" || specifiedUsers.length === 0) return null;
+    const set = new Set(specifiedUsers);
+    const specified = players.filter((p) => set.has(p.slug));
+    const onTab = specified.filter((p) => {
+      switch (tab) {
+        case "movement":
+          return hasKeyBindings(p, MOVEMENT_ACTIONS);
+        case "inventory":
+          return hasKeyBindings(p, INVENTORY_TAB_ACTIONS);
+        case "combat-ui":
+          return hasKeyBindings(p, COMBAT_UI_ACTIONS);
+        case "remaps":
+          return p.keyRemaps.length > 0;
+        case "custom-actions":
+          return p.customActions.length > 0;
+        case "mouse":
+          return hasMouseSettings(p.playerConfig);
+      }
+    });
+    return onTab.length < specifiedUsers.length ? onTab.length : null;
+  }, [mode, specifiedUsers, players, tab]);
+
   return (
     <div className="flex-1 flex flex-col space-y-6">
-      <KeybindingsPageTitle />
+      <KeybindingsPageTitle
+        title={mode === "visual" ? t("keybindings.visualTitle") : undefined}
+        description={mode === "visual" ? t("keybindings.visualDescription") : undefined}
+        trailing={<ViewSwitcher />}
+      />
 
-      {/* ツールバー: ビュー切替 / 件数 / フィルター（全幅ベースライン行に統合） */}
+      {/* ツールバー: 件数 / フィルター */}
       <div className="flex flex-col gap-3">
-        <ViewSwitcher
-          actions={
-            <>
-              <span className="text-sm text-muted-foreground tabular-nums">
-                {t("keybindings.countText", {
-                  count: filteredPlayers.length,
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          {/* 件数の変化を読み上げる（aria-live は描画済みの領域の変化だけを読むので、初回表示では読まれない） */}
+          <span className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+            {mode === "visual"
+              ? t("keybindings.countText", {
+                  count: visibleCount,
                   suffix: t("keybindings.countSuffix"),
+                })
+              : t("keybindings.countTabText", {
+                  count: visibleCount,
+                  total: filteredPlayers.length,
                 })}
-              </span>
-              <FilterDialog players={players} />
-            </>
-          }
-        />
+          </span>
+          <FilterDialog players={players} />
+        </div>
         <UserFilterChips players={players} />
+        {tabShownOfSpecified != null && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {t("keybindings.usersOnTabNote", {
+              specified: specifiedUsers.length,
+              shown: tabShownOfSpecified,
+            })}
+          </p>
+        )}
       </div>
 
-      {/* 本体 */}
+      {/* 本体（ビジュアルは凡例を一覧の直上に置き、ビュー切替の縦位置をビュー間でそろえる） */}
       <div>
+        {mode === "visual" && !isTabSwitching && (
+          <div className="mb-4">
+            <VisualLegend />
+          </div>
+        )}
         {isTabSwitching ? (
-          <TabContentSkeleton
-            variant={targetPathname === "/keybindings" ? "table" : "cards"}
-          />
+          <KeybindingsViewSkeleton variant={skeletonVariantForPath(targetPathname)} />
         ) : mode === "visual" ? (
-          <CardView players={filteredPlayers} />
+          <CardView players={visualPlayers} />
         ) : (
           <Tabs
             value={tab}
             onValueChange={(v) => filters.setTab(v as Tab)}
-            className="w-full"
+            // overflow-clip: 既定の overflow-hidden はスクロールコンテナになり、md 未満で表の見出しを
+            // ページに貼り付ける sticky を止めてしまう（clip は角丸の切り抜きだけ残す）
+            className="w-full overflow-clip"
           >
-            <TabsList>
+            <TabsList scrollFade>
               {TAB_ITEMS.map(({ value, labelKey, icon: Icon, color }) => (
-                <TabsTrigger key={value} value={value} className="gap-1.5">
+                <TabsTrigger key={value} value={value} className="gap-1.5 max-md:h-11">
                   <Icon
                     className="h-4 w-4"
                     style={color ? { color } : undefined}
@@ -139,7 +278,7 @@ export function KeybindingsListLayout({
               ))}
             </TabsList>
 
-            {TAB_ITEMS.map(({ value }) => (
+            {TAB_ITEMS.map(({ value, labelKey }) => (
               <TabsContent
                 key={value}
                 value={value}
@@ -148,6 +287,8 @@ export function KeybindingsListLayout({
                 <KeybindingsTable
                   rows={rowsByTab[value]}
                   preset={value as PresetKey}
+                  label={t(labelKey)}
+                  noTabData={filteredPlayers.length > 0}
                 />
               </TabsContent>
             ))}

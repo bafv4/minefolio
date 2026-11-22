@@ -30,13 +30,17 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock("@/lib/session", () => sessionMocks);
 
 import { action } from "../items";
+import { SAVE_LIMITS } from "@/lib/save-limits";
+import { createTranslator } from "@/lib/messages";
+import { encodeHistoryDescription } from "@/lib/history-description";
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
-const INVALID_LAYOUT_ERROR = "アイテム配置のデータ形式が不正です";
+const t = createTranslator("ja");
+const INVALID_LAYOUT_ERROR = t("meItems.invalidLayoutData");
 const PRESET_REQUIRED_ERROR = "アイテム配置を保存するには、先にプリセットを作成してください";
-const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください";
+const STALE_SESSION_ERROR = "プリセットが切り替わっています。ページを再読み込みしてください。";
 
 let db: TestDb;
 
@@ -249,7 +253,7 @@ describe("action - saveAll の正常系", () => {
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
       changeType: "game_setting",
-      changeDescription: "アイテム配置を更新",
+      changeDescription: encodeHistoryDescription("items.update"),
     });
   });
 });
@@ -288,7 +292,92 @@ describe("action - 未知のアクション", () => {
       formDataOf({ _action: "bogus", presetId: preset.id }),
     );
 
-    expect(res).toEqual({ error: "不明なアクション" });
+    expect(res).toEqual({ error: t("meItems.unknownAction") });
     expect(await findLayouts(user.id)).toHaveLength(1);
+  });
+});
+
+describe("action - 変更履歴の公開影響（preset_id）", () => {
+  it("メイン＝編集中の保存は preset_id にメインの id を入れる", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await db.update(schema.configPresets).set({ isMain: true }).where(eq(schema.configPresets.id, preset.id));
+
+    await callAction(saveForm([validLayout({ id: "new-1" })], preset.id));
+
+    expect((await findHistory(user.id))[0].presetId).toBe(preset.id);
+  });
+
+  it("メインでない編集中プリセットの保存は preset_id を入れない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedConfigPreset(db, user.id, { name: "公開用", isMain: true });
+
+    await callAction(saveForm([validLayout({ id: "new-1" })], preset.id));
+
+    expect((await findHistory(user.id))[0].presetId).toBeNull();
+  });
+});
+
+describe("action - saveAll の検証と id の引き継ぎ", () => {
+  const layout = (id: string, segment: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    segment,
+    slots: [{ slot: 1, items: ["minecraft:stone"] }],
+    offhand: [],
+    notes: null,
+    ...extra,
+  });
+
+  it("セグメント名の重複（大文字小文字違い）・空・id の重複は拒否し、何も書かない", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    await seedLayout(user.id, "keep", "Nether");
+
+    for (const layouts of [
+      [layout("a", "Overworld"), layout("b", "overworld")],
+      [layout("a", "  ")],
+      [layout("a", "A"), layout("a", "B")],
+    ]) {
+      expect(await callAction(saveForm(layouts, preset.id))).toEqual({ error: INVALID_LAYOUT_ERROR });
+    }
+    expect((await findLayouts(user.id)).map((l) => l.id)).toEqual(["keep"]);
+  });
+
+  it("件数・文字数・入れ子の上限を超えると拒否する", async () => {
+    const { preset } = await setupUserWithActivePreset();
+    const tooMany = Array.from({ length: SAVE_LIMITS.itemLayouts + 1 }, (_, i) => layout(`n${i}`, `S${i}`));
+
+    for (const layouts of [
+      tooMany,
+      [layout("a", "x".repeat(SAVE_LIMITS.segmentName + 1))],
+      [layout("a", "A", { notes: "x".repeat(SAVE_LIMITS.layoutNotes + 1) })],
+      [layout("a", "A", { slots: [{ slot: 1, items: Array(SAVE_LIMITS.itemsPerSlot + 1).fill("minecraft:stone") }] })],
+      [layout("a", "A", { slots: [{ slot: 1.5, items: [] }] })],
+    ]) {
+      expect(await callAction(saveForm(layouts, preset.id))).toEqual({ error: INVALID_LAYOUT_ERROR });
+    }
+  });
+
+  it("id を引き継ぐのは自分の既存行だけ。new-・他人の id・任意の文字列は新規採番する", async () => {
+    const { user, preset } = await setupUserWithActivePreset();
+    const other = await seedUser(db, { slug: "other", discordId: "discord-other" });
+    await seedLayout(user.id, "mine-1", "Overworld");
+    await seedLayout(other.id, "theirs-1", "Overworld");
+
+    const res = await callAction(
+      saveForm(
+        [layout("mine-1", "Overworld"), layout("new-abc", "Nether"), layout("theirs-1", "End"), layout("free-text", "Bastion")],
+        preset.id,
+      ),
+    );
+
+    expect(res).toEqual({ success: true });
+    const mine = await findLayouts(user.id);
+    expect(mine).toHaveLength(4);
+    const ids = mine.map((l) => l.id);
+    expect(ids).toContain("mine-1");
+    expect(ids).not.toContain("new-abc");
+    expect(ids).not.toContain("theirs-1");
+    expect(ids).not.toContain("free-text");
+    // 他人の行は壊れていない
+    expect(await findLayouts(other.id)).toHaveLength(1);
   });
 });

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
+import * as schema from "../schema";
 import {
+  countBrowse,
+  getFavoriteSlugsByDiscordId,
   loadBrowsePage,
   parseBrowseSearchParams,
   BROWSE_ITEMS_PER_PAGE,
@@ -20,6 +23,30 @@ function args(overrides: Partial<BrowseQueryArgs> = {}): BrowseQueryArgs {
     ...overrides,
   };
 }
+
+describe("getFavoriteSlugsByDiscordId", () => {
+  it("ユーザー不在は null、お気に入り0件は []", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { discordId: "d-none" });
+    expect(await getFavoriteSlugsByDiscordId(db, "d-missing")).toBeNull();
+    expect(await getFavoriteSlugsByDiscordId(db, "d-none")).toEqual([]);
+  });
+
+  it("favoriteSlug の辞書順で返す（登録順ではない）", async () => {
+    const db = await createTestDb();
+    const me = await seedUser(db, { discordId: "d-me" });
+    const base = Date.now();
+    // 登録順は c → a → b、辞書順は a → b → c
+    for (const [i, slug] of ["c", "a", "b"].entries()) {
+      await db.insert(schema.favorites).values({
+        userId: me.id,
+        favoriteSlug: slug,
+        createdAt: new Date(base + i * 1000),
+      });
+    }
+    expect(await getFavoriteSlugsByDiscordId(db, "d-me")).toEqual(["a", "b", "c"]);
+  });
+});
 
 describe("loadBrowsePage - 可視性フィルタ（セキュリティ回帰）", () => {
   it("public のユーザーのみ返し、unlisted / private は一覧に出さない", async () => {
@@ -84,6 +111,35 @@ describe("loadBrowsePage - LIKE 検索（セキュリティ回帰）", () => {
   });
 });
 
+describe("countBrowse - 一覧と同じ条件解釈", () => {
+  it("さまざまな条件で loadBrowsePage の totalCount と一致する（非公開・視聴者既定除外含む）", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "a", mcid: "Alpha", role: "runner", mainEdition: "java", inputMethod: "keyboard_mouse", mainPlatform: "pc_windows" });
+    await seedUser(db, { slug: "b", mcid: "Beta", role: null, mainEdition: "bedrock", inputMethod: "controller", mainPlatform: "switch" });
+    await seedUser(db, { slug: "v", mcid: "Viewer", role: "viewer", mainEdition: "java" });
+    await seedUser(db, { slug: "p", mcid: "Priv", role: "runner", profileVisibility: "private" });
+
+    const cases: Partial<BrowseQueryArgs>[] = [
+      {},
+      { roles: ["viewer"] },
+      { roles: ["runner", "viewer"] },
+      { editions: ["bedrock"] },
+      { inputMethods: ["controller"] },
+      { platforms: ["pc_windows", "switch"] },
+      { q: "alp" },
+      { q: "zzz" },
+      { roles: ["runner"], editions: ["java"], q: "a" },
+    ];
+    for (const c of cases) {
+      const a = args(c);
+      const list = await loadBrowsePage(db, a, []);
+      expect(await countBrowse(db, a)).toBe(list.totalCount);
+    }
+    expect(await countBrowse(db, args())).toBe(2);
+    expect(await countBrowse(db, args({ roles: ["viewer"] }))).toBe(1);
+  });
+});
+
 describe("loadBrowsePage - フィルタ", () => {
   it("role フィルタ未指定時は viewer を除外する（runner / null は含む）", async () => {
     const db = await createTestDb();
@@ -134,6 +190,27 @@ describe("loadBrowsePage - フィルタ", () => {
     expect(
       (await loadBrowsePage(db, args({ platforms: ["switch"] }), [])).players.map((p) => p.slug),
     ).toEqual(["other"]);
+  });
+
+  it("既定値（Java / Windows / キーボード＆マウス）で絞るときは未設定（NULL）も含める。既定値以外は含めない", async () => {
+    const db = await createTestDb();
+    await seedUser(db, { slug: "unset", mcid: "U", role: "runner", mainEdition: null, inputMethod: null, mainPlatform: null });
+    await seedUser(db, {
+      slug: "bedrock",
+      mcid: "B",
+      role: "runner",
+      mainEdition: "bedrock",
+      inputMethod: "controller",
+      mainPlatform: "switch",
+    });
+
+    const slugs = async (a: Partial<BrowseQueryArgs>) =>
+      (await loadBrowsePage(db, args(a), [])).players.map((p) => p.slug);
+    expect(await slugs({ editions: ["java"] })).toEqual(["unset"]);
+    expect(await slugs({ inputMethods: ["keyboard_mouse"] })).toEqual(["unset"]);
+    expect(await slugs({ platforms: ["pc_windows"] })).toEqual(["unset"]);
+    expect(await slugs({ editions: ["bedrock"] })).toEqual(["bedrock"]);
+    expect(await slugs({ platforms: ["pc_mac"] })).toEqual([]);
   });
 
   it("?input= は users.inputMethod 列のみを見る（廃止済みの inputMethodBadge 由来では絞られない）", async () => {

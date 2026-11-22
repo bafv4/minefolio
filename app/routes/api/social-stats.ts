@@ -18,6 +18,14 @@ import { getDbCached, setDbCached } from "@/lib/cache";
 const YOUTUBE_TTL = 6 * 60 * 60 * 1000; // 6時間
 const YOUTUBE_ERROR_TTL = 15 * 60 * 1000; // 15分（取得失敗時。クォータ浪費を防ぎつつ復旧を待つ）
 const TWITCH_TTL = 5 * 60 * 1000; // 5分
+const TWITCH_ERROR_TTL = 5 * 60 * 1000; // 5分（従来から失敗も TWITCH_TTL で保存していたので同値）
+
+// getDbCached は「行なし/期限切れ」も保存済み null も null で返すため、失敗は番兵値で保存して区別する
+type FailedMarker = { failed: true };
+const FAILED_MARKER: FailedMarker = { failed: true };
+function isFailedMarker(value: unknown): value is FailedMarker {
+  return typeof value === "object" && value !== null && (value as FailedMarker).failed === true;
+}
 
 // CDNキャッシュ（秒）: Twitchの配信中フラグの鮮度に合わせる
 const CDN_MAX_AGE = 300;
@@ -36,12 +44,12 @@ async function fetchYouTubeStats(
   if (!apiKey) return null;
 
   const cacheKey = `social-stats:youtube:${userId}`;
-  const cached = await getDbCached<YouTubeChannelStats | null>(cacheKey);
-  if (cached !== null) return cached;
+  const cached = await getDbCached<YouTubeChannelStats | FailedMarker>(cacheKey);
+  if (cached !== null) return isFailedMarker(cached) ? null : cached;
 
   const stats = await getYouTubeChannelStats(apiKey, identifier);
-  // 失敗（null）は短TTLでネガティブキャッシュし、連続アクセスでのクォータ浪費を防ぐ
-  await setDbCached(cacheKey, "social_stats", stats, stats ? YOUTUBE_TTL : YOUTUBE_ERROR_TTL);
+  // 失敗は短TTLでネガティブキャッシュし、連続アクセスでのクォータ浪費を防ぐ
+  await setDbCached(cacheKey, "social_stats", stats ?? FAILED_MARKER, stats ? YOUTUBE_TTL : YOUTUBE_ERROR_TTL);
   return stats;
 }
 
@@ -54,14 +62,14 @@ async function fetchTwitchStats(
   if (!clientId || !clientSecret) return null;
 
   const cacheKey = `social-stats:twitch:${userId}`;
-  const cached = await getDbCached<TwitchChannelStats | null>(cacheKey);
-  if (cached !== null) return cached;
+  const cached = await getDbCached<TwitchChannelStats | FailedMarker>(cacheKey);
+  if (cached !== null) return isFailedMarker(cached) ? null : cached;
 
   const token = await getTwitchAppToken(clientId, clientSecret);
   const stats = token
     ? await getTwitchChannelStats(clientId, token, identifier)
     : null;
-  await setDbCached(cacheKey, "social_stats", stats, TWITCH_TTL);
+  await setDbCached(cacheKey, "social_stats", stats ?? FAILED_MARKER, stats ? TWITCH_TTL : TWITCH_ERROR_TTL);
   return stats;
 }
 

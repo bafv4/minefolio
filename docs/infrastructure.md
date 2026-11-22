@@ -57,6 +57,17 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 
 ---
 
+## テーマとハイコントラスト
+
+- テーマ（light / dark / ultra-dark）は next-themes（`providers.tsx`、class 切替、localStorage `theme`。既定は `system`＝OS に従い、ダークは通常ダーク）。切替 UI は `layout/theme-toggle.tsx`（デスクトップ。ボタンはテーマとハイコントラストの両方を持つ「表示設定」）と `layout/header.tsx` のモバイルメニュー。選択肢（`THEME_OPTIONS`）は「システム・ライト・ダーク・ウルトラダーク」の4つで、一度ほかを選んでも「システム」で OS 追従へ戻せる
+- **ハイコントラスト**はテーマとは別軸のオン・オフ（3テーマ × 2）。`<html data-contrast="more">` を付け、`app/app.css` の「ハイコントラスト」ブロックが3テーマそれぞれのトークンを上書きする（強化基準: 通常の文字 7:1 以上、枠線・フォーカスリング等の UI 部品 4.5:1 以上）
+- 判定: localStorage `contrast`（`"more"` / `"normal"`）が明示の選択で、キーなし（または不正値）は OS の `prefers-contrast: more` に従う。純粋関数は `app/lib/contrast.ts` の `resolveContrast`。サーバー・Cookie へは送らない（プライバシーポリシーの「テーマ設定の保存（ローカルストレージ）」の範囲）
+- 初回描画前に `root.tsx` の head のインラインスクリプト（`CONTRAST_INIT_SCRIPT`）が属性を付ける（ちらつき防止）。以降は `app/hooks/use-contrast.ts`（`useContrast` / `ContrastSync`）が OS の設定の変更・別タブ（storage）に追従する
+- 明示の選択を解除して OS 追従へ戻す UI は無い（オン・オフだけ見せる）
+- フォーカスリング: `app/components/ui/` の部品（button・badge・checkbox・input・radio-group・select・slider・switch・textarea・toggle）は不透明の `--ring` の 2px（`ring-ring ring-2`。半透明に薄めない）。塗りのボタン（既定の brand・destructive）は面とリングが同系色なので `ring-offset-2 ring-offset-background` のすき間を挟む。`aria-invalid` の要素のフォーカスは不透明の `--destructive`。ネイティブのアウトラインの既定色（`app/app.css` の base の `*`）も不透明の `outline-ring`
+- ホバー・ハイライトも HC では面の濃淡に頼らず、前景色のアウトライン・強い枠・下線・反転で示す（`app/app.css` の「ハイコントラストのホバー・ハイライト」。詳細は `.claude/rules/ui.md` 3章）。カードのホバー枠は色に加えて内側 1px の影で 2px 相当の太さにする（キーボードフォーカス中は付けない）
+- HC でも「欄の区切り（`border-foreground/15`）≧ カードの枠（`border-border/70`）」の強弱を保つ。欄の区切りは `--border` の /85（背景比 light 11.6・dark 9.3・ultra-dark 9.4）、カードの枠は /70 のまま（同 6.7・6.5・6.5）
+
 ## レイアウト
 
 ### メインレイアウト (_layout.tsx)
@@ -65,6 +76,12 @@ pnpm db:push:remote   # リモート Turso（.env.remote）に反映
 - 認証チェック: オプション（`getOptionalSession`）
 - Discordアバター同期: ログイン時にDiscordアバターを最新に更新
 - ナビゲーション: ホーム、走者一覧、ランキング、統計など
+- 未マッチのパス（`app/routes.ts` のキャッチオール `*`、`routes/not-found.tsx`）はこのレイアウトの子ルート
+- **エラー画面**: 404 と、このレイアウト配下のルートの loader・描画のエラーは、`_layout.tsx` の `ErrorBoundary` がヘッダー・フッターの内側に `ErrorView`（`app/components/layout/error-view.tsx`）を描く。HTTP ステータスは変わらない。`<title>` は「ページが見つかりません - Minefolio」など。404 の出口はホーム・探す・ガイドの3つ。走者の 404（`/player/:slug`）だけは、その slug を入れた検索（`/browse?q=`、「「{slug}」で走者を探す」）を主ボタンにし、ホーム・ガイドを副にして、見つからない原因（MCID を変えると URL も変わる）を1文添える（ルーターの中の `NotFoundActions`。root の砦は従来の3リンク）
+- **画面遷移の読み込み表示**（`app/components/layout/navigation-progress.tsx`）: 遷移が約300ms を超えたときだけ全面のぼかし＋「読み込み中」を出す（速い遷移ではちらつかせない）。外枠は常に `role="status" aria-live="polite"`。Tips は 1s 以上かかったときだけ（読み上げ対象外）。同じパス内・タブ群内の遷移では出さない
+- **相対時刻**: `app/lib/relative-time.ts` が単一の入口。1日未満は分・時間（経過時間）、日単位以上は暦日（端末の日付変更で数える。今日・昨日・N日前・N週間前・Nか月前・N年前。en は Yesterday / 2d ago / 5mo ago）。date-fns の `formatDistanceToNow` は使わない
+- `_layout` 自身や root の loader が落ちたときは、root（`app/root.tsx`）の `ErrorBoundary` が最後の砦として描く（ルーターが壊れている可能性があるのでリンクは `<a href>`）
+- loader は `onboardingPending`（ログイン済みで初期設定が未完了。`users` の行がまだ無い場合も含む）を返す。true のとき、ヘッダーの下に「初期設定を続ける」（`/onboarding` へ）の案内を出す。`/onboarding`・`/login`・`/dev/login` では出さない
 
 ### ダッシュボードレイアウト (me/_layout.tsx)
 
@@ -203,17 +220,36 @@ md 内の `[フィードバックフォーム](/feedback)` のような相対リ
 
 ---
 
-## レガシーインポート
+## 設定インポート（ファイル、/me/import の action）
 
-### /me/import
-
-MCSRer Hotkeys（旧サービス）からのデータインポート機能。
+キー配置画面（`/me/keybindings`）のプリセット行にある「インポート」ボタン（`FileInput` アイコン。`PresetSelector` の `extraActions`）から開く `ImportDialog`（`app/components/import-dialog.tsx`）で、外部ファイルから設定を取り込む。
 
 | ファイル | 説明 |
 |---------|------|
 | `app/lib/import-parser.ts` | インポートデータのパーサー |
+| `app/routes/me/import.tsx` | 書き込みの action（`import-remaps` / `import-minecraft`）と旧 URL の転送 loader だけを持つリソースルート（ページ本体は無い） |
+
+#### ダイアログの構成
+
+- 手順は「取り込み元を選ぶ → ファイル選択（形式の説明つき）→ プレビュー → 完了」。取り込み元は**リマップ（AutoHotkey）**と**ゲーム内設定（Minecraft の `options.txt` / `standardsettings.json`）**の2つ。後者はキー配置に加えて**ゲーム内設定**（ダッシュ・スニーク切替、自動ジャンプ、FOV、GUI スケール、Raw Input、ゲーム言語。デバイス画面の項目）も書き込む（プレビューのチェックで個別に外せる）。
+- 取り込み先は編集中のプリセット（プリセット名をダイアログに示す。無いときは取り込みで新規作成される旨）。上書きの注意文（同じキー/アクションの既存設定は上書きされる）を最初の2手順に出す。
+- 送信は `fetcher.submit(..., { method: "post", action: "/me/import" })`。成功後はキー配置画面の loader を再検証する（action は常に結果を返すので、`keybindings.tsx` の `shouldRevalidate` の `actionResult` の分岐で既定の再検証が1回走る。`formAction === "/me/import"` の分岐は結果を返さない場合の保険）。
+- **未保存の編集があるとき**はボタンを非活性にする（コピーと同じ。理由は `PresetSelector` の「未保存の変更があります」の文を `aria-describedby` で結ぶ）。取り込み後の再検証でローカルの編集と食い違わせないため。
+- 旧 URL `/me/import` は `/me/keybindings?import=1` へ転送し、ダイアログが開いた状態で始まる（閉じると `import` パラメータを外す）。サイドバーに項目は無い。
+- 注意文・完了・エラーは `NoticeBanner`。ダイアログの閉じる×は `showCloseButton={false}` と自前の `DialogClose`（md 未満 44px）。
+
+---
+
+## レガシーインポート（旧 API。/me/account と開発用の import-legacy）
+
+旧サービス（MCSRer Hotkeys）のデータを旧 API から取り込む。ファイルの設定インポートとは別物。
+
+| ファイル | 説明 |
+|---------|------|
 | `app/lib/legacy-import.ts` | レガシーデータの変換・取り込みロジック |
 
+- 本番の入口は `/me/account` の「MCSRer Hotkeysからデータをインポート」（`import_legacy`）
+- `/me/keybindings` の開発用ボタン（`import.meta.env.DEV` の「Reload (dev)」「Legacy API import (dev)」。`import-legacy`）も同じ取り込みを呼ぶ
 - `users.hasImported` フラグでインポート済みかどうかを管理
 - `LEGACY_API_URL` 環境変数で旧APIのURLを指定
 

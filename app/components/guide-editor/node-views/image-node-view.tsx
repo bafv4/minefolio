@@ -5,7 +5,9 @@ import type { MessageKey } from "@/lib/messages";
 import { useState, useCallback, useRef } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
-import { Trash2, AlignLeft, AlignCenter, AlignRight, X, Crop } from "lucide-react";
+import { Trash2, AlignLeft, AlignCenter, AlignRight, X, Crop, Captions } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
@@ -51,6 +53,7 @@ export function ImageNodeView({
   const src = String(node.attrs.src);
   const width = node.attrs.width ? Number(node.attrs.width) : undefined;
   const align = node.attrs.align ? String(node.attrs.align) : "";
+  const alt = node.attrs.alt ? String(node.attrs.alt) : "";
 
   const handleCropApply = useCallback(
     async (rect: CropRect) => {
@@ -97,13 +100,13 @@ export function ImageNodeView({
   }, [updateAttributes]);
 
   return (
-    <NodeViewWrapper>
+    <NodeViewWrapper className="guide-block-node">
       <div
         className={cn(
-          "relative group my-2",
-          // 配置指定時はブロック化して寄せる（inline-block のままだと margin:auto が効かない）。
-          // 未設定は従来どおり inline-block ＝ 行の流れに従う
-          align ? cn("w-fit", WRAPPER_ALIGN_CLASS[align]) : "inline-block",
+          "relative group w-fit",
+          // 配置指定時は寄せる。未設定は左に置く。どちらもブロック（inline-block だと中の img の上下の余白が
+          // 外の余白と相殺されず、公開ページ〔img が block で余白が相殺される〕より 48px 高くなる）
+          align && WRAPPER_ALIGN_CLASS[align],
           (selected || resizing) && "ring-2 ring-primary/50 rounded-lg",
         )}
       >
@@ -164,6 +167,39 @@ export function ImageNodeView({
             </Tooltip>
           )}
           <span className="mx-0.5 h-4 w-px bg-white/30" aria-hidden />
+          {/* 代替テキスト。入力値は即時に node 属性へ反映する（空なら装飾扱い） */}
+          <Popover>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("guideEditor.ui.imageAlt")}
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded text-white transition-colors hover:bg-white/20",
+                      alt && "bg-white/30",
+                    )}
+                  >
+                    <Captions className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t("guideEditor.ui.imageAlt")}</TooltipContent>
+            </Tooltip>
+            <PopoverContent align="end" className="w-72 space-y-1.5 p-3">
+              <label htmlFor="guide-image-alt" className="text-xs font-medium">
+                {t("guideEditor.ui.imageAlt")}
+              </label>
+              <Input
+                id="guide-image-alt"
+                value={alt}
+                maxLength={200}
+                placeholder={t("guideEditor.ui.imageAltPlaceholder")}
+                onChange={(e) => updateAttributes({ alt: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </PopoverContent>
+          </Popover>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -207,7 +243,7 @@ export function ImageNodeView({
           }}
         />
         {width && (
-          <span className="absolute bottom-1 left-1 text-[10px] text-white bg-black/50 rounded px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="absolute bottom-1 left-1 text-[10px] text-white bg-black/70 rounded px-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {width}px
           </span>
         )}
@@ -218,6 +254,7 @@ export function ImageNodeView({
         onOpenChange={(open) => !open && setCropOpen(false)}
         onApply={handleCropApply}
         applying={cropping}
+        editor={editor}
       />
     </NodeViewWrapper>
   );

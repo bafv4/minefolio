@@ -27,6 +27,8 @@
 
 ## ハブページ (`/developers`)
 
+> 日本語以外のロケールでは、本文が日本語のみの API ドキュメント・更新履歴のカードにだけ小さな「日本語のみ」の印を付ける（入口ページ全体の断り書きは出さない）。更新履歴の見出しの読み替え（「キー設定」→「操作設定」）はロケールによらず日本語で行い、版の見出しの括弧だけ日本語は全角・それ以外は半角にする。
+
 `app/routes/developers/index.tsx`。
 
 - 3 つのサブページへのカード型ナビゲーション
@@ -40,7 +42,9 @@
 
 - ソース: `app/content/api.md`
 - Vite の `?raw` import でファイル内容を JS バンドルに埋め込み
-- 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`prose prose-sm dark:prose-invert max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）
+- 共通コンポーネント `app/components/markdown-doc-page.tsx`（`MarkdownDocPage`）で `react-markdown` + `remark-gfm` + `rehype-sanitize` レンダリング、`doc-content prose max-w-none` クラスを適用（`/privacy` `/terms` `/developers/changelog` と共通）。配色は `app/app.css` の `.doc-content.prose` がテーマトークンへ割り当てる（ガイド本文と同じ割り当て。`prose-invert` / `dark:` は使わない）。本文は `text-base`、1行は 42em まで（表の器とコードブロックは幅を使う）。注記（blockquote）は斜体にしない
+- `/privacy`・`/terms`・`/developers/api` は冒頭に h2 の目次（ページ内リンク）を出す（`toc`。API 文書は12エンドポイントの節を持つため）。h2 の id と目次のリンクは同じ `docHeadingId` から作る
+- 表は横スクロールの器（`overflow-x-auto`）で包み、コードブロック（`pre`）は prose の `overflow-x: auto` のまま使う。狭い画面でもページ全体は横に動かない。4列以上の表は md 未満で `min-width: 36rem`（`app.css`）を持ち、器の中で横に動く（はみ出しているときは表の上に「横にスクロールできます」を出す）。本文の h2 は `text-xl`・h3 は `text-lg`（h1 は `text-2xl`）、畳んだ節の h2 も `text-xl`。はみ出しているときだけ、器に `tabindex="0"`・`role="region"`・`aria-label`（`common.tableScrollRegion` / `common.codeScrollRegion`）を付けてキーボードで横スクロールできるようにする（収まっているときは Tab の停止点を増やさない）
 
 掲載対象は **認証不要の公開 API のみ**。`/api/me/*` や `/api/auth/*` などの認証必須 API、`/api/cron/*` の Cron 専用 API は掲載しない。
 
@@ -54,6 +58,7 @@
 
 - ソース: `app/content/changelog.md`
 - レンダリング方式は `/developers/api` と同じ（`?raw` + `MarkdownDocPage`）
+- 最新の3版だけを開いて出し、それより古い版は版の見出し（h2）を summary にした `details` に畳む（`app/lib/changelog.ts` の `parseChangelog` で版ごとに分ける。分けられない形式なら全文をそのまま出す）
 - 一般ユーザー向けに、技術用語を抑えた文体で記述する方針
 
 ---

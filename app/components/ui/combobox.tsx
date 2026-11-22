@@ -32,6 +32,12 @@ interface ComboboxProps {
   emptyText?: string
   allowCustomValue?: boolean
   className?: string
+  /** trigger ボタンに付与する id（`<Label htmlFor>` と結ぶ用） */
+  id?: string
+  /** trigger ボタンのアクセシブルネーム（見える Label が無いとき） */
+  "aria-label"?: string
+  /** trigger ボタンを名付ける要素の id */
+  "aria-labelledby"?: string
 }
 
 export function Combobox({
@@ -43,6 +49,9 @@ export function Combobox({
   emptyText: emptyTextProp,
   allowCustomValue = false,
   className,
+  id,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
 }: ComboboxProps) {
   // 既定値は本体で解決する（既定引数は useT() より先に評価されるため）
   const t = useT();
@@ -70,7 +79,10 @@ export function Combobox({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (allowCustomValue && e.key === "Enter" && inputValue) {
       const exists = options.some(
-        (option) => option.value.toLowerCase() === inputValue.toLowerCase()
+        // 表示名（label）で打った場合も既存の選択肢として扱う（値と表示名が違う選択肢があるため）
+        (option) =>
+          option.value.toLowerCase() === inputValue.toLowerCase() ||
+          option.label.toLowerCase() === inputValue.toLowerCase()
       )
       if (!exists) {
         onValueChange(inputValue)
@@ -84,12 +96,15 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          id={id}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledby}
+          variant="ghost"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between font-normal", className)}
+          className={cn("w-full max-sm:min-h-11 justify-between rounded-md border border-muted-foreground/70 bg-input px-3 font-normal shadow-xs hover:border-ring/50 hover:bg-input min-w-0", className)}
         >
-          <span className={cn(!value && "text-muted-foreground")}>
+          <span className={cn("min-w-0 flex-1 truncate text-left", !value && "text-muted-foreground")}>
             {selectedLabel}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

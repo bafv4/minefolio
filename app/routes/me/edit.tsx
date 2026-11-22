@@ -1,8 +1,11 @@
-import { createTranslator, type MessageKey } from "@/lib/messages";
+import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
+import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLoaderData, useFetcher, redirect, useParams, Link, type ShouldRevalidateFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher, useRouteLoaderData, type ShouldRevalidateFunctionArgs } from "react-router";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { FloatingSaveBar } from "@/components/floating-save-bar";
+import { MeChecklist } from "@/components/me/me-checklist";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
@@ -10,30 +13,37 @@ import { getSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
-import { SELECTABLE_PROFILE_TABS, type ProfileTabValue, type SelectableProfileTabValue } from "@/lib/profile-tabs";
-import { eq, and, asc, inArray } from "drizzle-orm";
-import { getYouTubeVideoId, getYouTubeThumbnailUrl } from "@/lib/youtube-url";
-import { isHttpUrl } from "@/lib/safe-url";
-import { importFromLegacy } from "@/lib/legacy-import";
-import { createId } from "@paralleldrive/cuid2";
-import { fetchUuidFromMcid, MojangError } from "@/lib/mojang";
-import { generateSlug } from "@/lib/slug";
+import { eq, asc } from "drizzle-orm";
+import { safeExternalHref } from "@/lib/safe-url";
+import { getYouTubeThumbnailUrl } from "@/lib/youtube-url";
 import { CAPE_DISPLAY_OPTIONS, resolveCapeProps, type CapeDisplay } from "@/lib/cape";
-import { recordSlugChange } from "@/lib/slug-history.server";
-import { retargetFavoritesOnSlugChange } from "@/lib/favorites";
+import { AGE_GROUP_VALUES, parseAgeGroup } from "@/lib/age-group";
+import { saveProfileBatch } from "@/lib/profile-edit.server";
 import {
-  runAfterResponse,
-  refreshTwitchVodsForLogin,
-  deleteTwitchVodsForLogin,
-  refreshYoutubeForChannel,
-  deleteYoutubeVideosForChannelIdentifier,
-  updateYoutubeCacheMcid,
-  refreshSrcRankingsForUser,
-} from "@/lib/targeted-refresh.server";
-import { deleteUserAccount } from "@/lib/content-cleanup.server";
-import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
+  MAX_PROFILE_VIDEOS,
+  PROFILE_FIELD_LIMITS,
+  validateBedrockMcidFormat,
+  validateLinkInput,
+  validateMcidFormat,
+  validateVideoInput,
+  type LinkPayload,
+  type ProfileFieldErrors,
+  type VideoPayload,
+} from "@/lib/profile-edit-validation";
 import {
-  isValidRtaStartedYearMonth,
+  buildProfileChanges,
+  buildProfileDraft,
+  hasProfileChanges,
+  moveDraftVideo,
+  newDraftKey,
+  resolveSpeedrunUsernameForSave,
+  speedrunLinkIdentifier,
+  type DraftLink,
+  type DraftVideo,
+  type ProfileDraft,
+} from "@/lib/profile-edit-draft";
+import type { McidCheckResult } from "@/routes/api/me/mcid-check";
+import {
   parseRtaStartedYearMonth,
   rtaCareerExactLabel,
   rtaCareerView,
@@ -41,10 +51,13 @@ import {
 } from "@/lib/rta-career";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import { MinecraftFullBody } from "@/components/minecraft-fullbody";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PageSection } from "@/components/page-section";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
@@ -57,6 +70,7 @@ import {
 } from "@/components/ui/select";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -75,7 +89,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { NoticeBanner } from "@/components/notice-banner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
@@ -87,13 +102,10 @@ import {
   ExternalLink,
   Share2,
   Video,
-  Settings,
-  AlertTriangle,
-  Download,
-  ImageIcon,
   Pin,
   ArrowUp,
   ArrowDown,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { Youtube, Twitch, Twitter } from "@/components/brand-icons";
@@ -101,76 +113,8 @@ import { SkinUploader } from "@/components/skin-uploader";
 import { CapeUploader } from "@/components/cape-uploader";
 import type { PoseName } from "@/components/minecraft-fullbody";
 import { useT, useLocale } from "@/hooks/use-locale";
-
-// enum系フィールドのallowlist。手書き配列ではなく schema.ts の enum 定義（列の enumValues）から導出する
-const VISIBILITIES = users.profileVisibility.enumValues;
-const POSES = users.profilePose.enumValues;
-const CAPE_DISPLAYS: readonly string[] = users.capeDisplay.enumValues;
-const PLATFORMS = users.mainPlatform.enumValues;
-const ROLES = users.role.enumValues;
-const SOCIAL_PLATFORMS = socialLinks.platform.enumValues;
-
-/**
- * ソーシャルリンクの追加/変更/削除に応じて、外部キャッシュ（Twitch VOD / YouTube 動画 /
- * Speedrun.com・MCSR Rankedランキング）の即時リフレッシュ・削除を `runAfterResponse()` 経由でキックする。
- * action のレスポンスは待たせない・失敗させない（各関数は内部でエラーを握る）。
- * 変更が無ければ何もしない。作成時は oldPlatform/oldIdentifier を null で呼ぶ
- */
-function scheduleSocialLinkKicks({
-  userId,
-  mcid,
-  oldPlatform,
-  oldIdentifier,
-  newPlatform,
-  newIdentifier,
-}: {
-  userId: string;
-  mcid: string | null;
-  oldPlatform: string | null;
-  oldIdentifier: string | null;
-  newPlatform: string;
-  newIdentifier: string;
-}) {
-  const changed = oldPlatform !== newPlatform || oldIdentifier !== newIdentifier;
-  if (!changed) return;
-
-  // Twitch: 旧がtwitchで(削除またはtwitch以外へ変更/identifier変更)なら旧を削除。新がtwitchなら即時取得。
-  // 旧新が同一チャンネルを指す変更（大文字小文字のみ等）で refresh 完了後に delete が走ると
-  // 次のcronまでキャッシュが空になるため、両方行う場合は必ず削除→取得の順に直列化する
-  const deleteOldTwitch =
-    oldPlatform === "twitch" && oldIdentifier && (newPlatform !== "twitch" || newIdentifier !== oldIdentifier)
-      ? () => deleteTwitchVodsForLogin(oldIdentifier)
-      : null;
-  const refreshNewTwitch =
-    newPlatform === "twitch" ? () => refreshTwitchVodsForLogin(newIdentifier) : null;
-  if (deleteOldTwitch && refreshNewTwitch) {
-    runAfterResponse(deleteOldTwitch().then(refreshNewTwitch));
-  } else if (deleteOldTwitch) {
-    runAfterResponse(deleteOldTwitch());
-  } else if (refreshNewTwitch) {
-    runAfterResponse(refreshNewTwitch());
-  }
-
-  // YouTube: 同上（@ハンドル↔UC-IDの変更も同一チャンネルでありうるため直列化。mcid未設定ユーザーは新規取得をスキップ）
-  const deleteOldYoutube =
-    oldPlatform === "youtube" && oldIdentifier && (newPlatform !== "youtube" || newIdentifier !== oldIdentifier)
-      ? () => deleteYoutubeVideosForChannelIdentifier(oldIdentifier)
-      : null;
-  const refreshNewYoutube =
-    newPlatform === "youtube" && mcid ? () => refreshYoutubeForChannel(newIdentifier, mcid) : null;
-  if (deleteOldYoutube && refreshNewYoutube) {
-    runAfterResponse(deleteOldYoutube().then(refreshNewYoutube));
-  } else if (deleteOldYoutube) {
-    runAfterResponse(deleteOldYoutube());
-  } else if (refreshNewYoutube) {
-    runAfterResponse(refreshNewYoutube());
-  }
-
-  // Speedrun.com: リンクの追加/変更/削除いずれも speedruncomUsername の変更を伴うためランキングを更新
-  if (newPlatform === "speedruncom" || oldPlatform === "speedruncom") {
-    runAfterResponse(refreshSrcRankingsForUser(userId));
-  }
-}
+import { cn } from "@/lib/utils";
+import { MeErrorBoundary } from "@/components/me/me-error-boundary";
 
 export const meta: Route.MetaFunction = ({ matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -202,11 +146,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       profileVideos: {
         orderBy: [asc(profileVideos.displayOrder)],
       },
-      keybindings: true,
-      playerConfig: true,
-      itemLayouts: true,
-      searchCrafts: true,
-      keyRemaps: true,
     },
   });
 
@@ -214,72 +153,55 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Response(t("meEdit.userNotFound"), { status: 404 });
   }
 
-  // キー配置等のデータが存在するかチェック
-  const hasExistingData =
-    user.keybindings.length > 0 ||
-    user.playerConfig !== null ||
-    user.itemLayouts.length > 0 ||
-    user.searchCrafts.length > 0 ||
-    user.keyRemaps.length > 0;
-
-  // レガシーAPIのURLのみ返す（チェックはクライアントサイドで行う）
-  const legacyApiUrl = env.LEGACY_API_URL;
+  const userRow = user;
 
   // 自動翻訳が無効（ANTHROPIC_API_KEY 未設定）のときは許可スイッチを出さない（真偽値だけをクライアントへ渡す）
   const translationEnabled = isTranslationEnabled();
 
   return {
-    user,
+    // 年代は既知の値だけを返す（未知の値は未設定として扱う）
+    user: { ...userRow, ageGroup: parseAgeGroup(userRow.ageGroup) ?? null },
     links: user.socialLinks,
     videos: user.profileVideos,
-    legacyApiUrl,
-    hasExistingData,
     translationEnabled,
   };
 }
 
 // ローディング中に表示するスケルトンUI（ナビゲーション時用）
 export function HydrateFallback() {
-  const t = useT();
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* Header Skeleton */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+    <div className="space-y-7 sm:space-y-8 animate-in fade-in duration-200" aria-hidden="true">
+      {/* 本物は h1 32px ＋ 説明 20px（行間なし） */}
+      <div>
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-5 w-64" />
       </div>
 
-      {/* Avatar Card Skeleton */}
-      <div className="border rounded-lg p-6 space-y-4">
-        <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
         <div className="flex items-center gap-6">
-          <div className="w-24 h-24 bg-muted rounded-full animate-pulse" />
+          <Skeleton className="h-24 w-24 rounded-xl" />
           <div className="space-y-2">
-            <div className="h-5 w-40 bg-muted rounded animate-pulse" />
-            <div className="h-4 w-56 bg-muted rounded animate-pulse" />
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
           </div>
         </div>
       </div>
 
-      {/* Form Fields Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-24 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-24 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-24" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
-        <div className="border rounded-lg p-6 space-y-4">
-          <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-          <div className="space-y-3">
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse" />
-          </div>
+      </div>
+
+      <div className="space-y-4 border-t border-foreground/15 pt-6">
+        <Skeleton className="h-7 w-32" />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       </div>
     </div>
@@ -303,663 +225,21 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-
-  // レガシーインポート
-  if (actionType === "import_legacy") {
-    const legacyApiUrl = env.LEGACY_API_URL;
-    if (!legacyApiUrl) {
-      return { error: t("meEdit.legacyApiNotConfigured"), action: "import" };
-    }
-
-    if (!user.mcid) {
-      return { error: t("meEdit.mcidNotSetForImport"), action: "import" };
-    }
-
-    const result = await importFromLegacy(t, db, user.id, legacyApiUrl, user.mcid);
-    if (result.success) {
-      return {
-        success: true,
-        action: "import",
-        keybindingsImported: result.keybindingsImported,
-        customKeysImported: result.customKeysImported,
-        remapsImported: result.remapsImported,
-        fingerAssignmentsImported: result.fingerAssignmentsImported,
-        settingsImported: result.settingsImported,
-      };
-    } else {
-      return { error: result.error ?? t("meEdit.importFailed"), action: "import" };
-    }
-  }
-
-  // MCID設定/変更
-  if (actionType === "set_mcid") {
-    const mcid = (formData.get("mcid") as string)?.trim();
-
-    if (!mcid) {
-      return { error: t("meEdit.mcidRequired"), action: "mcid" };
-    }
-
-    if (mcid.length < 3 || mcid.length > 16) {
-      return { error: t("meEdit.mcidLength"), action: "mcid" };
-    }
-
-    // 既に同じMCIDが登録されていないかチェック
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.mcid, mcid),
-    });
-
-    if (existingUser && existingUser.id !== user.id) {
-      return { error: t("meEdit.mcidTaken"), action: "mcid" };
-    }
-
-    // Mojang APIで検証
-    try {
-      const uuid = await fetchUuidFromMcid(mcid);
-      const newSlug = generateSlug(mcid, session.user.id);
-
-      await db.transaction(async (tx) => {
-        await tx
-          .update(users)
-          .set({
-            mcid,
-            uuid,
-            slug: newSlug,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, user.id));
-
-        await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-        await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
-      });
-
-      // MCID変更に伴う外部キャッシュの紐付け追従（YouTube動画キャッシュのMCID列を新値へ）。
-      // YouTube連携があれば新MCIDで即時取得もキックする（連携有無の検索もレスポンスを遅らせないようbackground側で行う）
-      const oldMcid = user.mcid;
-      runAfterResponse(
-        (async () => {
-          if (oldMcid) {
-            await updateYoutubeCacheMcid(oldMcid, mcid);
-          }
-          const youtubeLink = await db.query.socialLinks.findFirst({
-            where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "youtube")),
-          });
-          if (youtubeLink) {
-            await refreshYoutubeForChannel(youtubeLink.identifier, mcid);
-          }
-        })()
-      );
-
-      return { success: true, action: "mcid", newSlug };
-    } catch (error) {
-      if (error instanceof MojangError) {
-        if (error.code === "MCID_NOT_FOUND") {
-          return { error: t("meEdit.mcidNotFound"), action: "mcid" };
-        }
-      }
-      return { error: t("meEdit.mcidVerifyFailed"), action: "mcid" };
-    }
-  }
-
-  // MCID削除
-  if (actionType === "remove_mcid") {
-    const newSlug = generateSlug(null, session.user.id);
-
-    await db.transaction(async (tx) => {
-      await tx
-        .update(users)
-        .set({
-          mcid: null,
-          uuid: null,
-          slug: newSlug,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-
-      await recordSlugChange(tx, { userId: user.id, oldSlug: user.slug, newSlug });
-      await retargetFavoritesOnSlugChange(tx, { oldSlug: user.slug, newSlug });
-    });
-
-    return { success: true, action: "mcid_removed", newSlug };
-  }
-
-  // Bedrock版MCID（Xboxゲーマータグ）の設定/変更
-  // 自己申告の表示用テキスト。所有確認APIが存在しないためMojang検証は行わず、
-  // uuid・スキン・slug などJava MCIDに紐づく処理には一切関与させない（slugは変わらない）
-  if (actionType === "set_bedrock_mcid") {
-    const bedrockMcid = (formData.get("bedrockMcid") as string)?.trim();
-
-    if (!bedrockMcid) {
-      return { error: t("meEdit.bedrockMcidRequired"), action: "bedrock_mcid" };
-    }
-
-    // Xboxゲーマータグは最大12文字だが、新形式の `#1234` サフィックスまで許容する
-    if (bedrockMcid.length < 3 || bedrockMcid.length > 24) {
-      return { error: t("meEdit.bedrockMcidLength"), action: "bedrock_mcid" };
-    }
-
-    // 制御文字（改行・タブ等）のみ拒否し、それ以外の文字種は制限しない
-    if (/[\u0000-\u001f\u007f]/.test(bedrockMcid)) {
-      return { error: t("meEdit.bedrockMcidInvalid"), action: "bedrock_mcid" };
-    }
-
-    await db
-      .update(users)
-      .set({ bedrockMcid, updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-
-    return { success: true, action: "bedrock_mcid" };
-  }
-
-  // Bedrock版MCID削除
-  if (actionType === "remove_bedrock_mcid") {
-    await db
-      .update(users)
-      .set({ bedrockMcid: null, updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-
-    return { success: true, action: "bedrock_mcid_removed" };
-  }
-
-  // ソーシャルリンクの操作
-  if (actionType === "create_link" || actionType === "update_link") {
-    const id = formData.get("id") as string | null;
-    const platform = formData.get("platform") as "speedruncom" | "youtube" | "twitch" | "twitter" | "custom";
-    const identifier = (formData.get("identifier") as string)?.trim();
-    const customLabel = (formData.get("customLabel") as string)?.trim() || null;
-    const customUrl = (formData.get("customUrl") as string)?.trim() || null;
-
-    if (!platform || !identifier) {
-      return { error: t("meEdit.platformAndIdRequired") };
-    }
-
-    if (!(SOCIAL_PLATFORMS as readonly string[]).includes(platform)) {
-      return { error: t("meEdit.invalidOption") };
-    }
-
-    // 長さチェック
-    if (identifier.length > 100) {
-      return { error: t("meEdit.idMaxLength") };
-    }
-
-    // IDの形式をバリデーション
-    if (platform === "custom") {
-      // カスタムSNSはラベルとURLが必須
-      if (!customLabel) {
-        return { error: t("meEdit.customLabelRequired") };
-      }
-      if (!customUrl) {
-        return { error: t("meEdit.customUrlRequired") };
-      }
-      // URLの形式チェック
-      try {
-        new URL(customUrl);
-      } catch {
-        return { error: t("meEdit.customUrlInvalid") };
-      }
-      // javascript: / data: 等の実行可能スキームを拒否（stored XSS 対策。http/https のみ許可）
-      if (!isHttpUrl(customUrl)) {
-        return { error: t("meEdit.customUrlScheme") };
-      }
-    } else if (platform === "youtube") {
-      // YouTubeハンドルは日本語などUnicode文字を許可
-      // 空白、@、URL特殊文字は禁止
-      if (/[\s@#$%^&*()+=\[\]{}|\\;:'",<>/?]/.test(identifier)) {
-        return { error: t("meEdit.idInvalidChars") };
-      }
-    } else {
-      // 英数字、ハイフン、アンダースコアのみ許可（@と.は除外）
-      if (!/^[\w\-]+$/.test(identifier)) {
-        return { error: t("meEdit.idAllowedChars") };
-      }
-    }
-
-    try {
-      if (actionType === "create_link") {
-        // カスタム以外は同じプラットフォームの重複チェック
-        if (platform !== "custom") {
-          const existingPlatform = await db.query.socialLinks.findFirst({
-            where: (links, { and, eq: eqOp }) => and(
-              eqOp(links.userId, user.id),
-              eqOp(links.platform, platform)
-            ),
-          });
-
-          if (existingPlatform) {
-            return { error: t("meEdit.platformLinkExistsForEdit", { platform }) };
-          }
-        }
-
-        await db.insert(socialLinks).values({
-          id: createId(),
-          userId: user.id,
-          platform,
-          identifier,
-          customLabel: platform === "custom" ? customLabel : null,
-          customUrl: platform === "custom" ? customUrl : null,
-        });
-
-        // Speedrun.comの場合、speedruncomUsernameも自動設定
-        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
-        if (platform === "speedruncom") {
-          await db
-            .update(users)
-            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        }
-
-        scheduleSocialLinkKicks({
-          userId: user.id,
-          mcid: user.mcid,
-          oldPlatform: null,
-          oldIdentifier: null,
-          newPlatform: platform,
-          newIdentifier: identifier,
-        });
-      } else if (id) {
-        // カスタム以外は更新時に別のプラットフォームに変更する場合、重複チェック
-        if (platform !== "custom") {
-          const existingPlatform = await db.query.socialLinks.findFirst({
-            where: (links, { and, eq: eqOp, ne }) => and(
-              eqOp(links.userId, user.id),
-              eqOp(links.platform, platform),
-              ne(links.id, id)
-            ),
-          });
-
-          if (existingPlatform) {
-            return { error: t("meEdit.platformLinkExistsSimple", { platform }) };
-          }
-        }
-
-        // 更新前のリンク情報を取得（所有確認込み・IDOR 防止）
-        const oldLink = await db.query.socialLinks.findFirst({
-          where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
-        });
-
-        if (!oldLink) {
-          return { error: t("meEdit.linkSaveFailed") };
-        }
-
-        await db
-          .update(socialLinks)
-          .set({
-            platform,
-            identifier,
-            customLabel: platform === "custom" ? customLabel : null,
-            customUrl: platform === "custom" ? customUrl : null,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
-
-        // Speedrun.comの場合、speedruncomUsernameも自動更新
-        // （speedruncomId を残すと cron/即時更新が旧アカウントを見続けるため、あわせてリセットする）
-        if (platform === "speedruncom") {
-          await db
-            .update(users)
-            .set({ speedruncomUsername: identifier, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        } else if (oldLink?.platform === "speedruncom") {
-          // Speedrun.comから別のプラットフォームに変更した場合、クリア
-          await db
-            .update(users)
-            .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
-            .where(eq(users.id, user.id));
-        }
-
-        scheduleSocialLinkKicks({
-          userId: user.id,
-          mcid: user.mcid,
-          oldPlatform: oldLink.platform,
-          oldIdentifier: oldLink.identifier,
-          newPlatform: platform,
-          newIdentifier: identifier,
-        });
-      }
-
-      return { success: true, action: "link" };
-    } catch (e) {
-      console.error("Social link error:", e);
-      if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
-        return { error: t("meEdit.platformLinkExists") };
-      }
-      return { error: t("meEdit.linkSaveFailed") };
-    }
-  }
-
-  if (actionType === "delete_link") {
-    const id = formData.get("id") as string;
-    if (id) {
-      // 削除前にリンク情報を取得（所有確認込み・IDOR 防止）
-      const linkToDelete = await db.query.socialLinks.findFirst({
-        where: and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)),
-      });
-
-      if (!linkToDelete) {
-        return { success: true, action: "link" };
-      }
-
-      await db
-        .delete(socialLinks)
-        .where(and(eq(socialLinks.id, id), eq(socialLinks.userId, user.id)));
-
-      // Speedrun.comリンクを削除した場合、speedruncomUsername・speedruncomIdもクリア
-      if (linkToDelete.platform === "speedruncom") {
-        await db
-          .update(users)
-          .set({ speedruncomUsername: null, speedruncomId: null, updatedAt: new Date() })
-          .where(eq(users.id, user.id));
-      }
-
-      // 削除したプラットフォームの外部キャッシュも削除する
-      if (linkToDelete.platform === "twitch") {
-        runAfterResponse(deleteTwitchVodsForLogin(linkToDelete.identifier));
-      } else if (linkToDelete.platform === "youtube") {
-        runAfterResponse(deleteYoutubeVideosForChannelIdentifier(linkToDelete.identifier));
-      } else if (linkToDelete.platform === "speedruncom") {
-        runAfterResponse(refreshSrcRankingsForUser(user.id));
-      }
-    }
-    return { success: true, action: "link" };
-  }
-
-  // 動画欄の操作
-  if (actionType === "create_video" || actionType === "update_video") {
-    const id = formData.get("id") as string | null;
-    const url = (formData.get("url") as string)?.trim();
-    const title = (formData.get("title") as string)?.trim() || null;
-    const isPinned = formData.get("isPinned") === "true";
-
-    if (!url) {
-      return { error: t("meEdit.videoUrlRequired") };
-    }
-    // 動画IDを解決できないURLは登録不可（埋め込み時の X-Frame-Options ブロック防止）
-    if (!getYouTubeVideoId(url)) {
-      return { error: t("meEdit.videoUrlInvalid") };
-    }
-    if (title && title.length > 100) {
-      return { error: t("meEdit.videoTitleMaxLength") };
-    }
-
-    if (actionType === "create_video") {
-      const existing = await db.query.profileVideos.findMany({
-        where: eq(profileVideos.userId, user.id),
-      });
-      if (existing.length >= 10) {
-        return { error: t("meEdit.videoMaxCount") };
-      }
-      const maxOrder = existing.reduce((max, v) => Math.max(max, v.displayOrder), 0);
-      await db.insert(profileVideos).values({
-        id: createId(),
-        userId: user.id,
-        url,
-        title,
-        isPinned,
-        displayOrder: maxOrder + 1,
-      });
-    } else if (id) {
-      await db
-        .update(profileVideos)
-        .set({ url, title, isPinned, updatedAt: new Date() })
-        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
-    }
-    return { success: true, action: "video" };
-  }
-
-  if (actionType === "delete_video") {
-    const id = formData.get("id") as string;
-    if (id) {
-      await db
-        .delete(profileVideos)
-        .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
-    }
-    return { success: true, action: "video" };
-  }
-
-  if (actionType === "move_video") {
-    const id = formData.get("id") as string;
-    const direction = formData.get("direction") as string;
-    const videos = await db.query.profileVideos.findMany({
-      where: eq(profileVideos.userId, user.id),
-      orderBy: [asc(profileVideos.displayOrder)],
-    });
-    const index = videos.findIndex((v) => v.id === id);
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (index !== -1 && targetIndex >= 0 && targetIndex < videos.length) {
-      const reordered = [...videos];
-      const [moved] = reordered.splice(index, 1);
-      reordered.splice(targetIndex, 0, moved);
-      // displayOrder の重複があっても正しく並ぶよう、インデックスで振り直す
-      await Promise.all(
-        reordered
-          .map((video, i) => ({ video, i }))
-          .filter(({ video, i }) => video.displayOrder !== i)
-          .map(({ video, i }) =>
-            db
-              .update(profileVideos)
-              .set({ displayOrder: i, updatedAt: new Date() })
-              .where(and(eq(profileVideos.id, video.id), eq(profileVideos.userId, user.id)))
-          )
-      );
-    }
-    return { success: true, action: "video" };
-  }
-
-  // アカウント削除
-  if (actionType === "delete_account") {
-    const confirmText = (formData.get("confirmText") as string)?.trim();
-    const expectedText = user.mcid || user.slug;
-
-    if (confirmText !== expectedText) {
-      return { error: t("meEdit.deleteConfirmMismatch"), action: "delete" };
-    }
-
-    // 派生データの削除（翻訳キャッシュ・favorites孤児行）と本体削除（users + better-auth
-    // 3テーブル）を単一トランザクションで原子化する（app/lib/content-cleanup.server.ts）。
-    // トランザクション成功後、Vercel Blob 実体の削除は内部で runAfterResponse 経由でスケジュールされる。
-    await deleteUserAccount(db, { user, sessionUserId: session.user.id });
-
-    // Redirect to home after deletion
-    return redirect("/");
-  }
-
-  // プロフィール情報の更新
-  const displayName = (formData.get("displayName") as string)?.trim() || null;
-  const displayNameAlphabet = (formData.get("displayNameAlphabet") as string)?.trim() || null;
-  const bio = (formData.get("bio") as string)?.trim() || null;
-  const location = (formData.get("location") as string)?.trim() || null;
-  const pronouns = (formData.get("pronouns") as string)?.trim() || null;
-  const profileVisibility = formData.get("profileVisibility") as "public" | "unlisted" | "private";
-  const profilePose = formData.get("profilePose") as "standing" | "walking" | "waving";
-  const slimSkin = formData.get("slimSkin") === "true";
-  // マント表示。未送信（null）・不正値は列を更新対象から外す（null や既定値で上書きしない）
-  const capeDisplayRaw = formData.get("capeDisplay");
-  const capeDisplay =
-    typeof capeDisplayRaw === "string" && CAPE_DISPLAYS.includes(capeDisplayRaw)
-      ? (capeDisplayRaw as CapeDisplay)
-      : null;
-  // 値の集合・順序は app/lib/profile-tabs.ts が単一情報源。フォームは SELECTABLE_PROFILE_TABS の
-  // 値しか送らないため、既存どおり実行時検証はせず型のみ ProfileTabValue に合わせる（挙動不変）
-  const defaultProfileTab = formData.get("defaultProfileTab") as ProfileTabValue;
-  const mainPlatform = (formData.get("mainPlatform") as "pc_windows" | "pc_mac" | "pc_linux" | "switch" | "mobile" | "other") || null;
-  const role = (formData.get("role") as "viewer" | "runner") || null;
-  const shortBio = (formData.get("shortBio") as string)?.trim() || null;
-  // RTA歴（"YYYY-MM"）。未回答は空文字で送られてくるので null に落とす
-  const rtaStartedYearMonth = (formData.get("rtaStartedYearMonth") as string)?.trim() || null;
-  const speedruncomUsername = (formData.get("speedruncomUsername") as string)?.trim() || null;
-  const showPacemanOnHome = formData.get("showPacemanOnHome") === "true";
-  const showTwitchOnHome = formData.get("showTwitchOnHome") === "true";
-  const showYoutubeOnHome = formData.get("showYoutubeOnHome") === "true";
-  const showRankedStats = formData.get("showRankedStats") === "true";
-  const showPacemanStats = formData.get("showPacemanStats") === "true";
-  // 自己紹介の自動翻訳の許可。未送信（null）・不正値は列を更新対象から外す（既定値で上書きしない）
-  const allowAutoTranslationRaw = formData.get("allowAutoTranslation");
-  const allowAutoTranslation =
-    allowAutoTranslationRaw === "true" ? true : allowAutoTranslationRaw === "false" ? false : null;
-
-  // Validate
-  if (displayName && displayName.length > 50) {
-    return { error: t("meEdit.displayNameMax") };
-  }
-
-  if (displayNameAlphabet && displayNameAlphabet.length > 50) {
-    return { error: t("meEdit.displayNameAlphabetMax") };
-  }
-
-  // アルファベット表記は印字可能な ASCII のみ（英数字・空白・基本記号）
-  if (displayNameAlphabet && !/^[\x20-\x7E]+$/.test(displayNameAlphabet)) {
-    return { error: t("meEdit.displayNameAlphabetInvalid") };
-  }
-
-  if (bio && bio.length > 500) {
-    return { error: t("meEdit.bioMax") };
-  }
-
-  if (location && location.length > 100) {
-    return { error: t("meEdit.locationMax") };
-  }
-
-  if (shortBio && shortBio.length > 50) {
-    return { error: t("meEdit.shortBioMax") };
-  }
-
-  if (pronouns && pronouns.length > 20) {
-    return { error: t("meEdit.pronounsMax") };
-  }
-
-  if (!VISIBILITIES.includes(profileVisibility)) {
+  // `_action` が送られているのに `save_all` 以外（古いタブが送る import_legacy / delete_account など）は、
+  // 保存したと偽らずエラーにする。未指定（従来の保存）は下の経路のまま
+  const actionType = formData.get("_action");
+  if (actionType !== null && actionType !== "save_all") {
     return { error: t("meEdit.invalidOption") };
   }
-
-  if (profilePose !== null && !POSES.includes(profilePose)) {
-    return { error: t("meEdit.invalidOption") };
-  }
-
-  if (capeDisplayRaw !== null && capeDisplay === null) {
-    return { error: t("meEdit.invalidOption") };
-  }
-
-  if (allowAutoTranslationRaw !== null && allowAutoTranslation === null) {
-    return { error: t("meEdit.invalidOption") };
-  }
-
-  if (mainPlatform !== null && !PLATFORMS.includes(mainPlatform)) {
-    return { error: t("meEdit.invalidOption") };
-  }
-
-  if (role !== null && !ROLES.includes(role)) {
-    return { error: t("meEdit.invalidOption") };
-  }
-
-  if (speedruncomUsername && speedruncomUsername.length > 50) {
-    return { error: t("meEdit.speedrunUsernameMax") };
-  }
-
-  // ソーシャルリンク欄の speedruncom identifier と同じ形式（英数字・ハイフン・アンダースコアのみ）を要求する
-  if (speedruncomUsername && !/^[\w\-]+$/.test(speedruncomUsername)) {
-    return { error: t("meEdit.speedrunUsernameInvalid") };
-  }
-
-  if (rtaStartedYearMonth && !isValidRtaStartedYearMonth(rtaStartedYearMonth)) {
-    return { error: t("meEdit.rtaStartedInvalid") };
-  }
-
-  await db
-    .update(users)
-    .set({
-      displayName,
-      displayNameAlphabet,
-      bio,
-      location,
-      pronouns,
-      profileVisibility,
-      profilePose,
-      slimSkin,
-      ...(capeDisplay ? { capeDisplay } : {}),
-      defaultProfileTab,
-      mainPlatform,
-      role,
-      shortBio,
-      rtaStartedYearMonth,
-      speedruncomUsername,
-      // ユーザー名が変わったら解決済みIDもリセットする（残すと cron/即時更新が旧アカウントを見続ける）
-      ...(speedruncomUsername !== user.speedruncomUsername ? { speedruncomId: null } : {}),
-      showPacemanOnHome,
-      showTwitchOnHome,
-      showYoutubeOnHome,
-      showRankedStats,
-      showPacemanStats,
-      ...(allowAutoTranslation !== null ? { allowAutoTranslation } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, user.id));
-
-  // 自己紹介の自動翻訳（docs/translation.md）。オフにした／非公開にしたら既存の訳文を確実に消す（機能無効でも消す）。
-  // それ以外は毎回 schedule してよい（基盤側が原文ハッシュで upToDate を判定して API を呼ばない。
-  // 非公開→公開／限定公開への切り替えもここで翻訳が走る）
-  if ((allowAutoTranslation ?? user.allowAutoTranslation) === false || profileVisibility === "private") {
-    await removeUserBioTranslations(db, user.id);
-  } else {
-    scheduleUserBioTranslation(db, user.id);
-  }
-
-  // speedruncomUsername を social_links（speedruncom行）へ逆方向同期する。
-  // ソーシャルリンク欄側の create_link/update_link/delete_link は既に users.speedruncomUsername を
-  // 同期しているため、こちらは基本情報フォーム（連携欄）からの設定・変更・クリアを social_links に反映する
-  const existingSpeedruncomLink = await db.query.socialLinks.findFirst({
-    where: and(eq(socialLinks.userId, user.id), eq(socialLinks.platform, "speedruncom")),
-  });
-
-  if (speedruncomUsername) {
-    if (!existingSpeedruncomLink) {
-      await db.insert(socialLinks).values({
-        id: createId(),
-        userId: user.id,
-        platform: "speedruncom",
-        identifier: speedruncomUsername,
-      });
-    } else if (existingSpeedruncomLink.identifier !== speedruncomUsername) {
-      await db
-        .update(socialLinks)
-        .set({ identifier: speedruncomUsername, updatedAt: new Date() })
-        .where(eq(socialLinks.id, existingSpeedruncomLink.id));
-    }
-  } else if (existingSpeedruncomLink) {
-    await db.delete(socialLinks).where(eq(socialLinks.id, existingSpeedruncomLink.id));
-  }
-
-  // speedruncomUsername を基本情報フォーム側（連携欄を介さず）で直接変更した場合もランキングを即時更新する
-  if (speedruncomUsername !== user.speedruncomUsername) {
-    runAfterResponse(refreshSrcRankingsForUser(user.id));
-  }
-
-  // 非公開→公開への切り替え時は、非公開中はcron対象外で取りこぼしていたTwitch/YouTubeキャッシュを追いつかせる
-  // （連携有無の検索もレスポンスを遅らせないようbackground側で行う）
-  if (user.profileVisibility !== "public" && profileVisibility === "public") {
-    const mcidAtSave = user.mcid;
-    runAfterResponse(
-      (async () => {
-        const externalLinksOnPublish = await db.query.socialLinks.findMany({
-          where: and(eq(socialLinks.userId, user.id), inArray(socialLinks.platform, ["twitch", "youtube"])),
-        });
-        for (const link of externalLinksOnPublish) {
-          if (link.platform === "twitch") {
-            await refreshTwitchVodsForLogin(link.identifier);
-          } else if (link.platform === "youtube" && mcidAtSave) {
-            await refreshYoutubeForChannel(link.identifier, mcidAtSave);
-          }
-        }
-        // SRC/MCSR Rankedランキングも非公開中はcron対象外のため追いつかせる
-        await refreshSrcRankingsForUser(user.id);
-      })()
-    );
-  }
-
-  return { success: true, action: "profile" };
+  // プロフィール情報の更新（保存バーの一括保存。`save_all` と `_action` 未指定は同じ経路）。
+  // 本体は app/lib/profile-edit.server.ts。`changes`（JSON）に MCID・リンク・動画の差分が載る。
+  // このページの項目だけを送る（公開範囲・既定タブ・表示設定は /me/account。profile-edit-scope.ts）
+  return saveProfileBatch({ db, t, user, formData });
 }
 
 // Radix Select は空文字を value にできないため、「未設定」項目用の番兵値を使う（状態上は "" に正規化する）
 const RTA_STARTED_NONE = "none";
+const AGE_GROUP_NONE = "none";
 
 // 代名詞のプリセット選択肢（値=表示。ロケール非依存の英語表記のため翻訳キーは持たない）。
 // Combobox の allowCustomValue により任意の自由記述も入力できる
@@ -973,23 +253,12 @@ const pronounOptions = [
 ];
 
 const platformOptions = [
-  { value: "speedruncom", label: "Speedrun.com", placeholder: "e.g. couriern3w", prefix: "speedrun.com/users/" },
-  { value: "youtube", label: "YouTube", placeholder: "e.g. couriern3w", prefix: "youtube.com/@" },
-  { value: "twitch", label: "Twitch", placeholder: "e.g. couriern3w", prefix: "twitch.tv/" },
-  { value: "twitter", label: "Twitter/X", placeholder: "e.g. couriern3w", prefix: "x.com/" },
-  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholder: "e.g. username", prefix: "" },
+  { value: "speedruncom", label: "Speedrun.com", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "speedrun.com/users/" },
+  { value: "youtube", label: "YouTube", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "youtube.com/@" },
+  { value: "twitch", label: "Twitch", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "twitch.tv/" },
+  { value: "twitter", label: "Twitter/X", placeholderKey: "meEdit.linkPlaceholderExample" as const, prefix: "x.com/" },
+  { value: "custom", label: null, labelKey: "meEdit.customSns" as const, placeholderKey: null, prefix: "" },
 ] as const;
-
-// 既定タブ Select のラベル。値の集合・順序は SELECTABLE_PROFILE_TABS（@/lib/profile-tabs）が単一情報源
-const DEFAULT_PROFILE_TAB_LABEL_KEYS: Record<SelectableProfileTabValue, MessageKey> = {
-  profile: "meEdit.tabProfile",
-  stats: "meEdit.tabStats",
-  playstyle: "meEdit.tabPlaystyle",
-  keybindings: "meEdit.tabKeybindings",
-  devices: "meEdit.tabDevices",
-  items: "meEdit.tabItems",
-  searchcraft: "meEdit.tabSearchcraft",
-};
 
 function getPlatformIcon(platform: string) {
   switch (platform) {
@@ -1008,7 +277,9 @@ function getPlatformIcon(platform: string) {
   }
 }
 
-function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string {
+// href に置く URL。カスタムリンクは http/https 以外（保存済みの javascript: 等）なら undefined を返し、
+// href 属性自体を出さない（プロフィール側と同じく safeExternalHref を通す）
+function getPlatformUrl(platform: string, identifier: string, customUrlValue?: string | null): string | undefined {
   switch (platform) {
     case "speedruncom":
       return `https://www.speedrun.com/users/${identifier}`;
@@ -1020,32 +291,99 @@ function getPlatformUrl(platform: string, identifier: string, customUrlValue?: s
     case "twitter":
       return `https://x.com/${identifier}`;
     case "custom":
-      return customUrlValue || "#";
+      return safeExternalHref(customUrlValue);
     default:
       return "#";
   }
 }
 
-// ソーシャルリンク編集ダイアログ
+// Radix の Item を直接使う選択部品のフォーカスリング（不透明の --ring 2px。ui.md 9章）
+const FOCUS_RING = "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+const SEGMENT_ITEM_CLASS = cn(
+  "min-h-11 px-4 text-sm rounded-md transition-colors sm:min-h-8 sm:py-1.5",
+  FOCUS_RING,
+);
+
+/** ダイアログの検証エラー。field は入力欄の id（欄に結び付かないエラーは null で、通知帯に出す） */
+type DialogError = { field: string | null; message: string };
+
+/** validateLinkInput のエラーキーを、結び付ける入力欄の id へ対応づける（無いものは欄に結び付かない） */
+const LINK_ERROR_FIELD: Partial<Record<string, string>> = {
+  "meEdit.platformAndIdRequired": "link-identifier",
+  "meEdit.idMaxLength": "link-identifier",
+  "meEdit.idInvalidChars": "link-identifier",
+  "meEdit.idAllowedChars": "link-identifier",
+  "meEdit.customLabelRequired": "custom-label",
+  "meEdit.customLabelMax": "custom-label",
+  "meEdit.customUrlRequired": "custom-url",
+  "meEdit.customUrlMax": "custom-url",
+  "meEdit.customUrlInvalid": "custom-url",
+  "meEdit.customUrlScheme": "custom-url",
+};
+
+/** 入力欄の直下に出すインラインエラー（入力欄の aria-describedby から参照する） */
+function DialogFieldError({ id, error, field }: { id: string; error: DialogError | null; field: string }) {
+  if (error?.field !== field) return null;
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {error.message}
+    </p>
+  );
+}
+
+// ソーシャルリンク編集ダイアログ。確定しても保存はされず、下書き（保存バーで一括保存）に反映するだけ
 function SocialLinkDialog({
   editingLink,
-  linkFetcher,
-  isSubmitting,
+  otherPlatforms,
+  onSubmit,
 }: {
-  editingLink: { id: string; platform: string; identifier: string; customLabel: string | null; customUrl: string | null } | null;
-  linkFetcher: ReturnType<typeof useFetcher<typeof action>>;
-  isSubmitting: boolean;
+  editingLink: DraftLink | null;
+  /** 他のリンクが使用中のプラットフォーム（カスタム以外は1プラットフォーム1件） */
+  otherPlatforms: string[];
+  onSubmit: (payload: LinkPayload) => void;
 }) {
   const t = useT();
   const [selectedPlatform, setSelectedPlatform] = useState(editingLink?.platform ?? "youtube");
+  const [error, setError] = useState<DialogError | null>(null);
 
   const currentOption = platformOptions.find((opt) => opt.value === selectedPlatform);
   const isCustom = selectedPlatform === "custom";
 
+  const showError = (next: DialogError) => {
+    setError(next);
+    if (next.field) document.getElementById(next.field)?.focus();
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const payload: LinkPayload = {
+      platform: selectedPlatform,
+      identifier: String(fd.get("identifier") ?? "").trim(),
+      customLabel: String(fd.get("customLabel") ?? "").trim() || null,
+      customUrl: String(fd.get("customUrl") ?? "").trim() || null,
+    };
+    const errorKey = validateLinkInput(payload);
+    if (errorKey) {
+      showError({ field: LINK_ERROR_FIELD[errorKey] ?? null, message: t(errorKey) });
+      return;
+    }
+    if (payload.platform !== "custom" && otherPlatforms.includes(payload.platform)) {
+      showError({ field: "link-identifier", message: t("meEdit.platformLinkExists") });
+      return;
+    }
+    onSubmit(payload);
+  };
+
+  const fieldProps = (id: string) => ({
+    "aria-invalid": error?.field === id || undefined,
+    "aria-describedby": error?.field === id ? `${id}-error` : undefined,
+    onInput: () => setError((prev) => (prev?.field === id ? null : prev)),
+  });
+
   return (
-    <linkFetcher.Form method="post">
-      <input type="hidden" name="_action" value={editingLink ? "update_link" : "create_link"} />
-      {editingLink && <input type="hidden" name="id" value={editingLink.id} />}
+    // 検証は欄ごと（欄の下のエラー）に自前でやる。ブラウザ標準の吹き出しはロケールがブラウザの言語になるので切る
+    <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{editingLink ? t("meEdit.socialDialogEditTitle") : t("meEdit.socialDialogAddTitle")}</DialogTitle>
         <DialogDescription>
@@ -1060,8 +398,9 @@ function SocialLinkDialog({
             value={selectedPlatform}
             onValueChange={setSelectedPlatform}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue />
+            <SelectTrigger id="platform" className="w-full">
+              {/* Radix の SelectValue は SSR で選択中の項目の文字を描けないため、表示文字を明示して渡す */}
+              <SelectValue>{platformOptions.find((opt) => opt.value === selectedPlatform)?.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {platformOptions.map((opt) => (
@@ -1081,8 +420,11 @@ function SocialLinkDialog({
                 name="customLabel"
                 defaultValue={editingLink?.customLabel ?? ""}
                 placeholder={t("meEdit.customLabelPlaceholder")}
-                required
+                maxLength={PROFILE_FIELD_LIMITS.customLabel}
+                aria-required
+                {...fieldProps("custom-label")}
               />
+              <DialogFieldError id="custom-label-error" error={error} field="custom-label" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="custom-url">{t("meEdit.customUrlField")}</Label>
@@ -1091,13 +433,16 @@ function SocialLinkDialog({
                 name="customUrl"
                 defaultValue={editingLink?.customUrl ?? ""}
                 placeholder={t("meEdit.customUrlPlaceholder")}
-                required
+                maxLength={PROFILE_FIELD_LIMITS.customUrl}
+                aria-required
+                {...fieldProps("custom-url")}
               />
+              <DialogFieldError id="custom-url-error" error={error} field="custom-url" />
             </div>
           </>
         )}
         <div className="space-y-2">
-          <Label htmlFor="link-identifier">{isCustom ? t("meEdit.userId") : t("meEdit.userId")}</Label>
+          <Label htmlFor="link-identifier">{t("meEdit.userId")}</Label>
           <div className="flex items-center">
             {!isCustom && (
               <span className="text-sm text-muted-foreground mr-2 shrink-0">
@@ -1108,42 +453,75 @@ function SocialLinkDialog({
               id="link-identifier"
               name="identifier"
               defaultValue={editingLink?.identifier ?? ""}
-              placeholder={currentOption?.placeholder}
-              required
+              placeholder={currentOption?.placeholderKey ? t(currentOption.placeholderKey) : t("meEdit.linkPlaceholderUsername")}
+              aria-required
+              maxLength={PROFILE_FIELD_LIMITS.linkIdentifier}
               className="flex-1"
+              {...fieldProps("link-identifier")}
             />
           </div>
+          <DialogFieldError id="link-identifier-error" error={error} field="link-identifier" />
           <p className="text-xs text-muted-foreground">
             {isCustom ? t("meEdit.customIdentifierHint") : t("meEdit.socialIdHint")}
           </p>
         </div>
+        {error && !error.field && (
+          <NoticeBanner tone="error" icon={AlertCircle}>
+            {error.message}
+          </NoticeBanner>
+        )}
+        <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
       <DialogFooter>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {editingLink ? t("meEdit.updateLink") : t("meEdit.addLink")}
-        </Button>
+        <DialogClose asChild>
+          <Button type="button" variant="outline">{t("meEdit.cancel")}</Button>
+        </DialogClose>
+        <Button type="submit">{editingLink ? t("meEdit.updateLink") : t("meEdit.addLink")}</Button>
       </DialogFooter>
-    </linkFetcher.Form>
+    </form>
   );
 }
 
+// 動画編集ダイアログ。確定しても保存はされず、下書き（保存バーで一括保存）に反映するだけ
 function VideoDialog({
   editingVideo,
-  videoFetcher,
-  isSubmitting,
   defaultUrl,
+  onSubmit,
 }: {
-  editingVideo: { id: string; url: string; title: string | null; isPinned: boolean } | null;
-  videoFetcher: ReturnType<typeof useFetcher<typeof action>>;
-  isSubmitting: boolean;
+  editingVideo: DraftVideo | null;
   defaultUrl?: string;
+  onSubmit: (payload: VideoPayload) => void;
 }) {
   const t = useT();
+  const [error, setError] = useState<DialogError | null>(null);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const payload: VideoPayload = {
+      url: String(fd.get("url") ?? "").trim(),
+      title: String(fd.get("title") ?? "").trim() || null,
+      isPinned: fd.get("isPinned") === "true",
+    };
+    const errorKey = validateVideoInput(payload);
+    if (errorKey) {
+      const field = errorKey === "meEdit.videoTitleMaxLength" ? "video-title" : "video-url";
+      setError({ field, message: t(errorKey) });
+      document.getElementById(field)?.focus();
+      return;
+    }
+    onSubmit(payload);
+  };
+
+  const fieldProps = (id: string) => ({
+    "aria-invalid": error?.field === id || undefined,
+    "aria-describedby": error?.field === id ? `${id}-error` : undefined,
+    onInput: () => setError((prev) => (prev?.field === id ? null : prev)),
+  });
+
   return (
-    <videoFetcher.Form method="post">
-      <input type="hidden" name="_action" value={editingVideo ? "update_video" : "create_video"} />
-      {editingVideo && <input type="hidden" name="id" value={editingVideo.id} />}
+    // 検証は欄ごと（欄の下のエラー）に自前でやる。ブラウザ標準の吹き出しはロケールがブラウザの言語になるので切る
+    <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>
           {editingVideo ? t("meEdit.videoDialogEditTitle") : t("meEdit.videoDialogAddTitle")}
@@ -1159,8 +537,10 @@ function VideoDialog({
             type="url"
             defaultValue={editingVideo?.url ?? defaultUrl ?? ""}
             placeholder="https://www.youtube.com/watch?v=..."
-            required
+            aria-required
+            {...fieldProps("video-url")}
           />
+          <DialogFieldError id="video-url-error" error={error} field="video-url" />
           <p className="text-xs text-muted-foreground">{t("meEdit.videoUrlHint")}</p>
         </div>
         <div className="space-y-2">
@@ -1170,8 +550,10 @@ function VideoDialog({
             name="title"
             defaultValue={editingVideo?.title ?? ""}
             placeholder={t("meEdit.videoTitlePlaceholder")}
-            maxLength={100}
+            maxLength={PROFILE_FIELD_LIMITS.videoTitle}
+            {...fieldProps("video-title")}
           />
+          <DialogFieldError id="video-title-error" error={error} field="video-title" />
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -1185,44 +567,77 @@ function VideoDialog({
           </div>
           <p className="text-xs text-muted-foreground">{t("meEdit.videoPinnedHint")}</p>
         </div>
+        <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
       </div>
       <DialogFooter>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {editingVideo ? t("meEdit.videoUpdate") : t("meEdit.videoAdd")}
-        </Button>
+        <DialogClose asChild>
+          <Button type="button" variant="outline">{t("meEdit.cancel")}</Button>
+        </DialogClose>
+        <Button type="submit">{editingVideo ? t("meEdit.videoUpdate") : t("meEdit.videoAdd")}</Button>
       </DialogFooter>
-    </videoFetcher.Form>
+    </form>
+  );
+}
+
+// 未保存（保存バーで保存するまで反映されない）項目に付けるバッジ
+function PendingBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <Badge variant="outline" className="text-warning border-warning/50 bg-warning/10 text-xs">
+      {children}
+    </Badge>
+  );
+}
+
+// 下書きの項目単位の取り消しボタン
+function UndoButton({ onClick, disabled, title }: { onClick: () => void; disabled?: boolean; title?: string }) {
+  const t = useT();
+  return (
+    // 無効なボタンは title が出ないため、理由は外側の span に付ける
+    <span title={title}>
+      <Button variant="ghost" size="sm" type="button" className="min-h-11 sm:min-h-8" onClick={onClick} disabled={disabled}>
+        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+        {t("meEdit.undoChange")}
+      </Button>
+    </span>
   );
 }
 
 export default function EditProfilePage() {
   const t = useT();
+  // 「はじめに」（MeChecklist、first）が出ている間は、MCID 欄を first にしない（罫線の無い欄が2つ続くため）
+  // 閉じた直後は loader を再取得しない（記録は素の fetch）ので、閉じたことはこの画面の状態で持つ
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
+  const layoutData = useRouteLoaderData("routes/me/_layout") as { checklist?: unknown } | undefined;
+  const hasChecklist = !checklistDismissed && layoutData?.checklist != null;
   const locale = useLocale();
-  const { user, links, videos, legacyApiUrl, hasExistingData, translationEnabled } =
-    useLoaderData<typeof loader>();
+  const { user, links, videos, translationEnabled } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const linkFetcher = useFetcher<typeof action>();
-  const videoFetcher = useFetcher<typeof action>();
-  const deleteFetcher = useFetcher<typeof action>();
-  const importFetcher = useFetcher<typeof action>();
-  const mcidFetcher = useFetcher<typeof action>();
-  const bedrockMcidFetcher = useFetcher<typeof action>();
+
+  // MCID・リンク・動画は保存バーで保存するまで下書き（draft）にだけ持ち、保存時に差分を1リクエストで送る
+  // （docs/profiles.md「/me/edit の保存方式」）。savedDraft は dirty 判定・取り消しの基準
+  const loaderDraft = useMemo(() => buildProfileDraft({ user, links, videos }), [user, links, videos]);
+  const [draft, setDraft] = useState<ProfileDraft>(loaderDraft);
+  const [savedDraft, setSavedDraft] = useState<ProfileDraft>(loaderDraft);
+  // 保存時にサーバーが返した検証エラー（MCID・リンク行・動画行）
+  const [fieldErrors, setFieldErrors] = useState<ProfileFieldErrors>({});
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMcidDialogOpen, setIsMcidDialogOpen] = useState(false);
   const [isBedrockMcidDialogOpen, setIsBedrockMcidDialogOpen] = useState(false);
-  const [editingLink, setEditingLink] = useState<typeof links[0] | null>(null);
-  const [editingVideo, setEditingVideo] = useState<typeof videos[0] | null>(null);
-  const [confirmText, setConfirmText] = useState("");
+  const [editingLink, setEditingLink] = useState<DraftLink | null>(null);
+  const [editingVideo, setEditingVideo] = useState<DraftVideo | null>(null);
   const [newMcid, setNewMcid] = useState("");
+  const [mcidCheck, setMcidCheck] = useState<{ status: "idle" | "checking" | "error"; message?: string }>({
+    status: "idle",
+  });
   const [newBedrockMcid, setNewBedrockMcid] = useState("");
+  const [bedrockError, setBedrockError] = useState<string | null>(null);
+  // MCID 事前照合のリクエスト番号（古い結果を捨てるため）
+  const mcidCheckSeqRef = useRef(0);
   const [selectedPose, setSelectedPose] = useState<PoseName>(
     (user.profilePose as PoseName) ?? "waving"
   );
-  const [importCompleted, setImportCompleted] = useState(false);
 
   // RTA歴（"YYYY-MM"）を年・月のセレクト値に分解する。未回答・不正値は両方 ""（未選択）
   const initialRtaStarted = parseRtaStartedYearMonth(user.rtaStartedYearMonth ?? "");
@@ -1254,27 +669,56 @@ export default function EditProfilePage() {
     bio: user.bio ?? "",
     location: user.location ?? "",
     pronouns: user.pronouns ?? "",
-    profileVisibility: user.profileVisibility ?? "public",
+    ageGroup: user.ageGroup ?? "",
+    ageGroupPublic: (user.ageGroup ?? null) !== null && user.ageGroupPublic,
     profilePose: (user.profilePose as PoseName) ?? "waving",
     slimSkin: user.slimSkin ?? false,
     capeDisplay: (user.capeDisplay as CapeDisplay) ?? "cape",
-    defaultProfileTab: user.defaultProfileTab ?? "profile",
     mainPlatform: user.mainPlatform ?? "",
     role: user.role ?? "",
     shortBio: user.shortBio ?? "",
     rtaStartedYear: initialRtaStartedYear,
     rtaStartedMonth: initialRtaStartedMonth,
     speedruncomUsername: user.speedruncomUsername ?? "",
-    showPacemanOnHome: user.showPacemanOnHome ?? true,
-    showTwitchOnHome: user.showTwitchOnHome ?? true,
-    showYoutubeOnHome: user.showYoutubeOnHome ?? true,
-    showRankedStats: user.showRankedStats ?? true,
-    showPacemanStats: user.showPacemanStats ?? true,
     allowAutoTranslation: user.allowAutoTranslation ?? true,
   });
 
+  // カスタムスキン/マントの URL。アップローダーが API 経由で即時保存するので、完了時にここだけ更新する
+  // （ページ再読込や loader 再検証をすると未保存の下書きが消えるため、loader の値を初期値にローカルで持つ）
+  const [customSkinUrl, setCustomSkinUrl] = useState<string | null>(user.customSkinUrl);
+  const [customCapeUrl, setCustomCapeUrl] = useState<string | null>(user.customCapeUrl);
+
   const [formValues, setFormValues] = useState(buildFormValues);
-  const initialFormValues = useRef(buildFormValues());
+
+  // Radix の SelectValue は SSR で選択中の項目の文字を描けないため、今の値の表示文字を明示して渡す
+  const selectedAgeGroup = parseAgeGroup(formValues.ageGroup);
+  const mainPlatformLabels: Record<string, string> = {
+    pc_windows: t("playerProfile.platformPcWindows"),
+    pc_mac: t("playerProfile.platformPcMac"),
+    pc_linux: t("playerProfile.platformPcLinux"),
+    switch: "Switch",
+    mobile: t("meEdit.mobile"),
+    other: t("meEdit.other"),
+  };
+  const roleLabels: Record<string, string> = {
+    runner: t("meEdit.roleRunner"),
+    viewer: t("meEdit.roleViewer"),
+  };
+
+  // エラーの欄へスクロールしてフォーカスする（保存バーの裏は scroll-padding が避ける）。
+  // 対象が描画されていなければ何もしない
+  const focusErrorTarget = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    });
+  }, []);
+  // 保存済みの値（dirty 判定の基準）。保存成功時に送信時点のスナップショットへ更新する
+  const [savedFormValues, setSavedFormValues] = useState(buildFormValues);
+  const submittedValuesRef = useRef<ReturnType<typeof buildFormValues> | null>(null);
 
   // selectedPoseをformValuesに同期
   useEffect(() => {
@@ -1284,8 +728,9 @@ export default function EditProfilePage() {
     }));
   }, [selectedPose]);
 
-  // 変更チェック
-  const hasChanges = JSON.stringify(formValues) !== JSON.stringify(initialFormValues.current);
+  // 変更チェック（フォーム値 ＋ MCID・リンク・動画の下書き）
+  const hasChanges =
+    JSON.stringify(formValues) !== JSON.stringify(savedFormValues) || hasProfileChanges(savedDraft, draft);
 
   // 入力変更ハンドラ
   const handleInputChange = useCallback((field: keyof typeof formValues, value: string) => {
@@ -1351,10 +796,32 @@ export default function EditProfilePage() {
   }, [rtaStartedYear, rtaStartedMonth, locale, t]);
 
   // フォームリセット
+  // 「元に戻す」の間に基準（保存済みの値）が差し替わっていないか見るための最新値
+  const latestBaseRef = useRef({ savedFormValues, savedDraft });
+  latestBaseRef.current = { savedFormValues, savedDraft };
+
   const handleReset = useCallback(() => {
-    setFormValues(initialFormValues.current);
-    setSelectedPose((initialFormValues.current.profilePose as PoseName) ?? "waving");
-  }, []);
+    const prev = { formValues, selectedPose, draft, fieldErrors };
+    const base = { savedFormValues, savedDraft };
+    setFormValues(savedFormValues);
+    setSelectedPose((savedFormValues.profilePose as PoseName) ?? "waving");
+    setDraft(savedDraft);
+    setFieldErrors({});
+    return () => {
+      // 再取得で基準が変わっていたら、古い下書きを新しい基準に被せない
+      if (
+        !jsonEqual(latestBaseRef.current.savedFormValues, base.savedFormValues) ||
+        !jsonEqual(latestBaseRef.current.savedDraft, base.savedDraft)
+      ) {
+        return false;
+      }
+      setFormValues(prev.formValues);
+      setSelectedPose(prev.selectedPose);
+      setDraft(prev.draft);
+      setFieldErrors(prev.fieldErrors);
+      return true;
+    };
+  }, [formValues, selectedPose, draft, fieldErrors, savedFormValues, savedDraft]);
 
   // 保存処理
   const handleSave = useCallback(() => {
@@ -1362,20 +829,22 @@ export default function EditProfilePage() {
     // RTA歴は年・月の両方を選ぶか、両方未選択（未回答）のみ有効
     if (isRtaStartedIncomplete) {
       toast.error(t("meEdit.rtaStartedBothOrNone"));
+      focusErrorTarget(rtaStartedYear ? "rtaStartedMonth" : "rtaStartedYear");
       return;
     }
 
     const formData = new FormData();
+    formData.set("_action", "save_all");
     formData.set("displayName", formValues.displayName);
     formData.set("displayNameAlphabet", formValues.displayNameAlphabet);
     formData.set("bio", formValues.bio);
     formData.set("location", formValues.location);
     formData.set("pronouns", formValues.pronouns);
-    formData.set("profileVisibility", formValues.profileVisibility);
+    formData.set("ageGroup", formValues.ageGroup);
+    formData.set("ageGroupPublic", String(formValues.ageGroup !== "" && formValues.ageGroupPublic));
     formData.set("profilePose", formValues.profilePose);
     formData.set("slimSkin", String(formValues.slimSkin));
     formData.set("capeDisplay", formValues.capeDisplay);
-    formData.set("defaultProfileTab", formValues.defaultProfileTab);
     formData.set("mainPlatform", formValues.mainPlatform);
     formData.set("role", formValues.role);
     formData.set("shortBio", formValues.shortBio);
@@ -1385,183 +854,398 @@ export default function EditProfilePage() {
         ? `${rtaStartedYear}-${rtaStartedMonth.padStart(2, "0")}`
         : "",
     );
-    formData.set("speedruncomUsername", formValues.speedruncomUsername);
-    formData.set("showPacemanOnHome", String(formValues.showPacemanOnHome));
-    formData.set("showTwitchOnHome", String(formValues.showTwitchOnHome));
-    formData.set("showYoutubeOnHome", String(formValues.showYoutubeOnHome));
-    formData.set("showRankedStats", String(formValues.showRankedStats));
-    formData.set("showPacemanStats", String(formValues.showPacemanStats));
+    // 同じ保存に speedrun.com リンクの変更があるときはサーバーがリンクを優先するため、
+    // フォーム欄の手入力値ではなくリンクの下書きから決めた値を送り、「保存済み」としても扱う
+    const speedruncomUsername = resolveSpeedrunUsernameForSave(savedDraft, draft, formValues.speedruncomUsername);
+    formData.set("speedruncomUsername", speedruncomUsername);
     // 機能無効時はスイッチを出さないので送らない（action は未送信なら列を上書きしない）
     if (translationEnabled) {
       formData.set("allowAutoTranslation", String(formValues.allowAutoTranslation));
     }
+    // MCID・リンク・動画の差分（無ければ送らない）
+    const changes = buildProfileChanges(savedDraft, draft);
+    if (Object.keys(changes).length > 0) {
+      formData.set("changes", JSON.stringify(changes));
+    }
+    setFieldErrors({});
+    submittedValuesRef.current = { ...formValues, speedruncomUsername };
+    if (speedruncomUsername !== formValues.speedruncomUsername) {
+      setFormValues((prev) => ({ ...prev, speedruncomUsername }));
+    }
     fetcher.submit(formData, { method: "post" });
-  }, [fetcher, formValues, isRtaStartedIncomplete, t, translationEnabled]);
-
-  // ポーズ変更を同期
-  useEffect(() => {
-    setFormValues((prev) => ({ ...prev, profilePose: selectedPose }));
-  }, [selectedPose]);
+  }, [fetcher, formValues, draft, savedDraft, isRtaStartedIncomplete, t, translationEnabled, focusErrorTarget]);
 
   // ポーズプレビュー用のマント。capeDisplay は保存前のフォーム値を使う（選択が即プレビューに反映される）
   const capeProps = resolveCapeProps({
     uuid: user.uuid,
-    customCapeUrl: user.customCapeUrl,
+    customCapeUrl: customCapeUrl,
     capeDisplay: formValues.capeDisplay,
   });
 
-  const isSubmitting = fetcher.state === "submitting";
-  const isLinkSubmitting = linkFetcher.state === "submitting";
-  const isVideoSubmitting = videoFetcher.state === "submitting";
-  const isDeleting = deleteFetcher.state === "submitting";
-  const isImporting = importFetcher.state === "submitting";
-  const isMcidSubmitting = mcidFetcher.state === "submitting";
-  const isBedrockMcidSubmitting = bedrockMcidFetcher.state === "submitting";
+  // 保存中〜保存後の再取得（loading）が終わるまでは idle にならない（二重送信で新規行が重複するのを防ぐ）
+  const isSubmitting = fetcher.state !== "idle";
   const data = fetcher.data;
-  const linkData = linkFetcher.data;
-  const videoData = videoFetcher.data;
-  const deleteData = deleteFetcher.data;
-  const importData = importFetcher.data;
-  const mcidData = mcidFetcher.data;
-  const bedrockMcidData = bedrockMcidFetcher.data;
 
   const prevDataRef = useRef<typeof fetcher.data>(undefined);
-  const prevLinkDataRef = useRef<typeof linkFetcher.data>(undefined);
-  const prevVideoDataRef = useRef<typeof videoFetcher.data>(undefined);
-  const prevImportDataRef = useRef<typeof importFetcher.data>(undefined);
-  const prevMcidDataRef = useRef<typeof mcidFetcher.data>(undefined);
-  const prevBedrockMcidDataRef = useRef<typeof bedrockMcidFetcher.data>(undefined);
 
-  // 保存成功後に初期値を更新
+  // 保存成功後に基準値を更新（レスポンスごとに1回だけ。送信時点の値を使うので保存中の入力は未保存のまま残る）
+  const handledSaveDataRef = useRef<typeof fetcher.data>(undefined);
   useEffect(() => {
-    if (data && "success" in data && data.action === "profile") {
-      initialFormValues.current = { ...formValues };
+    if (!data || data === handledSaveDataRef.current) return;
+    handledSaveDataRef.current = data;
+    if ("success" in data && data.action === "profile" && submittedValuesRef.current) {
+      setSavedFormValues(submittedValuesRef.current);
     }
-  }, [data, formValues]);
+  }, [data]);
 
-  // プロフィール更新のトースト
+  // loader の再取得結果を下書きへ取り込む。保存成功後は新規行に実 id が振られているため必ず取り込み直す
+  // （そのままだと新規行が再び「作成」扱いになり重複する）。未保存の変更が無いときも最新に追従する。
+  // 保存中は下書きを変える操作をすべて無効化している（disabled={isSubmitting}）ので、取り込みで編集中の内容を失うことはない
+  const rebasedDataRef = useRef<typeof fetcher.data>(undefined);
+  const latestDraftRef = useRef({ draft, savedDraft });
+  latestDraftRef.current = { draft, savedDraft };
+  useEffect(() => {
+    const saved = Boolean(data && "success" in data && data.success && data.action === "profile");
+    const justSaved = saved && fetcher.state === "idle" && data !== rebasedDataRef.current;
+    const { draft: currentDraft, savedDraft: currentSaved } = latestDraftRef.current;
+    if (justSaved || !hasProfileChanges(currentSaved, currentDraft)) {
+      if (justSaved) rebasedDataRef.current = data;
+      setSavedDraft(loaderDraft);
+      setDraft(loaderDraft);
+    }
+  }, [loaderDraft, data, fetcher.state]);
+
+  // プロフィール保存のトースト。検証エラーは項目ごとのエラー表示にも反映する
   useEffect(() => {
     if (!data || data === prevDataRef.current) return;
     prevDataRef.current = data;
 
     if ("success" in data && data.action === "profile") {
       toast.success(t("meEdit.profileUpdated"));
-    } else if ("error" in data && !("action" in data)) {
+      setFieldErrors({});
+    } else if ("error" in data) {
       toast.error(data.error);
+      const errors = ("fieldErrors" in data && data.fieldErrors) || {};
+      setFieldErrors(errors);
+      // ページ順（MCID → Bedrock → リンク → 動画）で最初のエラー欄へ連れて行く
+      const firstLink = latestDraftRef.current.draft.links.find((l) => errors.links?.[l.key]);
+      const firstVideo = latestDraftRef.current.draft.videos.find((v) => errors.videos?.[v.key]);
+      const targetId = errors.mcid
+        ? "edit-error-mcid"
+        : errors.bedrockMcid
+          ? "edit-error-bedrockMcid"
+          : firstLink
+            ? `edit-error-link-${firstLink.key}`
+            : firstVideo
+              ? `edit-error-video-${firstVideo.key}`
+              : null;
+      if (targetId) focusErrorTarget(targetId);
     }
-  }, [data]);
+  }, [data, focusErrorTarget]);
 
-  // ソーシャルリンク更新のトースト
-  useEffect(() => {
-    if (!linkData || linkData === prevLinkDataRef.current) return;
-    prevLinkDataRef.current = linkData;
+  // ---- 下書きの操作（保存は保存バーでまとめて行う） ----
+  const isMcidChanged = draft.mcid.value !== savedDraft.mcid.value;
+  const isBedrockChanged = draft.bedrockMcid !== savedDraft.bedrockMcid;
+  const deletedLinks = savedDraft.links.filter((l) => !draft.links.some((d) => d.id === l.id));
+  const deletedVideos = savedDraft.videos.filter((v) => !draft.videos.some((d) => d.id === v.id));
 
-    if ("success" in linkData && linkData.action === "link") {
-      toast.success(t("meEdit.socialUpdated"));
-      setIsDialogOpen(false);
-    } else if ("error" in linkData) {
-      toast.error(linkData.error);
+  const isLinkEdited = (link: DraftLink) => {
+    const before = link.id ? savedDraft.links.find((l) => l.id === link.id) : undefined;
+    if (!before) return false;
+    const norm = (l: DraftLink) =>
+      JSON.stringify([
+        l.platform,
+        l.identifier.trim(),
+        l.platform === "custom" ? l.customLabel.trim() : "",
+        l.platform === "custom" ? l.customUrl.trim() : "",
+      ]);
+    return norm(before) !== norm(link);
+  };
+  const isVideoEdited = (video: DraftVideo) => {
+    const before = video.id ? savedDraft.videos.find((v) => v.id === video.id) : undefined;
+    if (!before) return false;
+    return (
+      before.url.trim() !== video.url.trim() ||
+      before.title.trim() !== video.title.trim() ||
+      before.isPinned !== video.isPinned
+    );
+  };
+
+  const clearRowError = (kind: "links" | "videos", key: string) => {
+    setFieldErrors((prev) => {
+      const group = prev[kind];
+      if (!group || !(key in group)) return prev;
+      const rest = { ...group };
+      delete rest[key];
+      return { ...prev, [kind]: rest };
+    });
+  };
+
+  // リンク。speedrun.com リンクが増減・変更したら、フォームの speedruncomUsername もそれに合わせる
+  // （サーバーは同じ保存に speedrun.com リンクの変更があればリンクを優先するため、画面上も同じ値にしておく）
+  const updateLinks = (nextLinks: DraftLink[]) => {
+    const before = speedrunLinkIdentifier(draft.links);
+    const after = speedrunLinkIdentifier(nextLinks);
+    setDraft((prev) => ({ ...prev, links: nextLinks }));
+    if (before !== after) {
+      setFormValues((prev) => ({ ...prev, speedruncomUsername: after ?? "" }));
     }
-  }, [linkData]);
-
-  // 動画更新のトースト
-  useEffect(() => {
-    if (!videoData || videoData === prevVideoDataRef.current) return;
-    prevVideoDataRef.current = videoData;
-
-    if ("success" in videoData && videoData.action === "video") {
-      toast.success(t("meEdit.videosUpdated"));
-      setIsVideoDialogOpen(false);
-    } else if ("error" in videoData) {
-      toast.error(videoData.error);
-    }
-  }, [videoData]);
-
-  // インポート結果のトースト
-  useEffect(() => {
-    if (!importData || importData === prevImportDataRef.current) return;
-    prevImportDataRef.current = importData;
-
-    if ("success" in importData && importData.action === "import") {
-      const parts: string[] = [];
-      if ("keybindingsImported" in importData && (importData.keybindingsImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedKeybindingsCount", { count: importData.keybindingsImported ?? 0 }));
-      }
-      if ("customKeysImported" in importData && (importData.customKeysImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedCustomKeysCount", { count: importData.customKeysImported ?? 0 }));
-      }
-      if ("remapsImported" in importData && (importData.remapsImported ?? 0) > 0) {
-        parts.push(t("meEdit.importedRemapsCount", { count: importData.remapsImported ?? 0 }));
-      }
-      if ("fingerAssignmentsImported" in importData && importData.fingerAssignmentsImported) {
-        parts.push(t("meEdit.importedFingerAssignments"));
-      }
-      if ("settingsImported" in importData && importData.settingsImported) {
-        parts.push(t("meEdit.importedSettings"));
-      }
-      if (parts.length > 0) {
-        toast.success(t("meEdit.importCompletedWithDetail", { detail: parts.join(t("common.listSeparatorComma")) }));
-      } else {
-        toast.success(t("meEdit.importCompletedNoData"));
-      }
-      setImportCompleted(true);
-    } else if ("error" in importData && importData.action === "import") {
-      toast.error(importData.error);
-    }
-  }, [importData]);
-
-  // MCID変更結果のトースト
-  useEffect(() => {
-    if (!mcidData || mcidData === prevMcidDataRef.current) return;
-    prevMcidDataRef.current = mcidData;
-
-    if ("success" in mcidData && mcidData.action === "mcid") {
-      toast.success(t("meEdit.mcidChanged"));
-      setIsMcidDialogOpen(false);
-      // ページをリロードして新しいデータを反映
-      window.location.reload();
-    } else if ("success" in mcidData && mcidData.action === "mcid_removed") {
-      toast.success(t("meEdit.mcidRemoved"));
-      window.location.reload();
-    }
-  }, [mcidData]);
-
-  // Bedrock版MCID変更結果のトースト（slugは変わらないためリロードは不要）
-  useEffect(() => {
-    if (!bedrockMcidData || bedrockMcidData === prevBedrockMcidDataRef.current) return;
-    prevBedrockMcidDataRef.current = bedrockMcidData;
-
-    if ("success" in bedrockMcidData && bedrockMcidData.action === "bedrock_mcid") {
-      toast.success(t("meEdit.bedrockMcidChanged"));
-      setIsBedrockMcidDialogOpen(false);
-      setNewBedrockMcid("");
-    } else if ("success" in bedrockMcidData && bedrockMcidData.action === "bedrock_mcid_removed") {
-      toast.success(t("meEdit.bedrockMcidRemoved"));
-    }
-  }, [bedrockMcidData]);
+  };
 
   const handleOpenCreate = () => {
     setEditingLink(null);
     setIsDialogOpen(true);
   };
 
-  const handleOpenEdit = (link: typeof links[0]) => {
+  const handleOpenEdit = (link: DraftLink) => {
     setEditingLink(link);
     setIsDialogOpen(true);
   };
 
+  const handleLinkSubmit = (payload: LinkPayload) => {
+    const apply = {
+      platform: payload.platform,
+      identifier: payload.identifier,
+      customLabel: payload.customLabel ?? "",
+      customUrl: payload.customUrl ?? "",
+    };
+    if (editingLink) {
+      updateLinks(draft.links.map((l) => (l.key === editingLink.key ? { ...l, ...apply } : l)));
+      clearRowError("links", editingLink.key);
+    } else {
+      updateLinks([...draft.links, { key: newDraftKey(), id: null, ...apply }]);
+    }
+    setIsDialogOpen(false);
+  };
+
+  const handleLinkRemove = (key: string) => {
+    updateLinks(draft.links.filter((l) => l.key !== key));
+    clearRowError("links", key);
+  };
+
+  // 取り消し（復元）すると同じプラットフォームのリンクが重複する場合は復元できない
+  const isRestoreBlocked = (link: DraftLink) =>
+    link.platform !== "custom" && draft.links.some((l) => l.platform === link.platform);
+
+  const handleLinkRestore = (link: DraftLink) => {
+    const index = savedDraft.links.findIndex((l) => l.key === link.key);
+    const next = [...draft.links];
+    next.splice(Math.min(Math.max(index, 0), next.length), 0, link);
+    updateLinks(next);
+  };
+
+  const handleLinkUndoEdit = (key: string) => {
+    const original = savedDraft.links.find((l) => l.key === key);
+    if (!original) return;
+    updateLinks(draft.links.map((l) => (l.key === key ? original : l)));
+    clearRowError("links", key);
+  };
+
+  // 動画
   const handleOpenVideoCreate = () => {
     setEditingVideo(null);
     setIsVideoDialogOpen(true);
   };
 
-  const handleOpenVideoEdit = (video: typeof videos[0]) => {
+  const handleOpenVideoEdit = (video: DraftVideo) => {
     setEditingVideo(video);
     setIsVideoDialogOpen(true);
   };
 
+  const handleVideoSubmit = (payload: VideoPayload) => {
+    const apply = { url: payload.url, title: payload.title ?? "", isPinned: payload.isPinned };
+    if (editingVideo) {
+      setDraft((prev) => ({
+        ...prev,
+        videos: prev.videos.map((v) => (v.key === editingVideo.key ? { ...v, ...apply } : v)),
+      }));
+      clearRowError("videos", editingVideo.key);
+    } else {
+      setDraft((prev) => ({
+        ...prev,
+        videos: [...prev.videos, { key: newDraftKey(), id: null, ...apply }],
+      }));
+    }
+    setIsVideoDialogOpen(false);
+  };
+
+  const handleVideoRemove = (key: string) => {
+    setDraft((prev) => ({ ...prev, videos: prev.videos.filter((v) => v.key !== key) }));
+    clearRowError("videos", key);
+  };
+
+  const handleVideoRestore = (video: DraftVideo) => {
+    const index = savedDraft.videos.findIndex((v) => v.key === video.key);
+    setDraft((prev) => {
+      const next = [...prev.videos];
+      next.splice(Math.min(Math.max(index, 0), next.length), 0, video);
+      return { ...prev, videos: next };
+    });
+  };
+
+  const handleVideoMove = (key: string, direction: "up" | "down") => {
+    setDraft((prev) => ({ ...prev, videos: moveDraftVideo(prev.videos, key, direction) }));
+  };
+
+  // Java 版 MCID。確定時に Mojang 照合（/api/me/mcid-check）し、確認できたものだけ下書きに載せる。
+  // 保存時にもサーバーが再照合する（この結果は信用されない）
+  const handleMcidUndo = () => {
+    setDraft((prev) => ({ ...prev, mcid: savedDraft.mcid }));
+    setFieldErrors((prev) => ({ ...prev, mcid: undefined }));
+  };
+
+  const handleMcidRemove = () => {
+    setDraft((prev) => ({ ...prev, mcid: { value: null, uuid: null } }));
+    setFieldErrors((prev) => ({ ...prev, mcid: undefined }));
+  };
+
+  const handleMcidSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = newMcid.trim();
+    const formatKey = validateMcidFormat(value);
+    if (formatKey) {
+      setMcidCheck({ status: "error", message: t(formatKey) });
+      return;
+    }
+    // 保存済みの MCID と同じなら「変更なし」に戻すだけ（照合不要）
+    if (value === savedDraft.mcid.value) {
+      handleMcidUndo();
+      setIsMcidDialogOpen(false);
+      return;
+    }
+    setMcidCheck({ status: "checking" });
+    const seq = ++mcidCheckSeqRef.current;
+    try {
+      const res = await fetch(`/api/me/mcid-check?mcid=${encodeURIComponent(value)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error(`mcid-check ${res.status}`);
+      const result = (await res.json()) as McidCheckResult;
+      // ダイアログを閉じた・再度確定した後に返ってきた古い結果は捨てる
+      if (seq !== mcidCheckSeqRef.current) return;
+      if (result.status === "ok") {
+        setDraft((prev) => ({ ...prev, mcid: { value: result.mcid, uuid: result.uuid } }));
+        setFieldErrors((prev) => ({ ...prev, mcid: undefined }));
+        setIsMcidDialogOpen(false);
+        setNewMcid("");
+        setMcidCheck({ status: "idle" });
+        return;
+      }
+      const message =
+        result.status === "invalid"
+          ? t("meEdit.mcidLength")
+          : result.status === "taken"
+            ? t("meEdit.mcidTaken")
+            : result.status === "not_found"
+              ? t("meEdit.mcidNotFound")
+              : t("meEdit.mcidVerifyFailed");
+      setMcidCheck({ status: "error", message });
+    } catch {
+      if (seq !== mcidCheckSeqRef.current) return;
+      setMcidCheck({ status: "error", message: t("meEdit.mcidVerifyFailed") });
+    }
+  };
+
+  // Bedrock 版 MCID（自己申告。Mojang 照合なし）
+  const handleBedrockUndo = () => {
+    setDraft((prev) => ({ ...prev, bedrockMcid: savedDraft.bedrockMcid }));
+    setFieldErrors((prev) => ({ ...prev, bedrockMcid: undefined }));
+  };
+
+  const handleBedrockRemove = () => {
+    setDraft((prev) => ({ ...prev, bedrockMcid: null }));
+    setFieldErrors((prev) => ({ ...prev, bedrockMcid: undefined }));
+  };
+
+  const handleBedrockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = newBedrockMcid.trim();
+    const errorKey = validateBedrockMcidFormat(value);
+    if (errorKey) {
+      setBedrockError(t(errorKey));
+      return;
+    }
+    setDraft((prev) => ({ ...prev, bedrockMcid: value }));
+    setFieldErrors((prev) => ({ ...prev, bedrockMcid: undefined }));
+    setIsBedrockMcidDialogOpen(false);
+    setNewBedrockMcid("");
+    setBedrockError(null);
+  };
+
+  const renderMcidDialog = (trigger: React.ReactNode) => (
+    <Dialog
+      open={isMcidDialogOpen}
+      onOpenChange={(open) => {
+        setIsMcidDialogOpen(open);
+        if (!open) {
+          mcidCheckSeqRef.current++; // 進行中の照合結果を無効化する
+          setNewMcid("");
+          setMcidCheck({ status: "idle" });
+        }
+      }}
+    >
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {draft.mcid.value ? t("meEdit.changeMcidTitle") : t("meEdit.setMcidTitle")}
+          </DialogTitle>
+          <DialogDescription>
+            {draft.mcid.value ? t("meEdit.changeMcidDesc") : t("meEdit.setMcidDesc")}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleMcidSubmit}>
+          <div className="space-y-4 py-4">
+            {draft.mcid.value && (
+              <NoticeBanner tone="warning" icon={AlertCircle}>
+                {t("meEdit.mcidUrlChangeWarning")}
+              </NoticeBanner>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="new-mcid">
+                {draft.mcid.value ? t("meEdit.newMcid") : t("meEdit.minecraftIdTitle")}
+              </Label>
+              <Input
+                id="new-mcid"
+                name="mcid"
+                value={newMcid}
+                onChange={(e) => {
+                  setNewMcid(e.target.value);
+                  if (mcidCheck.status === "error") setMcidCheck({ status: "idle" });
+                }}
+                placeholder={t("meEdit.mcidExample")}
+                minLength={PROFILE_FIELD_LIMITS.mcidMin}
+                maxLength={PROFILE_FIELD_LIMITS.mcidMax}
+              />
+            </div>
+            {mcidCheck.status === "error" && (
+              <NoticeBanner tone="error" icon={AlertCircle}>
+                {mcidCheck.message}
+              </NoticeBanner>
+            )}
+            <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={!newMcid.trim() || mcidCheck.status === "checking"}>
+              {mcidCheck.status === "checking" ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("meEdit.mcidChecking")}
+                </>
+              ) : draft.mcid.value ? (
+                t("meEdit.applyMcidChange")
+              ) : (
+                t("meEdit.setMcid")
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-7 pb-24 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold">{t("meEdit.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground">
@@ -1569,233 +1253,121 @@ export default function EditProfilePage() {
         </p>
       </div>
 
-      {/* Legacy Import Card */}
-      {legacyApiUrl && !importCompleted && !hasExistingData && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Download className="h-5 w-5" />
-              {t("meEdit.importFromLegacyTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("meEdit.importFromLegacyDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <importFetcher.Form method="post">
-              <input type="hidden" name="_action" value="import_legacy" />
-              <Button type="submit" disabled={isImporting}>
-                {isImporting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("meEdit.importing")}
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    {t("meEdit.importData")}
-                  </>
-                )}
-              </Button>
-            </importFetcher.Form>
-          </CardContent>
-        </Card>
-      )}
+      <MeChecklist onDismiss={() => setChecklistDismissed(true)} />
 
-      <div className="space-y-6">
-        {/* MCID & Skin Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("meEdit.mcidSkinTitle")}</CardTitle>
-            <CardDescription>
-              {t("meEdit.mcidSkinDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* MCID設定 */}
+      <div className="space-y-7 sm:space-y-8">
+        {/* MCID & Skin Section（ツアーの「プロフィール編集」の指す先） */}
+        <div data-me-tour="edit-form">
+        <PageSection
+          id="edit-mcid"
+          first={!hasChecklist}
+          title={t("meEdit.mcidTitle")}
+          className="space-y-6"
+        >
+            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.mcidDesc")}</p>
+            {/* MCID設定（下書き。保存バーで保存するまで反映されない） */}
             <div className="space-y-3">
-              <Label>{t("meEdit.minecraftIdTitle")}</Label>
-              {user.mcid ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden">
-                      <MinecraftAvatar uuid={user.uuid} skinUrl={user.customSkinUrl} size={64} />
+              <h3 className="text-base font-semibold">{t("meEdit.minecraftIdTitle")}</h3>
+              {draft.mcid.value ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0">
+                      <MinecraftAvatar uuid={draft.mcid.uuid} skinUrl={customSkinUrl} size={64} />
                     </div>
-                    <div>
-                      <p className="font-medium">@{user.mcid}</p>
-                      <p className="text-xs text-muted-foreground">
-                        UUID: {user.uuid}
+                    <div className="min-w-0">
+                      <p className="font-medium break-all">@{draft.mcid.value}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        UUID: {draft.mcid.uuid}
                       </p>
+                      {isMcidChanged && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
-                      setIsMcidDialogOpen(open);
-                      if (!open) setNewMcid("");
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {t("meEdit.change")}
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>{t("meEdit.changeMcidTitle")}</DialogTitle>
-                          <DialogDescription>
-                            {t("meEdit.changeMcidDesc")}
-                          </DialogDescription>
-                        </DialogHeader>
-                        <mcidFetcher.Form method="post">
-                          <input type="hidden" name="_action" value="set_mcid" />
-                          <div className="space-y-4 py-4">
-                            <Alert>
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>
-                                {t("meEdit.mcidUrlChangeWarning")}
-                              </AlertDescription>
-                            </Alert>
-                            <div className="space-y-2">
-                              <Label htmlFor="new-mcid">{t("meEdit.newMcid")}</Label>
-                              <Input
-                                id="new-mcid"
-                                name="mcid"
-                                value={newMcid}
-                                onChange={(e) => setNewMcid(e.target.value)}
-                                placeholder={t("meEdit.mcidExample")}
-                                minLength={3}
-                                maxLength={16}
-                              />
-                            </div>
-                            {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
-                              <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertDescription>{mcidData.error}</AlertDescription>
-                              </Alert>
-                            )}
-                          </div>
-                          <DialogFooter>
-                            <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
-                              {isMcidSubmitting ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : null}
-                              {t("meEdit.applyMcidChange")}
-                            </Button>
-                          </DialogFooter>
-                        </mcidFetcher.Form>
-                      </DialogContent>
-                    </Dialog>
-                    <mcidFetcher.Form method="post">
-                      <input type="hidden" name="_action" value="remove_mcid" />
-                      <Button variant="ghost" size="sm" type="submit" disabled={isMcidSubmitting}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t("meEdit.delete")}
-                      </Button>
-                    </mcidFetcher.Form>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {isMcidChanged && <UndoButton onClick={handleMcidUndo} disabled={isSubmitting} />}
+                    {renderMcidDialog(
+                      <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {t("meEdit.change")}
+                      </Button>,
+                    )}
+                    <Button variant="ghost" size="sm" type="button" className="min-h-11 sm:min-h-8" onClick={handleMcidRemove} disabled={isSubmitting}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {t("meEdit.delete")}
+                    </Button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
-                  <p className="text-sm text-muted-foreground">{t("meEdit.mcidNotConfigured")}</p>
-                  <Dialog open={isMcidDialogOpen} onOpenChange={(open) => {
-                    setIsMcidDialogOpen(open);
-                    if (!open) setNewMcid("");
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {savedDraft.mcid.value ? t("meEdit.mcidPendingRemove") : t("meEdit.mcidNotConfigured")}
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    {isMcidChanged && <UndoButton onClick={handleMcidUndo} />}
+                    {renderMcidDialog(
+                      <Button size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                         <Plus className="mr-2 h-4 w-4" />
                         {t("meEdit.setMcid")}
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>{t("meEdit.setMcidTitle")}</DialogTitle>
-                        <DialogDescription>
-                          {t("meEdit.setMcidDesc")}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <mcidFetcher.Form method="post">
-                        <input type="hidden" name="_action" value="set_mcid" />
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="new-mcid">{t("meEdit.minecraftIdTitle")}</Label>
-                            <Input
-                              id="new-mcid"
-                              name="mcid"
-                              value={newMcid}
-                              onChange={(e) => setNewMcid(e.target.value)}
-                              placeholder={t("meEdit.mcidExample")}
-                              minLength={3}
-                              maxLength={16}
-                            />
-                          </div>
-                          {mcidData && "error" in mcidData && mcidData.action === "mcid" && (
-                            <Alert variant="destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>{mcidData.error}</AlertDescription>
-                            </Alert>
-                          )}
-                        </div>
-                        <DialogFooter>
-                          <Button type="submit" disabled={isMcidSubmitting || !newMcid}>
-                            {isMcidSubmitting ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : null}
-                            {t("meEdit.setMcid")}
-                          </Button>
-                        </DialogFooter>
-                      </mcidFetcher.Form>
-                    </DialogContent>
-                  </Dialog>
+                      </Button>,
+                    )}
+                  </div>
                 </div>
+              )}
+              {fieldErrors.mcid && (
+                <NoticeBanner tone="error" icon={AlertCircle} id="edit-error-mcid" tabIndex={-1}>
+                  {fieldErrors.mcid}
+                </NoticeBanner>
               )}
             </div>
 
             <Separator />
 
-            {/* Bedrock版MCID（Xboxゲーマータグ）。自己申告のためMojang検証はせず、slug・スキンには影響しない */}
+            {/* Bedrock版MCID（Xboxゲーマータグ）。自己申告のためMojang検証はせず、slug・スキンには影響しない。下書き（保存バーで保存するまで反映されない） */}
             <div className="space-y-3">
-              <Label>{t("meEdit.bedrockMcidTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("meEdit.bedrockMcidTitle")}</h3>
               <p className="text-sm text-muted-foreground">{t("meEdit.bedrockMcidDesc")}</p>
-              <div className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-muted/30">
-                {user.bedrockMcid ? (
-                  <p className="min-w-0 truncate font-medium">@{user.bedrockMcid}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {draft.bedrockMcid ? (
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">@{draft.bedrockMcid}</p>
+                    {isBedrockChanged && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">{t("meEdit.bedrockMcidNotConfigured")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {savedDraft.bedrockMcid
+                      ? t("meEdit.bedrockMcidPendingRemove")
+                      : t("meEdit.bedrockMcidNotConfigured")}
+                  </p>
                 )}
                 <div className="flex shrink-0 gap-2">
+                  {isBedrockChanged && <UndoButton onClick={handleBedrockUndo} disabled={isSubmitting} />}
                   <Dialog
                     open={isBedrockMcidDialogOpen}
                     onOpenChange={(open) => {
                       setIsBedrockMcidDialogOpen(open);
-                      if (open) {
-                        setNewBedrockMcid(user.bedrockMcid ?? "");
-                      } else {
-                        setNewBedrockMcid("");
-                      }
+                      setBedrockError(null);
+                      setNewBedrockMcid(open ? (draft.bedrockMcid ?? "") : "");
                     }}
                   >
                     <DialogTrigger asChild>
-                      <Button variant={user.bedrockMcid ? "outline" : "default"} size="sm">
-                        {user.bedrockMcid ? (
+                      <Button variant={draft.bedrockMcid ? "outline" : "default"} size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
+                        {draft.bedrockMcid ? (
                           <Pencil className="mr-2 h-4 w-4" />
                         ) : (
                           <Plus className="mr-2 h-4 w-4" />
                         )}
-                        {user.bedrockMcid ? t("meEdit.change") : t("meEdit.setBedrockMcid")}
+                        {draft.bedrockMcid ? t("meEdit.change") : t("meEdit.setBedrockMcid")}
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>
-                          {user.bedrockMcid
+                          {draft.bedrockMcid
                             ? t("meEdit.changeBedrockMcidTitle")
                             : t("meEdit.setBedrockMcidTitle")}
                         </DialogTitle>
                         <DialogDescription>{t("meEdit.setBedrockMcidDesc")}</DialogDescription>
                       </DialogHeader>
-                      <bedrockMcidFetcher.Form method="post">
-                        <input type="hidden" name="_action" value="set_bedrock_mcid" />
+                      <form onSubmit={handleBedrockSubmit}>
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
                             <Label htmlFor="new-bedrock-mcid">{t("meEdit.newBedrockMcid")}</Label>
@@ -1805,37 +1377,29 @@ export default function EditProfilePage() {
                               value={newBedrockMcid}
                               onChange={(e) => setNewBedrockMcid(e.target.value)}
                               placeholder={t("meEdit.bedrockMcidExample")}
-                              minLength={3}
-                              maxLength={24}
+                              minLength={PROFILE_FIELD_LIMITS.bedrockMcidMin}
+                              maxLength={PROFILE_FIELD_LIMITS.bedrockMcidMax}
                             />
                           </div>
-                          {bedrockMcidData &&
-                            "error" in bedrockMcidData &&
-                            bedrockMcidData.action === "bedrock_mcid" && (
-                              <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertDescription>{bedrockMcidData.error}</AlertDescription>
-                              </Alert>
-                            )}
+                          {bedrockError && (
+                            <NoticeBanner tone="error" icon={AlertCircle}>
+                              {bedrockError}
+                            </NoticeBanner>
+                          )}
+                          <p className="text-xs text-muted-foreground">{t("meEdit.pendingSaveNote")}</p>
                         </div>
                         <DialogFooter>
-                          <Button
-                            type="submit"
-                            disabled={isBedrockMcidSubmitting || !newBedrockMcid.trim()}
-                          >
-                            {isBedrockMcidSubmitting ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : null}
+                          <Button type="submit" disabled={!newBedrockMcid.trim()}>
                             {t("meEdit.saveBedrockMcid")}
                           </Button>
                         </DialogFooter>
-                      </bedrockMcidFetcher.Form>
+                      </form>
                     </DialogContent>
                   </Dialog>
-                  {user.bedrockMcid && (
+                  {draft.bedrockMcid && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" disabled={isBedrockMcidSubmitting}>
+                        <Button variant="ghost" size="sm" className="min-h-11 sm:min-h-8" disabled={isSubmitting}>
                           <Trash2 className="mr-2 h-4 w-4" />
                           {t("meEdit.delete")}
                         </Button>
@@ -1844,53 +1408,54 @@ export default function EditProfilePage() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>{t("meEdit.removeBedrockMcidTitle")}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            {t("meEdit.removeBedrockMcidConfirm")}
+                            {t("meEdit.removeBedrockMcidConfirm")} {t("meEdit.pendingSaveNote")}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>{t("meEdit.cancel")}</AlertDialogCancel>
-                          <bedrockMcidFetcher.Form method="post">
-                            <input type="hidden" name="_action" value="remove_bedrock_mcid" />
-                            <AlertDialogAction
-                              type="submit"
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              {t("meEdit.delete")}
-                            </AlertDialogAction>
-                          </bedrockMcidFetcher.Form>
+                          <AlertDialogAction
+                            type="button"
+                            onClick={handleBedrockRemove}
+                            className={buttonVariants({ variant: "destructive" })}
+                          >
+                            {t("meEdit.removeBedrockMcidAction")}
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
                   )}
                 </div>
               </div>
+              {fieldErrors.bedrockMcid && (
+                <NoticeBanner tone="error" icon={AlertCircle} id="edit-error-bedrockMcid" tabIndex={-1}>
+                  {fieldErrors.bedrockMcid}
+                </NoticeBanner>
+              )}
             </div>
 
-            <Separator />
+        </PageSection>
+        </div>
+
+        {/* スキンとマント。アップロード・削除はすぐ反映（保存バーとは別）、「表示」の設定は保存バーで確定 */}
+        <PageSection id="edit-skin" title={t("meEdit.skinCapeTitle")} className="space-y-6">
+            <p className="-mt-2 text-sm text-muted-foreground">{t("meEdit.uploadImmediateNote")}</p>
 
             {/* Custom Skin Upload */}
             <div className="space-y-3">
-              <Label>{t("skinUploader.customSkinTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("skinUploader.customSkinTitle")}</h3>
               <p className="text-sm text-muted-foreground">
                 {t("skinUploader.customSkinDesc")}
               </p>
-              {user.customSkinUrl && (
-                <Alert className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {t("skinUploader.customSkinActive")}
-                  </AlertDescription>
-                </Alert>
+              {customSkinUrl && (
+                <NoticeBanner tone="info" icon={AlertCircle} className="mt-2">
+                  {t("skinUploader.customSkinActive")}
+                </NoticeBanner>
               )}
               <SkinUploader
                 userId={user.id}
-                currentSkinUrl={user.customSkinUrl}
-                onUploadComplete={() => {
-                  window.location.reload();
-                }}
-                onDelete={() => {
-                  window.location.reload();
-                }}
+                currentSkinUrl={customSkinUrl}
+                onUploadComplete={(url) => setCustomSkinUrl(url)}
+                onDelete={() => setCustomSkinUrl(null)}
               />
             </div>
 
@@ -1898,52 +1463,56 @@ export default function EditProfilePage() {
 
             {/* Custom Cape Upload */}
             <div className="space-y-3">
-              <Label>{t("capeUploader.customCapeTitle")}</Label>
+              <h3 className="text-base font-semibold">{t("capeUploader.customCapeTitle")}</h3>
               <p className="text-sm text-muted-foreground">
                 {t("capeUploader.customCapeDesc")}
               </p>
-              {user.customCapeUrl && (
-                <Alert className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {t("capeUploader.customCapeActive")}
-                  </AlertDescription>
-                </Alert>
+              {customCapeUrl && (
+                <NoticeBanner tone="info" icon={AlertCircle} className="mt-2">
+                  {t("capeUploader.customCapeActive")}
+                </NoticeBanner>
               )}
               <CapeUploader
                 userId={user.id}
-                currentCapeUrl={user.customCapeUrl}
-                onUploadComplete={() => {
-                  window.location.reload();
-                }}
-                onDelete={() => {
-                  window.location.reload();
-                }}
+                currentCapeUrl={customCapeUrl}
+                onUploadComplete={(url) => setCustomCapeUrl(url)}
+                onDelete={() => setCustomCapeUrl(null)}
               />
             </div>
 
-            {/* Pose Selection - show when user has uuid OR custom skin */}
-            {(user.uuid || user.customSkinUrl) && (
-              <>
-                <Separator />
+            <Separator />
 
+            {/* 見せ方の設定（保存バーで確定） */}
+            <div className="space-y-6">
+            <h3 className="text-base font-semibold">{t("meEdit.skinDisplayTitle")}</h3>
+
+            {/* Pose Selection - show when user has uuid OR custom skin */}
+            {(user.uuid || customSkinUrl) && (
+              <>
                 <div className="space-y-3">
-                  <Label>{t("meEdit.poseLabel")}</Label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <Label id="pose-label">{t("meEdit.poseLabel")}</Label>
+                  <RadioGroup
+                    aria-labelledby="pose-label"
+                    value={selectedPose}
+                    onValueChange={(value) => setSelectedPose(value as typeof selectedPose)}
+                    className="grid grid-cols-3 gap-3"
+                  >
                     {(["standing", "walking", "waving"] as const).map((pose) => (
-                      <button
+                      <RadioGroupPrimitive.Item
                         key={pose}
-                        type="button"
-                        onClick={() => setSelectedPose(pose)}
-                        className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors ${selectedPose === pose
-                          ? "border-primary bg-primary/5"
-                          : "border-muted hover:border-muted-foreground/30"
-                          }`}
+                        value={pose}
+                        className={cn(
+                          "relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors",
+                          FOCUS_RING,
+                          selectedPose === pose
+                            ? "border-brand bg-brand/5"
+                            : "border-muted hover:border-muted-foreground/30",
+                        )}
                       >
                         <div className="w-16 h-24">
                           <MinecraftFullBody
                             uuid={user.uuid ?? undefined}
-                            skinUrl={user.customSkinUrl ?? undefined}
+                            skinUrl={customSkinUrl ?? undefined}
                             width={64}
                             height={96}
                             pose={pose}
@@ -1960,75 +1529,74 @@ export default function EditProfilePage() {
                           {pose === "walking" && t("meEdit.poseWalking")}
                           {pose === "waving" && t("meEdit.poseWaving")}
                         </span>
-                      </button>
+                      </RadioGroupPrimitive.Item>
                     ))}
-                  </div>
+                  </RadioGroup>
                 </div>
               </>
             )}
 
-            <Separator />
-
             {/* Skin Model Toggle - 常に表示 */}
             <div className="space-y-2">
-              <Label>{t("meEdit.skinModelLabel")}</Label>
-              <div className="flex rounded-lg border p-1 w-fit">
-                <button
-                  type="button"
-                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: false }))}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${!formValues.slimSkin
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                    }`}
+              <Label id="skin-model-label">{t("meEdit.skinModelLabel")}</Label>
+              <RadioGroup
+                aria-labelledby="skin-model-label"
+                value={formValues.slimSkin ? "slim" : "default"}
+                onValueChange={(value) => setFormValues((prev) => ({ ...prev, slimSkin: value === "slim" }))}
+                className="flex gap-0 rounded-lg border p-1 w-fit"
+              >
+                <RadioGroupPrimitive.Item
+                  value="default"
+                  className={cn(
+                    SEGMENT_ITEM_CLASS,
+                    !formValues.slimSkin ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                  )}
                 >
                   {t("meEdit.skinModelDefault")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormValues((prev) => ({ ...prev, slimSkin: true }))}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.slimSkin
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                    }`}
+                </RadioGroupPrimitive.Item>
+                <RadioGroupPrimitive.Item
+                  value="slim"
+                  className={cn(
+                    SEGMENT_ITEM_CLASS,
+                    formValues.slimSkin ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                  )}
                 >
                   {t("meEdit.skinModelSlim")}
-                </button>
-              </div>
+                </RadioGroupPrimitive.Item>
+              </RadioGroup>
             </div>
-
-            <Separator />
 
             {/* Cape Display Toggle - 常に表示（Mojang のマントにも適用されるため） */}
             <div className="space-y-2">
-              <Label>{t("meEdit.capeDisplayLabel")}</Label>
-              <div className="flex rounded-lg border p-1 w-fit">
+              <Label id="cape-display-label">{t("meEdit.capeDisplayLabel")}</Label>
+              <RadioGroup
+                aria-labelledby="cape-display-label"
+                value={formValues.capeDisplay}
+                onValueChange={(value) => setFormValues((prev) => ({ ...prev, capeDisplay: value as typeof prev.capeDisplay }))}
+                className="flex gap-0 rounded-lg border p-1 w-fit"
+              >
                 {CAPE_DISPLAY_OPTIONS.map((option) => (
-                  <button
+                  <RadioGroupPrimitive.Item
                     key={option}
-                    type="button"
-                    onClick={() => setFormValues((prev) => ({ ...prev, capeDisplay: option }))}
-                    className={`px-4 py-1.5 text-sm rounded-md transition-colors ${formValues.capeDisplay === option
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                      }`}
+                    value={option}
+                    className={cn(
+                      SEGMENT_ITEM_CLASS,
+                      formValues.capeDisplay === option ? "bg-brand text-brand-foreground" : "hover:bg-muted",
+                    )}
                   >
                     {option === "cape" && t("meEdit.capeDisplayCape")}
                     {option === "elytra" && t("meEdit.capeDisplayElytra")}
                     {option === "hidden" && t("meEdit.capeDisplayHidden")}
-                  </button>
+                  </RadioGroupPrimitive.Item>
                 ))}
-              </div>
+              </RadioGroup>
               <p className="text-xs text-muted-foreground">{t("meEdit.capeDisplayHint")}</p>
             </div>
-          </CardContent>
-        </Card>
+            </div>
+        </PageSection>
 
         {/* Basic Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("meEdit.basicInfo")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <PageSection id="edit-basic" title={t("meEdit.basicInfo")} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="displayName">{t("meEdit.displayName")}</Label>
               <Input
@@ -2036,7 +1604,7 @@ export default function EditProfilePage() {
                 value={formValues.displayName}
                 onChange={(e) => handleInputChange("displayName", e.target.value)}
                 placeholder={user.mcid || user.slug}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.displayName}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.fallbackToMcidOrSlug", { value: user.mcid ? "MCID" : "slug" })}
@@ -2050,7 +1618,7 @@ export default function EditProfilePage() {
                 value={formValues.displayNameAlphabet}
                 onChange={(e) => handleInputChange("displayNameAlphabet", e.target.value)}
                 placeholder={t("meEdit.displayNameAlphabetPlaceholder")}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.displayNameAlphabet}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.displayNameAlphabetHint")}
@@ -2064,7 +1632,7 @@ export default function EditProfilePage() {
                 value={formValues.bio}
                 onChange={(e) => handleInputChange("bio", e.target.value)}
                 placeholder={t("meEdit.bioPlaceholder")}
-                maxLength={500}
+                maxLength={PROFILE_FIELD_LIMITS.bio}
                 rows={3}
               />
             </div>
@@ -2077,16 +1645,18 @@ export default function EditProfilePage() {
                   value={formValues.location}
                   onChange={(e) => handleInputChange("location", e.target.value)}
                   placeholder={t("meEdit.locationExample")}
-                  maxLength={100}
+                  maxLength={PROFILE_FIELD_LIMITS.location}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="pronouns">{t("meEdit.pronouns")}</Label>
                 <Combobox
+                  id="pronouns"
+                  className="h-11 sm:h-9"
                   options={pronounOptions}
                   value={formValues.pronouns}
-                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, 20))}
+                  onValueChange={(value) => handleInputChange("pronouns", value.slice(0, PROFILE_FIELD_LIMITS.pronouns))}
                   placeholder={t("meEdit.pronounsExample")}
                   allowCustomValue={true}
                 />
@@ -2100,15 +1670,59 @@ export default function EditProfilePage() {
                 value={formValues.shortBio}
                 onChange={(e) => handleInputChange("shortBio", e.target.value)}
                 placeholder={t("meEdit.shortBioExample")}
-                maxLength={50}
+                maxLength={PROFILE_FIELD_LIMITS.shortBio}
               />
               <p className="text-xs text-muted-foreground">
                 {t("meEdit.shortBioHint")}
               </p>
             </div>
 
+            <div className="space-y-3">
+              <div className="space-y-2 sm:max-w-sm">
+                <Label htmlFor="ageGroup">{t("meEdit.ageGroup")}</Label>
+                <Select
+                  value={formValues.ageGroup === "" ? AGE_GROUP_NONE : formValues.ageGroup}
+                  onValueChange={(value) =>
+                    setFormValues((prev) =>
+                      value === AGE_GROUP_NONE
+                        ? { ...prev, ageGroup: "", ageGroupPublic: false }
+                        : { ...prev, ageGroup: value },
+                    )
+                  }
+                >
+                  <SelectTrigger id="ageGroup" className="w-full">
+                    <SelectValue>
+                      {selectedAgeGroup ? t(`meEdit.ageGroupLabels.${selectedAgeGroup}`) : t("meEdit.ageGroupNone")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AGE_GROUP_NONE}>{t("meEdit.ageGroupNone")}</SelectItem>
+                    {AGE_GROUP_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {t(`meEdit.ageGroupLabels.${value}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="ageGroupPublic" className="flex min-h-11 items-center text-sm font-normal cursor-pointer sm:min-h-0">
+                    {t("meEdit.ageGroupPublic")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">{t("meEdit.ageGroupPublicHint")}</p>
+                </div>
+                <Switch
+                  id="ageGroupPublic"
+                  checked={formValues.ageGroup !== "" && formValues.ageGroupPublic}
+                  disabled={formValues.ageGroup === ""}
+                  onCheckedChange={(checked) => setFormValues((prev) => ({ ...prev, ageGroupPublic: checked }))}
+                />
+              </div>
+            </div>
+
             {translationEnabled && (
-              <div className="flex items-start justify-between gap-4 rounded-lg border border-border/60 p-3">
+              <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <Label htmlFor="allowAutoTranslation" className="text-sm font-normal cursor-pointer">
                     {t("meEdit.allowAutoTranslation")}
@@ -2142,7 +1756,12 @@ export default function EditProfilePage() {
                       aria-label={t("meEdit.rtaStartedYearAria")}
                       aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedYear}
                     >
-                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")} />
+                      <SelectValue placeholder={t("meEdit.rtaStartedYearPlaceholder")}>
+                        {/* 未選択（""）は undefined にして placeholder を出す（Number("") で「0年」にしない） */}
+                        {formValues.rtaStartedYear
+                          ? t("meEdit.rtaStartedYearOption", { year: Number(formValues.rtaStartedYear) })
+                          : undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
@@ -2164,7 +1783,12 @@ export default function EditProfilePage() {
                       aria-label={t("meEdit.rtaStartedMonthAria")}
                       aria-invalid={isRtaStartedIncomplete && !formValues.rtaStartedMonth}
                     >
-                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")} />
+                      <SelectValue placeholder={t("meEdit.rtaStartedMonthPlaceholder")}>
+                        {/* 未選択（""）は undefined にして placeholder を出す（Number("") で「0月」にしない） */}
+                        {formValues.rtaStartedMonth
+                          ? t("meEdit.rtaStartedMonthOption", { month: Number(formValues.rtaStartedMonth) })
+                          : undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={RTA_STARTED_NONE}>{t("meEdit.rtaStartedNone")}</SelectItem>
@@ -2181,7 +1805,7 @@ export default function EditProfilePage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-9 shrink-0 text-muted-foreground"
+                    className="size-11 shrink-0 text-muted-foreground sm:size-9"
                     aria-label={t("meEdit.rtaStartedClear")}
                     onClick={clearRtaStarted}
                   >
@@ -2207,8 +1831,10 @@ export default function EditProfilePage() {
                   value={formValues.mainPlatform}
                   onValueChange={(value) => handleInputChange("mainPlatform", value)}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
+                  <SelectTrigger id="mainPlatform" className="w-full">
+                    <SelectValue placeholder={t("meEdit.select")}>
+                      {mainPlatformLabels[formValues.mainPlatform]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pc_windows">{t("playerProfile.platformPcWindows")}</SelectItem>
@@ -2227,8 +1853,10 @@ export default function EditProfilePage() {
                   value={formValues.role}
                   onValueChange={(value) => handleInputChange("role", value)}
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("meEdit.select")} />
+                  <SelectTrigger id="role" className="w-full">
+                    <SelectValue placeholder={t("meEdit.select")}>
+                      {roleLabels[formValues.role]}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="runner">{t("meEdit.roleRunner")}</SelectItem>
@@ -2238,509 +1866,293 @@ export default function EditProfilePage() {
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              <Link to="/me/playstyle" className="underline underline-offset-2">
-                {t("meEdit.movedToPlaystyle")}
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
+        </PageSection>
 
         {/* Speedrun.com連携 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ExternalLink className="h-5 w-5" />
-              {t("meEdit.speedrunIntegration")}
-            </CardTitle>
-            <CardDescription>
-              {t("meEdit.speedrunIntegrationDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="speedruncomUsername">{t("meEdit.speedrunUsername")}</Label>
-              <div className="flex items-center">
-                <span className="text-sm text-muted-foreground mr-2 shrink-0">
-                  speedrun.com/users/
-                </span>
-                <Input
-                  id="speedruncomUsername"
-                  value={formValues.speedruncomUsername}
-                  onChange={(e) => handleInputChange("speedruncomUsername", e.target.value)}
-                  placeholder={t("meEdit.speedrunUsernameExample")}
-                  maxLength={50}
-                  className="flex-1"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.speedrunUsernameHint")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継） */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Video className="h-5 w-5" />
-                  {t("meEdit.videos")}
-                </CardTitle>
-                <CardDescription>
-                  {t("meEdit.videosDesc")}
-                </CardDescription>
-              </div>
-              <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
+        {/* Social Links Section（下書き。保存バーで一括保存） */}
+        <PageSection
+          id="edit-social"
+          title={t("meEdit.socialLinks")}
+          action={
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={handleOpenVideoCreate}>
+                  <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" onClick={handleOpenCreate} disabled={isSubmitting}>
                     <Plus className="mr-2 h-4 w-4" />
-                    {t("meEdit.add")}
+                    {t("meEdit.addLink")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <VideoDialog
-                    // 開くたびに再マウントし、非制御入力（defaultValue/defaultChecked）の
-                    // 前回状態が持ち越されないようにする
-                    key={`${isVideoDialogOpen}-${editingVideo?.id ?? "new"}`}
-                    editingVideo={editingVideo}
-                    videoFetcher={videoFetcher}
-                    isSubmitting={isVideoSubmitting}
-                    // 旧「おすすめ動画」からの移行を助けるため、初回追加時はレガシーURLをプリフィル
-                    defaultUrl={videos.length === 0 ? user.featuredVideoUrl ?? "" : ""}
+                  <SocialLinkDialog
+                    // 開くたびに再マウントし、非制御入力の前回状態が持ち越されないようにする
+                    key={`${isDialogOpen}-${editingLink?.key ?? "new"}`}
+                    editingLink={editingLink}
+                    otherPlatforms={draft.links
+                      .filter((l) => l.key !== editingLink?.key && l.platform !== "custom")
+                      .map((l) => l.platform)}
+                    onSubmit={handleLinkSubmit}
                   />
                 </DialogContent>
               </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {videos.length > 0 ? (
+          }
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.socialLinksDesc")}</p>
+            {/* Speedrun.com の読み取り状況。設定の入口はこの一覧の Speedrun.com だけ（下書きのリンクに追従する） */}
+            <p className="text-sm text-muted-foreground">{t("meEdit.speedrunIntegrationDesc")}</p>
+            <p className="text-sm" id="speedruncom-linked">
+              {formValues.speedruncomUsername ? (
+                t("meEdit.speedrunLinkedFrom", { username: formValues.speedruncomUsername })
+              ) : (
+                <span className="text-muted-foreground">{t("meEdit.speedrunLinkedNone")}</span>
+              )}
+            </p>
+            {draft.links.length > 0 || deletedLinks.length > 0 ? (
               <div className="space-y-2">
-                {videos.map((video, index) => {
-                  const thumbnail = getYouTubeThumbnailUrl(video.url);
+                {draft.links.map((link) => {
+                  const platformLabel = link.platform === "custom" && link.customLabel
+                    ? link.customLabel
+                    : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
+                  const url = getPlatformUrl(link.platform, link.identifier, link.customUrl || null);
+                  const rowError = fieldErrors.links?.[link.key];
+                  const pending = link.id === null || isLinkEdited(link);
                   return (
-                    <div key={video.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                      {thumbnail ? (
-                        <img
-                          src={thumbnail}
-                          alt=""
-                          className="w-24 h-14 object-cover rounded-md shrink-0"
-                        />
-                      ) : (
-                        <div className="w-24 h-14 bg-muted rounded-md shrink-0 flex items-center justify-center">
-                          <Video className="h-5 w-5 text-muted-foreground/50" />
+                    <div key={link.key} className="space-y-1">
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3 max-sm:flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {getPlatformIcon(link.platform)}
+                          <div className="min-w-0">
+                            <p className="font-medium flex items-center gap-2">
+                              {platformLabel}
+                              {pending && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
+                            </p>
+                            {url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-muted-foreground hover:underline"
+                              >
+                                {link.identifier}
+                              </a>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">{link.identifier}</span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          {video.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
-                          <p className="font-medium text-sm truncate">
-                            {video.title || t("meEdit.videoNoTitle")}
-                          </p>
-                        </div>
-                        <a
-                          href={video.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-muted-foreground hover:underline truncate block"
-                        >
-                          {video.url}
-                        </a>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <videoFetcher.Form method="post">
-                          <input type="hidden" name="_action" value="move_video" />
-                          <input type="hidden" name="id" value={video.id} />
-                          <input type="hidden" name="direction" value="up" />
-                          <Button variant="ghost" size="icon" type="submit" disabled={index === 0}>
-                            <ArrowUp className="h-4 w-4" />
+                        <div className="flex shrink-0 gap-1 max-sm:w-full max-sm:justify-end">
+                          {link.id !== null && isLinkEdited(link) && (
+                            <UndoButton onClick={() => handleLinkUndoEdit(link.key)} disabled={isSubmitting} />
+                          )}
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.editItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleOpenEdit(link)}>
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        </videoFetcher.Form>
-                        <videoFetcher.Form method="post">
-                          <input type="hidden" name="_action" value="move_video" />
-                          <input type="hidden" name="id" value={video.id} />
-                          <input type="hidden" name="direction" value="down" />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            type="submit"
-                            disabled={index === videos.length - 1}
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                        </videoFetcher.Form>
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenVideoEdit(video)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <videoFetcher.Form method="post">
-                          <input type="hidden" name="_action" value="delete_video" />
-                          <input type="hidden" name="id" value={video.id} />
-                          <Button variant="ghost" size="icon" type="submit">
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.removeItemAria", { label: platformLabel })} disabled={isSubmitting} onClick={() => handleLinkRemove(link.key)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </videoFetcher.Form>
+                        </div>
+                      </div>
+                      {rowError && (
+                        <p id={`edit-error-link-${link.key}`} tabIndex={-1} className="text-xs text-destructive">
+                          {rowError}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {deletedLinks.map((link) => {
+                  const platformLabel = link.platform === "custom" && link.customLabel
+                    ? link.customLabel
+                    : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
+                  return (
+                    <div
+                      key={link.key}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border/70 p-3 opacity-70"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {getPlatformIcon(link.platform)}
+                        <div className="min-w-0">
+                          <p className="font-medium line-through">{platformLabel}</p>
+                          <p className="text-sm text-muted-foreground line-through truncate">{link.identifier}</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <PendingBadge>{t("meEdit.pendingDeleteBadge")}</PendingBadge>
+                        <UndoButton
+                          onClick={() => handleLinkRestore(link)}
+                          disabled={isSubmitting || isRestoreBlocked(link)}
+                          title={isRestoreBlocked(link) ? t("meEdit.restoreBlockedPlatform") : undefined}
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Video className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">{t("meEdit.noVideos")}</p>
-                <p className="text-xs mt-1">
-                  {user.featuredVideoUrl
-                    ? t("meEdit.noVideosLegacyHint")
-                    : t("meEdit.noVideosHint")}
-                </p>
-              </div>
+              <EmptyState
+                size="compact"
+                icon={<Share2 className="h-5 w-5" />}
+                title={t("meEdit.noSocialLinks")}
+                description={t("meEdit.noSocialLinksHint")}
+              />
             )}
-          </CardContent>
-        </Card>
+        </PageSection>
 
-        {/* Profile Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t("meEdit.profileSettings")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="profileVisibility">{t("meEdit.profileVisibility")}</Label>
-              <Select
-                value={formValues.profileVisibility}
-                onValueChange={(value) => handleInputChange("profileVisibility", value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="public">
-                    {t("meEdit.profilePublic")}
-                  </SelectItem>
-                  <SelectItem value="unlisted">
-                    {t("meEdit.profileUnlisted")}
-                  </SelectItem>
-                  <SelectItem value="private">
-                    {t("meEdit.profilePrivate")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="defaultProfileTab">{t("meEdit.defaultTab")}</Label>
-              <Select
-                value={formValues.defaultProfileTab}
-                onValueChange={(value) => handleInputChange("defaultProfileTab", value)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SELECTABLE_PROFILE_TABS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(DEFAULT_PROFILE_TAB_LABEL_KEYS[value])}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.defaultTabHint")}
-              </p>
-            </div>
-
-            <Separator className="my-4" />
-
-            <div className="space-y-3">
-              <Label>{t("meEdit.displaySettings")}</Label>
-              <p className="text-xs text-muted-foreground">
-                {t("meEdit.displaySettingsHint")}
-              </p>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="showPacemanOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showPacemanOnHome")}
-                  </Label>
-                  <Switch
-                    id="showPacemanOnHome"
-                    checked={formValues.showPacemanOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanOnHome: checked }))
-                    }
+        {/* Videos（複数動画欄。旧「おすすめ動画」featuredVideoUrl の後継）。下書き（保存バーで一括保存） */}
+        <PageSection
+          id="edit-videos"
+          title={t("meEdit.videos")}
+          action={
+              <Dialog open={isVideoDialogOpen} onOpenChange={setIsVideoDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 sm:min-h-8"
+                    onClick={handleOpenVideoCreate}
+                    disabled={isSubmitting || draft.videos.length >= MAX_PROFILE_VIDEOS}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    {t("meEdit.videoAdd")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <VideoDialog
+                    // 開くたびに再マウントし、非制御入力（defaultValue/defaultChecked）の
+                    // 前回状態が持ち越されないようにする
+                    key={`${isVideoDialogOpen}-${editingVideo?.key ?? "new"}`}
+                    editingVideo={editingVideo}
+                    onSubmit={handleVideoSubmit}
+                    // 旧「おすすめ動画」からの移行を助けるため、初回追加時はレガシーURLをプリフィル
+                    defaultUrl={draft.videos.length === 0 && deletedVideos.length === 0 ? user.featuredVideoUrl ?? "" : ""}
                   />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="showTwitchOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showTwitchOnHome")}
-                  </Label>
-                  <Switch
-                    id="showTwitchOnHome"
-                    checked={formValues.showTwitchOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showTwitchOnHome: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="showYoutubeOnHome" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showYoutubeOnHome")}
-                  </Label>
-                  <Switch
-                    id="showYoutubeOnHome"
-                    checked={formValues.showYoutubeOnHome}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showYoutubeOnHome: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="showRankedStats" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showRankedStats")}
-                  </Label>
-                  <Switch
-                    id="showRankedStats"
-                    checked={formValues.showRankedStats}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showRankedStats: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="showPacemanStats" className="text-sm font-normal cursor-pointer">
-                    {t("meEdit.showPacemanStats")}
-                  </Label>
-                  <Switch
-                    id="showPacemanStats"
-                    checked={formValues.showPacemanStats}
-                    onCheckedChange={(checked) =>
-                      setFormValues((prev) => ({ ...prev, showPacemanStats: checked }))
-                    }
-                  />
-                </div>
+                </DialogContent>
+              </Dialog>
+          }
+        >
+            <p className="text-sm text-muted-foreground">{t("meEdit.videosDesc")}</p>
+            {draft.videos.length > 0 || deletedVideos.length > 0 ? (
+              <div className="space-y-2">
+                {draft.videos.map((video, index) => {
+                  const thumbnail = getYouTubeThumbnailUrl(video.url);
+                  const rowError = fieldErrors.videos?.[video.key];
+                  const videoLabel = video.title || t("meEdit.videoNoTitle");
+                  const pending = video.id === null || isVideoEdited(video);
+                  return (
+                    <div key={video.key} className="space-y-1">
+                      {/* 375px では、縮まないサムネイルとボタン4つ（44px）で本文が0幅になるので、ボタン群を本文の下の行へ折り返す */}
+                      <div className="flex items-center gap-3 rounded-xl border border-border/70 p-3 max-sm:flex-wrap">
+                        {thumbnail ? (
+                          <img
+                            src={thumbnail}
+                            alt=""
+                            className="w-24 h-14 object-cover rounded-lg shrink-0"
+                          />
+                        ) : (
+                          <div className="w-24 h-14 bg-muted rounded-lg shrink-0 flex items-center justify-center">
+                            <Video className="h-5 w-5 text-muted-foreground/50" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {video.isPinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                            <p className="font-medium text-sm truncate">
+                              {video.title || t("meEdit.videoNoTitle")}
+                            </p>
+                            {pending && <PendingBadge>{t("meEdit.unsavedBadge")}</PendingBadge>}
+                          </div>
+                          <a
+                            href={video.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-muted-foreground hover:underline truncate block"
+                          >
+                            {video.url}
+                          </a>
+                        </div>
+                        <div className="flex gap-1 shrink-0 max-sm:w-full max-sm:justify-end">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-11 sm:size-9"
+                            aria-label={t("meEdit.moveUpItemAria", { label: videoLabel })}
+                            type="button"
+                            disabled={isSubmitting || index === 0}
+                            onClick={() => handleVideoMove(video.key, "up")}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-11 sm:size-9"
+                            aria-label={t("meEdit.moveDownItemAria", { label: videoLabel })}
+                            type="button"
+                            disabled={isSubmitting || index === draft.videos.length - 1}
+                            onClick={() => handleVideoMove(video.key, "down")}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.editItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleOpenVideoEdit(video)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" type="button" className="size-11 sm:size-9" aria-label={t("meEdit.removeItemAria", { label: videoLabel })} disabled={isSubmitting} onClick={() => handleVideoRemove(video.key)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {rowError && (
+                        <p id={`edit-error-video-${video.key}`} tabIndex={-1} className="text-xs text-destructive">
+                          {rowError}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {deletedVideos.map((video) => (
+                  <div
+                    key={video.key}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border/70 p-3 opacity-70"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate line-through">
+                        {video.title || t("meEdit.videoNoTitle")}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate line-through">{video.url}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <PendingBadge>{t("meEdit.pendingDeleteBadge")}</PendingBadge>
+                      <UndoButton
+                        onClick={() => handleVideoRestore(video)}
+                        disabled={isSubmitting || draft.videos.length >= MAX_PROFILE_VIDEOS}
+                        title={draft.videos.length >= MAX_PROFILE_VIDEOS ? t("meEdit.restoreBlockedVideoLimit") : undefined}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            ) : (
+              <EmptyState
+                size="compact"
+                icon={<Video className="h-5 w-5" />}
+                title={t("meEdit.noVideos")}
+                description={user.featuredVideoUrl ? t("meEdit.noVideosLegacyHint") : t("meEdit.noVideosHint")}
+              />
+            )}
+        </PageSection>
 
-        {/* Floating Save Bar */}
+        {/* Floating Save Bar（離脱時の警告も保存バーが持つ） */}
         <FloatingSaveBar
           hasChanges={hasChanges}
           isSubmitting={isSubmitting}
+          saveResult={fetcher.data}
+          saveSucceeded={fetcher.data != null && "success" in fetcher.data && fetcher.data.success === true}
           onSave={handleSave}
           onReset={handleReset}
         />
       </div>
-
-      {/* Social Links Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Share2 className="h-5 w-5" />
-                {t("meEdit.socialLinks")}
-              </CardTitle>
-              <CardDescription>
-                {t("meEdit.socialLinksDesc")}
-              </CardDescription>
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" onClick={handleOpenCreate}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t("meEdit.add")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <SocialLinkDialog
-                  editingLink={editingLink}
-                  linkFetcher={linkFetcher}
-                  isSubmitting={isLinkSubmitting}
-                />
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {links.length > 0 ? (
-            <div className="space-y-2">
-              {links.map((link) => {
-                const platformLabel = link.platform === "custom" && link.customLabel
-                  ? link.customLabel
-                  : platformOptions.find((p) => p.value === link.platform)?.label ?? link.platform;
-                const url = getPlatformUrl(link.platform, link.identifier, link.customUrl);
-                return (
-                  <div key={link.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {getPlatformIcon(link.platform)}
-                      <div>
-                        <p className="font-medium">
-                          {platformLabel}
-                        </p>
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-muted-foreground hover:underline"
-                        >
-                          {link.identifier}
-                        </a>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(link)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <linkFetcher.Form method="post">
-                        <input type="hidden" name="_action" value="delete_link" />
-                        <input type="hidden" name="id" value={link.id} />
-                        <Button variant="ghost" size="icon" type="submit">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </linkFetcher.Form>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Share2 className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">{t("meEdit.noSocialLinks")}</p>
-              <p className="text-xs mt-1">{t("meEdit.noSocialLinksHint")}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Danger Zone */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5" />
-            {t("meEdit.dangerZone")}
-          </CardTitle>
-          <CardDescription>
-            {t("meEdit.dangerZoneDesc")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 border border-destructive/30 rounded-lg bg-destructive/5">
-            <div>
-              <p className="font-medium">{t("meEdit.deleteAccount")}</p>
-              <p className="text-sm text-muted-foreground">
-                {t("meEdit.deleteAccountDesc")}
-              </p>
-            </div>
-            <Dialog open={isDeleteDialogOpen} onOpenChange={(open) => {
-              setIsDeleteDialogOpen(open);
-              if (!open) setConfirmText("");
-            }}>
-              <DialogTrigger asChild>
-                <Button variant="destructive">
-                  {t("meEdit.deleteAccount")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-destructive">
-                    <AlertTriangle className="h-5 w-5" />
-                    {t("meEdit.confirmDeleteTitle")}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {t("meEdit.confirmDeleteDesc")}
-                  </DialogDescription>
-                </DialogHeader>
-                <deleteFetcher.Form method="post">
-                  <input type="hidden" name="_action" value="delete_account" />
-                  <div className="space-y-4 py-4">
-                    <Alert variant="destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        {t("meEdit.cannotUndo")}
-                      </AlertDescription>
-                    </Alert>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmText">
-                        {t("meEdit.confirmInput", { value: user.mcid || user.slug })}
-                      </Label>
-                      <Input
-                        id="confirmText"
-                        name="confirmText"
-                        value={confirmText}
-                        onChange={(e) => setConfirmText(e.target.value)}
-                        placeholder={user.mcid || user.slug}
-                        autoComplete="off"
-                      />
-                    </div>
-                    {deleteData && "error" in deleteData && deleteData.action === "delete" && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{deleteData.error}</AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsDeleteDialogOpen(false)}
-                    >
-                      {t("meEdit.cancel")}
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="destructive"
-                      disabled={confirmText !== (user.mcid || user.slug) || isDeleting}
-                    >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {t("meEdit.deleting")}
-                        </>
-                      ) : (
-                        t("meEdit.deletePermanently")
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </deleteFetcher.Form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 export function ErrorBoundary() {
-  const t = useT();
-  return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-            <h2 className="text-2xl font-bold">{t("meEdit.errorTitle")}</h2>
-            <p className="text-muted-foreground">
-              {t("meEdit.errorDescription")}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              {t("meEdit.reloadPage")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <MeErrorBoundary />;
 }

@@ -23,6 +23,8 @@ export interface FeedVideo {
   publishedAt: string | Date;
   /** 配信時間（秒）。Twitch VODのみ */
   durationSeconds?: number | null;
+  /** 取り込み時点のチャンネルのカテゴリ（ゲーム）名。Twitch VODのみ・取得不能は null */
+  gameName?: string | null;
   /** 紐付けMinefolioユーザーのMCID（「自分の動画を隠す」フィルタ用） */
   minefolioMcid: string | null;
   uuid: string | null;

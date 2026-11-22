@@ -29,10 +29,3 @@ export const SELECTABLE_PROFILE_TABS = [
 ] as const satisfies readonly ProfileTabValue[];
 
 export type SelectableProfileTabValue = (typeof SELECTABLE_PROFILE_TABS)[number];
-
-export function isSelectableProfileTab(value: unknown): value is SelectableProfileTabValue {
-  return (
-    typeof value === "string" &&
-    (SELECTABLE_PROFILE_TABS as readonly string[]).includes(value)
-  );
-}

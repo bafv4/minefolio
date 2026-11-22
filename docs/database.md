@@ -4,7 +4,7 @@ Minefolio の DB スキーマ全体を俯瞰するためのドキュメント。
 
 - DBMS: **libSQL（Turso）／ SQLite 方言**、ORM は **Drizzle ORM**
 - 主キーは原則 `text` の **CUID2**（`@paralleldrive/cuid2` の `createId()`）。例外は `app_meta`（`key` が PK）と better-auth 管理テーブル
-- テーブル数: **40**
+- テーブル数: **41**
 - スキーマ変更の反映手順は [CLAUDE.md](../CLAUDE.md) の「データベース」節（`db:push` / `db:push:remote`）を参照
 
 ## 凡例
@@ -60,6 +60,7 @@ erDiagram
     config_presets ||--o{ config_history : preset_id
 
     users ||--o{ player_rankings : user_id
+    users ||--o{ ranked_elo_snapshots : user_id
     users ||--o{ paceman_paces : user_id
     speedrun_categories ||--o{ player_rankings : category_id
     speedrun_categories ||--o{ rankings_cache : category_id
@@ -133,7 +134,7 @@ erDiagram
 | 23 | [`paceman_paces`](#paceman_paces) | 11 | PaceMan ペース履歴 | 1 : N（set null） |
 | 24 | [`guides`](#guides) | 19 | ガイド記事 | 1 : N |
 | 25 | [`guide_likes`](#guide_likes) | 4 | ガイドのいいね | 1 : N |
-| 26 | [`search_craft_templates`](#search_craft_templates) | 12 | 公開サーチクラフトテンプレート | 1 : N |
+| 26 | [`search_craft_templates`](#search_craft_templates) | 20 | 公開サーチクラフトテンプレート | 1 : N |
 | 27 | [`search_craft_template_likes`](#search_craft_template_likes) | 4 | テンプレートのいいね | 1 : N |
 | 28 | [`profile_reactions`](#profile_reactions) | 5 | プロフィールの絵文字リアクション | 1 : N ×2 |
 | 29 | [`auth_users`](#auth_users) | 7 | better-auth ユーザー | なし |
@@ -143,11 +144,12 @@ erDiagram
 | 33 | [`api_cache`](#api_cache) | 7 | 汎用 API キャッシュ | なし |
 | 34 | [`youtube_video_cache`](#youtube_video_cache) | 13 | YouTube 動画キャッシュ | なし（弱参照） |
 | 35 | [`youtube_live_cache`](#youtube_live_cache) | 15 | YouTube ライブ配信キャッシュ | なし（弱参照） |
-| 36 | [`twitch_vod_cache`](#twitch_vod_cache) | 12 | Twitch アーカイブキャッシュ | なし（弱参照） |
+| 36 | [`twitch_vod_cache`](#twitch_vod_cache) | 13 | Twitch アーカイブキャッシュ | なし（弱参照） |
 | 37 | [`content_translations`](#content_translations) | 15 | 利用者コンテンツの自動翻訳 | なし（弱参照） |
 | 38 | [`page_view_stats`](#page_view_stats) | 7 | ページビュー集計スナップショット | なし（弱参照） |
 | 39 | [`app_meta`](#app_meta) | 3 | アプリ全体の key-value | なし |
 | 40 | [`slug_history`](#slug_history) | 5 | 旧 slug からのリダイレクト解決 | 1 : N |
+| 41 | [`ranked_elo_snapshots`](#ranked_elo_snapshots) | 6 | Ranked レートの日次スナップショット | 1 : N |
 
 ---
 
@@ -175,7 +177,7 @@ erDiagram
 | `auth_accounts.account_id` | `users.discord_id` | better-auth 側のテーブル。アプリは `eq(users.discordId, session.user.id)` で毎回引き直す |
 
 副作用として `favorites` は参照先ユーザーの削除・`slug` 変更で孤児化しうる。
-`slug` 変更（MCID の設定・変更・削除、`app/routes/me/edit.tsx` の `set_mcid` / `remove_mcid`）による
+`slug` 変更（MCID の設定・変更・削除、`/me/edit` の一括保存 `save_all`、onboarding のステップ2。いずれも `app/lib/mcid-change.server.ts` の `applyMcidSlugChange`）による
 追従更新はアプリケーション層で実装済み（`app/lib/favorites.ts` の `retargetFavoritesOnSlugChange`。
 `users` 更新と同じトランザクション内で旧 slug → 新 slug へ更新し、新 slug を指す孤児行は先に削除する。
 詳細は [favorites.md](./favorites.md#slug-変更時の追従更新)）。ユーザー削除時（cascade 対象外の孤児）も
@@ -242,6 +244,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `show_youtube_on_home` | bool? | 既定 true |
 | `show_ranked_stats` | bool? | 既定 true |
 | `show_paceman_stats` | bool? | 既定 true |
+| `home_section_order` | json? | ホームの欄の並び順・表示（JSON `{"order":[...],"hidden":[...]}`。旧形式の欄 ID の配列＝並びのみも読める）。null は既定（既定順かつ全欄表示）。未知の ID は無視し、order の欠けた欄は既定順で末尾に補う。hidden が全欄を覆う値は空として扱う（正規化は `app/lib/home-sections.ts` の `normalizeHomeLayout`） |
 | `profile_views` | int | 既定 0 |
 | `last_active` | ts? | |
 | `custom_skin_url` | text? | Vercel Blob の URL |
@@ -256,6 +259,10 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `rta_started_year_month` | text? | `"YYYY-MM"` |
 | `onboarding_completed` | bool | 既定 **true**。初期設定ウィザード（`/onboarding`）を完了したか。既定 true は列追加前の既存ユーザーを完了済みとして扱うため（バックフィル不要）で、ウィザード開始時の insert だけが `false` を入れる。反映は `scripts/add-onboarding-completed-column.ts` |
 | `allow_auto_translation` | bool | 既定 **true**。bio / shortBio の自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `userBio` の翻訳行を削除する。既定 true は既存ユーザーを「許可」として扱うため。反映は `scripts/add-allow-auto-translation-columns.ts` |
+| `me_tour_completed_at` | timestamp | nullable。`/me` の初回ツアーを終えた（またはスキップした）日時。null の間は初めて `/me` を開いたときに1回だけ出す。反映は `scripts/add-me-guide-columns.ts`（詳細: [me-common.md](./me-common.md)） |
+| `me_checklist_dismissed_at` | timestamp | nullable。`/me/edit` の「はじめに」チェックリストを閉じた日時。反映は同スクリプト |
+| `age_group` | enum? | 年代。`junior_high` / `high_school` / `age_18_21` / `20s` / `30s` / `40s` / `50s` / `60s_plus`。null は未設定。値の単一情報源は `app/lib/age-group.ts` の `AGE_GROUP_VALUES`（検証・表示側もここから導く） |
+| `age_group_public` | bool | 既定 **false**。年代を走者画面に出すか（本人が選ぶ）。既定を非公開にするのは未成年の区分があるため。`age_group` 列とともに `scripts/add-age-group-columns.ts` で反映（falsy 既定の NOT NULL 列で `db:push` が TRUNCATE を提案するため手動 DDL） |
 
 索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
 
@@ -569,7 +576,7 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 
 #### `slug_history`
 
-MCID 登録（`set_mcid`）・削除（`remove_mcid`）で `users.slug` が変わるたびに旧 slug を記録し、
+MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `users.slug` が変わるたびに旧 slug を記録し、
 `/player/:slug` 等が 404 になったとき現在の slug へ 302 リダイレクトするための履歴
 （[`app/lib/slug-history.server.ts`](../app/lib/slug-history.server.ts)）。Mojang API 起点の
 フォールバック（`player-slug-fallback.server.ts`）より優先して解決する。詳細は
@@ -665,7 +672,7 @@ MCID 登録（`set_mcid`）・削除（`remove_mcid`）で `users.slug` が変�
 |---|---|---|
 | `id` | text | PK |
 | `user_id` | text | → `users.id` (cascade) |
-| `ranking_type` | enum | `speedruncom` / `ranked_pb` / `ranked_elo` |
+| `ranking_type` | enum | `speedruncom` / `ranked_pb`（MCSR Ranked の今シーズンのベスト）/ `ranked_pb_all_time`（同・全期間のベスト。ホーム「注目の走者」の PB 表示用。`/rankings` 等の既存集計は `ranked_pb` のみを見る）/ `ranked_elo` |
 | `category_id` | text? | → `speedrun_categories.id` (cascade)。Ranked Elo では null |
 | `speedruncom_run_id` | text? | |
 | `speedruncom_player_id` | text? | |
@@ -712,7 +719,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `paceman_run_id` | int | 同一ランのスプリットをまとめるキー |
 | `mcid` | text | ⇢ `users.mcid`（`user_id` が null でもここから再リンクできる） |
 | `user_id` | text? | → `users.id` (**set null**) |
-| `timeline` | text | `Enter Nether` / `Eye Spy` 等 |
+| `timeline` | text | `Enter Nether` / `Obtain Blaze Rods` 等 |
 | `rta` | int | ミリ秒 |
 | `igt` | int? | ミリ秒 |
 | `date` | ts | |
@@ -787,10 +794,23 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `apply_count` | int | 既定 0 |
 | `created_at` | ts | |
 | `updated_at` | ts | |
-| `game_language` | text? | 想定するゲーム内言語（例: `ja_jp`） |
+| `game_language` | text? | 想定するゲーム言語（例: `ja_jp`） |
 | `loops_data` | json? | 繋ぎ方（Loop）のスナップショット。`config_presets.search_craft_loops_data` と同一形式（`craftSeq = craftIndex + 1` が恒等） |
+| `draft_title` | text? | 下書き。公開版の `title` に対応 |
+| `draft_description` | text? | 下書き。`description` に対応 |
+| `draft_game_language` | text? | 下書き。`game_language` に対応 |
+| `draft_crafts_data` | json? | 下書き。`crafts_data` に対応 |
+| `draft_remaps_data` | json? | 下書き。`remaps_data` に対応 |
+| `draft_loops_data` | json? | 下書き。`loops_data` に対応 |
+| `draft_updated_at` | ts? | 下書きを最後に保存した日時。**下書きの有無はこの列が NULL かどうかだけで判定する** |
+| `published_at` | ts? | 初めて公開した日時（公開一覧の新着順）。未公開は NULL |
 
 索引: `(user_id)` / `(is_published, created_at)`
+
+下書きの不変条件（ガイドの `draft_*` と同じ形）:
+- 下書き保存では公開版の列・`is_published`・`updated_at` を変えず、`draft_*` 列だけを書く。公開・破棄で `draft_*` を NULL に戻す
+- `published_at` は初回の公開で入れ、以後は変えない（公開を取り下げて再公開しても維持）
+- 下書き列はすべて NULL 可（`ALTER ADD` のため。`is_published` の既定 true は変えない）
 
 #### `search_craft_template_likes`
 
@@ -959,6 +979,7 @@ MCID を持たないユーザーの VOD も扱うため **`mcid` 列を持たな
 | `title` | text | |
 | `thumbnail_url` | text? | 処理中 VOD は null |
 | `channel_title` | text? | |
+| `game_name` | text? | 取り込み時点のチャンネルのカテゴリ名（cron が保存）。既存行は null |
 | `duration_seconds` | int? | |
 | `published_at` | ts | |
 | `last_verified_at` | ts | |
@@ -1018,6 +1039,22 @@ Vercel Web Analytics の path 別 PV を Minefolio の対象へ解決したス�
 
 cron（`/api/cron/update-page-views`）が数時間おきに `target_type` 単位で全置換する。読み手は対象テーブル側を起点に相関サブクエリで引くため、孤児行が一覧へ漏れることはない。
 
+#### `ranked_elo_snapshots`
+
+Ranked レートの日次スナップショット。ホーム「注目の走者」の「直近 7 日のレート上がり幅」の元データ。
+cron `update-rankings`（12 時間ごと）が各ユーザーのレートを `(user_id, snapshot_date)` で upsert する（同日に複数回走っても 1 行）。
+
+| カラム | 型 | 制約・参照 |
+|---|---|---|
+| `id` | text | PK |
+| `user_id` | text | ⇢ `users.id`（cascade） |
+| `snapshot_date` | text | `YYYY-MM-DD`、**UTC 日付**（text のため辞書順比較で期間検索できる） |
+| `elo_rate` | int | その日（最後の記録時点）のレート |
+| `created_at` | ts | |
+| `updated_at` | ts | |
+
+索引: **UNIQUE** `(user_id, snapshot_date)` / `(snapshot_date)`
+
 #### `app_meta`
 
 アプリ全体の key-value メタデータ（例: リリース通知の最終通知バージョン `release_notify:last_version`）。
@@ -1058,6 +1095,7 @@ drizzle-kit v1 の RC ではパーサが書き直されており、この経路�
 | スクリプト | 目的 |
 |---|---|
 | `add-search-craft-loops.ts` | `search_craft_loops` テーブル＋ `config_presets.search_craft_loops_data` / `search_craft_templates.loops_data` 列を追加（本機能の DDL） |
+| `add-search-craft-template-draft-columns.ts` | `search_craft_templates` に `draft_*` 7列と `published_at` を追加し、公開中の行の `published_at` を `created_at` でバックフィル |
 | `fix-unique-index-names.ts` | inline `.unique()` 列の named unique index（14件）を補完（SQLite の自動 index のみで named index が無いテーブルが push を中断させる） |
 | `fix-missing-indexes.ts` | schema.ts が定義する index 全件（98件）を対象に、欠けているものだけ補完する汎用版（`fix-unique-index-names.ts` の対象を包含） |
 | `add-player-rankings-table.ts` | `local.db` に存在しなかった `player_rankings` テーブル＋ index を追加（drift の是正） |

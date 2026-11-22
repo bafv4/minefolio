@@ -150,11 +150,16 @@ function nativeName(t: Translator, def: GameLanguageDef): string {
   return "nativeKey" in def && def.nativeKey ? t(def.nativeKey as MessageKey) : (def.native ?? def.value);
 }
 
+/** 外側の括弧に入れる和名の中の括弧を「・」に置き換え、入れ子にならないようにする（例: "ノルウェー語（ブークモール）" → "ノルウェー語・ブークモール"） */
+export function flattenParenthetical(text: string): string {
+  return text.replace(/\s*[（(]([^（）()]*)[）)]/g, "・$1");
+}
+
 // 併記する和名は日本語UIでのみ意味があるため、英語では自称表記だけを出す
 function buildLanguageLabel(t: Translator, locale: Locale, def: GameLanguageDef): string {
   const native = nativeName(t, def);
   if (locale !== "ja") return native;
-  return def.ja && def.ja !== native ? `${native}（${def.ja}）` : native;
+  return def.ja && def.ja !== native ? `${native}（${flattenParenthetical(def.ja)}）` : native;
 }
 
 /** 言語の選択肢。ロケール依存なので描画時に組み立てる */
@@ -172,4 +177,33 @@ export function gameLanguageOptions(
 export function getGameLanguageName(t: Translator, locale: Locale, code: string): string {
   const def = GAME_LANGUAGE_DEFS.find((d) => d.value === code.toLowerCase());
   return def ? buildLanguageLabel(t, locale, def) : code;
+}
+
+/**
+ * アイテム名の辞書（public/mcitems/1.16/lang/<code>.json）を持たない言語。
+ * 辞書は @bafv4/mcitems 由来で、これらの言語は配布されていないため、アイテム名は英語（en_us）に
+ * フォールバックして表示される。実ファイルとの一致は game-languages-label.test.ts が検証する。
+ */
+const LANGUAGES_WITHOUT_ITEM_DICTIONARY: ReadonlySet<string> = new Set([
+  "lo_la",
+  "nah",
+  "nb_no",
+  "ry_ua",
+  "sr_cs",
+  "zlm_arab",
+]);
+
+/** その言語のアイテム名辞書があるか。無ければアイテム名は英語で表示される */
+export function hasItemNameDictionary(lang: string): boolean {
+  return !LANGUAGES_WITHOUT_ITEM_DICTIONARY.has(lang.toLowerCase());
+}
+
+/**
+ * 言語コードを許可リスト（GAME_LANGUAGE_DEFS）で正規化する。小文字化して一致した定義の値を返し、
+ * 未知のコードは null（描画側がアイテム名辞書の URL に連結するため、自由文字列は保存させない）。
+ */
+export function normalizeGameLanguage(code: unknown): string | null {
+  if (typeof code !== "string") return null;
+  const lower = code.trim().toLowerCase();
+  return GAME_LANGUAGE_DEFS.find((d) => d.value === lower)?.value ?? null;
 }

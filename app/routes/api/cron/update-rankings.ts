@@ -5,7 +5,7 @@
  * 処理内容:
  * - 各MinefolioユーザーのSpeedrun.com記録を取得
  * - 各MinefolioユーザーのMCSR Ranked記録を取得
- * - DBに保存
+ * - DBに保存（Ranked レートは日次スナップショットも記録し、30日超は最後に削除）
  *
  * 1ユーザー分の実処理は app/lib/rankings-update.server.ts に集約されている
  * （targeted-refresh.server.ts の1ユーザー即時更新とロジックを共有するため）。
@@ -15,7 +15,11 @@ import { createDb } from "@/lib/db";
 import { users, speedrunCategories } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { excludeViewersCondition } from "@/lib/users-filter";
-import { updateUserRankings, cleanupDuplicateVerifiedRankings } from "@/lib/rankings-update.server";
+import {
+  updateUserRankings,
+  cleanupDuplicateVerifiedRankings,
+  cleanupOldEloSnapshots,
+} from "@/lib/rankings-update.server";
 
 export async function loader({ request }: { request: Request }) {
   // セキュリティ: Vercel Cron認証（fail closed）。
@@ -75,7 +79,15 @@ export async function loader({ request }: { request: Request }) {
     // 重複した審査済み記録の整理（全ユーザー対象）
     const duplicatesRemoved = await cleanupDuplicateVerifiedRankings(db);
 
-    console.log(`Rankings update completed: SRC=${speedruncomUpdates}, PB=${rankedPbUpdates}, Elo=${rankedEloUpdates}, IDs resolved=${speedruncomIdResolved}, dup removed=${duplicatesRemoved}`);
+    // 保持期間（30日）を超えた Ranked レートスナップショットを削除（cron 1回の最後に1文のDELETE）
+    let eloSnapshotsRemoved = 0;
+    try {
+      eloSnapshotsRemoved = await cleanupOldEloSnapshots(db);
+    } catch (error) {
+      console.error("Failed to cleanup old Elo snapshots:", error);
+    }
+
+    console.log(`Rankings update completed: SRC=${speedruncomUpdates}, PB=${rankedPbUpdates}, Elo=${rankedEloUpdates}, IDs resolved=${speedruncomIdResolved}, dup removed=${duplicatesRemoved}, elo snapshots removed=${eloSnapshotsRemoved}`);
 
     return Response.json({
       success: true,
@@ -88,6 +100,7 @@ export async function loader({ request }: { request: Request }) {
         rankedEloUpdates,
         speedruncomIdResolved,
         duplicatesRemoved,
+        eloSnapshotsRemoved,
       },
       timestamp: new Date().toISOString(),
     });

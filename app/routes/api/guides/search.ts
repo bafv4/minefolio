@@ -4,6 +4,7 @@ import { users, guides } from "@/lib/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
+import { escapeLike } from "@/lib/sql-like.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const db = createDb();
@@ -17,7 +18,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   // LIKE のワイルドカード(%,_)をエスケープし、入力を部分一致リテラルとして扱う。
-  const likePattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const likePattern = `%${escapeLike(q)}%`;
 
   const results = await db
     .select({
@@ -30,6 +31,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorDisplayName: users.displayName,
       authorDisplayNameAlphabet: users.displayNameAlphabet,
       authorMcid: users.mcid,
+      authorUuid: users.uuid,
+      authorCustomSkinUrl: users.customSkinUrl,
     })
     .from(guides)
     .innerJoin(users, eq(guides.authorId, users.id))
@@ -57,6 +60,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           { displayName: r.authorDisplayName, displayNameAlphabet: r.authorDisplayNameAlphabet },
           locale,
         ) || r.authorMcid || r.authorSlug,
+      authorUuid: r.authorUuid,
+      authorSkinUrl: r.authorCustomSkinUrl,
       url: `/guides/${r.authorSlug}/${r.slug}`,
     })),
   });

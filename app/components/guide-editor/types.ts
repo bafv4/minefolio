@@ -49,6 +49,8 @@ export interface SlashCommandContext {
   insertLink: () => void;
   /** 埋め込み入力ダイアログを開く */
   openEmbedDialog: (kind: "keybind" | "searchcraft") => void;
+  /** サーチクラフトテンプレート埋め込みの選択ダイアログを開く */
+  openTemplateEmbedDialog: () => void;
   /** ガイドリンク検索ダイアログを開く */
   openGuideLinkSearch: () => void;
   /** 動画から GIF を作るダイアログを開く */
@@ -68,6 +70,22 @@ export interface GuideMediaContext {
   cropImage: (src: string, rect: CropRect) => Promise<string | null>;
 }
 
+/**
+ * 埋め込み NodeView の「変更」が必要とする宿主（index.tsx）側のダイアログ操作。
+ * NodeView には props を直接渡せないため、lib/embed-edit-context.ts の WeakMap（editor ごと）で注入する。
+ * apply はダイアログで確定したときだけ呼ばれ、NodeView 側が updateAttributes で書き換える（挿入はしない）
+ */
+export interface GuideEmbedEditContext {
+  /** リマップ / サーチクラフト埋め込みのダイアログを、保存済みの属性を初期値にして開く */
+  editEmbed: (
+    kind: "keybind" | "searchcraft",
+    initial: { userSlug: string; presetName: string | null },
+    apply: (userSlug: string, presetName: string | null) => void,
+  ) => void;
+  /** テンプレート埋め込みの選択ダイアログを開く。選んだテンプレートの ID を apply に渡す */
+  editTemplateEmbed: (apply: (templateId: string) => void) => void;
+}
+
 /** スラッシュコマンドの 1 項目 */
 export interface SlashItem {
   /** 表示名 */
@@ -78,6 +96,8 @@ export interface SlashItem {
   icon: ComponentType<{ className?: string }>;
   /** グループ見出し（基本ブロック / 埋め込み 等） */
   group: string;
+  /** 項目名の下に出す短い補足（任意。例: 表 → サーチ文字列は埋め込みを勧める） */
+  description?: string;
   /**
    * 実行ハンドラ。スラッシュ範囲は呼び出し側で削除済み。
    * 即時挿入は editor を、ダイアログ起動は ctx を使う。
@@ -86,7 +106,8 @@ export interface SlashItem {
 }
 
 /** スラッシュコマンドの項目定義（文言は翻訳キーのまま持つ） */
-export interface SlashItemDef extends Omit<SlashItem, "title" | "group"> {
+export interface SlashItemDef extends Omit<SlashItem, "title" | "group" | "description"> {
   titleKey: MessageKey;
   groupKey: MessageKey;
+  descriptionKey?: MessageKey;
 }

@@ -13,14 +13,14 @@ let root: Root;
 let mount: HTMLElement;
 let captured: string[];
 
-async function renderButton(allowModifiers: boolean) {
+async function renderButton(allowModifiers: boolean, keyboardLayout: string | null = "US") {
   captured = [];
   await act(async () => {
     root.render(
       createElement(KeyCaptureButton, {
         value: "",
         placeholder: "変更先",
-        keyboardLayout: "US",
+        keyboardLayout,
         onCapture: (k: string) => captured.push(k),
         allowModifiers,
       }),
@@ -79,6 +79,35 @@ describe("KeyCaptureButton", () => {
       focus();
       key("keydown", { code: "KeyA", key: "a", ctrlKey: true });
       expect(captured).toEqual(["KeyA"]);
+    });
+  });
+
+  describe("JIS 配列の ¥ キー", () => {
+    it("JIS を受け取っているときだけ IntlYen を IntlBackslash に読み替える（Backquote はそのまま）", async () => {
+      await renderButton(false, "JIS-TKL");
+      focus();
+      key("keydown", { code: "IntlYen", key: "¥" });
+      expect(captured).toEqual(["IntlBackslash"]);
+      focus();
+      key("keydown", { code: "Backquote", key: "`" });
+      expect(captured).toEqual(["IntlBackslash", "Backquote"]);
+    });
+
+    it("組み合わせでも読み替える", async () => {
+      await renderButton(true, "JIS");
+      focus();
+      key("keydown", { code: "IntlYen", key: "¥", ctrlKey: true });
+      expect(captured).toEqual(["Ctrl+IntlBackslash"]);
+    });
+
+    it("US・配列なしでは読み替えない", async () => {
+      await renderButton(false, "US");
+      focus();
+      key("keydown", { code: "IntlYen", key: "¥" });
+      await renderButton(false, null);
+      focus();
+      key("keydown", { code: "IntlYen", key: "¥" });
+      expect(captured).toEqual(["IntlYen"]);
     });
   });
 
@@ -156,5 +185,28 @@ describe("KeyCaptureButton", () => {
       expect(isKeyCaptureEscapeTarget(null)).toBe(false);
       expect(isKeyCaptureEscapeTarget(document.createElement("div"))).toBe(false);
     });
+  });
+});
+
+describe("KeyCaptureButton の名前（ariaLabel）", () => {
+  it("ariaLabel を渡すと、見えている値の前に付いた名前になる（「Q」だけにならない）", async () => {
+    await act(async () => {
+      root.render(
+        createElement(KeyCaptureButton, {
+          value: "KeyQ",
+          placeholder: "変更先",
+          keyboardLayout: "US",
+          onCapture: () => {},
+          allowModifiers: true,
+          ariaLabel: "変更元のキー",
+        }),
+      );
+    });
+    expect(button().getAttribute("aria-label")).toBe("変更元のキー: Q");
+  });
+
+  it("ariaLabel が無いときは aria-label を付けない（従来どおり見えている文字が名前）", async () => {
+    await renderButton(false);
+    expect(button().hasAttribute("aria-label")).toBe(false);
   });
 });

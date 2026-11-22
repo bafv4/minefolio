@@ -461,6 +461,18 @@ CREATE TABLE `profile_videos` (
 );
 
 CREATE INDEX `idx_profile_videos_user_id` ON `profile_videos` (`user_id`);
+CREATE TABLE `ranked_elo_snapshots` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`snapshot_date` text NOT NULL,
+	`elo_rate` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);
+
+CREATE UNIQUE INDEX `ranked_elo_snapshots_user_date_uniq` ON `ranked_elo_snapshots` (`user_id`,`snapshot_date`);
+CREATE INDEX `idx_ranked_elo_snapshots_date` ON `ranked_elo_snapshots` (`snapshot_date`);
 CREATE TABLE `rankings_cache` (
 	`id` text PRIMARY KEY NOT NULL,
 	`cache_key` text NOT NULL,
@@ -515,6 +527,14 @@ CREATE TABLE `search_craft_templates` (
 	`updated_at` integer NOT NULL,
 	`game_language` text,
 	`loops_data` text,
+	`draft_title` text,
+	`draft_description` text,
+	`draft_game_language` text,
+	`draft_crafts_data` text,
+	`draft_remaps_data` text,
+	`draft_loops_data` text,
+	`draft_updated_at` integer,
+	`published_at` integer,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
@@ -589,6 +609,7 @@ CREATE TABLE `twitch_vod_cache` (
 	`title` text NOT NULL,
 	`thumbnail_url` text,
 	`channel_title` text,
+	`game_name` text,
 	`duration_seconds` integer,
 	`published_at` integer NOT NULL,
 	`last_verified_at` integer NOT NULL,
@@ -634,6 +655,7 @@ CREATE TABLE `users` (
 	`show_twitch_on_home` integer DEFAULT true,
 	`show_youtube_on_home` integer DEFAULT true,
 	`show_ranked_stats` integer DEFAULT true,
+	`home_section_order` text,
 	`show_paceman_stats` integer DEFAULT true,
 	`profile_views` integer DEFAULT 0 NOT NULL,
 	`last_active` integer,
@@ -648,7 +670,11 @@ CREATE TABLE `users` (
 	`pinned_speedrun_records` text,
 	`rta_started_year_month` text,
 	`onboarding_completed` integer DEFAULT true NOT NULL,
-	`allow_auto_translation` integer DEFAULT true NOT NULL
+	`allow_auto_translation` integer DEFAULT true NOT NULL,
+	`me_tour_completed_at` integer,
+	`me_checklist_dismissed_at` integer,
+	`age_group` text,
+	`age_group_public` integer DEFAULT false NOT NULL
 );
 
 CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);

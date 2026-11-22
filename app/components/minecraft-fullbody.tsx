@@ -4,6 +4,7 @@ import { HelpCircle, RotateCcw } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/use-locale";
+import { MinecraftAvatar } from "@/components/minecraft-avatar";
 
 const STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 
@@ -43,6 +44,28 @@ function getCachedImage(key: string): string | undefined {
   imageCache.delete(key);
   imageCache.set(key, value);
   return value;
+}
+
+/**
+ * canvas がほぼ透明（描画失敗）かを粗いグリッドで判定する。
+ * 16x16 に縮小して alpha を見る。getImageData が例外（tainted 等）なら検査を諦め false（今の表示のまま）。
+ */
+function isCanvasTransparent(canvas: HTMLCanvasElement): boolean {
+  try {
+    const probe = document.createElement("canvas");
+    probe.width = 16;
+    probe.height = 16;
+    const ctx = probe.getContext("2d");
+    if (!ctx || canvas.width === 0 || canvas.height === 0) return false;
+    ctx.drawImage(canvas, 0, 0, 16, 16);
+    const data = ctx.getImageData(0, 0, 16, 16).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] > 8) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function setCachedImage(key: string, value: string): void {
@@ -103,6 +126,14 @@ interface MinecraftFullBodyProps {
   rotate?: boolean;
   /** trueの場合、レンダリング後に静止画像として出力（操作不可） */
   asImage?: boolean;
+  /**
+   * asImage のみ有効。表示サイズを width/height ではなく親要素（サイズは CSS で与える）に合わせる。
+   * width/height は描画解像度だけを決め、表示は親に収まるよう縮小する（object-contain）。
+   * SSR とハイドレーション後で表示サイズが変わる（useMediaQuery 由来の寸法差）ことによるレイアウトの跳ねを避けるために使う
+   */
+  fluid?: boolean;
+  /** fluid の静止画が顔（2D アバター）の代替表示になったとき／戻ったときに呼ばれる。親が箱の寸法を合わせ直すために使う */
+  onFallbackChange?: (isFallback: boolean) => void;
   /** Slimスキン（腕幅3px）を使用する場合はtrue */
   slim?: boolean;
   /** マント画像のURL。省略時はマント無し。読み込みに失敗（404 等）した場合もマント無しで表示する */
@@ -189,6 +220,8 @@ const MinecraftFullBodyComponent = ({
   run = false,
   rotate = false,
   asImage = false,
+  fluid = false,
+  onFallbackChange,
   slim = false,
   capeUrl,
   backEquipment = "cape",
@@ -213,6 +246,11 @@ const MinecraftFullBodyComponent = ({
   const [isLoading, setIsLoading] = useState(true);
   const [imageEntry, setImageEntry] = useState<{ requestKey: string; src: string } | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
+  // 静止画が透明（描画失敗）だったリクエストのキー。一致している間は 2D アバターを表示する
+  const [failedRequestKey, setFailedRequestKey] = useState<string | null>(null);
+  // fluid の 2D アバター代替は、箱の実寸（短辺）に合わせて描く。解像度用の width/height（320 等）で描くと箱より大きくなり切れる
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxSide, setBoxSide] = useState<number | null>(null);
 
   // interactive モードでは静止画化を強制無効化（操作不能なため）
   const effectiveAsImage = interactive ? false : asImage;
@@ -367,6 +405,15 @@ const MinecraftFullBodyComponent = ({
 
           viewer.render();
 
+          // 描画に失敗して透明になった静止画は、キャッシュも表示もせず 2D アバターへ切り替える
+          if (isCanvasTransparent(canvas)) {
+            setFailedRequestKey(requestKey);
+            viewer.dispose();
+            if (viewerRef.current === viewer) viewerRef.current = null;
+            setIsLoading(false);
+            return;
+          }
+
           const dataUrl = canvas.toDataURL("image/png");
 
           const cacheKey = getCacheKey(skinIdentifier, pose, width, height, angle, elevation, zoom, effectiveSlim, capeKey);
@@ -429,6 +476,28 @@ const MinecraftFullBodyComponent = ({
     viewer.render();
   }, []);
 
+  const fluidFallback = failedRequestKey === requestKey && effectiveAsImage && fluid;
+  useEffect(() => {
+    onFallbackChange?.(fluidFallback);
+  }, [fluidFallback, onFallbackChange]);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!fluidFallback || !el || typeof ResizeObserver === "undefined") return;
+    const update = () => {
+      const side = Math.floor(Math.min(el.clientWidth, el.clientHeight));
+      if (side > 0) setBoxSide(side);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fluidFallback]);
+
+  // fluid（静止画のみ）は表示サイズを親に任せる。それ以外は従来どおり width/height の実寸
+  const fluidSize = effectiveAsImage && fluid;
+  const boxWidth = fluidSize ? "100%" : width;
+  const boxHeight = fluidSize ? "100%" : height;
+
   // スケルトン表示（ローディング中）
   const skeleton = (
     <div
@@ -436,8 +505,8 @@ const MinecraftFullBodyComponent = ({
         position: "absolute",
         top: 0,
         left: 0,
-        width,
-        height,
+        width: boxWidth,
+        height: boxHeight,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -445,8 +514,9 @@ const MinecraftFullBodyComponent = ({
     >
       <div
         style={{
-          width: width * 0.3,
-          height: height * 0.7,
+          // fluid は本物（箱いっぱいの静止画）と同じ寸法で描く。細い縦長だと、読み込み後に形が変わって見える
+          width: fluidSize ? "100%" : width * 0.3,
+          height: fluidSize ? "100%" : height * 0.7,
           backgroundColor: "var(--muted)",
           borderRadius: 8,
           animation: "pulse 1.5s ease-in-out infinite",
@@ -467,8 +537,23 @@ const MinecraftFullBodyComponent = ({
   //   静止画が残留し続けるバグになる）
   if (effectiveAsImage) {
     return (
-      <div style={{ position: "relative", width, height }}>
-        {imageSrc ? (
+      // overflow: hidden … 描画用の隠しキャンバスは描画解像度（width/height）の実寸で置かれるため、
+      // fluid で箱を小さくしたとき箱の外へはみ出してページ幅を広げないよう切る
+      <div ref={boxRef} style={{ position: "relative", width: boxWidth, height: boxHeight, overflow: "hidden" }}>
+        {failedRequestKey === requestKey ? (
+          <div
+            className="flex items-center justify-center"
+            style={{ position: "absolute", top: 0, left: 0, width: boxWidth, height: boxHeight }}
+          >
+            <MinecraftAvatar
+              uuid={uuid}
+              skinUrl={skinUrl}
+              mcid={mcid}
+              size={fluidFallback && boxSide ? boxSide : Math.min(width, height)}
+              className={className}
+            />
+          </div>
+        ) : imageSrc ? (
           <img
             src={imageSrc}
             alt={avatarLabel}
@@ -476,8 +561,9 @@ const MinecraftFullBodyComponent = ({
             height={height}
             className={className}
             style={{
-              width,
-              height,
+              width: boxWidth,
+              height: boxHeight,
+              objectFit: fluidSize ? "contain" : undefined,
               imageRendering: "auto",
             }}
           />

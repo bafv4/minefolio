@@ -10,7 +10,7 @@ import {
   Quote,
   Terminal,
   Lightbulb,
-  ChevronRight,
+  ListCollapse,
   Table2,
   Minus,
   Columns2,
@@ -21,6 +21,7 @@ import {
   FileText,
   Keyboard,
   Package,
+  LayoutTemplate,
 } from "lucide-react";
 import { Youtube as YoutubeIcon } from "@/components/brand-icons";
 import type { SlashItem, SlashItemDef } from "../types";
@@ -117,12 +118,14 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
   {
     titleKey: "guideEditor.slash.toggleList",
     keywords: ["toggle", "details", "とぐる", "折りたたみ"],
-    icon: ChevronRight,
+    icon: ListCollapse,
     groupKey: GROUP.advanced,
     run: (editor) => setBlockType(editor, "toggleList"),
   },
   {
     titleKey: "guideEditor.slash.table",
+    // サーチ文字列を表に並べると本文フォントになるため、等幅・コピー付きの埋め込みを案内する
+    descriptionKey: "guideEditor.ui.tableSearchStrHint",
     keywords: ["table", "ひょう", "表", "テーブル"],
     icon: Table2,
     groupKey: GROUP.advanced,
@@ -190,7 +193,8 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
   },
   {
     titleKey: "guideEditor.slash.keybindEmbed",
-    keywords: ["keybind", "remap", "きーばいんど", "リマップ"],
+    // 表示名は「リマップ」（記事の見出しと同じ語）。旧名の「キー配置」や keyboard でも見つかるようにする
+    keywords: ["remap", "りまっぷ", "リマップ", "keybind", "keyboard", "controls", "きーはいち", "キー配置", "きーばいんど", "キーボード"],
     icon: Keyboard,
     groupKey: GROUP.embed,
     run: (_editor, ctx) => ctx.openEmbedDialog("keybind"),
@@ -202,12 +206,24 @@ export const SLASH_ITEM_DEFS: SlashItemDef[] = [
     groupKey: GROUP.embed,
     run: (_editor, ctx) => ctx.openEmbedDialog("searchcraft"),
   },
+  {
+    titleKey: "guideEditor.slash.searchCraftTemplateEmbed",
+    keywords: ["template", "searchcraft", "てんぷれ", "テンプレート", "さーちくらふと"],
+    icon: LayoutTemplate,
+    groupKey: GROUP.embed,
+    run: (_editor, ctx) => ctx.openTemplateEmbedDialog(),
+  },
 ];
 
 /** 定義を表示用（文言解決済み）に変換する */
 function resolveItem(def: SlashItemDef, t: Translator): SlashItem {
-  const { titleKey, groupKey, ...rest } = def;
-  return { ...rest, title: t(titleKey), group: t(groupKey) };
+  const { titleKey, groupKey, descriptionKey, ...rest } = def;
+  return {
+    ...rest,
+    title: t(titleKey),
+    group: t(groupKey),
+    ...(descriptionKey ? { description: t(descriptionKey) } : {}),
+  };
 }
 
 /** クエリで項目を絞り込む（タイトル + キーワードの部分一致、大小無視） */

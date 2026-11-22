@@ -4,15 +4,20 @@
 // 全ページに波及する不具合になるため、判定の分岐を実値で押さえる。
 import { describe, it, expect } from "vitest";
 import {
+  ACCEPT_LANGUAGE_MAP,
   DEFAULT_LOCALE,
+  SUPPORTED_LOCALES,
   isLocale,
+  matchAcceptLanguageTag,
   localeCookieValue,
   localeFromMatches,
   parseAcceptLanguage,
   parseLocaleCookie,
   resolveLocale,
 } from "../locale";
-import { t, PAGES_JA, PAGES_EN } from "../messages";
+import { t, PAGES_JA } from "../messages";
+import { PAGES_EN } from "../messages/pages-en";
+import { MESSAGES } from "../messages";
 
 /** ネストしたメッセージ定義を "a.b.c" のドットパス一覧へ潰す */
 function flattenKeys(obj: unknown, prefix = ""): string[] {
@@ -195,19 +200,46 @@ describe("t（ロケールとフォールバック）", () => {
 // 日本語だけにキーを足すとフォールバックで日本語が英語UIに混ざる。
 // 型では検出できない（pages-en.ts は部分集合を許す型）ため、ここで数える。
 describe("翻訳カバレッジ", () => {
-  it("日本語の全キーに英語訳がある", () => {
-    const jaKeys = flattenKeys(PAGES_JA);
-    const enKeys = new Set(flattenKeys(PAGES_EN));
-    const missing = jaKeys.filter((key) => !enKeys.has(key));
+  const jaKeys = flattenKeys(PAGES_JA);
+  const otherLocales = SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE);
 
-    expect(jaKeys.length).toBeGreaterThan(1000); // 走査対象が壊れていないことの確認
-    expect(missing).toEqual([]);
+  it("走査対象が壊れていない", () => {
+    expect(jaKeys.length).toBeGreaterThan(1000);
   });
 
-  it("日本語に存在しないキーが英語側に残っていない（キー名の打ち間違い・削除漏れ）", () => {
-    const jaKeys = new Set(flattenKeys(PAGES_JA));
-    const extra = flattenKeys(PAGES_EN).filter((key) => !jaKeys.has(key));
+  // ja 以外の全ロケールを回す（言語を足すと自動で検査対象になる）
+  describe.each(otherLocales)("%s", (locale) => {
+    it("日本語の全キーに訳がある", () => {
+      const keys = new Set(flattenKeys(MESSAGES[locale]));
+      expect(jaKeys.filter((key) => !keys.has(key))).toEqual([]);
+    });
 
-    expect(extra).toEqual([]);
+    it("日本語に存在しないキーが残っていない（キー名の打ち間違い・削除漏れ）", () => {
+      const ja = new Set(jaKeys);
+      expect(flattenKeys(MESSAGES[locale]).filter((key) => !ja.has(key))).toEqual([]);
+    });
+  });
+});
+
+describe("matchAcceptLanguageTag（タグ全体 → 主部分）", () => {
+  it("表のタグ全体を主部分より先に照合する", () => {
+    const original = { ...ACCEPT_LANGUAGE_MAP };
+    const map = ACCEPT_LANGUAGE_MAP as Record<string, "ja" | "en">;
+    try {
+      // 将来の zh-TW → zh-Hant のように、地域つきタグだけ別ロケールへ振る場合を模す
+      map["en-jp"] = "ja";
+      expect(matchAcceptLanguageTag("en-jp")).toBe("ja");
+      expect(parseAcceptLanguage("en-JP")).toBe("ja");
+      // 表にない地域つきタグは主部分へ落ちる
+      expect(matchAcceptLanguageTag("en-gb")).toBe("en");
+    } finally {
+      delete map["en-jp"];
+      expect(ACCEPT_LANGUAGE_MAP).toEqual(original);
+    }
+  });
+
+  it("未対応の言語は null（地域つきでも）", () => {
+    expect(matchAcceptLanguageTag("fr-ca")).toBeNull();
+    expect(matchAcceptLanguageTag("zh-tw")).toBeNull();
   });
 });

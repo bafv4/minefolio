@@ -8,11 +8,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
+  seedKeybinding,
+  seedPlayerConfig,
   seedUser,
   SHARED_MEMORY_URL,
   type TestDb,
 } from "@/lib/__tests__/helpers/test-db";
-import { contentTranslations, users } from "@/lib/schema";
+import { contentTranslations, socialLinks, users } from "@/lib/schema";
+import { MAX_SOCIAL_LINKS, PROFILE_FIELD_LIMITS, type ProfileChanges } from "@/lib/profile-edit-validation";
+import { PROFILE_TAB_VALUES } from "@/lib/profile-tabs";
 
 const sessionMocks = vi.hoisted(() => ({
   getOptionalSession: vi.fn(),
@@ -36,6 +40,9 @@ vi.mock("@/lib/content-translation.server", async (importOriginal) => {
 });
 
 import { action, loader } from "../edit";
+import { saveProfileBatch } from "@/lib/profile-edit.server";
+import { createTranslator } from "@/lib/messages";
+const t = createTranslator("ja");
 
 const ENV_KEYS = ["TURSO_DATABASE_URL", "BETTER_AUTH_SECRET", "APP_URL"] as const;
 const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -115,7 +122,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "2008-12" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -124,7 +131,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "2020-13" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -133,7 +140,7 @@ describe("action - rtaStartedYearMonth の検証", () => {
 
     const res = await callAction(baseFormData({ rtaStartedYearMonth: "9999-12" }));
 
-    expect(res).toEqual({ error: "RTA歴の開始年月が不正です（2009年1月〜現在まで）" });
+    expect(res).toEqual({ error: "RTA歴の開始年月は、2009年1月から現在までの範囲で選んでください" });
     expect(await findRtaStartedYearMonth(user.id)).toBe("2015-01");
   });
 
@@ -166,6 +173,52 @@ describe("action - pronouns の検証", () => {
   });
 });
 
+describe("action - ageGroup（年代）の検証", () => {
+  async function findAge(userId: string) {
+    const row = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    return { ageGroup: row?.ageGroup, ageGroupPublic: row?.ageGroupPublic };
+  }
+
+  it("正常値は保存され、公開フラグも保存される", async () => {
+    const user = await setupUser();
+
+    const res = await callAction(baseFormData({ ageGroup: "20s", ageGroupPublic: "true" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await findAge(user.id)).toEqual({ ageGroup: "20s", ageGroupPublic: true });
+  });
+
+  it("空文字は未設定（null）になり、公開フラグも false に戻る", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      ageGroup: "30s",
+      ageGroupPublic: true,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ ageGroup: "", ageGroupPublic: "true" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await findAge(user.id)).toEqual({ ageGroup: null, ageGroupPublic: false });
+  });
+
+  it("未知の値は保存せずエラーを返し、既存の値を null で上書きしない", async () => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      ageGroup: "30s",
+      ageGroupPublic: true,
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ ageGroup: "teens" }));
+
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
+    expect(await findAge(user.id)).toEqual({ ageGroup: "30s", ageGroupPublic: true });
+  });
+});
+
 describe("action - profileVisibility の検証", () => {
   it("allowlist 外の値（foo）は invalidOption エラーになり、DB は無変更", async () => {
     const user = await setupUser();
@@ -173,7 +226,7 @@ describe("action - profileVisibility の検証", () => {
 
     const res = await callAction(baseFormData({ profileVisibility: "foo" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
   });
 });
@@ -210,7 +263,7 @@ describe("action - capeDisplay の検証", () => {
 
     const res = await callAction(baseFormData({ capeDisplay: "evil" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
   });
 
@@ -224,7 +277,7 @@ describe("action - capeDisplay の検証", () => {
 
     const res = await callAction(baseFormData({ capeDisplay: "" }));
 
-    expect(res).toEqual({ error: "不正な選択肢です" });
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
     expect(await findCapeDisplay(user.id)).toBe("elytra");
   });
 
@@ -242,21 +295,6 @@ describe("action - capeDisplay の検証", () => {
     const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
     expect(row?.capeDisplay).toBe("elytra");
     expect(row?.displayName).toBe("Renamed");
-  });
-});
-
-describe("action - socialLinks の platform 検証", () => {
-  it("allowlist 外の platform（evil）は invalidOption エラーになる", async () => {
-    await setupUser();
-
-    const fd = new FormData();
-    fd.set("_action", "create_link");
-    fd.set("platform", "evil");
-    fd.set("identifier", "runner");
-
-    const res = await callAction(fd);
-
-    expect(res).toEqual({ error: "不正な選択肢です" });
   });
 });
 
@@ -357,5 +395,210 @@ describe("自己紹介の自動翻訳と公開範囲（非公開プロフィー�
 
     expect(await db.select().from(contentTranslations)).toHaveLength(0);
     expect(translationMocks.scheduleUserBioTranslation).not.toHaveBeenCalled();
+  });
+});
+
+describe("action - defaultProfileTab の検証", () => {
+  it.each([...PROFILE_TAB_VALUES])("有効値（%s）は保存される", async (value) => {
+    const user = await seedUser(db, {
+      slug: "runner",
+      discordId: "discord-runner",
+      defaultProfileTab: value === "profile" ? "stats" : "profile",
+    });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ defaultProfileTab: value }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.defaultProfileTab).toBe(value);
+  });
+
+  it.each(["evil", "", "guides", "Profile"])("不正な値（%j）は invalidOption エラーになり、ほかの列も書かれない", async (value) => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", defaultProfileTab: "stats", displayName: "Old" });
+    signInAs("discord-runner");
+    const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+    const res = await callAction(baseFormData({ defaultProfileTab: value, displayName: "Changed" }));
+
+    expect(res).toEqual({ error: t("meEdit.invalidOption") });
+    expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+  });
+});
+
+describe("action - 真偽の欄（slimSkin / show*）の検証", () => {
+  const FLAGS = ["slimSkin", "showPacemanOnHome", "showTwitchOnHome", "showYoutubeOnHome", "showRankedStats", "showPacemanStats"];
+
+  it.each(FLAGS.flatMap((f) => ["on", "1", "", "TRUE"].map((v) => [f, v] as const)))(
+    "%s に %j を送ると invalidOption エラーになり、DB は無変更（false 扱いにしない）",
+    async (flag, value) => {
+      const user = await seedUser(db, {
+        slug: "runner",
+        discordId: "discord-runner",
+        slimSkin: true,
+        showPacemanOnHome: true,
+        showTwitchOnHome: true,
+        showYoutubeOnHome: true,
+        showRankedStats: true,
+        showPacemanStats: true,
+        displayName: "Old",
+      });
+      signInAs("discord-runner");
+      const before = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+
+      const res = await callAction(baseFormData({ [flag]: value, displayName: "Changed" }));
+
+      expect(res).toEqual({ error: t("meEdit.invalidOption") });
+      expect(await db.query.users.findFirst({ where: eq(users.id, user.id) })).toEqual(before);
+    },
+  );
+
+  it("\"true\" / \"false\" は従来どおり保存される", async () => {
+    const user = await seedUser(db, { slug: "runner", discordId: "discord-runner", slimSkin: false, showRankedStats: true });
+    signInAs("discord-runner");
+
+    const res = await callAction(baseFormData({ slimSkin: "true", showRankedStats: "false" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    const row = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+    expect(row).toMatchObject({ slimSkin: true, showRankedStats: false });
+  });
+});
+
+describe("action - リンクの長さ・件数の上限", () => {
+  function formWithChanges(changes: ProfileChanges, overrides: Record<string, string> = {}): FormData {
+    const fd = baseFormData({ _action: "save_all", ...overrides });
+    fd.set("changes", JSON.stringify(changes));
+    return fd;
+  }
+  const custom = (label: string, url: string) => ({
+    key: "k",
+    platform: "custom",
+    identifier: "id",
+    customLabel: label,
+    customUrl: url,
+  });
+
+  it("上限ちょうどのカスタムリンクは保存できる", async () => {
+    const user = await setupUser();
+    const url = "https://example.com/" + "a".repeat(PROFILE_FIELD_LIMITS.customUrl - "https://example.com/".length);
+
+    const res = await callAction(
+      formWithChanges({ links: { create: [custom("a".repeat(PROFILE_FIELD_LIMITS.customLabel), url)] } }),
+    );
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(1);
+  });
+
+  it("customLabel が上限を超えるとエラーになり、リンクもほかの列も書かれない", async () => {
+    const user = await setupUser();
+
+    const res = (await callAction(
+      formWithChanges(
+        { links: { create: [custom("a".repeat(PROFILE_FIELD_LIMITS.customLabel + 1), "https://example.com")] } },
+        { displayName: "Changed" },
+      ),
+    )) as { error?: string };
+
+    expect(res.error).toBe("カスタムSNSの表示名は100文字以内で入力してください");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(0);
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("customUrl が上限を超えるとエラーになり、何も書かれない", async () => {
+    const user = await setupUser();
+    const url = "https://example.com/" + "a".repeat(PROFILE_FIELD_LIMITS.customUrl);
+
+    const res = (await callAction(formWithChanges({ links: { create: [custom("x", url)] } }))) as { error?: string };
+
+    expect(res.error).toBe("URLは2000文字以内で入力してください");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(0);
+  });
+
+  it("リンクが上限件数ある状態で増やす保存は拒否し、何も書かれない", async () => {
+    const user = await setupUser();
+    await db.insert(socialLinks).values(
+      Array.from({ length: MAX_SOCIAL_LINKS }, (_, i) => ({
+        userId: user.id,
+        platform: "custom" as const,
+        identifier: `id${i}`,
+        customLabel: `l${i}`,
+        customUrl: "https://example.com",
+      })),
+    );
+
+    const res = (await callAction(
+      formWithChanges({ links: { create: [custom("x", "https://example.com")] } }),
+    )) as { error?: string };
+
+    expect(res.error).toBe("リンクは50件まで登録できます");
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(MAX_SOCIAL_LINKS);
+  });
+
+  it("上限超えの既存データがあっても、件数が増えない保存（削除）は通る", async () => {
+    const user = await setupUser();
+    const rows = Array.from({ length: MAX_SOCIAL_LINKS + 2 }, (_, i) => ({
+      id: `link${i}`,
+      userId: user.id,
+      platform: "custom" as const,
+      identifier: `id${i}`,
+      customLabel: `l${i}`,
+      customUrl: "https://example.com",
+    }));
+    await db.insert(socialLinks).values(rows);
+
+    const res = await callAction(formWithChanges({ links: { delete: ["link0"] } }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+  });
+});
+
+describe("action - 未知の _action", () => {
+  it("save_all 以外の _action（古いタブが送る import_legacy / delete_account など）は拒否し、何も書かれない", async () => {
+    const user = await setupUser();
+
+    for (const unknown of ["import_legacy", "delete_account", "bogus", ""]) {
+      const res = await callAction(baseFormData({ _action: unknown, displayName: "Changed" }));
+      expect(res).toEqual({ error: t("meEdit.invalidOption") });
+    }
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("_action 未指定（従来の保存）は今までどおり保存できる", async () => {
+    const user = await setupUser();
+
+    const res = await callAction(baseFormData({ displayName: "Changed" }));
+
+    expect(res).toEqual({ success: true, action: "profile" });
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).toBe("Changed");
+  });
+});
+
+describe("saveProfileBatch - リンクの重複をトランザクション内で再検査する", () => {
+  it("事前確認（トランザクションの外）の後に同じプラットフォームのリンクが入っても、重複して作らず何も書かない", async () => {
+    const user = await setupUser();
+    // 並行リクエストが事前確認の後・書き込みの前に commit した状態を作る。事前確認の読み取りだけは古い（空の）結果を返させる
+    await db.insert(socialLinks).values({ id: "raced", userId: user.id, platform: "youtube", identifier: "first" });
+    vi.spyOn(db.query.socialLinks, "findMany").mockResolvedValueOnce([]);
+    const fd = baseFormData({ displayName: "Changed" });
+    fd.set("changes", JSON.stringify({ links: { create: [{ key: "k", platform: "youtube", identifier: "second" }] } }));
+
+    const res = await saveProfileBatch({ db, t: createTranslator("ja"), user, formData: fd });
+
+    expect(res).toMatchObject({ error: "このプラットフォームのリンクは既に登録されています" });
+    const links = await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) });
+    expect(links.map((l) => l.identifier)).toEqual(["first"]);
+    expect((await db.query.users.findFirst({ where: eq(users.id, user.id) }))?.displayName).not.toBe("Changed");
+  });
+
+  it("重複が無ければ従来どおり作成できる", async () => {
+    const user = await setupUser();
+    const fd = baseFormData();
+    fd.set("changes", JSON.stringify({ links: { create: [{ key: "k", platform: "youtube", identifier: "only" }] } }));
+
+    const res = await saveProfileBatch({ db, t: createTranslator("ja"), user, formData: fd });
+
+    expect(res).toMatchObject({ success: true });
+    expect(await db.query.socialLinks.findMany({ where: eq(socialLinks.userId, user.id) })).toHaveLength(1);
   });
 });
