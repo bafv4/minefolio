@@ -52,7 +52,10 @@ function TooltipContent({
       >
         {children}
         {showArrow && (
-          <TooltipPrimitive.Arrow className="bg-popover fill-popover z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />
+          // 矢印は 45° 回した四角で、半分を本体に重ねて外へ出した角だけを見せる。見える側の2辺（下・右。
+          // Radix が side に応じて外側の span ごと回すので、どの向きでもこの2辺が外側になる）に本体と同じ枠を引く。
+          // 四角の中心を本体の枠線（1px）の真ん中に置く。上にずらすと、矢印の枠の付け根が本体の内側に食い込む
+          <TooltipPrimitive.Arrow className="bg-popover fill-popover border-border z-50 size-2.5 translate-y-[calc(-50%_-_0.5px)] rotate-45 rounded-[2px] border-r border-b" />
         )}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
