@@ -198,27 +198,29 @@ export async function loadKeybindingsStats(
     excludeViewersCondition,
   );
 
-  // 独立した7クエリは並列に実行する（Turso は 1 往復ごとに HTTP RTT がかかるため）
+  // 独立した5クエリは並列に実行する（Turso は 1 往復ごとに HTTP RTT がかかるため）。
+  // 公開走者の情報（6列）は users から 1 回だけ引き、keybindings 側は必要列（userId・action・keyCode）だけにして、
+  // 走者情報は userId で突き合わせる（行ごとに走者の列を複製して返さない）
   const trackedActionNames = TRACKED_ACTIONS.map((a) => a.action);
   const [
-    [totalResult],
-    [keybindingCountResult],
-    trackedRows,
+    publicUsers,
+    keybindingRows,
     f3InputRemaps,
-    usersWithKeybindingsData,
     mouseConfigs,
     listPlayers,
   ] = await Promise.all([
-    // 公開プロフィール数
+    // 公開プロフィール（件数 = 公開プロフィール数。走者情報の突き合わせ元）
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({
+        userId: users.id,
+        slug: users.slug,
+        mcid: users.mcid,
+        uuid: users.uuid,
+        displayName: users.displayName,
+        displayNameAlphabet: users.displayNameAlphabet,
+        customSkinUrl: users.customSkinUrl,
+      })
       .from(users)
-      .where(publicCondition),
-    // キーバインドを持つユーザー数
-    db
-      .select({ count: sql<number>`count(distinct ${keybindings.userId})` })
-      .from(keybindings)
-      .innerJoin(users, eq(keybindings.userId, users.id))
       .where(publicCondition),
     // キーバインド統計の元データ（全アクションを1クエリで取得し、JS側で「操作→キー」（追跡対象のみ）と「キー→操作」（全操作）に分けて集計する）
     db
@@ -226,12 +228,6 @@ export async function loadKeybindingsStats(
         userId: keybindings.userId,
         action: keybindings.action,
         keyCode: keybindings.keyCode,
-        slug: users.slug,
-        mcid: users.mcid,
-        uuid: users.uuid,
-        displayName: users.displayName,
-        displayNameAlphabet: users.displayNameAlphabet,
-        customSkinUrl: users.customSkinUrl,
       })
       .from(keybindings)
       .innerJoin(users, eq(keybindings.userId, users.id))
@@ -251,20 +247,6 @@ export async function loadKeybindingsStats(
       .from(keyRemaps)
       .innerJoin(users, eq(keyRemaps.userId, users.id))
       .where(and(publicCondition, eq(keyRemaps.targetKey, "F3"), ne(keyRemaps.remapType, "chat"))),
-    db
-      .select({
-        userId: keybindings.userId,
-        slug: users.slug,
-        mcid: users.mcid,
-        uuid: users.uuid,
-        displayName: users.displayName,
-        displayNameAlphabet: users.displayNameAlphabet,
-        customSkinUrl: users.customSkinUrl,
-      })
-      .from(keybindings)
-      .innerJoin(users, eq(keybindings.userId, users.id))
-      .where(publicCondition)
-      .groupBy(keybindings.userId, users.slug, users.mcid, users.uuid, users.displayName, users.displayNameAlphabet, users.customSkinUrl),
     // マウス設定
     db
       .select({
@@ -288,9 +270,19 @@ export async function loadKeybindingsStats(
     // 一覧（/keybindings）と同じ母集団。ローダー側で 1 分キャッシュされる
     loadKeybindingsListPlayers(db),
   ]);
-  const publicProfiles = totalResult?.count ?? 0;
+
+  // keybindings の行に走者情報を突き合わせる（公開走者の行だけを引いているので、見つからない行は競合時の取りこぼしとして捨てる）
+  const publicUserById = new Map(publicUsers.map((u) => [u.userId, u]));
+  const trackedRows = keybindingRows.flatMap((r) => {
+    const u = publicUserById.get(r.userId);
+    return u ? [{ ...r, slug: u.slug, mcid: u.mcid, uuid: u.uuid, displayName: u.displayName, displayNameAlphabet: u.displayNameAlphabet, customSkinUrl: u.customSkinUrl }] : [];
+  });
+  // キーバインドを持つ公開走者（件数と F3 の既定入力の母集団）は行から導出する
+  const keybindingUserIds = new Set(trackedRows.map((r) => r.userId));
+  const usersWithKeybindingsData = publicUsers.filter((u) => keybindingUserIds.has(u.userId));
+  const publicProfiles = publicUsers.length;
+  const playersWithKeybindings = keybindingUserIds.size;
   const registeredPlayers = listPlayers.length;
-  const playersWithKeybindings = keybindingCountResult?.count ?? 0;
   // マウス設定の登録者と Raw Input / マウス加速の分布の母集団は、表のマウスタブに載る走者
   // （DPI・感度・Windows 速度のどれかがある。hasMouseSettings）に揃える。Raw Input（既定 ON）・
   // マウス加速（既定 OFF）は設定行ができた時点で値が入るため、これだけを根拠にすると
