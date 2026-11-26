@@ -1,8 +1,6 @@
-import { eq } from "drizzle-orm";
 import { createDb } from "./db";
 import { createAuth } from "./auth";
-import { users } from "./schema";
-import { getOptionalSession } from "./session";
+import { getOptionalSession, loadUserByDiscordId } from "./session";
 import { getPaceFeedEntries } from "./paceman-cache";
 import { PACE_FEED_SPLITS, getTimelineProgress } from "./pace-splits";
 import { getCached, setCached } from "./cache";
@@ -244,10 +242,8 @@ export async function getViewerPacePrefs(
   const session = await getOptionalSession(request, auth);
   if (!session) return { mcid: null, showPacemanOnHome: true };
 
-  const me = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { mcid: true, showPacemanOnHome: true },
-  });
+  // 同じ Request で users 行を1回だけ読む（共通レイアウトなどと共有）
+  const me = await loadUserByDiscordId(request, db, session.user.id);
   if (!me) return { mcid: null, showPacemanOnHome: true };
 
   return { mcid: me.mcid, showPacemanOnHome: me.showPacemanOnHome ?? true };

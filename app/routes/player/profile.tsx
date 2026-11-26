@@ -12,7 +12,7 @@ import { createDb } from "@/lib/db";
 import { itemSegmentLabel } from "@/lib/segment-labels";
 import { loadPendingSpeedrunRecords, type PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
@@ -488,10 +488,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     const viewerUserId = isOwner
       ? gate.id
       : session
-        ? ((await db.query.users.findFirst({
-            where: eq(users.discordId, session.user.id),
-            columns: { id: true },
-          }))?.id ?? null)
+        ? ((await loadUserByDiscordId(request, db, session.user.id))?.id ?? null)
         : null;
     const [counts, viewerReactions] = await Promise.all([
       getProfileReactionCounts(db, gate.id),

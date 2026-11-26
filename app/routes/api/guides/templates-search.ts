@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getEnv } from "@/lib/env.server";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
@@ -23,10 +23,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const auth = createAuth(db, getEnv());
   const session = await getOptionalSession(request, auth);
   const viewer = session
-    ? await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      })
+    ? await loadUserByDiscordId(request, db, session.user.id)
     : null;
 
   const url = new URL(request.url);

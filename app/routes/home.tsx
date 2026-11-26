@@ -15,7 +15,7 @@ import { HOME_SECTION_ORDER_FETCHER_KEY } from "@/components/home/home-settings-
 import type { Route } from "./+types/home";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
 import { listedRunnerCondition } from "@/lib/users-filter";
@@ -161,24 +161,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const accountPromise = (async () => {
     const session = await getOptionalSession(request, auth);
     if (!session) return null;
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.discordId, session.user.id),
-      columns: {
-        mcid: true,
-        uuid: true,
-        slug: true,
-        displayName: true,
-        displayNameAlphabet: true,
-        customSkinUrl: true,
-        showPacemanOnHome: true,
-        showYoutubeOnHome: true,
-        showTwitchOnHome: true,
-        homeSectionOrder: true,
-        createdAt: true,
-      },
-    });
+    // 同じ Request で users 行（全列）を1回だけ読む（共通レイアウトなどと共有）。全列なので、クライアントへ渡す列は明示的に選ぶ
+    const existingUser = await loadUserByDiscordId(request, db, session.user.id);
     if (!existingUser) return null;
-    const { homeSectionOrder, createdAt, ...profile } = existingUser;
+    const { homeSectionOrder, createdAt } = existingUser;
+    const profile = {
+      mcid: existingUser.mcid,
+      uuid: existingUser.uuid,
+      slug: existingUser.slug,
+      displayName: existingUser.displayName,
+      displayNameAlphabet: existingUser.displayNameAlphabet,
+      customSkinUrl: existingUser.customSkinUrl,
+    };
     return {
       layout: normalizeHomeLayout(homeSectionOrder),
       // クライアントへそのまま渡す部分

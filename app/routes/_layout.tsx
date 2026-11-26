@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -43,21 +43,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   // Get user from our users table
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: {
-      id: true,
-      mcid: true,
-      slug: true,
-      displayName: true,
-      displayNameAlphabet: true,
-      discordAvatar: true,
-      // ヘッダーのアバター（スキンの顔）用
-      uuid: true,
-      customSkinUrl: true,
-      onboardingCompleted: true,
-    },
-  });
+  const user = await loadUserByDiscordId(request, db, session.user.id);
 
   // ログイン済みだが初期設定（/onboarding）が未完了。users 行がまだ無い場合も含む
   if (!user) {

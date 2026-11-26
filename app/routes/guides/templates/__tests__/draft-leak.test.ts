@@ -21,7 +21,10 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 // 自動翻訳の読み取りは外部 API 前提なので null 固定にする
 vi.mock("@/lib/content-translation.server", async (importOriginal) => {

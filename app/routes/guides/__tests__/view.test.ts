@@ -15,7 +15,10 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 // 著者slugの404フォールバック（slug_history → Mojang API）の検証用。MojangError は
 // player-slug-fallback.server.test.ts / onboarding.test.ts と同じく実クラスをそのまま使う

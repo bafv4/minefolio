@@ -32,7 +32,10 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 // 自動翻訳の依頼・削除（実体は ANTHROPIC_API_KEY が無いと何もしない）。呼び分けだけを検証するため差し替える
 const translationMocks = vi.hoisted(() => ({

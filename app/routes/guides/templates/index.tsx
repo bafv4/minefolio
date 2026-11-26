@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useLoaderData, Link, Form, useSearchParams, useNavigation, useLocation, type LoaderFunctionArgs } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
 import { eq, and, or, asc, desc, sql, isNotNull } from "drizzle-orm";
@@ -70,10 +70,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // viewer（session → users）と一覧の取得は互いに独立なので並行する（rows は下で起動）
   const viewerPromise = getOptionalSession(request, auth).then((session) =>
     session
-      ? db.query.users.findFirst({
-          where: eq(users.discordId, session.user.id),
-          columns: { id: true },
-        })
+      ? loadUserByDiscordId(request, db, session.user.id)
       : null
   );
 

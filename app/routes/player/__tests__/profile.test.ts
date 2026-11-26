@@ -31,6 +31,7 @@ const sessionMocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getCurrentUserOrOnboarding: vi.fn(),
   isAuthenticated: vi.fn(),
+  loadUserByDiscordId: vi.fn(),
 }));
 
 vi.mock("@/lib/session", () => sessionMocks);
@@ -89,6 +90,9 @@ beforeEach(async () => {
   process.env.APP_URL = "https://minefolio.app";
   db = await createTestDbAt(SHARED_MEMORY_URL);
   // 既定は未ログイン
+  sessionMocks.loadUserByDiscordId.mockImplementation((_req: Request, d: TestDb, discordId: string) =>
+    d.query.users.findFirst({ where: eq(schema.users.discordId, discordId) }),
+  );
   sessionMocks.getOptionalSession.mockResolvedValue(null);
 });
 

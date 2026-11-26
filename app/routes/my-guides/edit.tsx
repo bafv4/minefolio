@@ -6,7 +6,7 @@ import {
 } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
@@ -41,11 +41,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const auth = createAuth(db, env);
   const session = await getSession(request, auth);
 
-  // user はクライアントへ渡す列（画像パスの userId と公開 URL の slug）だけ引く
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true, slug: true },
-  });
+  // クライアントへ渡すのは画像パスの userId と公開 URL の slug だけ（user 行そのものは返さない）
+  const user = await loadUserByDiscordId(request, db, session.user.id);
   if (!user) return redirect("/onboarding");
 
   const guide = await db.query.guides.findFirst({
@@ -100,7 +97,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       allowAutoTranslation: guide.allowAutoTranslation,
       ...resolved,
     },
-    user,
+    user: { id: user.id, slug: user.slug },
     hasDraft,
     published,
     translationEnabled,
