@@ -10,6 +10,7 @@ import { createId } from "@paralleldrive/cuid2";
 import type { Translator } from "@/lib/messages";
 import { isUniqueConstraintError, type Database } from "@/lib/db";
 import { errorSummary } from "@/lib/error-summary";
+import { caseById } from "@/lib/sql-case";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
 import { applyMcidSlugChange, verifyMcidForUser } from "@/lib/mcid-change.server";
 import type { CapeDisplay } from "@/lib/cape";
@@ -687,17 +688,20 @@ export async function saveProfileBatch({
       if (linkDeletes.length > 0) {
         await tx.delete(socialLinks).where(and(inArray(socialLinks.id, linkDeletes), eq(socialLinks.userId, user.id)));
       }
-      for (const l of validLinkUpdates) {
+      // 行ごとの UPDATE（Turso では 1 件 = 1 HTTP 往復）を、CASE 式の単一 UPDATE にまとめる（同一 id は後勝ち）
+      if (validLinkUpdates.length > 0) {
+        const byId = new Map(validLinkUpdates.map((l) => [l.id, l]));
+        const rows = [...byId.values()];
         await tx
           .update(socialLinks)
           .set({
-            platform: l.platform as typeof socialLinks.$inferInsert.platform,
-            identifier: l.identifier,
-            customLabel: l.platform === "custom" ? l.customLabel : null,
-            customUrl: l.platform === "custom" ? l.customUrl : null,
+            platform: caseById(socialLinks.id, rows.map((l) => [l.id, l.platform])),
+            identifier: caseById(socialLinks.id, rows.map((l) => [l.id, l.identifier])),
+            customLabel: caseById(socialLinks.id, rows.map((l) => [l.id, l.platform === "custom" ? l.customLabel : null])),
+            customUrl: caseById(socialLinks.id, rows.map((l) => [l.id, l.platform === "custom" ? l.customUrl : null])),
             updatedAt: now,
           })
-          .where(and(eq(socialLinks.id, l.id), eq(socialLinks.userId, user.id)));
+          .where(and(inArray(socialLinks.id, [...byId.keys()]), eq(socialLinks.userId, user.id)));
       }
       for (const l of linkCreates) {
         await tx.insert(socialLinks).values({
@@ -742,11 +746,18 @@ export async function saveProfileBatch({
           .delete(profileVideos)
           .where(and(inArray(profileVideos.id, videoDeletes), eq(profileVideos.userId, user.id)));
       }
-      for (const v of validVideoUpdates) {
+      if (validVideoUpdates.length > 0) {
+        const byId = new Map(validVideoUpdates.map((v) => [v.id, v]));
+        const rows = [...byId.values()];
         await tx
           .update(profileVideos)
-          .set({ url: v.url, title: v.title, isPinned: v.isPinned, updatedAt: now })
-          .where(and(eq(profileVideos.id, v.id), eq(profileVideos.userId, user.id)));
+          .set({
+            url: caseById(profileVideos.id, rows.map((v) => [v.id, v.url])),
+            title: caseById(profileVideos.id, rows.map((v) => [v.id, v.title])),
+            isPinned: caseById(profileVideos.id, rows.map((v) => [v.id, v.isPinned ? 1 : 0])),
+            updatedAt: now,
+          })
+          .where(and(inArray(profileVideos.id, [...byId.keys()]), eq(profileVideos.userId, user.id)));
       }
       for (const v of videoCreates) {
         await tx.insert(profileVideos).values({
@@ -758,14 +769,16 @@ export async function saveProfileBatch({
           displayOrder: orderedIds.indexOf(newVideoIds.get(v.key)!),
         });
       }
+      const reordered: [string, number][] = [];
       for (const [index, id] of orderedIds.entries()) {
         const existing = videoById.get(id);
-        if (existing && existing.displayOrder !== index) {
-          await tx
-            .update(profileVideos)
-            .set({ displayOrder: index, updatedAt: now })
-            .where(and(eq(profileVideos.id, id), eq(profileVideos.userId, user.id)));
-        }
+        if (existing && existing.displayOrder !== index) reordered.push([id, index]);
+      }
+      if (reordered.length > 0) {
+        await tx
+          .update(profileVideos)
+          .set({ displayOrder: caseById(profileVideos.id, reordered), updatedAt: now })
+          .where(and(inArray(profileVideos.id, reordered.map(([id]) => id)), eq(profileVideos.userId, user.id)));
       }
 
       // プロフィール列。送られていない列（undefined）は更新対象に含めない

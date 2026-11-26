@@ -6,7 +6,7 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/devices";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, playerConfigs, configPresets } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
@@ -63,9 +63,8 @@ import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
 import { gameLanguageOptions, normalizeGameLanguage } from "@/lib/game-languages";
 import { SAVE_LIMITS, formString, isValidFov, isValidGuiScale } from "@/lib/save-limits";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError } from "@/lib/preset-utils";
+import { syncActivePresetSnapshot } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
-import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeHistoryDescription } from "@/lib/history-description";
 import { createId } from "@paralleldrive/cuid2";
 import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
@@ -184,18 +183,12 @@ export function HydrateFallback() {
   );
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
 
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    with: { playerConfig: true },
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     return { error: t("meDevices.userNotFound") };
@@ -205,13 +198,19 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formData.get("_action") as string | null;
   const presetId = formString(formData, "presetId") || null;
 
-  try {
-    await assertPresetIsActive(db, user.id, presetId);
-  } catch (e) {
-    if (e instanceof PresetMismatchError) {
-      return { error: t("mePresets.staleSession") };
-    }
-    throw e;
+  // ライブの playerConfig 行（gameLanguage の比較と update / insert の分岐に使う。以前の with: playerConfig の join を置き換える）
+  const liveConfig = await db.query.playerConfigs.findFirst({
+    where: eq(playerConfigs.userId, user.id),
+  });
+
+  // アクティブプリセットは 1 回だけ引き、競合検証・プリセット必須ゲート・スナップショット同期・履歴の presetId で共有する
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true, isMain: true },
+  });
+  // 送信 presetId が現在のアクティブと異なる（別タブでプリセット切替が起きた等）場合は弾く
+  if (presetId && activePresetRow?.id !== presetId) {
+    return { error: t("mePresets.staleSession") };
   }
 
   // playerConfig はプリセットのスナップショットに含まれるデータのため、
@@ -219,10 +218,6 @@ export async function action({ request }: Route.ActionArgs) {
   // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
   // どのプリセットにも属さないデータになってしまう。
   // 入力方法（users.inputMethod）の編集は /me/playstyle に一本化した（ここでは受け付けない）。
-  const activePresetRow = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-    columns: { id: true },
-  });
   if (!activePresetRow) {
     return { error: t("meDevices.presetRequired") };
   }
@@ -302,7 +297,7 @@ export async function action({ request }: Route.ActionArgs) {
     const normalized = normalizeGameLanguage(gameLanguageRaw);
     if (normalized !== null) {
       gameLanguage = normalized;
-    } else if (gameLanguageRaw === user.playerConfig?.gameLanguage) {
+    } else if (gameLanguageRaw === liveConfig?.gameLanguage) {
       gameLanguage = gameLanguageRaw;
     } else {
       return { error: t("meDevices.gameLanguageInvalid") };
@@ -383,11 +378,11 @@ export async function action({ request }: Route.ActionArgs) {
   await db.transaction(async (tx) => {
     // upsert: ライブの playerConfig 行が無い場合は insert する
     // （update のみだと保存が無言で失われ、直後の sync がスナップショットを null で上書きする）
-    if (user.playerConfig) {
+    if (liveConfig) {
       await tx
         .update(playerConfigs)
         .set(configData)
-        .where(eq(playerConfigs.id, user.playerConfig.id));
+        .where(eq(playerConfigs.id, liveConfig.id));
     } else {
       await tx.insert(playerConfigs).values({
         id: createId(),
@@ -403,13 +398,13 @@ export async function action({ request }: Route.ActionArgs) {
       userId: user.id,
       changeType: "device",
       changeDescription: encodeHistoryDescription("devices.update"),
-      presetId: await resolveActivePublicPresetId(tx, user.id),
+      presetId: activePresetRow.isMain ? activePresetRow.id : null,
       createdAt: new Date(),
     });
   });
 
   // アクティブプリセットスナップショット同期
-  await syncActivePresetSnapshot(db, user.id, ["playerConfig", "fingers"]);
+  await syncActivePresetSnapshot(db, user.id, ["playerConfig", "fingers"], { activePresetId: activePresetRow.id });
 
   return { success: true };
 }

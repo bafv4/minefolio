@@ -3,9 +3,7 @@ import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { useLoaderData, useFetcher } from "react-router";
 import type { Route } from "./+types/presets";
 import { createDb, type Database } from "@/lib/db";
-import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
-import { getEnv } from "@/lib/env.server";
+import { registeredUserContext } from "@/lib/session";
 import { users, configPresets, configHistory, keybindings, playerConfigs, keyRemaps, itemLayouts, searchCrafts, searchCraftLoops, customKeys, customActions } from "@/lib/schema";
 import { eq, desc, asc, and, ne, sql } from "drizzle-orm";
 import { SAVE_LIMITS, formString } from "@/lib/save-limits";
@@ -202,18 +200,12 @@ async function restoreSearchCraftLoopsFromSnapshot(
 // 旧実装が apply-preset（編集先の切替）で記録した履歴の文言（ja / en）。% は名前部分
 const LEGACY_APPLY_HISTORY_PATTERNS = ["プリセット「%」を適用しました", 'Applied preset "%"'];
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
 
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     throw new Response(t("mePresets.userNotFound"), { status: 404 });
@@ -282,13 +274,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { userId: user.id, presets, history: historyRows };
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
-
-  const session = await getSession(request, auth);
 
   const formData = await request.formData();
   const intent = formString(formData, "intent");
@@ -297,10 +285,8 @@ export async function action({ request }: Route.ActionArgs) {
   // 全8リレーションが必要なのは create-preset の現設定分岐と apply-preset の
   // user.keybindings（履歴バックアップ用）だけのため、ここでは id だけ取得し、
   // 各 intent 分岐内で必要な分だけ2段目のフェッチを行う
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true },
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     return { error: t("mePresets.userNotFound") };
@@ -773,26 +759,28 @@ export async function action({ request }: Route.ActionArgs) {
     // 唯一のプリセットの削除は許可し、「アクティブプリセット = ライブテーブル」の
     // 不変条件を保つため、同一トランザクションでライブテーブルも全ワイプする。
     if (others.length === 0) {
-      await db.transaction(async (tx) => {
-        await tx.delete(keybindings).where(eq(keybindings.userId, user.id));
-        await tx.delete(keyRemaps).where(eq(keyRemaps.userId, user.id));
-        await tx.delete(playerConfigs).where(eq(playerConfigs.userId, user.id));
-        await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
-        await tx.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id));
-        await tx.delete(searchCrafts).where(eq(searchCrafts.userId, user.id));
-        await tx.delete(customKeys).where(eq(customKeys.userId, user.id));
-        await tx.delete(customActions).where(eq(customActions.userId, user.id));
-        await tx
+      // 固定の書き込み 10 文なので db.batch（1 往復・原子的）でまとめる。
+      // 子（Loop）→ 親（サーチクラフト）の削除順は従来のまま
+      await db.batch([
+        db.delete(keybindings).where(eq(keybindings.userId, user.id)),
+        db.delete(keyRemaps).where(eq(keyRemaps.userId, user.id)),
+        db.delete(playerConfigs).where(eq(playerConfigs.userId, user.id)),
+        db.delete(itemLayouts).where(eq(itemLayouts.userId, user.id)),
+        db.delete(searchCraftLoops).where(eq(searchCraftLoops.userId, user.id)),
+        db.delete(searchCrafts).where(eq(searchCrafts.userId, user.id)),
+        db.delete(customKeys).where(eq(customKeys.userId, user.id)),
+        db.delete(customActions).where(eq(customActions.userId, user.id)),
+        db
           .delete(configPresets)
-          .where(and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id)));
-        await tx.insert(configHistory).values({
+          .where(and(eq(configPresets.id, presetId), eq(configPresets.userId, user.id))),
+        db.insert(configHistory).values({
           id: createId(),
           userId: user.id,
           changeType: "preset_switch",
           changeDescription: encodeHistoryDescription("preset.delete", { name: preset.name }),
           createdAt: now,
-        });
-      });
+        }),
+      ]);
 
       return { success: true, intent: "delete-preset", message: t("mePresets.presetDeleted") };
     }

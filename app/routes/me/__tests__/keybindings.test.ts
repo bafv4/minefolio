@@ -8,6 +8,7 @@
 // セッションはモックし、ルート本体（プリセット前提条件・検証・DB書き込み）を実DBで検証する
 // （app/routes/me/__tests__/devices.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { makeMeContext } from "@/lib/__tests__/helpers/route-context";
 import { and, eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -28,7 +29,11 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+// registeredUserContext など実物の export は残し、セッション関数だけモックに差し替える
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 import { action } from "../keybindings";
 import { SAVE_LIMITS } from "@/lib/save-limits";
@@ -49,7 +54,7 @@ function makeRequest(formData: FormData): Request {
 }
 
 async function callAction(formData: FormData): Promise<ActionResult> {
-  return action({ request: makeRequest(formData), params: {}, context: {} } as never) as never;
+  return action({ request: makeRequest(formData), params: {}, context: await makeMeContext(db, () => sessionMocks.getSession()) } as never) as never;
 }
 
 function signInAs(discordId: string) {

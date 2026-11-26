@@ -9,7 +9,7 @@ import { MeChecklist } from "@/components/me/me-checklist";
 import type { Route } from "./+types/edit";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
 import { users, socialLinks, profileVideos } from "@/lib/schema";
@@ -208,7 +208,7 @@ export function HydrateFallback() {
   );
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
@@ -216,9 +216,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   const session = await getSession(request, auth);
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェアが解決済みの行（同じ Request で1回読んだもの。保存の前に読むだけなので再取得しない）
+  const user =
+    context.get(registeredUserContext) ??
+    (await db.query.users.findFirst({ where: eq(users.discordId, session.user.id) }));
 
   if (!user) {
     return { error: t("meEdit.userNotFound") };

@@ -3,10 +3,8 @@ import { resolveLocale } from "@/lib/locale";
 import { redirect } from "react-router";
 import type { Route } from "./+types/import";
 import { createDb, type Database } from "@/lib/db";
-import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
-import { getEnv } from "@/lib/env.server";
-import { users, keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
+import { registeredUserContext } from "@/lib/session";
+import { keybindings, keyRemaps, playerConfigs, configPresets, customKeys, customActions, itemLayouts, searchCrafts } from "@/lib/schema";
 import { eq, sql } from "drizzle-orm";
 import type { ParsedRemap } from "@/lib/import-parser";
 import { normalizeKeyRemapType } from "@/lib/remap-utils";
@@ -78,16 +76,12 @@ async function syncPresetAfterImport(t: Translator, db: Database, userId: string
   return !hasPresets;
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
-  const session = await getSession(request, auth);
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     throw new Response("Not Found", { status: 404 });

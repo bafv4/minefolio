@@ -8,7 +8,7 @@ import { FloatingSaveBar } from "@/components/floating-save-bar";
 import type { Route } from "./+types/account";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, keybindings, playerConfigs, itemLayouts, searchCrafts, keyRemaps, guides, searchCraftTemplates } from "@/lib/schema";
 import { SELECTABLE_PROFILE_TABS, type SelectableProfileTabValue } from "@/lib/profile-tabs";
@@ -139,7 +139,7 @@ export function HydrateFallback() {
   );
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
@@ -147,9 +147,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   const session = await getSession(request, auth);
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェアが解決済みの行（同じ Request で1回読んだもの。保存の前に読むだけなので再取得しない）
+  const user =
+    context.get(registeredUserContext) ??
+    (await db.query.users.findFirst({ where: eq(users.discordId, session.user.id) }));
 
   if (!user) {
     return { error: t("meEdit.userNotFound") };

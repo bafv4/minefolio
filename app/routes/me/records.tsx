@@ -5,10 +5,12 @@ import type { Route } from "./+types/records";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords } from "@/lib/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, inArray } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
+import { caseById } from "@/lib/sql-case";
 import { createId } from "@paralleldrive/cuid2";
 import { formatTime, parseTimeToMs } from "@/lib/time-utils";
 import { fetchSpeedrunComStats } from "@/lib/external-stats";
@@ -251,7 +253,7 @@ function parseRecordOps(raw: unknown, t: Translator): { ops: RecordOp[] } | { er
   return { ops };
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
   const env = getEnv();
   const db = createDb();
@@ -259,9 +261,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   const session = await getSession(request, auth);
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェアが解決済みの行（同じ Request で1回読んだもの。保存の前に読むだけなので再取得しない）
+  const user =
+    context.get(registeredUserContext) ??
+    (await db.query.users.findFirst({ where: eq(users.discordId, session.user.id) }));
 
   if (!user) {
     return { error: t("meRecords.userNotFound") };
@@ -315,56 +318,66 @@ export async function action({ request }: Route.ActionArgs) {
 
     // 非表示は露出を減らす操作なので updatedAt（ホームの「最近の更新」等）は進めない。ピン留めが変わったときだけ進める
     const pinnedChanged = !sameRunIdSet(parseRunIdList(user.pinnedSpeedrunRecords), pinned);
-    try {
-      await db.transaction(async (tx) => {
-        // 一意制約に一時的に触れないよう、削除 → 更新 → 追加の順に書く
-        for (const op of ops) {
-          if (op.id !== null && op.delete) {
-            await tx
-              .delete(categoryRecords)
-              .where(and(eq(categoryRecords.id, op.id), eq(categoryRecords.userId, user.id)));
-          }
-        }
-        for (const op of ops) {
-          if (op.id !== null && !op.delete) {
-            await tx
-              .update(categoryRecords)
-              .set({
-                category: op.category,
-                categoryDisplayName: op.categoryDisplayName,
-                personalBest: op.personalBest,
-                pbVideoUrl: op.pbVideoUrl,
-                isVisible: op.isVisible,
-                isPinned: op.isPinned,
-                updatedAt: new Date(),
-              })
-              .where(and(eq(categoryRecords.id, op.id), eq(categoryRecords.userId, user.id)));
-          }
-        }
-        for (const op of ops) {
-          if (op.id === null) {
-            await tx.insert(categoryRecords).values({
-              id: createId(),
-              userId: user.id,
-              category: op.category,
-              categoryDisplayName: op.categoryDisplayName,
-              recordType: "custom",
-              personalBest: op.personalBest,
-              pbVideoUrl: op.pbVideoUrl,
-              isVisible: op.isVisible,
-              isPinned: op.isPinned,
-            });
-          }
-        }
-        await tx
-          .update(users)
+    // 行ごとの書き込み（Turso では 1 件 = 1 HTTP 往復）を、削除 → 更新 → 追加 → users の順の4文以内にまとめ、
+    // db.batch（1 リクエスト・原子的）で送る。削除を先にするのは一意制約に一時的に触れないため
+    const now = new Date();
+    const deleteIds = ops.flatMap((op) => (op.id !== null && op.delete ? [op.id] : []));
+    const updateOps = ops.filter((op) => op.id !== null && !op.delete);
+    const insertOps = ops.filter((op) => op.id === null);
+    const statements: BatchItem<"sqlite">[] = [];
+    if (deleteIds.length > 0) {
+      statements.push(
+        db
+          .delete(categoryRecords)
+          .where(and(inArray(categoryRecords.id, deleteIds), eq(categoryRecords.userId, user.id))),
+      );
+    }
+    if (updateOps.length > 0) {
+      const rows = updateOps.map((op) => ({ ...op, id: op.id as string }));
+      statements.push(
+        db
+          .update(categoryRecords)
           .set({
-            hiddenSpeedrunRecords: JSON.stringify(hidden),
-            pinnedSpeedrunRecords: JSON.stringify(pinned),
-            ...(pinnedChanged ? { updatedAt: new Date() } : {}),
+            category: caseById(categoryRecords.id, rows.map((op) => [op.id, op.category])),
+            categoryDisplayName: caseById(categoryRecords.id, rows.map((op) => [op.id, op.categoryDisplayName])),
+            personalBest: caseById(categoryRecords.id, rows.map((op) => [op.id, op.personalBest])),
+            pbVideoUrl: caseById(categoryRecords.id, rows.map((op) => [op.id, op.pbVideoUrl])),
+            isVisible: caseById(categoryRecords.id, rows.map((op) => [op.id, op.isVisible ? 1 : 0])),
+            isPinned: caseById(categoryRecords.id, rows.map((op) => [op.id, op.isPinned ? 1 : 0])),
+            updatedAt: now,
           })
-          .where(eq(users.id, user.id));
-      });
+          .where(and(inArray(categoryRecords.id, rows.map((op) => op.id)), eq(categoryRecords.userId, user.id))),
+      );
+    }
+    if (insertOps.length > 0) {
+      statements.push(
+        db.insert(categoryRecords).values(
+          insertOps.map((op) => ({
+            id: createId(),
+            userId: user.id,
+            category: op.category,
+            categoryDisplayName: op.categoryDisplayName,
+            recordType: "custom" as const,
+            personalBest: op.personalBest,
+            pbVideoUrl: op.pbVideoUrl,
+            isVisible: op.isVisible,
+            isPinned: op.isPinned,
+          })),
+        ),
+      );
+    }
+    statements.push(
+      db
+        .update(users)
+        .set({
+          hiddenSpeedrunRecords: JSON.stringify(hidden),
+          pinnedSpeedrunRecords: JSON.stringify(pinned),
+          ...(pinnedChanged ? { updatedAt: now } : {}),
+        })
+        .where(eq(users.id, user.id)),
+    );
+    try {
+      await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
     } catch (e) {
       // 事前確認をすり抜けた並行リクエストとの競合（(userId, category, recordType) の一意制約）
       if (isUniqueConstraintError(e)) {
