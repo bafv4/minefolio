@@ -17,12 +17,11 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users, guides, pageViewStats, playstyles } from "@/lib/schema";
-import { listedRunnerCondition } from "@/lib/users-filter";
-import { eq, desc, and, or, isNotNull, sql } from "drizzle-orm";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import { getHomeSpotlight } from "@/lib/home-featured.server";
 import { getHomeOutlooks } from "@/lib/home-live-outlook.server";
-import { guideLikeCountSql } from "@/lib/likes.server";
+import { getRecentProfiles, getPopularProfiles, getNewGuides, getPublicProfileCount, getHeroFaces } from "@/lib/home-discovery.server";
 import type { CachedPace } from "@/lib/paceman-cache";
 import type { PaceManLiveRun } from "@/lib/paceman";
 import type { McidUserMaps } from "@/lib/home-user-data.server";
@@ -118,45 +117,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   const auth = createAuth(db, env);
 
-  // プロフィール一覧の select 列（更新順・PV順で共通）
-  const profileFeedColumns = {
-    inputMethod: users.inputMethod,
-    mcid: users.mcid,
-    uuid: users.uuid,
-    slug: users.slug,
-    displayName: users.displayName,
-    displayNameAlphabet: users.displayNameAlphabet,
-    pronouns: users.pronouns,
-    role: users.role,
-    mainEdition: users.mainEdition,
-    mainPlatform: users.mainPlatform,
-    updatedAt: users.updatedAt,
-    shortBio: users.shortBio,
-    customSkinUrl: users.customSkinUrl,
-    // カードのタグ用（メインカテゴリ）。playstyles.userId は一意なので leftJoin しても行は増えない
-    mainCategory: playstyles.mainCategory,
-  };
-
-  // ガイド一覧の select 列
-  const guideListColumns = {
-    id: guides.id,
-    slug: guides.slug,
-    title: guides.title,
-    summary: guides.summary,
-    tags: guides.tags,
-    coverImageUrl: guides.coverImageUrl,
-    viewCount: guides.viewCount,
-    likeCount: guideLikeCountSql(),
-    updatedAt: guides.updatedAt,
-    authorSlug: users.slug,
-    authorDisplayName: users.displayName,
-    authorDisplayNameAlphabet: users.displayNameAlphabet,
-    authorMcid: users.mcid,
-    // 著者の顔（GuideCardGrid の著者名の左）。同じ users との JOIN で取れるので追加クエリは無い
-    authorUuid: users.uuid,
-    authorCustomSkinUrl: users.customSkinUrl,
-  };
-
   // セッション確認（→登録ユーザー判定）。他の取得と並列に走らせる
   const accountPromise = (async () => {
     const session = await getOptionalSession(request, auth);
@@ -193,86 +153,39 @@ export async function loader({ request }: Route.LoaderArgs) {
     recentlyUpdatedUsers,
     popularUsersRaw,
     guidesWithTranslations,
-    [profileCounts],
+    totalPublicProfiles,
     spotlight,
     heroFaces,
     outlooks,
   ] = await Promise.all([
     accountPromise,
     // 最近更新されたプロフィール（公開設定のみ、視聴者ロール除外）
-    db
-      .select(profileFeedColumns)
-      .from(users)
-      .leftJoin(playstyles, eq(playstyles.userId, users.id))
-      .where(listedRunnerCondition)
-      .orderBy(desc(users.updatedAt))
-      .limit(HOME_PROFILE_COUNT),
-    // よく見られているプロフィール（直近7日PV順）。「最近の更新」との重複を除くため多めに取る。
-    // page_view_stats のスナップショット行を直接引くため、集計未稼働の環境では自然に0件になる
-    db
-      .select({ ...profileFeedColumns, pageViews7d: pageViewStats.pageviews })
-      .from(pageViewStats)
-      .innerJoin(users, eq(pageViewStats.targetId, users.id))
-      .leftJoin(playstyles, eq(playstyles.userId, users.id))
-      .where(and(eq(pageViewStats.targetType, "profile"), listedRunnerCondition))
-      .orderBy(desc(pageViewStats.pageviews))
-      .limit(HOME_PROFILE_COUNT * 3),
-    // 新着ガイド（公開済み・更新日時順）。同じ著者は1件までにするため多めに取って絞る
-    db
-      .select(guideListColumns)
-      .from(guides)
-      .innerJoin(users, eq(guides.authorId, users.id))
-      // 非公開・限定公開の著者のガイドはホームの一覧（discovery）に出さない（視聴者ロールの著者は除外しない）
-      .where(and(eq(guides.isPublished, true), eq(users.profileVisibility, "public")))
-      .orderBy(desc(guides.updatedAt))
-      .limit(HOME_GUIDE_COUNT * 6)
-      .then((newGuidesRaw) => {
-        // 同じ著者は1件まで
-        const seenAuthors = new Set<string>();
-        const newGuides = newGuidesRaw
-          .filter((g) => {
-            if (seenAuthors.has(g.authorSlug)) return false;
-            seenAuthors.add(g.authorSlug);
-            return true;
-          })
-          .slice(0, HOME_GUIDE_COUNT);
-        // 自動翻訳（docs/translation.md）。newGuides が決まった時点で、他の取得を待たずに引き始める。
-        // 機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
-        return getGuideTranslations(db, newGuides.map((g) => g.id), locale).then((guideTranslations) => ({
-          newGuides,
-          guideTranslations,
-        }));
-      }),
-    db.select({ total: sql<number>`count(*)` }).from(users).where(listedRunnerCondition),
+    // 最近更新されたプロフィール・よく見られているプロフィール・新着ガイド（翻訳前）・公開人数は、閲覧者・ロケールに
+    // 依存しないので60秒キャッシュする（home-discovery.server.ts）。「最近の更新」との重複除外は下で行う。
+    // 「よく見られている」は重複を除くため多めに取る
+    getRecentProfiles(db, HOME_PROFILE_COUNT),
+    getPopularProfiles(db, HOME_PROFILE_COUNT * 3),
+    // 新着ガイド。翻訳（ロケール依存）はキャッシュの外。newGuides が決まった時点で、他の取得を待たずに引き始める。
+    // 自動翻訳（docs/translation.md）は機能無効・opt-out・失効・原文と同じロケールでは空の Map（原文のまま）
+    getNewGuides(db, HOME_GUIDE_COUNT).then((newGuides) =>
+      getGuideTranslations(db, newGuides.map((g) => g.id), locale).then((guideTranslations) => ({
+        newGuides,
+        guideTranslations,
+      })),
+    ),
+    getPublicProfileCount(db),
     // 注目の走者（ゲストはヒーロー右、ログイン時は「プロフィール」欄の上。10分キャッシュ）。失敗してもホーム全体は落とさない
     getHomeSpotlight(db).catch((error) => {
       console.error("Failed to build home spotlight:", error);
       return null;
     }),
-    // ゲストのヒーローの「顔ぶれ」の帯用。ログイン時は DB に行かない。公開一覧に出ている項目のうち表示に要る列だけ
-    accountPromise.then((acct) =>
-      acct
-        ? []
-        : db
-            .select({
-              slug: users.slug,
-              mcid: users.mcid,
-              uuid: users.uuid,
-              customSkinUrl: users.customSkinUrl,
-              displayName: users.displayName,
-              displayNameAlphabet: users.displayNameAlphabet,
-            })
-            .from(users)
-            .where(and(listedRunnerCondition, or(isNotNull(users.uuid), isNotNull(users.customSkinUrl))))
-            .orderBy(desc(users.updatedAt))
-            .limit(HERO_FACE_POOL),
-    ),
+    // ゲストのヒーローの「顔ぶれ」の帯用（60秒キャッシュ）。ログイン時は DB に行かない
+    accountPromise.then((acct) => (acct ? [] : getHeroFaces(db, HERO_FACE_POOL))),
     // ライブ欄・動画欄の読み込み中の骨組みの形を選ぶ見込み（キャッシュと DB の1行確認だけ。上流は呼ばない）
     getHomeOutlooks(db),
   ]);
   const currentUser = account?.user ?? null;
   const isRegistered = currentUser != null;
-  const totalPublicProfiles = profileCounts?.total ?? 0;
 
   // 「最近の更新」と「よく見られている」の重複は除く
   const recentSlugs = new Set(recentlyUpdatedUsers.map((u) => u.slug));

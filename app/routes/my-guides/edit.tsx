@@ -15,6 +15,7 @@ import { normalizeSlug } from "@/lib/guide-slug";
 import { parseGuideTags } from "@/lib/guide-tags";
 import { removeGuideTranslations, scheduleGuideTranslation } from "@/lib/content-translation.server";
 import { isTranslationEnabled } from "@/lib/translate.server";
+import { invalidateHomeDiscoveryCache } from "@/lib/home-discovery.server";
 import { createTranslator } from "@/lib/messages";
 import { localeFromMatches, resolveLocale } from "@/lib/locale";
 import { GuideRouteNotFound } from "@/components/guide-route-not-found";
@@ -279,6 +280,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         draftUpdatedAt: null,
       })
       .where(eq(guides.id, guide.id));
+    // 公開状態を非公開に変えた保存がホームの新着ガイドにすぐ反映されるよう、キャッシュを消す
+    if (guide.isPublished && !isPublished) await invalidateHomeDiscoveryCache();
   }
 
   // 自動翻訳（docs/translation.md）。オフなら既存の訳文を確実に消す（機能無効でも消す）。

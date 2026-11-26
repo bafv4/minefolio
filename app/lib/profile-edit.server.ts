@@ -28,6 +28,7 @@ import {
   type LinkOwner,
 } from "@/lib/targeted-refresh.server";
 import { removeUserBioTranslations, scheduleUserBioTranslation } from "@/lib/content-translation.server";
+import { invalidateHomeDiscoveryCache } from "@/lib/home-discovery.server";
 import {
   MAX_PROFILE_VIDEOS,
   MAX_SOCIAL_LINKS,
@@ -832,6 +833,8 @@ export async function saveProfileBatch({
   }
 
   // ---- ③ commit 後の副作用（失敗しても保存は成功扱い） ----
+  // 一覧に出る条件（公開範囲・ロール）を書いたなら、ホームの一覧キャッシュを消す（非公開化がすぐ反映されるように）
+  if (fields.profileVisibility !== undefined || fields.role !== undefined) await invalidateHomeDiscoveryCache();
   const effectiveMcid = mcidSet ?? (mcidRemove ? null : user.mcid);
   // キャッシュ行は MCID に帰属する。同じ保存で MCID を変える／外すときは updateYoutubeCacheMcid と並行になるので、旧・新の両方を渡す
   const ownerMcids = [user.mcid, effectiveMcid];

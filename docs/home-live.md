@@ -158,6 +158,7 @@ DBキャッシュ系（PaceManペース / YouTube動画）はデータ鮮度がc
 - **TwitchLinkCache**: Twitchソーシャルリンク一覧をキャッシュ（TTL: 5分。キー `home-feed:twitch-links:v2`）。配信中応答（`home-feed:twitch:all:v2`）の各要素（`HomeTwitchStream`、`app/lib/home-live.ts`）は `displayNameAlphabet` を含み、表示側が `pickDisplayName` でロケールに応じた名前に解決する（他の欄と揃える）
 - **HomeHiddenUsers**: ホームの表示設定をオフにした人の一覧（`getHomeHiddenUsers`）を60秒キャッシュ（キー `home:hidden-users:v1`。純関数 `isHiddenOnHome(user, kind)` が「`false` のときだけ隠す」判定の単一定義）
 - **Ranked ライブの登録者一覧**: `getRegisteredByUuid`（公開・視聴者除外・Ranked 統計を表示する人）を60秒キャッシュ（キー `home:ranked-registered:v1`）
+- **ホームの一覧（`home-discovery.server.ts`）**: 最近更新・よく見られている・新着ガイド・公開人数・ゲストのヒーローの顔を60秒キャッシュ。公開範囲・ロールの変更、アカウント削除、ガイドの削除・非公開化の後は `invalidateHomeDiscoveryCache()` で操作したインスタンスの分だけ即座に消す（ほかのインスタンスは最大60秒遅れる）
 - **CDNキャッシュヘッダー**: `Cache-Control: public, s-maxage=N, stale-while-revalidate=M` を設定（上記の表を参照）
 
 ### 動画フィード（YouTube + Twitch VOD）
