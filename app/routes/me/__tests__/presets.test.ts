@@ -834,10 +834,14 @@ describe("action - create-preset のソース別スナップショット", () =>
     // メイン未設定ユーザーの最初の1件は自動でメインになる
     expect(preset.isMain).toBe(true);
 
-    expect(JSON.parse(preset.keybindingsData!)).toEqual([
-      { action: "forward", keyCode: "KeyW", category: "movement" },
-      { action: "attack", keyCode: "Mouse0", category: "combat" },
-    ]);
+    // 並びは未指定クエリ（索引の選択）に依存するので、順序は問わない
+    expect(JSON.parse(preset.keybindingsData!)).toHaveLength(2);
+    expect(JSON.parse(preset.keybindingsData!)).toEqual(
+      expect.arrayContaining([
+        { action: "forward", keyCode: "KeyW", category: "movement" },
+        { action: "attack", keyCode: "Mouse0", category: "combat" },
+      ]),
+    );
     expect(JSON.parse(preset.playerConfigData!)).toMatchObject({
       keyboardLayout: "US",
       mouseDpi: 800,

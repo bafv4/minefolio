@@ -9,7 +9,6 @@ CREATE TABLE `api_cache` (
 );
 
 CREATE UNIQUE INDEX `api_cache_cache_key_unique` ON `api_cache` (`cache_key`);
-CREATE INDEX `idx_api_cache_key` ON `api_cache` (`cache_key`);
 CREATE INDEX `idx_api_cache_type` ON `api_cache` (`cache_type`);
 CREATE INDEX `idx_api_cache_expires` ON `api_cache` (`expires_at`);
 CREATE TABLE `app_meta` (
@@ -95,7 +94,6 @@ CREATE TABLE `category_records` (
 );
 
 CREATE UNIQUE INDEX `idx_category_records_user_category_type` ON `category_records` (`user_id`,`category`,`record_type`);
-CREATE INDEX `idx_category_records_user_id` ON `category_records` (`user_id`);
 CREATE INDEX `idx_category_records_category` ON `category_records` (`category`);
 CREATE INDEX `idx_category_records_type` ON `category_records` (`record_type`);
 CREATE TABLE `config_history` (
@@ -111,9 +109,7 @@ CREATE TABLE `config_history` (
 	FOREIGN KEY (`preset_id`) REFERENCES `config_presets`(`id`) ON UPDATE no action ON DELETE set null
 );
 
-CREATE INDEX `idx_config_history_user_id` ON `config_history` (`user_id`);
-CREATE INDEX `idx_config_history_created_at` ON `config_history` (`created_at`);
-CREATE INDEX `idx_config_history_change_type` ON `config_history` (`change_type`);
+CREATE INDEX `idx_config_history_user_created` ON `config_history` (`user_id`,`created_at`);
 CREATE TABLE `config_presets` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -135,9 +131,8 @@ CREATE TABLE `config_presets` (
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 
-CREATE INDEX `idx_config_presets_user_id` ON `config_presets` (`user_id`);
-CREATE INDEX `idx_config_presets_is_active` ON `config_presets` (`is_active`);
-CREATE INDEX `idx_config_presets_is_main` ON `config_presets` (`is_main`);
+CREATE INDEX `idx_config_presets_user_active_main` ON `config_presets` (`user_id`,`is_active`,`is_main`);
+CREATE INDEX `idx_config_presets_user_main` ON `config_presets` (`user_id`,`is_main`);
 CREATE TABLE `content_translations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`target_type` text NOT NULL,
@@ -172,7 +167,6 @@ CREATE TABLE `custom_actions` (
 );
 
 CREATE UNIQUE INDEX `idx_custom_actions_user_trigger` ON `custom_actions` (`user_id`,`trigger_key`);
-CREATE INDEX `idx_custom_actions_user_id` ON `custom_actions` (`user_id`);
 CREATE INDEX `idx_custom_actions_category` ON `custom_actions` (`category`);
 CREATE TABLE `custom_fields` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -213,7 +207,6 @@ CREATE TABLE `external_stats` (
 );
 
 CREATE UNIQUE INDEX `idx_external_stats_user_service` ON `external_stats` (`user_id`,`service`);
-CREATE INDEX `idx_external_stats_user_id` ON `external_stats` (`user_id`);
 CREATE INDEX `idx_external_stats_service` ON `external_stats` (`service`);
 CREATE TABLE `external_tools` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -237,7 +230,6 @@ CREATE TABLE `favorites` (
 );
 
 CREATE UNIQUE INDEX `idx_favorites_user_slug` ON `favorites` (`user_id`,`favorite_slug`);
-CREATE INDEX `idx_favorites_user_id` ON `favorites` (`user_id`);
 CREATE TABLE `guide_likes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`guide_id` text NOT NULL,
@@ -275,7 +267,6 @@ CREATE TABLE `guides` (
 
 CREATE UNIQUE INDEX `guides_author_slug_uniq` ON `guides` (`author_id`,`slug`);
 CREATE INDEX `guides_feed_idx` ON `guides` (`is_published`,`updated_at`);
-CREATE INDEX `guides_author_idx` ON `guides` (`author_id`);
 CREATE TABLE `item_layouts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -318,7 +309,6 @@ CREATE TABLE `keybindings` (
 );
 
 CREATE UNIQUE INDEX `idx_keybindings_user_action` ON `keybindings` (`user_id`,`action`);
-CREATE INDEX `idx_keybindings_user_id` ON `keybindings` (`user_id`);
 CREATE INDEX `idx_keybindings_category` ON `keybindings` (`category`);
 CREATE TABLE `paceman_paces` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -340,8 +330,6 @@ CREATE INDEX `idx_paceman_paces_mcid_lower` ON `paceman_paces` (lower("mcid"));
 CREATE INDEX `idx_paceman_paces_user_id` ON `paceman_paces` (`user_id`);
 CREATE INDEX `idx_paceman_paces_date` ON `paceman_paces` (`date`);
 CREATE INDEX `idx_paceman_paces_timeline` ON `paceman_paces` (`timeline`);
-CREATE INDEX `idx_paceman_paces_is_nether_enter` ON `paceman_paces` (`is_nether_enter`);
-CREATE INDEX `idx_paceman_paces_is_2nd_structure_or_later` ON `paceman_paces` (`is_2nd_structure_or_later`);
 CREATE INDEX `idx_paceman_paces_run_id` ON `paceman_paces` (`paceman_run_id`);
 CREATE TABLE `page_view_stats` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -486,7 +474,6 @@ CREATE TABLE `rankings_cache` (
 );
 
 CREATE UNIQUE INDEX `rankings_cache_cache_key_unique` ON `rankings_cache` (`cache_key`);
-CREATE INDEX `idx_rankings_cache_key` ON `rankings_cache` (`cache_key`);
 CREATE INDEX `idx_rankings_cache_type` ON `rankings_cache` (`cache_type`);
 CREATE INDEX `idx_rankings_cache_expires` ON `rankings_cache` (`expires_at`);
 CREATE INDEX `idx_rankings_cache_category` ON `rankings_cache` (`category_id`);
@@ -599,7 +586,6 @@ CREATE TABLE `speedrun_categories` (
 );
 
 CREATE UNIQUE INDEX `speedrun_categories_slug_unique` ON `speedrun_categories` (`slug`);
-CREATE INDEX `idx_speedrun_categories_slug` ON `speedrun_categories` (`slug`);
 CREATE INDEX `idx_speedrun_categories_type` ON `speedrun_categories` (`category_type`);
 CREATE INDEX `idx_speedrun_categories_speedruncom` ON `speedrun_categories` (`speedruncom_category_id`);
 CREATE TABLE `twitch_vod_cache` (
@@ -681,10 +667,8 @@ CREATE UNIQUE INDEX `users_discord_id_unique` ON `users` (`discord_id`);
 CREATE UNIQUE INDEX `users_mcid_unique` ON `users` (`mcid`);
 CREATE UNIQUE INDEX `users_uuid_unique` ON `users` (`uuid`);
 CREATE UNIQUE INDEX `users_slug_unique` ON `users` (`slug`);
-CREATE INDEX `idx_users_discord_id` ON `users` (`discord_id`);
-CREATE INDEX `idx_users_mcid` ON `users` (`mcid`);
-CREATE INDEX `idx_users_uuid` ON `users` (`uuid`);
-CREATE INDEX `idx_users_slug` ON `users` (`slug`);
+CREATE INDEX `idx_users_mcid_lower` ON `users` (lower("mcid"));
+CREATE INDEX `idx_users_slug_lower` ON `users` (lower("slug"));
 CREATE INDEX `idx_users_speedruncom_id` ON `users` (`speedruncom_id`);
 CREATE TABLE `youtube_live_cache` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -705,7 +689,6 @@ CREATE TABLE `youtube_live_cache` (
 );
 
 CREATE UNIQUE INDEX `youtube_live_cache_video_id_unique` ON `youtube_live_cache` (`video_id`);
-CREATE INDEX `idx_youtube_live_video_id` ON `youtube_live_cache` (`video_id`);
 CREATE INDEX `idx_youtube_live_channel_id` ON `youtube_live_cache` (`channel_id`);
 CREATE INDEX `idx_youtube_live_mcid` ON `youtube_live_cache` (`minefolio_mcid`);
 CREATE INDEX `idx_youtube_live_status` ON `youtube_live_cache` (`live_broadcast_content`);
@@ -726,7 +709,6 @@ CREATE TABLE `youtube_video_cache` (
 );
 
 CREATE UNIQUE INDEX `youtube_video_cache_video_id_unique` ON `youtube_video_cache` (`video_id`);
-CREATE INDEX `idx_youtube_cache_video_id` ON `youtube_video_cache` (`video_id`);
 CREATE INDEX `idx_youtube_cache_channel_id` ON `youtube_video_cache` (`channel_id`);
 CREATE INDEX `idx_youtube_cache_mcid` ON `youtube_video_cache` (`minefolio_mcid`);
 CREATE INDEX `idx_youtube_cache_published` ON `youtube_video_cache` (`published_at`);
