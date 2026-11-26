@@ -42,17 +42,11 @@ export async function addFavoriteToDb(
   userId: string,
   slug: string,
 ): Promise<void> {
-  const existing = await db
-    .select()
-    .from(favorites)
-    .where(and(eq(favorites.userId, userId), eq(favorites.favoriteSlug, slug)))
-    .get();
-  if (existing) return;
-
-  await db.insert(favorites).values({
-    userId,
-    favoriteSlug: slug,
-  });
+  // SELECT して INSERT する2往復をやめ、一意制約（idx_favorites_user_slug）に任せて1文にする
+  await db
+    .insert(favorites)
+    .values({ userId, favoriteSlug: slug })
+    .onConflictDoNothing({ target: [favorites.userId, favorites.favoriteSlug] });
 }
 
 /**

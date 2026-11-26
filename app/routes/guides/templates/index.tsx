@@ -153,7 +153,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       id: searchCraftTemplates.id,
       title: searchCraftTemplates.title,
       description: searchCraftTemplates.description,
-      craftCount: sql<number>`json_array_length(${searchCraftTemplates.craftsData})`,
+      craftCount: sql<number>`case when json_valid(${searchCraftTemplates.craftsData}) then coalesce(json_array_length(${searchCraftTemplates.craftsData}), 0) else 0 end`,
       hasRemaps: sql<boolean>`${searchCraftTemplates.remapsData} is not null`,
       gameLanguage: searchCraftTemplates.gameLanguage,
       applyCount: searchCraftTemplates.applyCount,

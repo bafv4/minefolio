@@ -5,11 +5,10 @@ import { redirect, useLoaderData, useFetcher, Link } from "react-router";
 import type { Route } from "./+types/templates";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, searchCraftTemplates } from "@/lib/schema";
-import { eq, desc, and } from "drizzle-orm";
-import { parseTemplateCrafts } from "@/lib/search-craft-templates";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { getGameLanguageName } from "@/lib/game-languages";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -59,18 +58,29 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const session = await getSession(request, auth);
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  const user = await loadUserByDiscordId(request, db, session.user.id);
 
   if (!user) {
     return redirect("/onboarding");
   }
 
-  const templates = await db.query.searchCraftTemplates.findMany({
-    where: eq(searchCraftTemplates.userId, user.id),
-    orderBy: [desc(searchCraftTemplates.updatedAt)],
-  });
+  // craftCount / hasRemaps / hasDraft は SQL で算出し、craftsData・remapsData・下書き本体は読まない
+  const templates = await db
+    .select({
+      id: searchCraftTemplates.id,
+      title: searchCraftTemplates.title,
+      description: searchCraftTemplates.description,
+      gameLanguage: searchCraftTemplates.gameLanguage,
+      isPublished: searchCraftTemplates.isPublished,
+      hasDraft: sql<boolean>`${searchCraftTemplates.draftUpdatedAt} is not null`,
+      applyCount: searchCraftTemplates.applyCount,
+      craftCount: sql<number>`case when json_valid(${searchCraftTemplates.craftsData}) then coalesce(json_array_length(${searchCraftTemplates.craftsData}), 0) else 0 end`,
+      hasRemaps: sql<boolean>`${searchCraftTemplates.remapsData} is not null and ${searchCraftTemplates.remapsData} <> ''`,
+      updatedAt: searchCraftTemplates.updatedAt,
+    })
+    .from(searchCraftTemplates)
+    .where(eq(searchCraftTemplates.userId, user.id))
+    .orderBy(desc(searchCraftTemplates.updatedAt));
 
   return {
     templates: templates.map((template) => ({
@@ -80,10 +90,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       gameLanguage: template.gameLanguage,
       isPublished: template.isPublished,
       // 下書き本体は返さない（有無だけ）
-      hasDraft: template.draftUpdatedAt !== null,
+      hasDraft: !!template.hasDraft,
       applyCount: template.applyCount,
-      craftCount: parseTemplateCrafts(template.craftsData).length,
-      hasRemaps: !!template.remapsData,
+      craftCount: Number(template.craftCount),
+      hasRemaps: !!template.hasRemaps,
       updatedAt: template.updatedAt.toISOString(),
     })),
   };

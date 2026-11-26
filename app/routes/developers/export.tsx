@@ -3,8 +3,8 @@ import { useState, useMemo } from "react";
 import type { Route } from "./+types/export";
 import { createDb } from "@/lib/db";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import { users, keybindings, keyRemaps, customActions } from "@/lib/schema";
+import { and, eq, or, sql } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,23 +47,26 @@ export async function loader({ request }: Route.LoaderArgs) {
   const locale = resolveLocale(request);
 
   // 設定（キー配置・リマップ・カスタムアクションのいずれか）が登録されている公開ユーザーを取得
-  const allPlayers = await db.query.users.findMany({
-    where: eq(users.profileVisibility, "public"),
-    columns: {
-      slug: true,
-      mcid: true,
-      displayName: true,
-      displayNameAlphabet: true,
-    },
-    with: {
-      keybindings: { columns: { id: true } },
-      keyRemaps: { columns: { id: true } },
-      customActions: { columns: { id: true } },
-    },
-  });
+  const players = await db
+    .select({
+      slug: users.slug,
+      mcid: users.mcid,
+      displayName: users.displayName,
+      displayNameAlphabet: users.displayNameAlphabet,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.profileVisibility, "public"),
+        or(
+          sql`exists (select 1 from ${keybindings} where ${keybindings.userId} = ${users.id})`,
+          sql`exists (select 1 from ${keyRemaps} where ${keyRemaps.userId} = ${users.id})`,
+          sql`exists (select 1 from ${customActions} where ${customActions.userId} = ${users.id})`,
+        ),
+      ),
+    );
 
-  const availableUsers: AvailableUser[] = allPlayers
-    .filter((p) => p.keybindings.length > 0 || p.keyRemaps.length > 0 || p.customActions.length > 0)
+  const availableUsers: AvailableUser[] = players
     .map((p) => ({ slug: p.slug, mcid: p.mcid, displayName: p.displayName, displayNameAlphabet: p.displayNameAlphabet }))
     .sort((a, b) => {
       // 並び順は表示に使う名前に合わせる（英語表示ではアルファベット表記で並ぶ）
