@@ -24,6 +24,42 @@ function loadSession(request: Request, auth: Auth) {
   return pending;
 }
 
+type UserRowShared = typeof users.$inferSelect;
+
+// 同一 Request 内の「users 行（discord_id 引き）」の読み取りを共有する。loadSession と同じ方式で、
+// 進行中の Promise を Request をキーに保持する（内側は discordId ごと）。
+// 設計: 呼び出しごとに必要な列が違うため、全列を1回読んで使い回す（users は1行で、全列読みでも
+// 往復は1回のまま。列を絞った別クエリを混ぜると結局2回読むことになる）。`with`（リレーション）を伴う
+// 呼び出しは共有できないので対象外（従来どおり db.query.users.findFirst を直接呼ぶ）。
+// 返す行は呼び出しごとに浅いコピーなので、呼び出し側が書き換えても他の呼び出しへ波及しない。
+// 注意: 同じ Request の中で users を更新した後に読み直す用途には使わない（古い行を返す）。
+// action 後の再検証ローダーには新しい Request が作られるので、古い行は残らない。
+const userByRequest = new WeakMap<Request, Map<string, Promise<UserRowShared | undefined>>>();
+
+export async function loadUserByDiscordId(
+  request: Request,
+  db: Database,
+  discordId: string,
+): Promise<UserRowShared | undefined> {
+  let perRequest = userByRequest.get(request);
+  if (!perRequest) {
+    perRequest = new Map();
+    userByRequest.set(request, perRequest);
+  }
+  let pending = perRequest.get(discordId);
+  if (!pending) {
+    // Drizzle のクエリは遅延 thenable で、then / catch / await のたびに SELECT を実行し直す。
+    // Promise.resolve で1回だけ実行したネイティブの Promise にしてから共有する
+    pending = Promise.resolve(db.query.users.findFirst({ where: eq(users.discordId, discordId) }));
+    perRequest.set(discordId, pending);
+    // reject したら失敗を共有し続けないようエントリを消す
+    const map = perRequest;
+    pending.catch(() => map.delete(discordId));
+  }
+  const row = await pending;
+  return row ? { ...row } : undefined;
+}
+
 // セッション取得（認証必須）。未ログインなら /login?returnTo=<元のURL> へリダイレクトし、
 // ログイン後に元のページへ戻れるようにする（returnTo の検証は sanitizeReturnTo に集約）。
 export async function getSession(request: Request, auth: Auth) {

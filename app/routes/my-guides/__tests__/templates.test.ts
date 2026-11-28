@@ -25,7 +25,10 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 import { action } from "../templates";
 

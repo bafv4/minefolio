@@ -26,6 +26,7 @@ import { collectBlobPathnames } from "./blob-url";
 import { isOwnTextureBlob } from "./blob-ownership.server";
 import { listAllBlobs, delBlobsInBatches } from "./blob-storage.server";
 import { runAfterResponse } from "./targeted-refresh.server";
+import { invalidateHomeDiscoveryCache } from "./home-discovery.server";
 
 /** drizzle のトランザクション内外どちらでも使える最小インターフェース（app/lib/favorites.ts と同じ方式） */
 type DatabaseOrTransaction = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -248,6 +249,9 @@ export async function deleteUserAccount(
     await tx.delete(authUsers).where(eq(authUsers.id, sessionUserId));
   });
 
+  // ホームの一覧（最近更新・新着ガイド・公開人数など）に残らないようキャッシュを消す
+  await invalidateHomeDiscoveryCache();
+
   // Vercel Blob 実体（ガイド一式・カスタムスキン・カスタムマント）はレスポンス後に best-effort で削除する
   runAfterResponse(
     cleanupUserBlobs({
@@ -282,6 +286,9 @@ export async function deleteGuide(
     await deleteTranslationsForGuide(tx, guide.id);
     await tx.delete(guides).where(eq(guides.id, guide.id));
   });
+
+  // ホームの新着ガイドに残らないようキャッシュを消す
+  await invalidateHomeDiscoveryCache();
 
   // Vercel Blob 実体（本文画像・カバー・ドラフトカバー）はレスポンス後に best-effort で削除する
   runAfterResponse(

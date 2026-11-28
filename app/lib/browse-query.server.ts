@@ -1,7 +1,8 @@
 // /browse と /api/browse 共通のクエリビルダー。
 // 検索 / フィルタ / ソート + ページネーションを一元管理し、二重実装を防ぐ。
 import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn } from "drizzle-orm";
-import { favorites, users } from "./schema";
+import { configPresets, favorites, playerConfigs, users } from "./schema";
+import { normalizeGameLanguage } from "./game-languages";
 import type { Database } from "./db";
 import { excludeViewersCondition } from "./users-filter";
 import { nullsLast } from "./sort-order";
@@ -58,6 +59,18 @@ export interface BrowseQueryArgs {
   editions: BrowseFilterEdition[];
   inputMethods: BrowseFilterInputMethod[];
   platforms: BrowseFilterPlatform[];
+  /** ゲーム内言語（正規化済みの言語コード。未知の値・重複は parse 時に捨てる） */
+  languages: string[];
+}
+
+/** `?lang=` を許可リストで正規化し、未知の値と重複を捨てる */
+function parseBrowseLanguages(raw: string[]): string[] {
+  const out: string[] = [];
+  for (const value of raw) {
+    const lang = normalizeGameLanguage(value);
+    if (lang && !out.includes(lang)) out.push(lang);
+  }
+  return out;
 }
 
 export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQueryArgs {
@@ -69,7 +82,28 @@ export function parseBrowseSearchParams(searchParams: URLSearchParams): BrowseQu
     editions: searchParams.getAll("edition") as BrowseFilterEdition[],
     inputMethods: searchParams.getAll("input") as BrowseFilterInputMethod[],
     platforms: searchParams.getAll("platform") as BrowseFilterPlatform[],
+    languages: parseBrowseLanguages(searchParams.getAll("lang")),
   };
+}
+
+/**
+ * 走者のプロフィールに表示されるゲーム内言語（小文字）。表示と絞り込みを食い違わせないため、
+ * プロフィール（player/profile.tsx）と同じ解決をする:
+ * - メインプリセットが「編集中でない」ときは、そのスナップショット（config_presets.player_config_data の gameLanguage）
+ * - それ以外（メインが編集中、またはメイン無し＝編集中プリセットへフォールバック）はライブの player_configs.game_language
+ * スナップショットが壊れた JSON のときは、プロフィールのデコードと同じく「設定なし」（NULL）。
+ */
+function effectiveGameLanguageSql() {
+  // 内側の表は列名を付け替えた派生表にする。drizzle は単一テーブルの select では列を修飾せず出す
+  // （外側の users.id が `"id"` になる）ため、内側に同名の列（id 等）があると外側を参照できなくなる
+  // （profilePageViewsSql と同じ回避）。
+  return sql`lower(trim(CASE
+    WHEN EXISTS (SELECT 1 FROM (SELECT user_id AS cp_uid, is_main AS cp_main, is_active AS cp_active FROM ${configPresets}) WHERE cp_uid = ${users.id} AND cp_main = 1 AND cp_active = 0)
+    THEN (SELECT CASE WHEN json_valid(cp_data) THEN json_extract(cp_data, '$.gameLanguage') END
+          FROM (SELECT user_id AS cp_uid, is_main AS cp_main, is_active AS cp_active, player_config_data AS cp_data FROM ${configPresets})
+          WHERE cp_uid = ${users.id} AND cp_main = 1 AND cp_active = 0 LIMIT 1)
+    ELSE (SELECT pc_lang FROM (SELECT user_id AS pc_uid, game_language AS pc_lang FROM ${playerConfigs}) WHERE pc_uid = ${users.id})
+  END))`;
 }
 
 /** 一覧で取得する列 */
@@ -98,7 +132,7 @@ function eqOrNullWhenDefault(column: AnyColumn, value: string, defaultValue: str
  * 検索 + フィルタ条件を組み立てる（共通）。
  * デフォルトの視聴者除外もここで吸収する。
  */
-function buildWhere(args: BrowseQueryArgs) {
+function buildWhere(args: BrowseQueryArgs, { skipLanguage = false } = {}) {
   const conditions = [eq(users.profileVisibility, "public")];
 
   // 検索対象は mcid と displayName のみ。
@@ -138,7 +172,34 @@ function buildWhere(args: BrowseQueryArgs) {
       or(...args.platforms.map((p) => eqOrNullWhenDefault(users.mainPlatform, p, DEFAULT_PROFILE_PLATFORM)))!,
     );
   }
+  // 言語が未設定の走者は、言語を選んだ絞り込みには出さない（NULL は IN に一致しない）
+  if (!skipLanguage && args.languages.length > 0) {
+    conditions.push(inArray(effectiveGameLanguageSql(), args.languages));
+  }
   return and(...conditions);
+}
+
+/**
+ * 言語ごとの人数（絞り込みダイアログの選択肢用）。言語以外の条件（検索語・ロール等）は一覧と同じで、
+ * 選んだ言語自体では絞らない（他の言語の人数も見えるように）。言語が未設定の走者は数えない。
+ */
+export async function countBrowseLanguages(
+  db: Database,
+  args: BrowseQueryArgs,
+): Promise<Record<string, number>> {
+  const lang = effectiveGameLanguageSql();
+  const rows = await db
+    .select({ lang: sql<string | null>`${lang}`, count: sql<number>`count(*)` })
+    .from(users)
+    .where(and(buildWhere(args, { skipLanguage: true }), sql`${lang} IS NOT NULL`))
+    .groupBy(lang);
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    // 許可リスト外の保存値（旧データ・手編集）は選択肢にできないので数えない
+    const code = normalizeGameLanguage(row.lang);
+    if (code) counts[code] = (counts[code] ?? 0) + Number(row.count);
+  }
+  return counts;
 }
 
 /** 条件に一致する件数（一覧と同じ buildWhere を通す。行は取得せず count(*) のみ） */

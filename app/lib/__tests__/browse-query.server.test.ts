@@ -2,13 +2,14 @@ import { describe, it, expect } from "vitest";
 import * as schema from "../schema";
 import {
   countBrowse,
+  countBrowseLanguages,
   getFavoriteSlugsByDiscordId,
   loadBrowsePage,
   parseBrowseSearchParams,
   BROWSE_ITEMS_PER_PAGE,
   type BrowseQueryArgs,
 } from "../browse-query.server";
-import { createTestDb, seedUser, seedPageViewStat } from "./helpers/test-db";
+import { createTestDb, seedUser, seedPageViewStat, seedPlayerConfig, seedConfigPreset } from "./helpers/test-db";
 
 // BrowseQueryArgs のデフォルト（各テストで必要な項目だけ上書き）
 function args(overrides: Partial<BrowseQueryArgs> = {}): BrowseQueryArgs {
@@ -20,6 +21,7 @@ function args(overrides: Partial<BrowseQueryArgs> = {}): BrowseQueryArgs {
     editions: [],
     inputMethods: [],
     platforms: [],
+    languages: [],
     ...overrides,
   };
 }
@@ -448,5 +450,112 @@ describe("parseBrowseSearchParams", () => {
     expect(mk("abc")).toBe(1);
     expect(mk("999999999")).toBe(100_000);
     expect(mk("3")).toBe(3);
+  });
+
+  it("lang は許可リストで正規化し、未知の値・重複を捨てる", () => {
+    const sp = new URLSearchParams();
+    sp.append("lang", "JA_JP");
+    sp.append("lang", "ja_jp");
+    sp.append("lang", "xx_bogus");
+    sp.append("lang", "en_us");
+    expect(parseBrowseSearchParams(sp).languages).toEqual(["ja_jp", "en_us"]);
+    expect(parseBrowseSearchParams(new URLSearchParams()).languages).toEqual([]);
+  });
+});
+
+describe("loadBrowsePage - ゲーム内言語の絞り込み", () => {
+  async function seedLangUsers() {
+    const db = await createTestDb();
+    const ja = await seedUser(db, { slug: "ja", mcid: "Ja", role: "runner" });
+    await seedPlayerConfig(db, ja.id, { gameLanguage: "ja_jp" });
+    const en = await seedUser(db, { slug: "en", mcid: "En", role: "runner" });
+    await seedPlayerConfig(db, en.id, { gameLanguage: "en_us" });
+    const none = await seedUser(db, { slug: "none", mcid: "None", role: "runner" });
+    await seedPlayerConfig(db, none.id, { gameLanguage: null });
+    await seedUser(db, { slug: "noconfig", mcid: "NoConfig", role: "runner" });
+    return db;
+  }
+  const slugsOf = async (db: Awaited<ReturnType<typeof createTestDb>>, a: Partial<BrowseQueryArgs>) =>
+    (await loadBrowsePage(db, args(a), [])).players.map((p) => p.slug).sort();
+
+  it("言語で絞れる。未設定（設定行なし・NULL）は絞り込み中は出ず、無指定では出る", async () => {
+    const db = await seedLangUsers();
+    expect(await slugsOf(db, { languages: ["ja_jp"] })).toEqual(["ja"]);
+    expect(await slugsOf(db, { languages: ["ja_jp", "en_us"] })).toEqual(["en", "ja"]);
+    expect(await slugsOf(db, {})).toEqual(["en", "ja", "none", "noconfig"].sort());
+    expect(await countBrowse(db, args({ languages: ["en_us"] }))).toBe(1);
+  });
+
+  it("保存値の大文字・前後空白は無視して一致する", async () => {
+    const db = await createTestDb();
+    const u = await seedUser(db, { slug: "u", mcid: "U", role: "runner" });
+    await seedPlayerConfig(db, u.id, { gameLanguage: " JA_JP " });
+    expect(await slugsOf(db, { languages: ["ja_jp"] })).toEqual(["u"]);
+  });
+
+  it("ほかの絞り込み・検索と AND で組み合わさる", async () => {
+    const db = await createTestDb();
+    const a = await seedUser(db, { slug: "a", mcid: "Alpha", role: "runner", mainEdition: "java" });
+    await seedPlayerConfig(db, a.id, { gameLanguage: "ja_jp" });
+    const b = await seedUser(db, { slug: "b", mcid: "Beta", role: "runner", mainEdition: "bedrock" });
+    await seedPlayerConfig(db, b.id, { gameLanguage: "ja_jp" });
+    expect(await slugsOf(db, { languages: ["ja_jp"], editions: ["bedrock"] })).toEqual(["b"]);
+    expect(await slugsOf(db, { languages: ["ja_jp"], q: "alp" })).toEqual(["a"]);
+    // 視聴者は既定で除外されたまま
+    const v = await seedUser(db, { slug: "v", mcid: "V", role: "viewer" });
+    await seedPlayerConfig(db, v.id, { gameLanguage: "ja_jp" });
+    expect(await slugsOf(db, { languages: ["ja_jp"] })).toEqual(["a", "b"]);
+  });
+
+  it("メインが編集中でないプリセットなら、プロフィールの表示と同じくそのスナップショットの言語を使う", async () => {
+    const db = await createTestDb();
+    const u = await seedUser(db, { slug: "u", mcid: "U", role: "runner" });
+    // ライブ（編集中プリセット）は en_us、公開用（メイン・非編集中）のスナップショットは ja_jp
+    await seedPlayerConfig(db, u.id, { gameLanguage: "en_us" });
+    await seedConfigPreset(db, u.id, { name: "edit", isActive: true, isMain: false });
+    await seedConfigPreset(db, u.id, {
+      name: "main",
+      isActive: false,
+      isMain: true,
+      playerConfigData: JSON.stringify({ gameLanguage: "ja_jp" }),
+    });
+    expect(await slugsOf(db, { languages: ["ja_jp"] })).toEqual(["u"]);
+    expect(await slugsOf(db, { languages: ["en_us"] })).toEqual([]);
+  });
+
+  it("メインが編集中ならライブの値、スナップショットが壊れていれば未設定として扱う", async () => {
+    const db = await createTestDb();
+    const live = await seedUser(db, { slug: "live", mcid: "Live", role: "runner" });
+    await seedPlayerConfig(db, live.id, { gameLanguage: "en_us" });
+    await seedConfigPreset(db, live.id, {
+      isActive: true,
+      isMain: true,
+      playerConfigData: JSON.stringify({ gameLanguage: "ja_jp" }),
+    });
+    const broken = await seedUser(db, { slug: "broken", mcid: "Broken", role: "runner" });
+    await seedPlayerConfig(db, broken.id, { gameLanguage: "en_us" });
+    await seedConfigPreset(db, broken.id, { isActive: false, isMain: true, playerConfigData: "{not json" });
+    expect(await slugsOf(db, { languages: ["en_us"] })).toEqual(["live"]);
+    expect(await slugsOf(db, { languages: ["ja_jp"] })).toEqual([]);
+  });
+});
+
+describe("countBrowseLanguages", () => {
+  it("言語ごとの人数を返し、言語以外の条件は効かせ、選択中の言語では絞らない", async () => {
+    const db = await createTestDb();
+    for (const [slug, lang, edition] of [
+      ["a", "ja_jp", "java"],
+      ["b", "ja_jp", "bedrock"],
+      ["c", "en_us", "java"],
+    ] as const) {
+      const u = await seedUser(db, { slug, mcid: slug.toUpperCase(), role: "runner", mainEdition: edition });
+      await seedPlayerConfig(db, u.id, { gameLanguage: lang });
+    }
+    await seedUser(db, { slug: "n", mcid: "N", role: "runner" });
+    expect(await countBrowseLanguages(db, args())).toEqual({ ja_jp: 2, en_us: 1 });
+    expect(await countBrowseLanguages(db, args({ editions: ["java"], languages: ["ja_jp"] }))).toEqual({
+      ja_jp: 1,
+      en_us: 1,
+    });
   });
 });

@@ -18,7 +18,7 @@ import {
 import { loader } from "../skin";
 
 // 実装（app/routes/api/skin.ts）と同じ値。ここが変わったら意図した変更か確認する
-const LONG_CACHE = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+const LONG_CACHE = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
 const SHORT_CACHE = "public, max-age=300, s-maxage=300";
 
 const STEVE_SKIN_URL =

@@ -10,6 +10,7 @@
 // セッションのみモックし、ルート本体は実 DB で動かす
 // （app/routes/me/edit.test.ts / devices.test.ts と同じ方針）。
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { makeMeContext } from "@/lib/__tests__/helpers/route-context";
 import { eq } from "drizzle-orm";
 import {
   createTestDbAt,
@@ -32,7 +33,11 @@ const sessionMocks = vi.hoisted(() => ({
   isAuthenticated: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => sessionMocks);
+// registeredUserContext など実物の export は残し、セッション関数だけモックに差し替える
+vi.mock("@/lib/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/session")>()),
+  ...sessionMocks,
+}));
 
 import { action } from "../presets";
 import { SAVE_LIMITS } from "@/lib/save-limits";
@@ -54,7 +59,7 @@ function makeRequest(formData: FormData): Request {
 async function callAction(entries: Record<string, string>): Promise<ActionResult> {
   const fd = new FormData();
   for (const [k, v] of Object.entries(entries)) fd.set(k, v);
-  return action({ request: makeRequest(fd), params: {}, context: {} } as never) as never;
+  return action({ request: makeRequest(fd), params: {}, context: await makeMeContext(db, () => sessionMocks.getSession()) } as never) as never;
 }
 
 function signInAs(discordId: string) {
@@ -834,10 +839,14 @@ describe("action - create-preset のソース別スナップショット", () =>
     // メイン未設定ユーザーの最初の1件は自動でメインになる
     expect(preset.isMain).toBe(true);
 
-    expect(JSON.parse(preset.keybindingsData!)).toEqual([
-      { action: "forward", keyCode: "KeyW", category: "movement" },
-      { action: "attack", keyCode: "Mouse0", category: "combat" },
-    ]);
+    // 並びは未指定クエリ（索引の選択）に依存するので、順序は問わない
+    expect(JSON.parse(preset.keybindingsData!)).toHaveLength(2);
+    expect(JSON.parse(preset.keybindingsData!)).toEqual(
+      expect.arrayContaining([
+        { action: "forward", keyCode: "KeyW", category: "movement" },
+        { action: "attack", keyCode: "Mouse0", category: "combat" },
+      ]),
+    );
     expect(JSON.parse(preset.playerConfigData!)).toMatchObject({
       keyboardLayout: "US",
       mouseDpi: 800,
@@ -1227,7 +1236,7 @@ describe("action - 上限と型の検証（create-preset / update-preset）", ()
     const fd = new FormData();
     fd.set("intent", "create-preset");
     fd.set("name", new File(["x"], "x.txt"));
-    const res = (await action({ request: makeRequest(fd), params: {}, context: {} } as never)) as ActionResult;
+    const res = (await action({ request: makeRequest(fd), params: {}, context: await makeMeContext(db, () => sessionMocks.getSession()) } as never)) as ActionResult;
 
     expect(res.error).toBe("プリセット名を入力してください");
   });

@@ -26,6 +26,7 @@ const sessionMocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getCurrentUserOrOnboarding: vi.fn(),
   isAuthenticated: vi.fn(),
+  registeredUserContext: {},
 }));
 vi.mock("@/lib/session", () => sessionMocks);
 
@@ -69,12 +70,12 @@ function formOf(fields: Record<string, string>): FormData {
 
 async function callAccount(fields: Record<string, string>) {
   const request = new Request("https://minefolio.app/me/account", { method: "POST", body: formOf(fields) });
-  return accountAction({ request, params: {}, context: {} } as never);
+  return accountAction({ request, params: {}, context: { get: () => null } } as never);
 }
 
 async function callEdit(fields: Record<string, string>) {
   const request = new Request("https://minefolio.app/me/edit", { method: "POST", body: formOf(fields) });
-  return editAction({ request, params: {}, context: {} } as never);
+  return editAction({ request, params: {}, context: { get: () => null } } as never);
 }
 
 // /me/account が送る項目だけ（各ページの handleSave と同じ名前の集合）
@@ -290,7 +291,7 @@ describe("/me/account の _action", () => {
     if (action !== null) fd.set("_action", action);
     fd.set("profileVisibility", "unlisted");
     const request = new Request("https://minefolio.app/me/account", { method: "POST", body: fd });
-    return accountAction({ request, params: {}, context: {} } as never) as Promise<{ error?: string; success?: boolean }>;
+    return accountAction({ request, params: {}, context: { get: () => null } } as never) as Promise<{ error?: string; success?: boolean }>;
   }
 
   it("送られているが未知の _action はエラーを返し、保存しない", async () => {
@@ -424,7 +425,7 @@ describe("/me/edit の保存は /me/account の列を消さない", () => {
 describe("loader - hasExistingData（EXISTS の相関）", () => {
   async function callLoader(): Promise<Record<string, unknown>> {
     const request = new Request("https://minefolio.app/me/account");
-    return accountLoader({ request, params: {}, context: {} } as never) as never;
+    return accountLoader({ request, params: {}, context: { get: () => null } } as never) as never;
   }
 
   it("キー配置等が無ければ false、当人の行があれば true、他人の行だけなら false", async () => {

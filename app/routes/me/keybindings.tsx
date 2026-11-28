@@ -6,7 +6,7 @@ import { useLoaderData, useFetcher, useRevalidator, useSearchParams, type Should
 import type { Route } from "./+types/keybindings";
 import { createDb, isUniqueConstraintError } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeKeybindingUpdate, type KeybindingChangeId } from "@/lib/history-description";
@@ -642,17 +642,12 @@ function isValidFingerAssignmentsJson(raw: string): boolean {
   return validateFingerAssignmentsJson(raw) !== null;
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
 
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     return { error: t("meKeybindings.userNotFound") };
@@ -853,7 +848,7 @@ export async function action({ request }: Route.ActionArgs) {
   // レガシーインポート
   if (intent === "import-legacy") {
     // リマップ・カスタムキーを取り込むため、プリセットが必要
-    const legacyApiUrl = env.LEGACY_API_URL;
+    const legacyApiUrl = getEnv().LEGACY_API_URL;
     if (!legacyApiUrl) {
       return { error: t("meKeybindings.legacyApiNotConfigured") };
     }

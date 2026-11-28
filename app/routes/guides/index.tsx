@@ -12,7 +12,7 @@ import {
 import { useEffect, useRef } from "react";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
@@ -102,10 +102,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     (async () => {
       const session = await getOptionalSession(request, auth);
       return session
-        ? ((await db.query.users.findFirst({
-            where: eq(users.discordId, session.user.id),
-            columns: { id: true },
-          })) ?? null)
+        ? ((await loadUserByDiscordId(request, db, session.user.id)) ?? null)
         : null;
     })(),
     isPopular ? hasPageViewStats(db, "guide") : Promise.resolve(true),

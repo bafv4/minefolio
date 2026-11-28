@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { createDb } from "@/lib/db";
 import { errorSummary } from "@/lib/error-summary";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, registeredUserContext } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, itemLayouts, configPresets } from "@/lib/schema";
 import { eq, asc, and } from "drizzle-orm";
@@ -94,9 +94,8 @@ import { Combobox } from "@/components/ui/combobox";
 import { useT, useLocale } from "@/hooks/use-locale";
 import { jsonEqual } from "@/lib/loader-synced-draft";
 import { useLoaderSyncedDraft, successfulSaveToken } from "@/hooks/use-loader-synced-draft";
-import { syncActivePresetSnapshot, assertPresetIsActive, PresetMismatchError, type PresetItemLayoutData } from "@/lib/preset-utils";
+import { syncActivePresetSnapshot, type PresetItemLayoutData } from "@/lib/preset-utils";
 import { configHistory } from "@/lib/schema";
-import { resolveActivePublicPresetId } from "@/lib/config-history";
 import { encodeHistoryDescription } from "@/lib/history-description";
 import { PresetSelector, PresetSelectorSkeleton } from "@/components/preset-selector";
 import { PresetSwitchLock } from "@/components/preset-switch-lock";
@@ -250,17 +249,12 @@ export function HydrateFallback() {
   );
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
   const t = createTranslator(resolveLocale(request));
-  const env = getEnv();
   const db = createDb();
-  const auth = createAuth(db, env);
 
-  const session = await getSession(request, auth);
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-  });
+  // /me/* のミドルウェア（_layout.tsx）が解決済みの登録済みユーザー行を使い回す（users の再読み込みを省く）
+  const user = context.get(registeredUserContext);
 
   if (!user) {
     return { error: t("meItems.userNotFound") };
@@ -270,23 +264,20 @@ export async function action({ request }: Route.ActionArgs) {
   const actionType = formString(formData, "_action");
   const presetId = formString(formData, "presetId") || null;
 
-  try {
-    await assertPresetIsActive(db, user.id, presetId);
-  } catch (e) {
-    if (e instanceof PresetMismatchError) {
-      return { error: t("mePresets.staleSession") };
-    }
-    throw e;
+  // アクティブプリセットは 1 回だけ引き、競合検証・プリセット必須ゲート・スナップショット同期・履歴の presetId で共有する
+  const activePresetRow = await db.query.configPresets.findFirst({
+    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
+    columns: { id: true, isMain: true },
+  });
+  // 送信 presetId が現在のアクティブと異なる（別タブでプリセット切替が起きた等）場合は弾く
+  if (presetId && activePresetRow?.id !== presetId) {
+    return { error: t("mePresets.staleSession") };
   }
 
   // アイテム配置はプリセットのスナップショットに含まれるデータのため、
   // アクティブなプリセットが無い状態では保存できない（UIのグレーアウトだけでなくサーバー側でも拒否）。
   // プリセットが無いまま書き込むと syncActivePresetSnapshot が無言でスキップされ、
   // どのプリセットにも属さないデータになってしまう。
-  const activePresetRow = await db.query.configPresets.findFirst({
-    where: and(eq(configPresets.userId, user.id), eq(configPresets.isActive, true)),
-    columns: { id: true },
-  });
   if (!activePresetRow) {
     return { error: t("meItems.presetRequired") };
   }
@@ -323,24 +314,25 @@ export async function action({ request }: Route.ActionArgs) {
         await tx.delete(itemLayouts).where(eq(itemLayouts.userId, user.id));
 
         // 新しいレイアウトを挿入
-        for (let i = 0; i < layouts.length; i++) {
-          const layout = layouts[i];
-          await tx.insert(itemLayouts).values({
-            id: ownIds.has(layout.id) ? layout.id : createId(),
-            userId: user.id,
-            segment: layout.segment,
-            slots: JSON.stringify(layout.slots),
-            offhand: JSON.stringify(layout.offhand),
-            notes: layout.notes || null,
-            displayOrder: i,
-            createdAt: now,
-            updatedAt: now,
-          });
+        if (layouts.length > 0) {
+          await tx.insert(itemLayouts).values(
+            layouts.map((layout, i) => ({
+              id: ownIds.has(layout.id) ? layout.id : createId(),
+              userId: user.id,
+              segment: layout.segment,
+              slots: JSON.stringify(layout.slots),
+              offhand: JSON.stringify(layout.offhand),
+              notes: layout.notes || null,
+              displayOrder: i,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
         }
       });
 
       // アクティブプリセットスナップショット同期
-      await syncActivePresetSnapshot(db, user.id, ["itemLayouts"]);
+      await syncActivePresetSnapshot(db, user.id, ["itemLayouts"], { activePresetId: activePresetRow.id });
 
       // 変更履歴を記録
       await db.insert(configHistory).values({
@@ -348,7 +340,7 @@ export async function action({ request }: Route.ActionArgs) {
         userId: user.id,
         changeType: "game_setting",
         changeDescription: encodeHistoryDescription("items.update"),
-        presetId: await resolveActivePublicPresetId(db, user.id),
+        presetId: activePresetRow.isMain ? activePresetRow.id : null,
         createdAt: now,
       });
 

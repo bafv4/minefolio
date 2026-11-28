@@ -12,7 +12,7 @@ import {
 } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { parseGuideTags } from "@/lib/guide-tags";
@@ -56,10 +56,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // クライアントへ渡すのは一覧で使う列だけ（行をそのまま返すと、本文・下書き本文や
   // ユーザーの個人情報の列まで HTML と hydration に載る）。user は id（クエリ用）と公開 URL 用の slug だけ
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { id: true, slug: true },
-  });
+  const user = await loadUserByDiscordId(request, db, session.user.id);
   if (!user) return redirect("/onboarding");
 
   const userGuides = await db.query.guides.findMany({

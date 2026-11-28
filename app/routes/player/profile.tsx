@@ -12,7 +12,7 @@ import { createDb } from "@/lib/db";
 import { itemSegmentLabel } from "@/lib/segment-labels";
 import { loadPendingSpeedrunRecords, type PendingSpeedrunRecord } from "@/lib/speedruncom-pending.server";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, categoryRecords, keybindings, socialLinks, profileVideos, itemLayouts, searchCrafts, searchCraftLoops, configPresets, customKeys, customActions, guides } from "@/lib/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
@@ -488,10 +488,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     const viewerUserId = isOwner
       ? gate.id
       : session
-        ? ((await db.query.users.findFirst({
-            where: eq(users.discordId, session.user.id),
-            columns: { id: true },
-          }))?.id ?? null)
+        ? ((await loadUserByDiscordId(request, db, session.user.id))?.id ?? null)
         : null;
     const [counts, viewerReactions] = await Promise.all([
       getProfileReactionCounts(db, gate.id),
@@ -566,7 +563,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // gate 通過後に必要なクエリはすべて互いに独立（gate.id・session だけで引ける）ため、
   // 重い player クエリと一緒に1つの Promise.all で並列実行する
   // （Turso は HTTP のため RTT を1つでも減らす。browse-query.server.ts と同じ方針）。
-  const [player, presets, presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation] = await Promise.all([
+  const [player, presets, presetOverride, profileReactions, playerGuides, pacemanStats, minefolioEloRank, bioTranslation, pendingSpeedrunRecordsAll] = await Promise.all([
     playerPromise,
     presetsPromise,
     presetOverridePromise,
@@ -577,6 +574,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // bio / shortBio の自動翻訳（docs/translation.md）。訳文が使えない（機能無効・opt-out・失効・
     // 原文と閲覧ロケールが同じ）ときは null で、原文をそのまま表示する。player 取得後に続けて走る
     playerPromise.then((p) => (p ? getUserBioTranslation(db, p, viewerLocale) : null)),
+    // 審査中の speedrun.com 記録（cron が保存済みの player_rankings から。外部APIは叩かない）。
+    // gate.id だけで引けるので並列の段に入れ、非表示 run の除外は player 取得後の JS で行う
+    loadPendingSpeedrunRecords(db, gate.id),
   ]);
 
   // クエリ間のレース対策（ゲート通過直後に対象ユーザーが削除された場合等）
@@ -633,9 +633,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const hiddenSpeedrunRecords = parseRunIdList(player.hiddenSpeedrunRecords);
   const pinnedSpeedrunRecords = parseRunIdList(player.pinnedSpeedrunRecords);
 
-  // 審査中の speedrun.com 記録（cron が保存済みの player_rankings から。外部APIは叩かない）。
-  // 非公開プロフィールは上のゲートで本人以外を弾き済み
-  const pendingSpeedrunRecords = await loadPendingSpeedrunRecords(db, gate.id, new Set(hiddenSpeedrunRecords));
+  // 非公開プロフィールは上のゲートで本人以外を弾き済み。非表示にした run は除く（承認済み記録の非表示設定と揃える）
+  const hiddenRunIds = new Set(hiddenSpeedrunRecords);
+  const pendingSpeedrunRecords = pendingSpeedrunRecordsAll.filter((r) => !(r.runId && hiddenRunIds.has(r.runId)));
 
   // 外部APIは呼び出さず、クライアント側で取得する
   return {

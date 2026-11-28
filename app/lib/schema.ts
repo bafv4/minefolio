@@ -116,10 +116,9 @@ export const users = sqliteTable("users", {
   // 年代を走者画面に出すか。既定は非公開（未成年の区分があるため。本人が明示的に選んだときだけ公開する）
   ageGroupPublic: integer("age_group_public", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
-  index("idx_users_discord_id").on(table.discordId),
-  index("idx_users_mcid").on(table.mcid),
-  index("idx_users_uuid").on(table.uuid),
-  index("idx_users_slug").on(table.slug),
+  // 大文字小文字を無視した照合用の式インデックス（lower(mcid) / lower(slug) の等価比較）
+  index("idx_users_mcid_lower").on(sql`lower(${table.mcid})`),
+  index("idx_users_slug_lower").on(sql`lower(${table.slug})`),
   index("idx_users_speedruncom_id").on(table.speedruncomId),
 ]);
 
@@ -181,7 +180,6 @@ export const keybindings = sqliteTable("keybindings", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("idx_keybindings_user_action").on(table.userId, table.action),
-  index("idx_keybindings_user_id").on(table.userId),
   index("idx_keybindings_category").on(table.category),
 ]);
 
@@ -397,7 +395,6 @@ export const categoryRecords = sqliteTable("category_records", {
   isPinned: integer("is_pinned", { mode: "boolean" }).default(false).notNull(),
 }, (table) => [
   uniqueIndex("idx_category_records_user_category_type").on(table.userId, table.category, table.recordType),
-  index("idx_category_records_user_id").on(table.userId),
   index("idx_category_records_category").on(table.category),
   index("idx_category_records_type").on(table.recordType),
 ]);
@@ -431,7 +428,6 @@ export const externalStats = sqliteTable("external_stats", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("idx_external_stats_user_service").on(table.userId, table.service),
-  index("idx_external_stats_user_id").on(table.userId),
   index("idx_external_stats_service").on(table.service),
 ]);
 
@@ -517,7 +513,6 @@ export const guides = sqliteTable("guides", {
 }, (t) => [
   uniqueIndex("guides_author_slug_uniq").on(t.authorId, t.slug),
   index("guides_feed_idx").on(t.isPublished, t.updatedAt),
-  index("guides_author_idx").on(t.authorId),
 ]);
 
 export const guidesRelations = relations(guides, ({ one, many }) => ({
@@ -710,9 +705,9 @@ export const configPresets = sqliteTable("config_presets", {
   // ※ ALTER ADD は末尾に追加されるため、列定義も末尾に置き物理順と一致させる
   searchCraftLoopsData: text("search_craft_loops_data"),
 }, (table) => [
-  index("idx_config_presets_user_id").on(table.userId),
-  index("idx_config_presets_is_active").on(table.isActive),
-  index("idx_config_presets_is_main").on(table.isMain),
+  // user_id 先頭の複合。active / main の取得は user_id で絞ってから引く（真偽値単体の索引は選択度が低く選び間違いの元）
+  index("idx_config_presets_user_active_main").on(table.userId, table.isActive, table.isMain),
+  index("idx_config_presets_user_main").on(table.userId, table.isMain),
 ]);
 
 // ============================================
@@ -733,9 +728,8 @@ export const configHistory = sqliteTable("config_history", {
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_config_history_user_id").on(table.userId),
-  index("idx_config_history_created_at").on(table.createdAt),
-  index("idx_config_history_change_type").on(table.changeType),
+  // 履歴は user_id で絞って created_at 降順で引くので、ソートまで索引で済ませる
+  index("idx_config_history_user_created").on(table.userId, table.createdAt),
 ]);
 
 export const configPresetsRelations = relations(configPresets, ({ one, many }) => ({
@@ -796,8 +790,6 @@ export const pacemanPaces = sqliteTable("paceman_paces", {
   index("idx_paceman_paces_user_id").on(table.userId),
   index("idx_paceman_paces_date").on(table.date),
   index("idx_paceman_paces_timeline").on(table.timeline),
-  index("idx_paceman_paces_is_nether_enter").on(table.isNetherEnter),
-  index("idx_paceman_paces_is_2nd_structure_or_later").on(table.is2ndStructureOrLater),
   index("idx_paceman_paces_run_id").on(table.pacemanRunId),
 ]);
 
@@ -830,7 +822,6 @@ export const favorites = sqliteTable("favorites", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("idx_favorites_user_slug").on(table.userId, table.favoriteSlug),
-  index("idx_favorites_user_id").on(table.userId),
 ]);
 
 export const favoritesRelations = relations(favorites, ({ one }) => ({
@@ -855,7 +846,6 @@ export const apiCache = sqliteTable("api_cache", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_api_cache_key").on(table.cacheKey),
   index("idx_api_cache_type").on(table.cacheType),
   index("idx_api_cache_expires").on(table.expiresAt),
 ]);
@@ -882,7 +872,6 @@ export const youtubeVideoCache = sqliteTable("youtube_video_cache", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_youtube_cache_video_id").on(table.videoId),
   index("idx_youtube_cache_channel_id").on(table.channelId),
   index("idx_youtube_cache_mcid").on(table.minefolioMcid),
   index("idx_youtube_cache_published").on(table.publishedAt),
@@ -947,7 +936,6 @@ export const youtubeLiveCache = sqliteTable("youtube_live_cache", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_youtube_live_video_id").on(table.videoId),
   index("idx_youtube_live_channel_id").on(table.channelId),
   index("idx_youtube_live_mcid").on(table.minefolioMcid),
   index("idx_youtube_live_status").on(table.liveBroadcastContent),
@@ -978,7 +966,6 @@ export const customActions = sqliteTable("custom_actions", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("idx_custom_actions_user_trigger").on(table.userId, table.triggerKey),
-  index("idx_custom_actions_user_id").on(table.userId),
   index("idx_custom_actions_category").on(table.category),
 ]);
 
@@ -1020,7 +1007,6 @@ export const speedrunCategories = sqliteTable("speedrun_categories", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_speedrun_categories_slug").on(table.slug),
   index("idx_speedrun_categories_type").on(table.categoryType),
   index("idx_speedrun_categories_speedruncom").on(table.speedruncomCategoryId),
 ]);
@@ -1043,7 +1029,6 @@ export const rankingsCache = sqliteTable("rankings_cache", {
   lastFetched: integer("last_fetched", { mode: "timestamp" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 }, (table) => [
-  index("idx_rankings_cache_key").on(table.cacheKey),
   index("idx_rankings_cache_type").on(table.cacheType),
   index("idx_rankings_cache_expires").on(table.expiresAt),
   index("idx_rankings_cache_category").on(table.categoryId),

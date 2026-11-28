@@ -13,7 +13,7 @@ import {
 } from "react-router";
 import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, loadUserByDiscordId } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
 import { users, guides } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
@@ -42,10 +42,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const session = await getSession(request, auth);
 
   // 公開URLのプレビュー（/guides/<著者>/<スラッグ>）に著者スラッグが要る
-  const user = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { slug: true },
-  });
+  const user = await loadUserByDiscordId(request, db, session.user.id);
   if (!user) return redirect("/onboarding");
 
   return { authorSlug: user.slug };

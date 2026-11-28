@@ -4,8 +4,6 @@ import { useLoaderData, useSearchParams, useNavigation } from "react-router";
 import type { ReactNode } from "react";
 import type { Route } from "./+types/rankings";
 import { createDb } from "@/lib/db";
-import { eq } from "drizzle-orm";
-import { users } from "@/lib/schema";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -18,7 +16,7 @@ import { useRelativeTimeFormatter } from "@/components/relative-time";
 import { Link } from "react-router";
 import { getEnv } from "@/lib/env.server";
 import { createAuth } from "@/lib/auth";
-import { getOptionalSession } from "@/lib/session";
+import { getOptionalSession, loadUserByDiscordId } from "@/lib/session";
 import { getCached, setCached } from "@/lib/cache";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
 import {
@@ -149,13 +147,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const db = createDb();
   // 空状態に「自分の Ranked 統計の公開設定」への導線を出すかどうか（ログイン時のみ）
   const session = await getOptionalSession(request, createAuth(db, env));
-  // 自分の行を示す・たどり着くために、ログイン中は users.id を引く（session.user.id は Discord ID）
-  const viewer = session
-    ? await db.query.users.findFirst({
-        where: eq(users.discordId, session.user.id),
-        columns: { id: true },
-      })
-    : undefined;
+  // 自分の行を示す・たどり着くために、ログイン中は users.id を引く（session.user.id は Discord ID）。ランキングの取得と並列に走らせる
+  const viewerPromise = session
+    ? loadUserByDiscordId(request, db, session.user.id)
+    : Promise.resolve(undefined);
   const url = new URL(request.url);
   // ランキングは12時間ごとの cron でしか変わらないため、短い TTL でモジュールキャッシュする
   const loadCategories = async () => {
@@ -166,40 +161,44 @@ export async function loader({ request }: Route.LoaderArgs) {
     return fresh;
   };
 
-  let speedruncomCategories: Categories;
-  let rankings: LoadedRankings["rankings"];
-  let selectedCategory: LoadedRankings["selectedCategory"];
-  let lastFetchedMs: LoadedRankings["lastFetchedMs"];
+  const loadData = async () => {
+    let speedruncomCategories: Categories;
+    let rankings: LoadedRankings["rankings"];
+    let selectedCategory: LoadedRankings["selectedCategory"];
+    let lastFetchedMs: LoadedRankings["lastFetchedMs"];
 
-  // tab が Ranked と明示されているときはカテゴリ一覧を先に要らない（下で並列に取得する）。それ以外は、カテゴリの有無で
-  // 既定のタブが決まり、選択カテゴリの id も要るので一覧が先（キャッシュ済みなら往復なし）
-  let loadedCategories: Categories | undefined;
-  if (url.searchParams.get("tab") !== "ranked") loadedCategories = await loadCategories();
-  const args = resolveRankingsParams(url.searchParams, { hasCategories: (loadedCategories?.length ?? 1) > 0 });
+    // tab が Ranked と明示されているときはカテゴリ一覧を先に要らない（下で並列に取得する）。それ以外は、カテゴリの有無で
+    // 既定のタブが決まり、選択カテゴリの id も要るので一覧が先（キャッシュ済みなら往復なし）
+    let loadedCategories: Categories | undefined;
+    if (url.searchParams.get("tab") !== "ranked") loadedCategories = await loadCategories();
+    const args = resolveRankingsParams(url.searchParams, { hasCategories: (loadedCategories?.length ?? 1) > 0 });
 
-  if (args.tab === "speedruncom") {
-    speedruncomCategories = loadedCategories ?? (await loadCategories());
-    const target = args.categorySlug
-      ? speedruncomCategories.find((c) => c.slug === args.categorySlug)
-      : speedruncomCategories[0];
-    const key = `rankings:speedruncom:${target?.id ?? "none"}`;
-    const cached = await getCached<LoadedRankings>(key);
-    const loaded =
-      cached ?? (await loadRankings(db, args, speedruncomCategories));
-    if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
-    ({ rankings, selectedCategory, lastFetchedMs } = loaded);
-  } else {
-    // ranked タブはカテゴリ不要（nav 用の一覧だけ必要）なので並列に取得する
-    const key = `rankings:ranked:${args.rankedType === "pb" ? "pb" : "elo"}`;
-    const cached = await getCached<LoadedRankings>(key);
-    const [cats, loaded] = await Promise.all([
-      loadedCategories ?? loadCategories(),
-      cached ?? loadRankings(db, args, []),
-    ]);
-    if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
-    speedruncomCategories = cats;
-    ({ rankings, selectedCategory, lastFetchedMs } = loaded);
-  }
+    if (args.tab === "speedruncom") {
+      speedruncomCategories = loadedCategories ?? (await loadCategories());
+      const target = args.categorySlug
+        ? speedruncomCategories.find((c) => c.slug === args.categorySlug)
+        : speedruncomCategories[0];
+      const key = `rankings:speedruncom:${target?.id ?? "none"}`;
+      const cached = await getCached<LoadedRankings>(key);
+      const loaded =
+        cached ?? (await loadRankings(db, args, speedruncomCategories));
+      if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
+      ({ rankings, selectedCategory, lastFetchedMs } = loaded);
+    } else {
+      // ranked タブはカテゴリ不要（nav 用の一覧だけ必要）なので並列に取得する
+      const key = `rankings:ranked:${args.rankedType === "pb" ? "pb" : "elo"}`;
+      const cached = await getCached<LoadedRankings>(key);
+      const [cats, loaded] = await Promise.all([
+        loadedCategories ?? loadCategories(),
+        cached ?? loadRankings(db, args, []),
+      ]);
+      if (!cached) await setCached(key, loaded, RANKINGS_CACHE_TTL);
+      speedruncomCategories = cats;
+      ({ rankings, selectedCategory, lastFetchedMs } = loaded);
+    }
+    return { args, speedruncomCategories, rankings, selectedCategory, lastFetchedMs };
+  };
+  const [viewer, { args, speedruncomCategories, rankings, selectedCategory, lastFetchedMs }] = await Promise.all([viewerPromise, loadData()]);
 
   return {
     tab: args.tab,

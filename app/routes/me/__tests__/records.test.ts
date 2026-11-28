@@ -15,6 +15,7 @@ const sessionMocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getCurrentUserOrOnboarding: vi.fn(),
   isAuthenticated: vi.fn(),
+  registeredUserContext: {},
 }));
 
 vi.mock("@/lib/session", () => sessionMocks);
@@ -61,7 +62,7 @@ function makeRequest(formData: FormData): Request {
 }
 
 async function callAction(formData: FormData): Promise<{ success?: boolean; error?: string }> {
-  return action({ request: makeRequest(formData), params: {}, context: {} } as never) as never;
+  return action({ request: makeRequest(formData), params: {}, context: { get: () => null } } as never) as never;
 }
 
 function signInAs(discordId: string) {

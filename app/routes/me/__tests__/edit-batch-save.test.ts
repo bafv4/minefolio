@@ -19,6 +19,7 @@ const sessionMocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getCurrentUserOrOnboarding: vi.fn(),
   isAuthenticated: vi.fn(),
+  registeredUserContext: {},
 }));
 vi.mock("@/lib/session", () => sessionMocks);
 
@@ -55,7 +56,7 @@ let db: TestDb;
 
 async function callAction(formData: FormData) {
   const request = new Request("https://minefolio.app/me/edit", { method: "POST", body: formData });
-  return action({ request, params: {}, context: {} } as never);
+  return action({ request, params: {}, context: { get: () => null } } as never);
 }
 
 function signInAs(discordId: string) {

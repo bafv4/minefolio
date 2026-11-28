@@ -22,6 +22,7 @@ const sessionMocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getCurrentUserOrOnboarding: vi.fn(),
   isAuthenticated: vi.fn(),
+  registeredUserContext: {},
 }));
 vi.mock("@/lib/session", () => sessionMocks);
 
@@ -43,7 +44,7 @@ async function callAction(fields: Record<string, string | string[]>) {
     else fd.set(k, v);
   }
   const request = new Request("https://minefolio.app/me/playstyle", { method: "POST", body: fd });
-  return action({ request, params: {}, context: {} } as never) as Promise<{ success?: boolean; error?: string }>;
+  return action({ request, params: {}, context: { get: () => null } } as never) as Promise<{ success?: boolean; error?: string }>;
 }
 
 const VERSION = ALL_VERSION_KEYS[0];

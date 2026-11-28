@@ -264,7 +264,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `age_group` | enum? | 年代。`junior_high` / `high_school` / `age_18_21` / `20s` / `30s` / `40s` / `50s` / `60s_plus`。null は未設定。値の単一情報源は `app/lib/age-group.ts` の `AGE_GROUP_VALUES`（検証・表示側もここから導く） |
 | `age_group_public` | bool | 既定 **false**。年代を走者画面に出すか（本人が選ぶ）。既定を非公開にするのは未成年の区分があるため。`age_group` 列とともに `scripts/add-age-group-columns.ts` で反映（falsy 既定の NOT NULL 列で `db:push` が TRUNCATE を提案するため手動 DDL） |
 
-索引: `(discord_id)` / `(mcid)` / `(uuid)` / `(slug)` / `(speedruncom_id)`
+索引: `(speedruncom_id)` / 式 `lower(mcid)` / 式 `lower(slug)`（discord_id・mcid・uuid・slug は UNIQUE 制約の索引が兼ねる。式索引は大文字小文字を無視した照合用で、`db:push` では反映されない。`scripts/tune-indexes-2026-11.ts`）
 
 #### `player_configs`
 
@@ -342,7 +342,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: **UNIQUE** `(user_id, action)` / `(user_id)` / `(category)`
+索引: **UNIQUE** `(user_id, action)` / `(category)`
 
 #### `custom_keys`
 
@@ -393,7 +393,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: **UNIQUE** `(user_id, trigger_key)` / `(user_id)` / `(category)`
+索引: **UNIQUE** `(user_id, trigger_key)` / `(category)`
 
 #### `external_tools`
 
@@ -530,7 +530,7 @@ FK（cascade）なので、退会（`users` 行削除）で該当ユーザーの
 | `updated_at` | ts | |
 | `is_pinned` | bool | 既定 false |
 
-索引: **UNIQUE** `(user_id, category, record_type)` / `(user_id)` / `(category)` / `(record_type)`
+索引: **UNIQUE** `(user_id, category, record_type)` / `(category)` / `(record_type)`
 
 #### `custom_fields`
 
@@ -561,7 +561,7 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: **UNIQUE** `(user_id, service)` / `(user_id)` / `(service)`
+索引: **UNIQUE** `(user_id, service)` / `(service)`
 
 #### `favorites`
 
@@ -572,7 +572,7 @@ Speedrun.com / MCSR Ranked の統計を JSON でキャッシュする（[`app/li
 | `favorite_slug` | text | ⇢ `users.slug`（FK 制約なし。→ [整合性ポリシー](#弱参照fk-を張らない参照)） |
 | `created_at` | ts | |
 
-索引: **UNIQUE** `(user_id, favorite_slug)` / `(user_id)`
+索引: **UNIQUE** `(user_id, favorite_slug)`
 
 #### `slug_history`
 
@@ -622,7 +622,7 @@ MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `us
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: `(user_id)` / `(is_active)` / `(is_main)`
+索引: `(user_id, is_active, is_main)` / `(user_id, is_main)`（真偽値単体の索引は選択度が低く、統計の無い Turso で選び間違うため持たない）
 
 #### `config_history`
 
@@ -637,7 +637,7 @@ MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `us
 | `preset_id` | text? | → `config_presets.id` (**set null**) |
 | `created_at` | ts | |
 
-索引: `(user_id)` / `(created_at)` / `(change_type)`
+索引: `(user_id, created_at)`
 
 ---
 
@@ -664,7 +664,7 @@ MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `us
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: `(slug)` / `(category_type)` / `(speedruncom_category_id)`
+索引: `(category_type)` / `(speedruncom_category_id)`
 
 #### `player_rankings`
 
@@ -707,7 +707,7 @@ MCID 登録・変更・削除（`/me/edit` の `save_all`、onboarding）で `us
 | `last_fetched` | ts | |
 | `created_at` | ts | |
 
-索引: `(cache_key)` / `(cache_type)` / `(expires_at)` / `(category_id)`
+索引: `(cache_type)` / `(expires_at)` / `(category_id)`（`cache_key` は UNIQUE 制約が兼ねる）
 
 #### `paceman_paces`
 
@@ -727,7 +727,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `is_2nd_structure_or_later` | bool | 既定 false |
 | `created_at` | ts | |
 
-索引: `(mcid)` / `lower(mcid)` / `(user_id)` / `(date)` / `(timeline)` / `(is_nether_enter)` / `(is_2nd_structure_or_later)` / `(paceman_run_id)`
+索引: `(mcid)` / `lower(mcid)` / `(user_id)` / `(date)` / `(timeline)` / `(paceman_run_id)`（真偽値単体の索引は持たない）
 
 > `lower(mcid)` は**式インデックス**。drizzle-kit push は式インデックスの差分を検出しないため `db:push` では反映されない。
 > 実 DB への適用は `scripts/add-paceman-mcid-lower-index.ts`（手動 DDL）で行う。
@@ -765,7 +765,7 @@ PaceMan API から取り込むペース履歴（[`app/lib/paceman.ts`](../app/li
 | `is_pinned` | bool | 既定 false |
 | `allow_auto_translation` | bool | 既定 **true**。このガイドの自動翻訳を許可するか（[translation.md](./translation.md)）。オフにすると `guide` の翻訳行を削除する。反映は `scripts/add-allow-auto-translation-columns.ts` |
 
-索引: **UNIQUE** `(author_id, slug)` / `(is_published, updated_at)` / `(author_id)`
+索引: **UNIQUE** `(author_id, slug)` / `(is_published, updated_at)`
 
 #### `guide_likes`
 
@@ -922,7 +922,7 @@ cron（`/api/cron/*`）が蓄積・更新する層。いずれも FK を持た�
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: `(cache_key)` / `(cache_type)` / `(expires_at)`
+索引: `(cache_type)` / `(expires_at)`（`cache_key` は UNIQUE 制約が兼ねる）
 
 #### `youtube_video_cache`
 
@@ -942,7 +942,7 @@ cron（`/api/cron/*`）が蓄積・更新する層。いずれも FK を持た�
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: `(video_id)` / `(channel_id)` / `(minefolio_mcid)` / `(published_at)` / `(is_available)`
+索引: `(channel_id)` / `(minefolio_mcid)` / `(published_at)` / `(is_available)`（`video_id` は UNIQUE 制約が兼ねる）
 
 #### `youtube_live_cache`
 
@@ -964,7 +964,7 @@ cron（`/api/cron/*`）が蓄積・更新する層。いずれも FK を持た�
 | `created_at` | ts | |
 | `updated_at` | ts | |
 
-索引: `(video_id)` / `(channel_id)` / `(minefolio_mcid)` / `(live_broadcast_content)`
+索引: `(channel_id)` / `(minefolio_mcid)` / `(live_broadcast_content)`（`video_id` は UNIQUE 制約が兼ねる）
 
 #### `twitch_vod_cache`
 

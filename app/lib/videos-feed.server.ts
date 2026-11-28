@@ -7,7 +7,7 @@ import { eq, and, isNotNull, gte, desc, inArray, sql } from "drizzle-orm";
 import { createDb } from "./db";
 import { createAuth } from "./auth";
 import { users, socialLinks, youtubeVideoCache, twitchVodCache } from "./schema";
-import { getOptionalSession } from "./session";
+import { getOptionalSession, loadUserByDiscordId } from "./session";
 import { excludeViewersCondition } from "./users-filter";
 import { getCached, setCached } from "./cache";
 import { parseDateParam } from "./paces-feed.server";
@@ -283,10 +283,8 @@ export async function getViewerVideoPrefs(
   const session = await getOptionalSession(request, auth);
   if (!session) return { mcid: null, showYoutubeOnHome: true, showTwitchOnHome: true };
 
-  const me = await db.query.users.findFirst({
-    where: eq(users.discordId, session.user.id),
-    columns: { mcid: true, showYoutubeOnHome: true, showTwitchOnHome: true },
-  });
+  // 同じ Request で users 行を1回だけ読む（共通レイアウトなどと共有）
+  const me = await loadUserByDiscordId(request, db, session.user.id);
   if (!me) return { mcid: null, showYoutubeOnHome: true, showTwitchOnHome: true };
 
   return {

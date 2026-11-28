@@ -6,9 +6,9 @@ import { createDb } from "@/lib/db";
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import { getEnv } from "@/lib/env.server";
-import { users } from "@/lib/schema";
-import { inArray } from "drizzle-orm";
-import { getFavoriteSlugsByDiscordId } from "@/lib/browse-query.server";
+import { users, favorites } from "@/lib/schema";
+import { asc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { getLocalFavorites } from "@/lib/favorites-client";
 import { ProfileFeedCard, ProfileFeedCardSkeleton, type ProfileFeedCardPlayer } from "@/components/profile-feed-card";
 import { FavoritesNav } from "@/components/favorites-nav";
@@ -26,20 +26,21 @@ type FavoritePlayer = ProfileFeedCardPlayer;
 
 // 一覧取得で必要な列（ProfileFeedCard の描画に必要な最小限。browse-query.server.ts の
 // BROWSE_LIST_COLUMNS と揃える）
-const FAVORITE_PLAYER_COLUMNS = {
-  mcid: true,
-  uuid: true,
-  slug: true,
-  displayName: true,
-  displayNameAlphabet: true,
-  pronouns: true,
-  role: true,
-  mainEdition: true,
-  mainPlatform: true,
-  customSkinUrl: true,
-  updatedAt: true,
-  shortBio: true,
-} as const;
+const favoritePlayer = alias(users, "favorite_player");
+const FAVORITE_PLAYER_SELECT = {
+  mcid: favoritePlayer.mcid,
+  uuid: favoritePlayer.uuid,
+  slug: favoritePlayer.slug,
+  displayName: favoritePlayer.displayName,
+  displayNameAlphabet: favoritePlayer.displayNameAlphabet,
+  pronouns: favoritePlayer.pronouns,
+  role: favoritePlayer.role,
+  mainEdition: favoritePlayer.mainEdition,
+  mainPlatform: favoritePlayer.mainPlatform,
+  customSkinUrl: favoritePlayer.customSkinUrl,
+  updatedAt: favoritePlayer.updatedAt,
+  shortBio: favoritePlayer.shortBio,
+};
 
 export const meta: Route.MetaFunction = ({ loaderData, matches }) => {
   const t = createTranslator(localeFromMatches(matches));
@@ -73,26 +74,22 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { players: [] as FavoritePlayer[], isLoggedIn: false, appUrl };
   }
 
-  const slugs = await getFavoriteSlugsByDiscordId(db, session.user.id);
-  if (slugs === null) {
+  // 本人の行 → favorites → お気に入り先の users を1回の JOIN で引く（slug 一覧 → users IN の2往復を1往復に）。
+  // 本人の行が無い（users 未登録）ときは0行 = 未ログイン扱い。お気に入りが無いときは favorite_player が全て null の1行。
+  // 並びは favoriteSlug の辞書順。実在しない slug（孤児行）は favorite_player が null になるので落とす
+  const rows = await db
+    .select(FAVORITE_PLAYER_SELECT)
+    .from(users)
+    .leftJoin(favorites, eq(favorites.userId, users.id))
+    .leftJoin(favoritePlayer, eq(favoritePlayer.slug, favorites.favoriteSlug))
+    .where(eq(users.discordId, session.user.id))
+    .orderBy(asc(favorites.favoriteSlug));
+  if (rows.length === 0) {
     return { players: [] as FavoritePlayer[], isLoggedIn: false, appUrl };
   }
-  if (slugs.length === 0) {
-    return { players: [] as FavoritePlayer[], isLoggedIn: true, appUrl };
-  }
+  const players = rows.filter((p): p is typeof p & FavoritePlayer => p.slug !== null);
 
-  const rows = await db.query.users.findMany({
-    where: inArray(users.slug, slugs),
-    columns: FAVORITE_PLAYER_COLUMNS,
-  });
-
-  // お気に入り順（slugs の順 = favoriteSlug の辞書順）でソート
-  const bySlug = new Map(rows.map((p) => [p.slug, p]));
-  const sorted = slugs
-    .map((s) => bySlug.get(s))
-    .filter((p): p is NonNullable<typeof p> => p != null);
-
-  return { players: sorted, isLoggedIn: true, appUrl };
+  return { players, isLoggedIn: true, appUrl };
 }
 
 export default function FavoritesPage() {

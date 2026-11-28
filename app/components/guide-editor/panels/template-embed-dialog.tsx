@@ -10,12 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useT, useLocale } from "@/hooks/use-locale";
-import { getGameLanguageName } from "@/lib/game-languages";
+import { Combobox } from "@/components/ui/combobox";
+import { gameLanguageOptions, getGameLanguageName } from "@/lib/game-languages";
 import { parseTemplateIdInput } from "@/lib/guide-embed-attrs";
 import type { TemplateEmbedMeta } from "../lib/template-embed-meta";
 import { useDialogReturnFocus } from "../lib/dialog-return-focus";
 import { MinecraftAvatar } from "@/components/minecraft-avatar";
-import { Search, Loader2, LayoutTemplate } from "lucide-react";
+import { Search, Loader2, LayoutTemplate, Languages } from "lucide-react";
 
 interface TemplateEmbedDialogProps {
   open: boolean;
@@ -26,11 +27,13 @@ interface TemplateEmbedDialogProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
+const ALL_LANGUAGES = "__all";
 
 export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = false }: TemplateEmbedDialogProps) {
   const t = useT();
   const locale = useLocale();
   const [query, setQuery] = useState("");
+  const [lang, setLang] = useState(ALL_LANGUAGES);
   const [results, setResults] = useState<TemplateEmbedMeta[]>([]);
   const [loading, setLoading] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -38,7 +41,10 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
   const requestSeq = useRef(0);
 
   useEffect(() => {
-    if (open) setQuery("");
+    if (open) {
+      setQuery("");
+      setLang(ALL_LANGUAGES);
+    }
   }, [open]);
 
   // debounce 検索。空クエリでも自分のテンプレート＋新着を出す。URL / ID は ID 指定で引く
@@ -52,7 +58,7 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
       const pastedId = parseTemplateIdInput(trimmed);
       const params = pastedId
         ? `id=${encodeURIComponent(pastedId)}`
-        : `q=${encodeURIComponent(trimmed)}`;
+        : `q=${encodeURIComponent(trimmed)}${lang !== ALL_LANGUAGES ? `&lang=${encodeURIComponent(lang)}` : ""}`;
       try {
         const res = await fetch(`/api/guides/templates-search?${params}`);
         if (res.ok && seq === requestSeq.current) {
@@ -65,10 +71,15 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
       if (seq === requestSeq.current) setLoading(false);
     }, query ? SEARCH_DEBOUNCE_MS : 0);
     return () => clearTimeout(timer.current);
-  }, [query, open]);
+  }, [query, lang, open]);
 
   // 閉じたあと、フォーカスが body に落ちたときだけ開く前の要素（「変更」ボタン等）かエディタへ戻す
   const returnFocus = useDialogReturnFocus(open);
+
+  const languageOptions = [
+    { value: ALL_LANGUAGES, label: t("templates.allLanguages") },
+    ...gameLanguageOptions(t, locale),
+  ];
 
   const select = (template: TemplateEmbedMeta) => {
     onInsert(template);
@@ -94,6 +105,15 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
             autoFocus
           />
         </div>
+        <Combobox
+          aria-label={t("templates.languageFilterLabel")}
+          options={languageOptions}
+          value={lang}
+          onValueChange={(v) => setLang(v || ALL_LANGUAGES)}
+          placeholder={t("templates.allLanguages")}
+          searchPlaceholder={t("templates.languageSearchPlaceholder")}
+          emptyText={t("templates.languageNotFound")}
+        />
         <div className="max-h-72 overflow-y-auto -mx-1" role="listbox" aria-label={t("guideEditor.ui.searchResults")}>
           {loading ? (
             <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-6">
@@ -129,7 +149,10 @@ export function TemplateEmbedDialog({ open, onOpenChange, onInsert, editing = fa
                       </span>
                     </span>
                     {template.gameLanguage && (
-                      <span>{getGameLanguageName(t, locale, template.gameLanguage)}</span>
+                      <span className="flex items-center gap-1">
+                        <Languages className="h-3 w-3 shrink-0 text-primary" aria-hidden />
+                        {getGameLanguageName(t, locale, template.gameLanguage)}
+                      </span>
                     )}
                     <span>{t("guideEditor.embedTemplateCraftCount", { count: template.craftCount })}</span>
                   </span>

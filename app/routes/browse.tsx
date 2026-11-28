@@ -31,6 +31,7 @@ import { Search, Users, ArrowUpDown, Loader2, Filter, X, Shuffle } from "lucide-
 import { createAuth } from "@/lib/auth";
 import { getOptionalSession } from "@/lib/session";
 import {
+  countBrowseLanguages,
   loadBrowsePage,
   parseBrowseSearchParams,
   getViewerFavoriteSlugs,
@@ -38,7 +39,9 @@ import {
 import { PAGE_VIEW_WINDOW_DAYS } from "@/lib/page-view-paths";
 import { FeedErrorNotice } from "@/components/home/feed-error-notice";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
-import { useT } from "@/hooks/use-locale";
+import { useLocale, useT } from "@/hooks/use-locale";
+import { Combobox } from "@/components/ui/combobox";
+import { gameLanguageOptions, getGameLanguageName } from "@/lib/game-languages";
 import { useFavorites } from "@/hooks/use-favorites";
 import type { Translator } from "@/lib/messages";
 import { localeFromMatches } from "@/lib/locale";
@@ -80,11 +83,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const args = parseBrowseSearchParams(url.searchParams);
   // お気に入り取得は loadBrowsePage 内で count と並行して解決される
   const favoriteSlugs = getViewerFavoriteSlugs(db, session?.user?.id ?? null);
-  const { players, totalPages, totalCount, hasMore } = await loadBrowsePage(
-    db,
-    args,
-    favoriteSlugs,
-  );
+  const [{ players, totalPages, totalCount, hasMore }, languageCounts] = await Promise.all([
+    loadBrowsePage(db, args, favoriteSlugs),
+    // 絞り込みダイアログの言語の選択肢（人数つき）。言語以外の条件は一覧と同じ
+    countBrowseLanguages(db, args),
+  ]);
 
   return {
     players,
@@ -102,7 +105,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       editions: args.editions,
       inputMethods: args.inputMethods,
       platforms: args.platforms,
+      languages: args.languages,
     },
+    languageCounts,
     appUrl: env.APP_URL || "https://minefolio.app",
   };
 }
@@ -162,8 +167,9 @@ function FilterCheckboxRow({
 
 export default function BrowsePage() {
   const t = useT();
+  const locale = useLocale();
   const { favorites, isFavorite } = useFavorites();
-  const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, isLoggedIn, randomNone } =
+  const { players, searchQuery, sortBy, currentPage, totalCount, hasMore, filters, languageCounts, isLoggedIn, randomNone } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -175,7 +181,7 @@ export default function BrowsePage() {
   const isNavigating = navigation.state === "loading";
 
   // 無限スクロール
-  const filtersKey = `${searchQuery}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}`;
+  const filtersKey = `${searchQuery}|${sortBy}|${filters.roles.join(",")}|${filters.editions.join(",")}|${filters.inputMethods.join(",")}|${filters.platforms.join(",")}|${filters.languages.join(",")}`;
   // /api/browse への「もっと読み込む」フェッチ先URLにだけ auth=1 を付与する。CDN は同一URLで
   // cookie変種を区別できないため、ログイン中クライアントのリクエストURL空間を匿名と分離する目印
   // として使う（個人識別子は含めない）。ドキュメント側の URL（アドレスバー・共有リンク）には乗らない。
@@ -230,6 +236,7 @@ export default function BrowsePage() {
       draftFilters.editions.forEach((v) => params.append("edition", v));
       draftFilters.inputMethods.forEach((v) => params.append("input", v));
       draftFilters.platforms.forEach((v) => params.append("platform", v));
+      draftFilters.languages.forEach((v) => params.append("lang", v));
       try {
         const res = await fetch(`/api/browse?${params.toString()}`, { signal: controller.signal });
         if (!res.ok) throw new Error(String(res.status));
@@ -250,10 +257,23 @@ export default function BrowsePage() {
   }, [isFilterDialogOpen, draftFilters, searchQuery]);
 
   // アクティブなフィルタ数（適用済み）
-  const activeFilterCount = filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length;
+  const activeFilterCount =
+    filters.roles.length + filters.editions.length + filters.inputMethods.length + filters.platforms.length + filters.languages.length;
   // 検索語かロール以外の絞り込みがあるときは、件数を「該当する〜」の文言にする（ロールは文言の出し分けに使う）
   const isNarrowed =
-    searchQuery !== "" || filters.editions.length + filters.inputMethods.length + filters.platforms.length > 0;
+    searchQuery !== "" ||
+    filters.editions.length + filters.inputMethods.length + filters.platforms.length + filters.languages.length > 0;
+
+  // 言語の選択肢: 人数のいる言語だけ（人数つき）。URL で選ばれている言語は 0 人でも残す（選択中の値が無いとコンボボックスが空表示になる）
+  const languageOptions = [
+    { value: "__all", label: t("browse.allLanguages") },
+    ...gameLanguageOptions(t, locale)
+      .filter((o) => (languageCounts[o.value] ?? 0) > 0 || draftFilters.languages.includes(o.value) || filters.languages.includes(o.value))
+      .map((o) => ({
+        value: o.value,
+        label: t("browse.languageOptionWithCount", { language: o.label, count: languageCounts[o.value] ?? 0 }),
+      })),
+  ];
   const countRole =
     filters.roles.length === 0 || (filters.roles.length === 1 && filters.roles[0] === "runner")
       ? "runner"
@@ -365,10 +385,12 @@ export default function BrowsePage() {
     newParams.delete("edition");
     newParams.delete("input");
     newParams.delete("platform");
+    newParams.delete("lang");
     draftFilters.roles.forEach((v) => newParams.append("role", v));
     draftFilters.editions.forEach((v) => newParams.append("edition", v));
     draftFilters.inputMethods.forEach((v) => newParams.append("input", v));
     draftFilters.platforms.forEach((v) => newParams.append("platform", v));
+    draftFilters.languages.forEach((v) => newParams.append("lang", v));
     newParams.delete("random");
     newParams.delete("page");
     setSearchParams(newParams);
@@ -377,7 +399,7 @@ export default function BrowsePage() {
 
   // 「すべてクリア」: ドラフトをクリア（適用は完了ボタン）
   const clearDraftFilters = () => {
-    setDraftFilters({ roles: [], editions: [], inputMethods: [], platforms: [] });
+    setDraftFilters({ roles: [], editions: [], inputMethods: [], platforms: [], languages: [] });
   };
 
   return (
@@ -532,10 +554,30 @@ export default function BrowsePage() {
                       </FilterCheckboxRow>
                     </div>
                   </div>
+
+                  {/* ゲーム内言語（選択肢が多いのでコンボボックスで1言語を選ぶ。テンプレート一覧と同じ形） */}
+                  <div className="space-y-3">
+                    <div id="browse-language-label" className="text-sm font-medium">{t("browse.gameLanguage")}</div>
+                    <Combobox
+                      aria-labelledby="browse-language-label"
+                      options={languageOptions}
+                      value={draftFilters.languages[0] ?? "__all"}
+                      onValueChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          languages: value && value !== "__all" ? [value] : [],
+                        }))
+                      }
+                      placeholder={t("browse.allLanguages")}
+                      searchPlaceholder={t("browse.languageSearchPlaceholder")}
+                      emptyText={t("browse.languageNotFound")}
+                      className="h-11 sm:h-9"
+                    />
+                  </div>
                 </div>
 
                 <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 flex-col gap-2 border-t border-border/60 bg-background px-6 py-4 sm:flex-row">
-                  {(draftFilters.roles.length + draftFilters.editions.length + draftFilters.inputMethods.length + draftFilters.platforms.length) > 0 && (
+                  {(draftFilters.roles.length + draftFilters.editions.length + draftFilters.inputMethods.length + draftFilters.platforms.length + draftFilters.languages.length) > 0 && (
                     <Button
                       variant="outline"
                       className="min-h-11 w-full sm:min-h-9 sm:w-auto"
@@ -643,6 +685,18 @@ export default function BrowsePage() {
                 <button
                   onClick={() => handleFilterChange("input", inputMethod, false)}
                   aria-label={t("browse.removeFilterAria", { label: inputMethodLabels(t)[inputMethod] })}
+                  className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            {filters.languages.map((language) => (
+              <Badge key={language} variant="secondary" className="gap-1 overflow-visible">
+                {getGameLanguageName(t, locale, language)}
+                <button
+                  onClick={() => handleFilterChange("lang", language, false)}
+                  aria-label={t("browse.removeFilterAria", { label: getGameLanguageName(t, locale, language) })}
                   className="relative ml-1 -m-0.5 rounded p-0.5 hover:bg-foreground/10 before:absolute before:-inset-x-2 before:-inset-y-2.5 before:content-['']"
                 >
                   <X className="h-3 w-3" />

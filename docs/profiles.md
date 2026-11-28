@@ -364,7 +364,7 @@ Minefolioの中核機能。各ユーザーはMinecraftスピードラン向け�
 2. Mojang Session Server API (UUIDからスキンテクスチャURLを取得)
 3. Steve スキン (フォールバック)
 
-レスポンスヘッダ: `Cache-Control: public, max-age=3600` (1時間)
+レスポンスヘッダ: `Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800`（ブラウザ1時間・CDN 1日。スキンの変更は CDN 上で最大1日遅れて反映される）
 
 **MCID未登録ユーザーの扱いは表示側で分岐する。** `/api/skin` は `uuid` も `customSkinUrl` も無いユーザーに対しても
 Steve を返す（この API の挙動は変えていない）。「MCID未登録（`uuid` も `customSkinUrl` も無い）」の判定と
