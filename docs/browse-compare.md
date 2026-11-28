@@ -63,6 +63,10 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 `input` フィルタの参照先は `users.inputMethod`（旧 `inputMethodBadge` は @deprecated・未使用。プロフィールのバッジ表示と同じ列に一本化されている。詳細は [`docs/profiles.md`](./profiles.md#プレイスタイル) の「プレイスタイル」参照）。URLパラメータ名・値は変更前と同じで既存URLと互換。
 
+| `lang` | 言語コード（複数可・OR） | ゲーム内言語（`game-languages.ts` の許可リスト。`normalizeGameLanguage` で小文字化・正規化し、未知の値と重複は無視） |
+
+**ゲーム内言語の絞り込み**: 値はプロフィールの「ゲーム内言語」と同じもの（食い違わせない）。`effectiveGameLanguageSql()` が、メインプリセットが編集中でないときはそのスナップショット（`config_presets.player_config_data` の `gameLanguage`。壊れた JSON は未設定）、それ以外（メインが編集中・メイン無し）はライブの `player_configs.game_language` を使う（プロフィールの `resolveSelectedPreset` と同じ解決）。**言語が未設定の走者は、言語を選んだ絞り込みには出ない**（無指定のときは通常どおり出る）。UI は絞り込みダイアログの「ゲーム内言語」コンボボックス（テンプレート一覧と同じ。選択肢は人数のいる言語だけで人数つき、選択は1言語、適用中は他の項目と同じチップで解除）。人数は `countBrowseLanguages()`（言語以外の条件は一覧と同じ、選んだ言語では絞らない）を /browse の loader で取る。`lang` は URL に載るので `/api/browse` の CDN キャッシュ（匿名 `s-maxage`）もキーが分かれる。users は小規模なので専用インデックスは持たない（相関サブクエリは `config_presets` / `player_configs` の既存索引を使う）。
+
 エディション・プラットフォーム・入力方法の未設定（NULL）は、カード（`profile-feed-card.tsx`）が既定値（Java・Windows・キーボード＆マウス）を表示しないのと同じく既定値として扱う。既定値で絞るときは NULL も含め、一覧・件数（`countBrowse`）とも同じ `buildWhere` を通る。
 
 ロールフィルタで何も選択していない時のみ視聴者ロールが除外される（前述）。「視聴者」を選択した場合はそのまま表示される。
@@ -80,7 +84,7 @@ MCID 未登録・表示名未設定の走者が並び替えのたびに 1 ペー
 
 #### 件数専用モード (`GET /api/browse?count=1`)
 
-同じ絞り込みパラメータ（`q` / `role` / `edition` / `input` / `platform`）を受け取り `{ total }` だけを返す。一覧と同じ `buildWhere` を通す `countBrowse()`（`app/lib/browse-query.server.ts`）で `count(*)` のみ実行し、一覧 loader の総件数もこの関数を共有する。お気に入り順に依存しないためセッションは見ず、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300`。
+同じ絞り込みパラメータ（`q` / `role` / `edition` / `input` / `platform` / `lang`）を受け取り `{ total }` だけを返す。一覧と同じ `buildWhere` を通す `countBrowse()`（`app/lib/browse-query.server.ts`）で `count(*)` のみ実行し、一覧 loader の総件数もこの関数を共有する。お気に入り順に依存しないためセッションは見ず、`Cache-Control: public, s-maxage=30, stale-while-revalidate=300`。
 
 ### ページネーション
 

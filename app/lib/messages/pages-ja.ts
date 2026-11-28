@@ -659,6 +659,12 @@ export const PAGES_JA = {
     inputKeyboardMouse: "キーボード/マウス",
     inputController: "コントローラー",
     inputTouch: "タッチ",
+    gameLanguage: "ゲーム内言語",
+    allLanguages: "すべての言語",
+    languageSearchPlaceholder: "言語を検索...",
+    languageNotFound: "一致する言語がありません",
+    /** 言語の選択肢（その言語の走者数つき） */
+    languageOptionWithCount: "{language}（{count}人）",
     sortUpdatedAt: "更新日順",
     sortMcid: "MCID順",
     sortDisplayName: "名前順",
