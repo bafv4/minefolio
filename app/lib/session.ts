@@ -48,7 +48,9 @@ export async function loadUserByDiscordId(
   }
   let pending = perRequest.get(discordId);
   if (!pending) {
-    pending = db.query.users.findFirst({ where: eq(users.discordId, discordId) });
+    // Drizzle のクエリは遅延 thenable で、then / catch / await のたびに SELECT を実行し直す。
+    // Promise.resolve で1回だけ実行したネイティブの Promise にしてから共有する
+    pending = Promise.resolve(db.query.users.findFirst({ where: eq(users.discordId, discordId) }));
     perRequest.set(discordId, pending);
     // reject したら失敗を共有し続けないようエントリを消す
     const map = perRequest;

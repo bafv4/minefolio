@@ -53,4 +53,25 @@ describe("loadUserByDiscordId", () => {
     await expect(loadUserByDiscordId(request, db, "d1")).resolves.toBeUndefined();
     expect(findFirst).toHaveBeenCalledTimes(2);
   });
+
+  it("Drizzle のような遅延 thenable（then のたびに実行する）でも、実行は1回だけ", async () => {
+    let executions = 0;
+    const lazyQuery = () => ({
+      then(resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) {
+        executions++;
+        return Promise.resolve({ id: "u1", discordId: "d1", mcid: "abc" }).then(resolve, reject);
+      },
+      catch(reject: (e: unknown) => unknown) {
+        return this.then((v: unknown) => v, reject);
+      },
+    });
+    const db = { query: { users: { findFirst: vi.fn(lazyQuery) } } } as unknown as Database;
+    const request = new Request("https://minefolio.app/");
+    await Promise.all([
+      loadUserByDiscordId(request, db, "d1"),
+      loadUserByDiscordId(request, db, "d1"),
+    ]);
+    await loadUserByDiscordId(request, db, "d1");
+    expect(executions).toBe(1);
+  });
 });
