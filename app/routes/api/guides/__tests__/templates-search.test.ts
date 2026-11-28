@@ -44,11 +44,12 @@ type TemplateItem = {
 };
 
 async function callLoader(
-  params: { q?: string; id?: string } = {},
+  params: { q?: string; id?: string; lang?: string } = {},
 ): Promise<{ status: number; templates: TemplateItem[] }> {
   const sp = new URLSearchParams();
   if (params.q !== undefined) sp.set("q", params.q);
   if (params.id !== undefined) sp.set("id", params.id);
+  if (params.lang !== undefined) sp.set("lang", params.lang);
   const url = `https://minefolio.app/api/guides/templates-search?${sp.toString()}`;
   const res = (await loader({
     request: new Request(url),
@@ -150,6 +151,48 @@ describe("loader - LIKE のエスケープ", () => {
     const res = await callLoader({ q: "nether" });
 
     expect(res.templates.map((x) => x.id)).toEqual([hit.id]);
+  });
+});
+
+describe("loader - ?lang= の絞り込み", () => {
+  it("言語で絞れる（大文字も正規化される）", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "public" });
+    const ja = await seedSearchCraftTemplate(db, author.id, { gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, author.id, { gameLanguage: "en_us" });
+    await seedSearchCraftTemplate(db, author.id);
+
+    expect((await callLoader({ lang: "ja_jp" })).templates.map((x) => x.id)).toEqual([ja.id]);
+    expect((await callLoader({ lang: "JA_JP" })).templates.map((x) => x.id)).toEqual([ja.id]);
+  });
+
+  it("未知の値は無視して絞り込まない", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "public" });
+    await seedSearchCraftTemplate(db, author.id, { gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, author.id, { gameLanguage: "en_us" });
+
+    const res = await callLoader({ lang: "xx_xx" });
+
+    expect(res.templates).toHaveLength(2);
+  });
+
+  it("q と組み合わせられる", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "public" });
+    const hit = await seedSearchCraftTemplate(db, author.id, { title: "Nether A", gameLanguage: "ja_jp" });
+    await seedSearchCraftTemplate(db, author.id, { title: "Nether B", gameLanguage: "en_us" });
+    await seedSearchCraftTemplate(db, author.id, { title: "Other", gameLanguage: "ja_jp" });
+
+    const res = await callLoader({ q: "nether", lang: "ja_jp" });
+
+    expect(res.templates.map((x) => x.id)).toEqual([hit.id]);
+  });
+
+  it("?id= 指定には影響しない", async () => {
+    const author = await seedUser(db, { slug: "author", profileVisibility: "public" });
+    const t = await seedSearchCraftTemplate(db, author.id, { gameLanguage: "en_us" });
+
+    const res = await callLoader({ id: t.id, lang: "ja_jp" });
+
+    expect(res.templates.map((x) => x.id)).toEqual([t.id]);
   });
 });
 

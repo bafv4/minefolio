@@ -8,6 +8,7 @@ import { eq, desc, and, or, sql } from "drizzle-orm";
 import { resolveLocale } from "@/lib/locale";
 import { pickDisplayName } from "@/lib/slug";
 import { escapeLike } from "@/lib/sql-like.server";
+import { normalizeGameLanguage } from "@/lib/game-languages";
 import { isValidTemplateId } from "@/lib/guide-embed-attrs";
 import { publiclyReferencableCondition } from "@/lib/users-filter";
 
@@ -15,6 +16,7 @@ import { publiclyReferencableCondition } from "@/lib/users-filter";
  * ガイドエディタの「サーチクラフトテンプレート埋め込み」用の検索。
  * - `?q=`（任意）: タイトル部分一致。公開済み（作者が public）＋ 自分のテンプレート（非公開を含む）。
  *   q が空なら新着を返す。自分のテンプレートは先頭に出す（isOwn / isPublished を付ける）。
+ * - `?lang=`（任意）: ゲーム内言語の完全一致（`normalizeGameLanguage` で正規化。未知の値は無視）。q と併用できる。`id` 指定には効かない。
  * - `?id=`: ID 指定（URL 貼り付け用）。公開済み（作者が private でない）か自分のもの。他人の非公開は返さない。
  */
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -28,6 +30,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const q = url.searchParams.get("q")?.trim().slice(0, 100) || "";
+  const lang = normalizeGameLanguage(url.searchParams.get("lang"));
   const id = url.searchParams.get("id")?.trim() || "";
 
   const ownCondition = viewer ? eq(searchCraftTemplates.userId, viewer.id) : undefined;
@@ -51,6 +54,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : undefined;
     where = and(
       titleCondition,
+      lang ? eq(searchCraftTemplates.gameLanguage, lang) : undefined,
       or(
         // 非公開・限定公開の著者のテンプレートは検索結果（discovery）に出さない
         and(eq(searchCraftTemplates.isPublished, true), eq(users.profileVisibility, "public")),

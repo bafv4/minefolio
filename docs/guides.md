@@ -191,8 +191,8 @@
 ### サーチクラフトテンプレート埋め込み
 
 - TipTap ノード `searchCraftTemplateEmbed`（atom・block。`extensions/searchcraft-template-embed.ts`）。属性は `templateId` のみ。保存 HTML は `<div data-sctemplate-embed data-template-id="…">`。`parseHTML` で読み戻すので編集→再保存で ID は消えない
-- 挿入口は既存の埋め込みと同じ: 「挿入」タブ（LayoutTemplate アイコン）とスラッシュコマンド。ダイアログは `panels/template-embed-dialog.tsx`。タイトル検索（候補にタイトル・作者・ゲーム言語・クラフト数）と、テンプレート詳細の URL（`/guides/templates/:id`）または ID の貼り付けに対応。自分のテンプレートは非公開を含めて先頭に出し、非公開には「公開すると記事に表示されます」を付ける
-- 検索 API: `GET /api/guides/templates-search`。`?q=` はタイトル部分一致（公開済み＋作者 `public`、および自分のテンプレート）、`?id=` は ID 指定（公開済み＋作者が `private` でない、または自分のもの。他人の非公開は返さない）
+- 挿入口は既存の埋め込みと同じ: 「挿入」タブ（LayoutTemplate アイコン）とスラッシュコマンド。ダイアログは `panels/template-embed-dialog.tsx`。タイトル検索（候補にタイトル・作者・ゲーム言語〔primary 色の `Languages` アイコン付き〕・クラフト数）と、テンプレート詳細の URL（`/guides/templates/:id`）または ID の貼り付けに対応。自分のテンプレートは非公開を含めて先頭に出し、非公開には「公開すると記事に表示されます」を付ける
+- 検索 API: `GET /api/guides/templates-search`。`?q=` はタイトル部分一致（公開済み＋作者 `public`、および自分のテンプレート）、`?lang=` はゲーム内言語の完全一致（`normalizeGameLanguage` で正規化、未知の値は無視、`q` と併用可、`id` 指定には効かない。ダイアログの検索欄の下の言語 Combobox〔既定「すべての言語」〕から送る）、`?id=` は ID 指定（公開済み＋作者が `private` でない、または自分のもの。他人の非公開は返さない）
 - 編集中表示（`node-views/template-embed-node-view.tsx`）は ID しか持たないため、タイトル・言語・作者・クラフト数を `lib/template-embed-meta.ts`（モジュール内キャッシュ。挿入時は選択結果で先に埋める）で軽く取得する。読み込み中は「読み込み中…」、取れなければ「テンプレートが見つかりません」（破線の枠）
 - サニタイズ: `data-sctemplate-embed` / `data-template-id` を許可。ID は cuid2 形式（`isValidTemplateId`、`lib/guide-embed-attrs.ts`）で検証し、形式外は属性ごと除去する
 - 公開表示: `guides/view.tsx` の loader が本文から ID を集め（`extractTemplateEmbedIds`）、`inArray` の1クエリで「公開済み・作者が `private` でない」ものだけ作者名つきで取得する（テンプレート詳細ページの閲覧規則と同じ。N+1 なし）。`splitContentAtEmbeds` が `sctemplate-embed` セグメントを返し、`SearchCraftTemplateEmbedView`（`guide-embeds.tsx`）が描く。見出し行はテンプレート名・作者・ゲーム言語・「テンプレートを見る」、その下にサーチクラフト一覧（繋ぎ方 Loop があれば併せて）。描画本体は `SearchCraftEmbedBody` で、ユーザー参照のサーチクラフト埋め込みと共用する
