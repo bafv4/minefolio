@@ -12,11 +12,23 @@ import type { Route } from "./+types/root";
 import { CONTRAST_INIT_SCRIPT } from "@/lib/contrast";
 import { resolveLocale, DEFAULT_LOCALE, type Locale } from "@/lib/locale";
 import { loadLocaleMessages } from "@/lib/messages";
+import { isBotProbePath, botProbeResponse } from "@/lib/bot-probe";
 import { ErrorView } from "@/components/layout/error-view";
 import { Providers } from "@/components/providers";
 import { CookieConsentBanner } from "@/components/cookie-consent";
 import { BackgroundPattern } from "@/components/layout/background-pattern";
 import "./app.css";
+
+/**
+ * 明らかなボットの探り（/wp-login.php・/.env 等）は、loader（ロケール・セッション・DB）にも SSR にも行かず
+ * 素の 404 を返す。判定は @/lib/bot-probe。人の打ち間違いは従来どおり routes/not-found.tsx のロケール付き 404 へ。
+ */
+export const middleware: Route.MiddlewareFunction[] = [
+  ({ request }, next) => {
+    if (isBotProbePath(new URL(request.url).pathname)) return botProbeResponse();
+    return next();
+  },
+];
 
 /**
  * 表示ロケールを決めてツリー全体へ配る（Cookie → Accept-Language → 既定）。
