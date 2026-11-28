@@ -32,7 +32,8 @@ interface TexturesProperty {
 // スキン画像のキャッシュヘッダー。
 // s-maxage でCDN（Vercel Edge）にもキャッシュさせ、Mojang API 2連続fetch入りの
 // 関数呼び出しが訪問者ごとに発生しないようにする。TTL切れ後は stale 配信しつつ再検証。
-const SKIN_CACHE_CONTROL = "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400";
+// CDN は1日（スキンはめったに変わらない）。1時間だと走者ごとの URL が毎時取り直しになり、Active CPU の最大の要因になっていた
+const SKIN_CACHE_CONTROL = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
 
 // Mojang API 失敗時のSteveフォールバック用（短TTL・長SWRなし）。
 // 長期ヘッダーで返すと、一時的なMojang障害・レート制限による代替スキンが

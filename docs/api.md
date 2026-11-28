@@ -69,7 +69,7 @@ Minecraftスキン画像を返す。
 
 **レスポンス:** `image/png`（バイナリ）
 
-**キャッシュ:** `Cache-Control: public, max-age=3600`（1時間）
+**キャッシュ:** `Cache-Control: public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800`（ブラウザ1時間・CDN 1日。Mojang の取得に失敗したときの代替は 5 分）
 
 **関連ファイル:** `app/routes/api/skin.ts`
 
